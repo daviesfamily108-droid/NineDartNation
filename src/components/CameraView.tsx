@@ -5,6 +5,7 @@ import { BoardRadii, drawPolyline, sampleRing, scaleHomography, type Point } fro
 import { scoreFromImagePoint } from '../utils/autoscore'
 import { addSample } from '../store/profileStats'
 import ResizablePanel from './ui/ResizablePanel'
+import ResizableModal from './ui/ResizableModal'
 
 export default function CameraView({
   onVisitCommitted,
@@ -40,6 +41,7 @@ export default function CameraView({
   const [hadRecentAuto, setHadRecentAuto] = useState(false)
   const [activeTab, setActiveTab] = useState<'auto'|'manual'>('auto')
   const [showManualModal, setShowManualModal] = useState(false)
+  const [showAutoModal, setShowAutoModal] = useState(false)
   const manualPreviewRef = useRef<HTMLCanvasElement | null>(null)
 
   // Allow parent to open/close the manual modal via global events
@@ -377,7 +379,7 @@ export default function CameraView({
           <div className="flex items-center gap-2 mb-2">
             <button
               className={`btn px-3 py-1 text-sm ${activeTab==='auto' ? 'tab--active' : ''}`}
-              onClick={()=>{ setActiveTab('auto'); setShowManualModal(false) }}
+              onClick={()=>{ setActiveTab('auto'); setShowManualModal(false); setShowAutoModal(true) }}
             >Autoscore</button>
             <button
               className={`btn px-3 py-1 text-sm ${activeTab==='manual' ? 'tab--active' : ''}`}
@@ -406,59 +408,82 @@ export default function CameraView({
       </div>
       {/* Snapshot panel removed to reduce unused space */}
       <canvas ref={canvasRef} className="hidden"></canvas>
-      <div className="card">
-        <h2 className="text-xl font-semibold mb-3">Autoscore</h2>
-        <div className="text-sm opacity-80 mb-2">Click the camera overlay to autoscore. Use Manual Correction if the last auto is off.</div>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="font-semibold">Last auto:</span>
-          <span>{lastAutoScore || '—'}</span>
-          <button className="btn" onClick={onAddAutoDart} disabled={pendingDarts>=3}>Add Auto Dart</button>
-          {nonRegCount>0 && <span className="text-sm opacity-80">No-registers: {nonRegCount}/3</span>}
-        </div>
-        <div className="mt-3">
-          <div className="text-sm font-semibold mb-1">Quick entry</div>
-          <div className="flex gap-2 mb-2">
-            <button className={`btn ${quickMult==='S'?'tab--active':''}`} onClick={()=>setQuickMult('S')}>S</button>
-            <button className={`btn ${quickMult==='D'?'tab--active':''}`} onClick={()=>setQuickMult('D')}>D</button>
-            <button className={`btn ${quickMult==='T'?'tab--active':''}`} onClick={()=>setQuickMult('T')}>T</button>
+      {/* Autoscore moved into a pill-triggered modal to reduce on-screen clutter */}
+      {/* Modal: Autoscore */}
+      {showAutoModal && (
+        <div className="fixed inset-0 bg-black/60 z-[100]" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <ResizableModal
+              storageKey="ndn:autoscore:size"
+              className="w-full max-w-3xl"
+              defaultWidth={720}
+              defaultHeight={520}
+              minWidth={420}
+              minHeight={320}
+              maxWidth={1400}
+              maxHeight={900}
+              initialFitHeight
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xl font-semibold">Autoscore</h2>
+                <div className="flex items-center gap-2">
+                  <button className="btn btn--ghost" onClick={()=>setShowAutoModal(false)}>Close</button>
+                </div>
+              </div>
+              <div className="text-sm opacity-80 mb-3">Click the camera overlay to autoscore. Use Manual Correction if the last auto is off.</div>
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <span className="font-semibold">Last auto:</span>
+                <span>{lastAutoScore || '—'}</span>
+                <button className="btn" onClick={onAddAutoDart} disabled={pendingDarts>=3}>Add Auto Dart</button>
+                {nonRegCount>0 && <span className="text-sm opacity-80">No-registers: {nonRegCount}/3</span>}
+              </div>
+              <div className="mt-2">
+                <div className="text-sm font-semibold mb-1">Quick entry</div>
+                <div className="flex gap-2 mb-2">
+                  <button className={`btn ${quickMult==='S'?'tab--active':''}`} onClick={()=>setQuickMult('S')}>S</button>
+                  <button className={`btn ${quickMult==='D'?'tab--active':''}`} onClick={()=>setQuickMult('D')}>D</button>
+                  <button className={`btn ${quickMult==='T'?'tab--active':''}`} onClick={()=>setQuickMult('T')}>T</button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {['20','19','18','17','16','15'].map(n => (
+                    <button key={n} className="btn" disabled={pendingDarts>=3} onClick={()=>{
+                      const mult = quickMult
+                      const num = parseInt(n,10)
+                      const val = num * (mult==='S'?1:mult==='D'?2:3)
+                      const ring: Ring = mult==='S'?'SINGLE':mult==='D'?'DOUBLE':'TRIPLE'
+                      if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
+                        const c = nonRegCount + 1
+                        setNonRegCount(c)
+                        if (c >= 3) setShowRecalModal(true)
+                      } else {
+                        setNonRegCount(0)
+                      }
+                      addDart(val, `${mult}${n} ${val}`, ring)
+                      setHadRecentAuto(false)
+                    }}>{quickMult}{n}</button>
+                  ))}
+                  <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
+                    if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
+                      const c = nonRegCount + 1
+                      setNonRegCount(c)
+                      if (c >= 3) setShowRecalModal(true)
+                    } else setNonRegCount(0)
+                    addDart(25, 'BULL 25', 'BULL'); setHadRecentAuto(false)
+                  }}>25</button>
+                  <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
+                    if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
+                      const c = nonRegCount + 1
+                      setNonRegCount(c)
+                      if (c >= 3) setShowRecalModal(true)
+                    } else setNonRegCount(0)
+                    addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
+                  }}>50</button>
+                </div>
+              </div>
+            </ResizableModal>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {['20','19','18','17','16','15'].map(n => (
-              <button key={n} className="btn" disabled={pendingDarts>=3} onClick={()=>{
-                const mult = quickMult
-                const num = parseInt(n,10)
-                const val = num * (mult==='S'?1:mult==='D'?2:3)
-                const ring: Ring = mult==='S'?'SINGLE':mult==='D'?'DOUBLE':'TRIPLE'
-                if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
-                  const c = nonRegCount + 1
-                  setNonRegCount(c)
-                  if (c >= 3) setShowRecalModal(true)
-                } else {
-                  setNonRegCount(0)
-                }
-                addDart(val, `${mult}${n} ${val}`, ring)
-                setHadRecentAuto(false)
-              }}>{quickMult}{n}</button>
-            ))}
-            <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
-              if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
-                const c = nonRegCount + 1
-                setNonRegCount(c)
-                if (c >= 3) setShowRecalModal(true)
-              } else setNonRegCount(0)
-              addDart(25, 'BULL 25', 'BULL'); setHadRecentAuto(false)
-            }}>25</button>
-            <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
-              if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
-                const c = nonRegCount + 1
-                setNonRegCount(c)
-                if (c >= 3) setShowRecalModal(true)
-              } else setNonRegCount(0)
-              addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
-            }}>50</button>
-          </div>
         </div>
-      </div>
+      )}
       {showManualModal && (
         <div className="fixed inset-0 bg-black/60 z-[100]" role="dialog" aria-modal="true">
           <div className="absolute inset-0 flex flex-col">
