@@ -903,7 +903,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 {/* Turn-by-turn camera: show your camera when it's your turn */}
                 {/* Top toolbar above camera area */}
                 <div className="flex items-center gap-2 mb-2">
-                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ /* autoscore default */ closeManual() }}>Autoscore</button>
+                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
                   <button className="btn px-3 py-1 text-sm" onClick={openManual}>Manual Correction</button>
                 </div>
                 <div className="flex items-center gap-3">
@@ -1007,7 +1007,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <div className="flex items-center gap-2">
                     {/* Top toolbar above camera area */}
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ closeManual() }}>Autoscore</button>
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
                       <button className="btn px-2 py-0.5 text-xs" onClick={openManual}>Manual Correction</button>
                     </div>
                     {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (

@@ -43,6 +43,12 @@ export default function CameraView({
   const [showManualModal, setShowManualModal] = useState(false)
   const [showAutoModal, setShowAutoModal] = useState(false)
   const manualPreviewRef = useRef<HTMLCanvasElement | null>(null)
+  // Open Autoscore modal from parent via global event
+  useEffect(() => {
+    const onOpen = () => setShowAutoModal(true)
+    window.addEventListener('ndn:open-autoscore' as any, onOpen)
+    return () => window.removeEventListener('ndn:open-autoscore' as any, onOpen)
+  }, [])
 
   // Allow parent to open/close the manual modal via global events
   useEffect(() => {
