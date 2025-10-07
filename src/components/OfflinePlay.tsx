@@ -752,6 +752,38 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <CameraTile label="Your Board" autoStart={false} />
                 </div>
               </div>
+              {/* Match summary (offline) */}
+              <div className="mt-2 p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-white text-sm">
+                <div className="font-semibold mb-2">Match Summary</div>
+                {(() => {
+                  // In offline X01, player is vs AI or practice
+                  const currentThrower = isPlayerTurn ? (user?.username || 'You') : (ai === 'None' ? '—' : `${ai} AI`)
+                  const currentRemaining = isPlayerTurn ? playerScore : (ai === 'None' ? 0 : aiScore)
+                  const last = isPlayerTurn ? playerLastDart : aiLastDart
+                  const lastScoreVisit = isPlayerTurn ? playerVisitSum : aiVisitSum
+                  const dartsThrown = isPlayerTurn ? playerDartsThrown : aiDartsThrown
+                  const scored = (x01Score - (isPlayerTurn ? playerScore : (ai === 'None' ? x01Score : aiScore)))
+                  const avg3 = dartsThrown > 0 ? ((scored / dartsThrown) * 3) : 0
+                  const matchScore = `${playerLegs}-${aiLegs}`
+                  const bestLegText = legStats.length > 0 ? `${Math.min(...legStats.map(l=>l.doubleDarts + (l.checkoutDarts||0))) || 0} darts` : '—'
+                  return (
+                    <div className="grid grid-cols-2 gap-y-1">
+                      <div className="opacity-80">Current score</div>
+                      <div className="font-mono text-right">{matchScore}</div>
+                      <div className="opacity-80">Current thrower</div>
+                      <div className="text-right font-semibold">{currentThrower}</div>
+                      <div className="opacity-80">Score remaining</div>
+                      <div className="text-right font-mono">{currentRemaining}</div>
+                      <div className="opacity-80">3-dart avg</div>
+                      <div className="text-right font-mono">{avg3.toFixed(1)}</div>
+                      <div className="opacity-80">Last score</div>
+                      <div className="text-right font-mono">{lastScoreVisit || last}</div>
+                      <div className="opacity-80">Best leg</div>
+                      <div className="text-right">{bestLegText}</div>
+                    </div>
+                  )
+                })()}
+              </div>
               <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col h-full">
                 <div className="text-xs flex items-center justify-between opacity-80">
                   <span>{ai === 'None' ? 'Opponent' : `${ai} AI`} Remain</span>

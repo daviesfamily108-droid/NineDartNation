@@ -1194,7 +1194,47 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   )}
                 </div>
               </div>
-                <div className="md:col-span-2" />
+                {/* Right-hand summary panel */}
+                <div className="space-y-2">
+                  {(() => {
+                    const players = match.players || []
+                    const curIdx = match.currentPlayerIdx || 0
+                    const cur = players[curIdx]
+                    const leg = cur?.legs?.[cur?.legs?.length - 1]
+                    const remaining = leg ? leg.totalScoreRemaining : match.startingScore
+                    const darts = leg?.dartsThrown || 0
+                    const scored = leg ? (leg.totalScoreStart - leg.totalScoreRemaining) : 0
+                    const avg3 = darts > 0 ? ((scored / darts) * 3) : 0
+                    const lastScore = leg?.visits?.[leg.visits.length-1]?.score ?? 0
+                    let matchScore = '—'
+                    if (players.length === 2) {
+                      matchScore = `${players[0]?.legsWon || 0}-${players[1]?.legsWon || 0}`
+                    } else if (players.length > 2) {
+                      matchScore = players.map(p => `${p.name}:${p.legsWon||0}`).join(' · ')
+                    }
+                    const best = match.bestLegThisMatch
+                    const bestText = best ? `${best.darts} darts${(() => { const p = players.find(x=>x.id===best.playerId); return p?` (${p.name})`:'' })()}` : '—'
+                    return (
+                      <div className="p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-white text-sm">
+                        <div className="font-semibold mb-2">Match Summary</div>
+                        <div className="grid grid-cols-2 gap-y-1">
+                          <div className="opacity-80">Current score</div>
+                          <div className="font-mono text-right">{matchScore}</div>
+                          <div className="opacity-80">Current thrower</div>
+                          <div className="text-right font-semibold">{cur?.name || '—'}</div>
+                          <div className="opacity-80">Score remaining</div>
+                          <div className="text-right font-mono">{remaining}</div>
+                          <div className="opacity-80">3-dart avg</div>
+                          <div className="text-right font-mono">{avg3.toFixed(1)}</div>
+                          <div className="opacity-80">Last score</div>
+                          <div className="text-right font-mono">{lastScore}</div>
+                          <div className="opacity-80">Best leg</div>
+                          <div className="text-right">{bestText}</div>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
               </div>
               <div className="sticky bottom-0 bg-slate-900/80 backdrop-blur border-t border-slate-700 z-10 px-2 py-2">
                 <button className="btn w-full" disabled={!user?.fullAccess && (premiumGames as readonly string[]).includes(game)} title={!user?.fullAccess && (premiumGames as readonly string[]).includes(game) ? 'PREMIUM game' : ''} onClick={()=>{
