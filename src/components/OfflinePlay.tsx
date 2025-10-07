@@ -86,6 +86,11 @@ export default function OfflinePlay({ user }: { user: any }) {
   // Mirror Online layout defaults when in modern layout, otherwise keep classic feel
   const [maximized, setMaximized] = useState(offlineLayout === 'modern')
   const [fitAll, setFitAll] = useState(offlineLayout === 'modern')
+  // React to layout changes at runtime
+  useEffect(() => {
+    setMaximized(offlineLayout === 'modern')
+    setFitAll(offlineLayout === 'modern')
+  }, [offlineLayout])
   const [fitScale, setFitScale] = useState(1)
   const [isPlayerTurn, setIsPlayerTurn] = useState(true)
   // Per-dart input and stats
