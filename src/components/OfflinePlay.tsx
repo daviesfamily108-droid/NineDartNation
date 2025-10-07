@@ -133,7 +133,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   // Manual correction input for offline (matches CameraView UX)
   const [manualBox, setManualBox] = useState<string>('')
   // Settings: favourite double and caller
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline } = useUserSettings()
+  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale } = useUserSettings()
   // Fit-all scaling measurement
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -646,6 +646,21 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <span className={`ml-2 px-2 py-0.5 rounded-full border text-xs ${offlineLayout==='modern' ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30' : 'bg-white/10 text-white/70 border-white/20'}`}>{offlineLayout==='modern' ? 'Modern layout' : 'Classic layout'}</span>
                 </div>
                 <div className="flex items-center gap-1">
+                  {/* Camera scale controls (match Online UI) */}
+                  <div className="hidden sm:flex items-center gap-2 mr-2 text-xs">
+                    <span className="opacity-80">Cam</span>
+                    <button
+                      className="btn btn--ghost px-2 py-1"
+                      onClick={() => setCameraScale(Math.max(0.5, Math.round((cameraScale - 0.05) * 100) / 100))}
+                      title="Decrease camera size"
+                    >−</button>
+                    <span className="w-9 text-center">{Math.round(cameraScale * 100)}%</span>
+                    <button
+                      className="btn btn--ghost px-2 py-1"
+                      onClick={() => setCameraScale(Math.min(1.25, Math.round((cameraScale + 0.05) * 100) / 100))}
+                      title="Increase camera size"
+                    >+</button>
+                  </div>
                   <button
                     className="btn btn--ghost px-3 py-1 text-sm"
                     title={fitAll ? 'Actual Size' : 'Fit All'}
@@ -715,7 +730,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 <div className="text-3xl font-extrabold tracking-tight">{dpHits} / 21</div>
               </div>
             ) : offlineLayout === 'modern' ? (
-              <div className="grid grid-cols-1 md:grid-cols-[1.1fr_1.4fr] gap-2 mb-2 items-stretch min-w-0">
+              <div className="grid grid-cols-1 md:grid-cols-[1fr_1.6fr] gap-2 mb-2 items-stretch min-w-0">
                 {/* Left column: Player panel, Match Summary, Opponent panel stacked */}
                 <div className="flex flex-col gap-2 min-w-0">
                   <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col">
@@ -814,7 +829,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 </div>
                 {/* Right column: Camera tile */}
                 <div className="flex items-stretch justify-center min-w-0">
-                  <div className="w-full max-w-3xl min-w-0 aspect-video rounded-2xl overflow-hidden bg-black/70 border border-white/10">
+                  <div className="w-full min-w-0 aspect-video rounded-2xl overflow-hidden bg-black/70 border border-white/10">
                     <CameraTile label="Your Board" autoStart={false} />
                   </div>
                 </div>
