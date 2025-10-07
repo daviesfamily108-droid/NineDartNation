@@ -35,8 +35,9 @@ export default function CameraView({
   const addVisit = useMatch(s => s.addVisit)
   const endLeg = useMatch(s => s.endLeg)
   const matchState = useMatch(s => s)
-  // Quick entry tab selection (order: Doubles, Singles, Trebles)
-  const [quickTab, setQuickTab] = useState<'D'|'S'|'T'>('D')
+  // Quick entry dropdown selections
+  const [quickSelAuto, setQuickSelAuto] = useState('')
+  const [quickSelManual, setQuickSelManual] = useState('')
   const [nonRegCount, setNonRegCount] = useState(0)
   const [showRecalModal, setShowRecalModal] = useState(false)
   const [hadRecentAuto, setHadRecentAuto] = useState(false)
@@ -482,25 +483,41 @@ export default function CameraView({
                     addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
                   }}>50</button>
                 </div>
-                {/* Tabs: Doubles, Singles, Trebles */}
+                {/* Grouped dropdown: Doubles, Singles, Trebles */}
                 <div className="flex items-center gap-2 mb-3">
-                  <button className={`btn px-3 py-1 text-sm ${quickTab==='D'?'tab--active':''}`} onClick={()=>setQuickTab('D')}>Doubles</button>
-                  <button className={`btn px-3 py-1 text-sm ${quickTab==='S'?'tab--active':''}`} onClick={()=>setQuickTab('S')}>Singles</button>
-                  <button className={`btn px-3 py-1 text-sm ${quickTab==='T'?'tab--active':''}`} onClick={()=>setQuickTab('T')}>Trebles</button>
-                </div>
-                {/* Grid for selected tab */}
-                <div className="card p-3">
-                  <div className="text-sm font-semibold mb-2">{quickTab==='S'?'Singles':quickTab==='D'?'Doubles':'Trebles'}</div>
-                  <div className="grid grid-cols-5 gap-2">
-                    {Array.from({length:20}, (_,i)=>20-i).map(num => (
-                      <button
-                        key={`${quickTab}${num}`}
-                        className="btn"
-                        disabled={pendingDarts>=3}
-                        onClick={()=>onQuickEntry(num, quickTab)}
-                      >{quickTab}{num}</button>
-                    ))}
-                  </div>
+                  <select
+                    className="input w-full max-w-sm"
+                    value={quickSelAuto}
+                    onChange={e=>setQuickSelAuto(e.target.value)}
+                  >
+                    <option value="" disabled>Select quick entry…</option>
+                    <optgroup label="Doubles">
+                      {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                        <option key={`D${num}`} value={`D${num}`}>{`D${num}`}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Singles">
+                      {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                        <option key={`S${num}`} value={`S${num}`}>{`S${num}`}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Trebles">
+                      {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                        <option key={`T${num}`} value={`T${num}`}>{`T${num}`}</option>
+                      ))}
+                    </optgroup>
+                  </select>
+                  <button
+                    className="btn"
+                    disabled={!quickSelAuto || pendingDarts>=3}
+                    onClick={()=>{
+                      const m = quickSelAuto.match(/^(S|D|T)(\d{1,2})$/)
+                      if (!m) return
+                      const mult = m[1] as 'S'|'D'|'T'
+                      const num = parseInt(m[2], 10)
+                      onQuickEntry(num, mult)
+                    }}
+                  >Add</button>
                 </div>
               </div>
             </ResizableModal>
@@ -569,25 +586,41 @@ export default function CameraView({
                         addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
                       }}>50</button>
                     </div>
-                    {/* Tabs: Doubles, Singles, Trebles */}
+                    {/* Grouped dropdown: Doubles, Singles, Trebles */}
                     <div className="flex items-center gap-2 mb-3">
-                      <button className={`btn px-3 py-1 text-sm ${quickTab==='D'?'tab--active':''}`} onClick={()=>setQuickTab('D')}>Doubles</button>
-                      <button className={`btn px-3 py-1 text-sm ${quickTab==='S'?'tab--active':''}`} onClick={()=>setQuickTab('S')}>Singles</button>
-                      <button className={`btn px-3 py-1 text-sm ${quickTab==='T'?'tab--active':''}`} onClick={()=>setQuickTab('T')}>Trebles</button>
-                    </div>
-                    {/* Grid for selected tab */}
-                    <div className="card p-3">
-                      <div className="text-sm font-semibold mb-2">{quickTab==='S'?'Singles':quickTab==='D'?'Doubles':'Trebles'}</div>
-                      <div className="grid grid-cols-5 gap-2">
-                        {Array.from({length:20}, (_,i)=>20-i).map(num => (
-                          <button
-                            key={`${quickTab}${num}`}
-                            className="btn"
-                            disabled={pendingDarts>=3}
-                            onClick={()=>onQuickEntry(num, quickTab)}
-                          >{quickTab}{num}</button>
-                        ))}
-                      </div>
+                      <select
+                        className="input w-full max-w-sm"
+                        value={quickSelManual}
+                        onChange={e=>setQuickSelManual(e.target.value)}
+                      >
+                        <option value="" disabled>Select quick entry…</option>
+                        <optgroup label="Doubles">
+                          {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                            <option key={`D${num}`} value={`D${num}`}>{`D${num}`}</option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Singles">
+                          {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                            <option key={`S${num}`} value={`S${num}`}>{`S${num}`}</option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Trebles">
+                          {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                            <option key={`T${num}`} value={`T${num}`}>{`T${num}`}</option>
+                          ))}
+                        </optgroup>
+                      </select>
+                      <button
+                        className="btn"
+                        disabled={!quickSelManual || pendingDarts>=3}
+                        onClick={()=>{
+                          const m = quickSelManual.match(/^(S|D|T)(\d{1,2})$/)
+                          if (!m) return
+                          const mult = m[1] as 'S'|'D'|'T'
+                          const num = parseInt(m[2], 10)
+                          onQuickEntry(num, mult)
+                        }}
+                      >Add</button>
                     </div>
                   </div>
                 </div>
