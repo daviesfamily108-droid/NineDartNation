@@ -15,6 +15,9 @@ type SettingsState = {
   reducedMotion: boolean
   compactHeader: boolean
   allowSpectate: boolean
+  // UI tuning
+  cameraScale: number // 0.5 .. 1.25
+  calibrationGuide: boolean
   setFavoriteDouble: (d: string) => void
   setCallerEnabled: (v: boolean) => void
   setCallerVoice: (name: string) => void
@@ -27,14 +30,16 @@ type SettingsState = {
   setReducedMotion: (v: boolean) => void
   setCompactHeader: (v: boolean) => void
   setAllowSpectate: (v: boolean) => void
+  setCameraScale: (n: number) => void
+  setCalibrationGuide: (v: boolean) => void
 }
 
 const KEY = 'ndn_user_settings'
 
-function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'callerVoice' | 'avgMode' | 'callerVolume' | 'speakCheckoutOnly' | 'autoStartOffline' | 'rememberLastOffline' | 'lastOffline' | 'reducedMotion' | 'compactHeader' | 'allowSpectate'> {
+function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'callerVoice' | 'avgMode' | 'callerVolume' | 'speakCheckoutOnly' | 'autoStartOffline' | 'rememberLastOffline' | 'lastOffline' | 'reducedMotion' | 'compactHeader' | 'allowSpectate' | 'cameraScale' | 'calibrationGuide'> {
   try {
     const raw = localStorage.getItem(KEY)
-    if (!raw) return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true }
+    if (!raw) return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 0.9, calibrationGuide: true }
     const j = JSON.parse(raw)
     return {
       favoriteDouble: j.favoriteDouble || 'D16',
@@ -54,9 +59,11 @@ function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'calle
       reducedMotion: !!j.reducedMotion,
       compactHeader: !!j.compactHeader,
       allowSpectate: (typeof j.allowSpectate === 'boolean') ? j.allowSpectate : true,
+      cameraScale: (typeof j.cameraScale === 'number' && isFinite(j.cameraScale)) ? Math.max(0.5, Math.min(1.25, j.cameraScale)) : 0.9,
+      calibrationGuide: (typeof j.calibrationGuide === 'boolean') ? j.calibrationGuide : true,
     }
   } catch {
-    return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true }
+    return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 0.9, calibrationGuide: true }
   }
 }
 
@@ -81,4 +88,6 @@ export const useUserSettings = create<SettingsState>((set) => ({
   setReducedMotion: (v) => { save({ reducedMotion: v }); set({ reducedMotion: v }) },
   setCompactHeader: (v) => { save({ compactHeader: v }); set({ compactHeader: v }) },
   setAllowSpectate: (v) => { save({ allowSpectate: v }); set({ allowSpectate: v }) },
+  setCameraScale: (n) => { const s = Math.max(0.5, Math.min(1.25, n)); save({ cameraScale: s }); set({ cameraScale: s }) },
+  setCalibrationGuide: (v) => { save({ calibrationGuide: v }); set({ calibrationGuide: v }) },
 }))

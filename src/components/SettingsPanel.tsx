@@ -77,6 +77,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
     reducedMotion, setReducedMotion,
     compactHeader, setCompactHeader,
     allowSpectate, setAllowSpectate,
+    cameraScale, setCameraScale,
+    calibrationGuide, setCalibrationGuide,
   } = useUserSettings();
   const voices = (typeof window !== 'undefined' && window.speechSynthesis) ? window.speechSynthesis.getVoices() : [];
 
@@ -276,6 +278,22 @@ export default function SettingsPanel({ user }: { user?: any }) {
                 <div className="text-xs text-slate-400 mt-1">Uses your browser's built-in speech synthesis voices.</div>
               </div>
             </div>
+          </div>
+          <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 mt-4">
+            <div className="font-semibold mb-2">Camera & Calibration</div>
+            <div className="grid grid-cols-3 gap-2 items-center text-sm mb-2">
+              <div className="text-slate-600 col-span-1">Default camera size</div>
+              <div className="col-span-2 flex items-center gap-2">
+                <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
+                <input className="flex-1" type="range" min={0.5} max={1.25} step={0.05} value={cameraScale} onChange={e=>setCameraScale(parseFloat(e.target.value))} />
+                <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                <div className="w-10 text-right">{Math.round(cameraScale*100)}%</div>
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="accent-indigo-600" checked={calibrationGuide} onChange={e=>setCalibrationGuide(e.target.checked)} />
+              Show preferred-view guide in Calibrator
+            </label>
           </div>
           <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 mt-4">
             <div className="font-semibold mb-2">Online & Privacy</div>
