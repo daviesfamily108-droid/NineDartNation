@@ -1,7 +1,7 @@
 [build]
-  # Build the Vite app in the app/ subfolder
-  command = "cd app && npm ci && npm run build"
-  publish = "app/dist"
+  # Build the Vite app from the repository root
+  command = "npm ci && npm run build"
+  publish = "dist"
 
 [build.environment]
   NODE_VERSION = "18"
