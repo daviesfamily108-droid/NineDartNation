@@ -35,7 +35,8 @@ export default function CameraView({
   const addVisit = useMatch(s => s.addVisit)
   const endLeg = useMatch(s => s.endLeg)
   const matchState = useMatch(s => s)
-  const [quickMult, setQuickMult] = useState<'S'|'D'|'T'>('S')
+  // Quick entry tab selection (order: Doubles, Singles, Trebles)
+  const [quickTab, setQuickTab] = useState<'D'|'S'|'T'>('D')
   const [nonRegCount, setNonRegCount] = useState(0)
   const [showRecalModal, setShowRecalModal] = useState(false)
   const [hadRecentAuto, setHadRecentAuto] = useState(false)
@@ -481,23 +482,25 @@ export default function CameraView({
                     addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
                   }}>50</button>
                 </div>
-                {/* Full S/D/T board */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {(['S','D','T'] as const).map(mult => (
-                    <div key={mult} className="card p-3">
-                      <div className="text-sm font-semibold mb-2">{mult==='S'?'Singles':mult==='D'?'Doubles':'Trebles'}</div>
-                      <div className="grid grid-cols-5 gap-2">
-                        {Array.from({length:20}, (_,i)=>20-i).map(num => (
-                          <button
-                            key={`${mult}${num}`}
-                            className="btn"
-                            disabled={pendingDarts>=3}
-                            onClick={()=>onQuickEntry(num, mult)}
-                          >{mult}{num}</button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                {/* Tabs: Doubles, Singles, Trebles */}
+                <div className="flex items-center gap-2 mb-3">
+                  <button className={`btn px-3 py-1 text-sm ${quickTab==='D'?'tab--active':''}`} onClick={()=>setQuickTab('D')}>Doubles</button>
+                  <button className={`btn px-3 py-1 text-sm ${quickTab==='S'?'tab--active':''}`} onClick={()=>setQuickTab('S')}>Singles</button>
+                  <button className={`btn px-3 py-1 text-sm ${quickTab==='T'?'tab--active':''}`} onClick={()=>setQuickTab('T')}>Trebles</button>
+                </div>
+                {/* Grid for selected tab */}
+                <div className="card p-3">
+                  <div className="text-sm font-semibold mb-2">{quickTab==='S'?'Singles':quickTab==='D'?'Doubles':'Trebles'}</div>
+                  <div className="grid grid-cols-5 gap-2">
+                    {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                      <button
+                        key={`${quickTab}${num}`}
+                        className="btn"
+                        disabled={pendingDarts>=3}
+                        onClick={()=>onQuickEntry(num, quickTab)}
+                      >{quickTab}{num}</button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </ResizableModal>
@@ -566,23 +569,25 @@ export default function CameraView({
                         addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
                       }}>50</button>
                     </div>
-                    {/* Full S/D/T board */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {(['S','D','T'] as const).map(mult => (
-                        <div key={mult} className="card p-3">
-                          <div className="text-sm font-semibold mb-2">{mult==='S'?'Singles':mult==='D'?'Doubles':'Trebles'}</div>
-                          <div className="grid grid-cols-5 gap-2">
-                            {Array.from({length:20}, (_,i)=>20-i).map(num => (
-                              <button
-                                key={`${mult}${num}`}
-                                className="btn"
-                                disabled={pendingDarts>=3}
-                                onClick={()=>onQuickEntry(num, mult)}
-                              >{mult}{num}</button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                    {/* Tabs: Doubles, Singles, Trebles */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <button className={`btn px-3 py-1 text-sm ${quickTab==='D'?'tab--active':''}`} onClick={()=>setQuickTab('D')}>Doubles</button>
+                      <button className={`btn px-3 py-1 text-sm ${quickTab==='S'?'tab--active':''}`} onClick={()=>setQuickTab('S')}>Singles</button>
+                      <button className={`btn px-3 py-1 text-sm ${quickTab==='T'?'tab--active':''}`} onClick={()=>setQuickTab('T')}>Trebles</button>
+                    </div>
+                    {/* Grid for selected tab */}
+                    <div className="card p-3">
+                      <div className="text-sm font-semibold mb-2">{quickTab==='S'?'Singles':quickTab==='D'?'Doubles':'Trebles'}</div>
+                      <div className="grid grid-cols-5 gap-2">
+                        {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                          <button
+                            key={`${quickTab}${num}`}
+                            className="btn"
+                            disabled={pendingDarts>=3}
+                            onClick={()=>onQuickEntry(num, quickTab)}
+                          >{quickTab}{num}</button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
