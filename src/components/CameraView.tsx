@@ -358,6 +358,23 @@ export default function CameraView({
     setNonRegCount(0)
   }
 
+  // Centralized quick-entry handler for S/D/T 1-20 buttons
+  function onQuickEntry(num: number, mult: 'S'|'D'|'T') {
+    if (pendingDarts >= 3) return
+    const val = num * (mult==='S'?1:mult==='D'?2:3)
+    const ring: Ring = mult==='S' ? 'SINGLE' : mult==='D' ? 'DOUBLE' : 'TRIPLE'
+    // If autoscore didn't register recently, count toward recalibration
+    if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
+      const c = nonRegCount + 1
+      setNonRegCount(c)
+      if (c >= 3) setShowRecalModal(true)
+    } else {
+      setNonRegCount(0)
+    }
+    addDart(val, `${mult}${num} ${val}`, ring)
+    setHadRecentAuto(false)
+  }
+
   function onUndoDart() {
     if (pendingDarts === 0) return
     const last = pendingEntries[pendingEntries.length-1]
@@ -444,30 +461,9 @@ export default function CameraView({
                 {nonRegCount>0 && <span className="text-sm opacity-80">No-registers: {nonRegCount}/3</span>}
               </div>
               <div className="mt-2">
-                <div className="text-sm font-semibold mb-1">Quick entry</div>
-                <div className="flex gap-2 mb-2">
-                  <button className={`btn ${quickMult==='S'?'tab--active':''}`} onClick={()=>setQuickMult('S')}>S</button>
-                  <button className={`btn ${quickMult==='D'?'tab--active':''}`} onClick={()=>setQuickMult('D')}>D</button>
-                  <button className={`btn ${quickMult==='T'?'tab--active':''}`} onClick={()=>setQuickMult('T')}>T</button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {['20','19','18','17','16','15'].map(n => (
-                    <button key={n} className="btn" disabled={pendingDarts>=3} onClick={()=>{
-                      const mult = quickMult
-                      const num = parseInt(n,10)
-                      const val = num * (mult==='S'?1:mult==='D'?2:3)
-                      const ring: Ring = mult==='S'?'SINGLE':mult==='D'?'DOUBLE':'TRIPLE'
-                      if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
-                        const c = nonRegCount + 1
-                        setNonRegCount(c)
-                        if (c >= 3) setShowRecalModal(true)
-                      } else {
-                        setNonRegCount(0)
-                      }
-                      addDart(val, `${mult}${n} ${val}`, ring)
-                      setHadRecentAuto(false)
-                    }}>{quickMult}{n}</button>
-                  ))}
+                <div className="text-sm font-semibold mb-2">Quick entry</div>
+                {/* Bulls */}
+                <div className="flex flex-wrap gap-2 mb-3">
                   <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
                     if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
                       const c = nonRegCount + 1
@@ -484,6 +480,24 @@ export default function CameraView({
                     } else setNonRegCount(0)
                     addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
                   }}>50</button>
+                </div>
+                {/* Full S/D/T board */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {(['S','D','T'] as const).map(mult => (
+                    <div key={mult} className="card p-3">
+                      <div className="text-sm font-semibold mb-2">{mult==='S'?'Singles':mult==='D'?'Doubles':'Trebles'}</div>
+                      <div className="grid grid-cols-5 gap-2">
+                        {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                          <button
+                            key={`${mult}${num}`}
+                            className="btn"
+                            disabled={pendingDarts>=3}
+                            onClick={()=>onQuickEntry(num, mult)}
+                          >{mult}{num}</button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </ResizableModal>
@@ -532,30 +546,9 @@ export default function CameraView({
                   </div>
                   <div className="text-xs opacity-70 mb-4">Press Enter to Add · Shift+Enter to Replace Last</div>
                   <div className="mt-auto">
-                    <div className="text-sm font-semibold mb-1">Quick entry</div>
-                    <div className="flex gap-2 mb-2">
-                      <button className={`btn ${quickMult==='S'?'tab--active':''}`} onClick={()=>setQuickMult('S')}>S</button>
-                      <button className={`btn ${quickMult==='D'?'tab--active':''}`} onClick={()=>setQuickMult('D')}>D</button>
-                      <button className={`btn ${quickMult==='T'?'tab--active':''}`} onClick={()=>setQuickMult('T')}>T</button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {['20','19','18','17','16','15'].map(n => (
-                        <button key={n} className="btn" disabled={pendingDarts>=3} onClick={()=>{
-                          const mult = quickMult
-                          const num = parseInt(n,10)
-                          const val = num * (mult==='S'?1:mult==='D'?2:3)
-                          const ring: Ring = mult==='S'?'SINGLE':mult==='D'?'DOUBLE':'TRIPLE'
-                          if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
-                            const c = nonRegCount + 1
-                            setNonRegCount(c)
-                            if (c >= 3) setShowRecalModal(true)
-                          } else {
-                            setNonRegCount(0)
-                          }
-                          addDart(val, `${mult}${n} ${val}`, ring)
-                          setHadRecentAuto(false)
-                        }}>{quickMult}{n}</button>
-                      ))}
+                    <div className="text-sm font-semibold mb-2">Quick entry</div>
+                    {/* Bulls */}
+                    <div className="flex flex-wrap gap-2 mb-3">
                       <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
                         if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
                           const c = nonRegCount + 1
@@ -572,6 +565,24 @@ export default function CameraView({
                         } else setNonRegCount(0)
                         addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
                       }}>50</button>
+                    </div>
+                    {/* Full S/D/T board */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {(['S','D','T'] as const).map(mult => (
+                        <div key={mult} className="card p-3">
+                          <div className="text-sm font-semibold mb-2">{mult==='S'?'Singles':mult==='D'?'Doubles':'Trebles'}</div>
+                          <div className="grid grid-cols-5 gap-2">
+                            {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                              <button
+                                key={`${mult}${num}`}
+                                className="btn"
+                                disabled={pendingDarts>=3}
+                                onClick={()=>onQuickEntry(num, mult)}
+                              >{mult}{num}</button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
