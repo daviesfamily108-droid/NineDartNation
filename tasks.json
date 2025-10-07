@@ -1,0 +1,67 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Install root deps and run dev servers",
+			"type": "shell",
+			"command": "npm install && npm run dev",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Install root deps",
+			"type": "shell",
+			"command": "npm install",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Install root deps (PowerShell-safe)",
+			"type": "shell",
+			"command": "npm install",
+			"args": [],
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Install app qrcode dep",
+			"type": "shell",
+			"command": "cd app && npm install qrcode@^1.5.3 --save",
+			"isBackground": false,
+			"group": "build"
+		},
+		{
+			"label": "Run dev (PowerShell-safe)",
+			"type": "shell",
+			"command": "npm install; npm run dev",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Run server to smoke-test endpoints",
+			"type": "shell",
+			"command": "cd server; node server.js",
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Run server to smoke-test endpoints",
+			"type": "shell",
+			"command": "cd server; node server.js",
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "Run dev (PowerShell-safe)",
+			"type": "shell",
+			"command": "npm install; npm run dev",
+			"isBackground": false
+		}
+	]
+}
