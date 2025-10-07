@@ -492,17 +492,17 @@ export default function CameraView({
                   >
                     <option value="" disabled>Select quick entry…</option>
                     <optgroup label="Doubles">
-                      {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                      {Array.from({length:20}, (_,i)=>i+1).map(num => (
                         <option key={`D${num}`} value={`D${num}`}>{`D${num}`}</option>
                       ))}
                     </optgroup>
                     <optgroup label="Singles">
-                      {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                      {Array.from({length:20}, (_,i)=>i+1).map(num => (
                         <option key={`S${num}`} value={`S${num}`}>{`S${num}`}</option>
                       ))}
                     </optgroup>
                     <optgroup label="Trebles">
-                      {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                      {Array.from({length:20}, (_,i)=>i+1).map(num => (
                         <option key={`T${num}`} value={`T${num}`}>{`T${num}`}</option>
                       ))}
                     </optgroup>
@@ -595,17 +595,17 @@ export default function CameraView({
                       >
                         <option value="" disabled>Select quick entry…</option>
                         <optgroup label="Doubles">
-                          {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                          {Array.from({length:20}, (_,i)=>i+1).map(num => (
                             <option key={`D${num}`} value={`D${num}`}>{`D${num}`}</option>
                           ))}
                         </optgroup>
                         <optgroup label="Singles">
-                          {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                          {Array.from({length:20}, (_,i)=>i+1).map(num => (
                             <option key={`S${num}`} value={`S${num}`}>{`S${num}`}</option>
                           ))}
                         </optgroup>
                         <optgroup label="Trebles">
-                          {Array.from({length:20}, (_,i)=>20-i).map(num => (
+                          {Array.from({length:20}, (_,i)=>i+1).map(num => (
                             <option key={`T${num}`} value={`T${num}`}>{`T${num}`}</option>
                           ))}
                         </optgroup>
