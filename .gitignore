@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+app/node_modules/
+server/node_modules/
+
+# Build output
+/dist/
+/build/
+app/dist/
+server/dist/
+.vite/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment files
+.env
+.env.*
+!.env.example
+app/.env.local
+server/.env.local
+
+# Coverage
+coverage/
+
+# Editor/IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
+*.iml
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# Caches
+.cache/
+.parcel-cache/
+.eslintcache
+
+# Framework outputs (harmless if unused)
+.next/
+.nuxt/
+.svelte-kit/
+
+# Server certificates (never commit secrets)
+server/certs/*.pem
+server/certs/*.crt
+server/certs/*.key
+server/certs/*.pfx

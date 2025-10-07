@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import QRCode from 'qrcode'
 import { useCalibration } from '../store/calibration'
 import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, type Homography, type Point } from '../utils/vision'
+import { useUserSettings } from '../store/userSettings'
 
 type Phase = 'idle' | 'camera' | 'capture' | 'select' | 'computed'
 type CamMode = 'local' | 'phone'
@@ -16,6 +17,7 @@ export default function Calibrator() {
 	const [dstPoints, setDstPoints] = useState<Point[]>([]) // image points clicked in order TOP, RIGHT, BOTTOM, LEFT
 	const [snapshotSet, setSnapshotSet] = useState(false)
 	const { H, setCalibration, reset, errorPx } = useCalibration()
+  const { calibrationGuide } = useUserSettings()
 
 	// Phone pairing state (mirrors CameraTile)
 	const [ws, setWs] = useState<WebSocket | null>(null)
@@ -222,6 +224,35 @@ export default function Calibrator() {
 				const poly = sampleRing(Huse, r, 360)
 				drawPolyline(ctx, poly, r === BoardRadii.doubleOuter ? '#22d3ee' : '#a78bfa', r === BoardRadii.doubleOuter ? 3 : 2)
 			}
+		}
+
+		// Preferred-view framing guide (if enabled): shaded safe zone and angle lines
+		if (calibrationGuide) {
+			ctx.save()
+			// Semi-transparent vignette to encourage centered, face-on framing
+			ctx.fillStyle = 'rgba(59,130,246,0.10)'
+			const pad = Math.round(Math.min(o.width, o.height) * 0.08)
+			const w = o.width - pad*2
+			const h = o.height - pad*2
+			ctx.fillRect(pad, pad, w, h)
+			// Horizon/tilt line and vertical center line
+			ctx.strokeStyle = 'rgba(34,197,94,0.9)'
+			ctx.lineWidth = 2
+			// Horizontal line roughly through bull height
+			ctx.beginPath(); ctx.moveTo(pad, o.height/2); ctx.lineTo(o.width-pad, o.height/2); ctx.stroke()
+			// Vertical center
+			ctx.beginPath(); ctx.moveTo(o.width/2, pad); ctx.lineTo(o.width/2, o.height-pad); ctx.stroke()
+			// Angle brackets to suggest slight top-down 10–15°
+			ctx.strokeStyle = 'rgba(234,179,8,0.9)'
+			ctx.setLineDash([6,4])
+			const ax = pad + 30, ay = pad + 30
+			ctx.beginPath(); ctx.moveTo(ax, ay+30); ctx.lineTo(ax+60, ay); ctx.stroke()
+			ctx.beginPath(); ctx.moveTo(o.width-ax, ay+30); ctx.lineTo(o.width-ax-60, ay); ctx.stroke()
+			ctx.restore()
+			// Legend
+			ctx.fillStyle = 'rgba(255,255,255,0.85)'
+			ctx.font = '12px sans-serif'
+			ctx.fillText('Tip: Frame board centered, edges parallel; slight top-down is okay. Keep bull near center.', pad+6, pad+18)
 		}
 	}
 

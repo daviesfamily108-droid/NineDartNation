@@ -1,23 +1,38 @@
 import { useEffect, useRef, useState } from 'react'
+import { useUserSettings } from '../store/userSettings'
 import { useCalibration } from '../store/calibration'
 import { useMatch } from '../store/match'
 import { BoardRadii, drawPolyline, sampleRing, scaleHomography, type Point } from '../utils/vision'
 import { scoreFromImagePoint } from '../utils/autoscore'
 import { addSample } from '../store/profileStats'
 import ResizablePanel from './ui/ResizablePanel'
+import ResizableModal from './ui/ResizableModal'
+
+// Shared ring type across autoscore/manual flows
+type Ring = 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'
 
 export default function CameraView({
   onVisitCommitted,
   showToolbar = true,
   onAutoDart,
   immediateAutoCommit = false,
+  hideInlinePanels = false,
+  scoringMode = 'x01',
+  onGenericDart,
+  onGenericReplace,
 }: {
   onVisitCommitted?: (score: number, darts: number, finished: boolean) => void
   showToolbar?: boolean
   onAutoDart?: (value: number, ring: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', info?: { sector: number | null; mult: 0|1|2|3 }) => void
   immediateAutoCommit?: boolean
+  hideInlinePanels?: boolean
+  scoringMode?: 'x01' | 'custom'
+  onGenericDart?: (value: number, ring: Ring, meta: { label: string }) => void
+  onGenericReplace?: (value: number, ring: Ring, meta: { label: string }) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const { preferredCameraId, setPreferredCamera } = useUserSettings()
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const [streaming, setStreaming] = useState(false)
@@ -26,7 +41,6 @@ export default function CameraView({
   const [lastAutoScore, setLastAutoScore] = useState<string>('')
   const [manualScore, setManualScore] = useState<string>('')
   const [lastAutoValue, setLastAutoValue] = useState<number>(0)
-  type Ring = 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'
   const [lastAutoRing, setLastAutoRing] = useState<Ring>('MISS')
   const [pendingDarts, setPendingDarts] = useState<number>(0)
   const [pendingScore, setPendingScore] = useState<number>(0)
@@ -34,13 +48,30 @@ export default function CameraView({
   const addVisit = useMatch(s => s.addVisit)
   const endLeg = useMatch(s => s.endLeg)
   const matchState = useMatch(s => s)
-  const [quickMult, setQuickMult] = useState<'S'|'D'|'T'>('S')
+  // Quick entry dropdown selections
+  const [quickSelAuto, setQuickSelAuto] = useState('')
+  const [quickSelManual, setQuickSelManual] = useState('')
   const [nonRegCount, setNonRegCount] = useState(0)
   const [showRecalModal, setShowRecalModal] = useState(false)
   const [hadRecentAuto, setHadRecentAuto] = useState(false)
   const [activeTab, setActiveTab] = useState<'auto'|'manual'>('auto')
   const [showManualModal, setShowManualModal] = useState(false)
+  const [showAutoModal, setShowAutoModal] = useState(false)
+  const [showScoringModal, setShowScoringModal] = useState(false)
   const manualPreviewRef = useRef<HTMLCanvasElement | null>(null)
+  // Open Autoscore modal from parent via global event
+  useEffect(() => {
+    const onOpen = () => setShowAutoModal(true)
+    window.addEventListener('ndn:open-autoscore' as any, onOpen)
+    return () => window.removeEventListener('ndn:open-autoscore' as any, onOpen)
+  }, [])
+
+  // Open Scoring (Camera + Pending Visit) modal from parent via global event
+  useEffect(() => {
+    const onOpen = () => setShowScoringModal(true)
+    window.addEventListener('ndn:open-scoring' as any, onOpen)
+    return () => window.removeEventListener('ndn:open-scoring' as any, onOpen)
+  }, [])
 
   // Allow parent to open/close the manual modal via global events
   useEffect(() => {
@@ -92,12 +123,37 @@ export default function CameraView({
 
   async function startCamera() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      // If a preferred camera is set, request it; otherwise default
+      const constraints: MediaStreamConstraints = preferredCameraId ? { video: { deviceId: { exact: preferredCameraId } }, audio: false } : { video: true, audio: false }
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints)
+      } catch (err: any) {
+        // Fallback if specific device isn't available
+        const name = (err && (err.name || err.code)) || ''
+        if (preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError')) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        } else {
+          throw err
+        }
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         await videoRef.current.play()
       }
       setStreaming(true)
+      // Capture device list for inline picker and remember selection
+      try {
+        const list = await navigator.mediaDevices.enumerateDevices()
+        setAvailableCameras(list.filter(d=>d.kind==='videoinput'))
+        const vidTrack = (stream.getVideoTracks?.()||[])[0]
+        const settings = vidTrack?.getSettings?.()
+        const id = settings?.deviceId as string | undefined
+        if (id) {
+          const label = list.find(d=>d.deviceId===id)?.label
+          setPreferredCamera(id, label||'')
+        }
+      } catch {}
     } catch (e) {
       alert('Camera permission denied or not available.')
     }
@@ -122,6 +178,31 @@ export default function CameraView({
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
     const url = canvas.toDataURL('image/png')
     setSnapshotUrl(url)
+  }
+
+  // Inline light-weight device switcher (optional)
+  function CameraSelector() {
+    if (!availableCameras.length) return null
+    return (
+      <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-black/40 rounded px-2 py-1 text-xs">
+        <span>Cam:</span>
+        <select
+          className="bg-black/20 rounded px-1 py-0.5"
+          value={preferredCameraId || ''}
+          onChange={async (e)=>{
+            const id = e.target.value || undefined
+            const label = availableCameras.find(d=>d.deviceId===id)?.label
+            setPreferredCamera(id, label||'')
+            stopCamera(); await startCamera()
+          }}
+        >
+          <option value="">Auto</option>
+          {availableCameras.map(d => (
+            <option key={d.deviceId} value={d.deviceId}>{d.label || 'Camera'}</option>
+          ))}
+        </select>
+      </div>
+    )
   }
 
   function drawOverlay() {
@@ -202,6 +283,18 @@ export default function CameraView({
   }
 
   function addDart(value: number, label: string, ring: Ring) {
+    // In generic mode, delegate to parent without X01 bust/finish rules
+    if (scoringMode === 'custom') {
+      if (onGenericDart) try { onGenericDart(value, ring, { label }) } catch {}
+      // Maintain a lightweight pending list for UI only
+      if (pendingDarts >= 3) return
+      const newDarts = pendingDarts + 1
+      setPendingDarts(newDarts)
+      setPendingScore(s => s + value)
+      setPendingEntries(e => [...e, { label, value, ring }])
+      return
+    }
+
     if (pendingDarts >= 3) return
     const newDarts = pendingDarts + 1
     const newScore = pendingScore + value
@@ -277,6 +370,21 @@ export default function CameraView({
       onApplyManual()
       return
     }
+    if (scoringMode === 'custom') {
+      // Let parent handle replacement semantics
+      if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
+        const c = nonRegCount + 1
+        setNonRegCount(c)
+        if (c >= 3) setShowRecalModal(true)
+      } else setNonRegCount(0)
+
+      // Update local pending UI
+      setPendingEntries((e)=>[...e.slice(0,-1), { label: parsed.label, value: parsed.value, ring: parsed.ring }])
+      if (onGenericReplace) try { onGenericReplace(parsed.value, parsed.ring, { label: parsed.label }) } catch {}
+      setManualScore('')
+      setHadRecentAuto(false)
+      return
+    }
     if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
       const c = nonRegCount + 1
       setNonRegCount(c)
@@ -350,6 +458,23 @@ export default function CameraView({
     setNonRegCount(0)
   }
 
+  // Centralized quick-entry handler for S/D/T 1-20 buttons
+  function onQuickEntry(num: number, mult: 'S'|'D'|'T') {
+    if (pendingDarts >= 3) return
+    const val = num * (mult==='S'?1:mult==='D'?2:3)
+    const ring: Ring = mult==='S' ? 'SINGLE' : mult==='D' ? 'DOUBLE' : 'TRIPLE'
+    // If autoscore didn't register recently, count toward recalibration
+    if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
+      const c = nonRegCount + 1
+      setNonRegCount(c)
+      if (c >= 3) setShowRecalModal(true)
+    } else {
+      setNonRegCount(0)
+    }
+    addDart(val, `${mult}${num} ${val}`, ring)
+    setHadRecentAuto(false)
+  }
+
   function onUndoDart() {
     if (pendingDarts === 0) return
     const last = pendingEntries[pendingEntries.length-1]
@@ -360,6 +485,11 @@ export default function CameraView({
 
   function onCommitVisit() {
     if (pendingDarts === 0) return
+    if (scoringMode === 'custom') {
+      // For custom mode, simply clear local pending (parent maintains its own scoring)
+      setPendingDarts(0); setPendingScore(0); setPendingEntries([])
+      return
+    }
     addVisit(pendingScore, pendingDarts)
     try {
       const name = matchState.players[matchState.currentPlayerIdx]?.name
@@ -377,7 +507,7 @@ export default function CameraView({
           <div className="flex items-center gap-2 mb-2">
             <button
               className={`btn px-3 py-1 text-sm ${activeTab==='auto' ? 'tab--active' : ''}`}
-              onClick={()=>{ setActiveTab('auto'); setShowManualModal(false) }}
+              onClick={()=>{ setActiveTab('auto'); setShowManualModal(false); setShowAutoModal(true) }}
             >Autoscore</button>
             <button
               className={`btn px-3 py-1 text-sm ${activeTab==='manual' ? 'tab--active' : ''}`}
@@ -387,9 +517,11 @@ export default function CameraView({
           </div>
         </div>
       )}
-      <div className="card">
+  {!hideInlinePanels ? (
+  <div className="card">
         <h2 className="text-xl font-semibold mb-3">Camera</h2>
         <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={720} defaultHeight={405} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
+          <CameraSelector />
           <video ref={videoRef} className="w-full h-full object-cover" />
           <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
         </ResizablePanel>
@@ -403,62 +535,94 @@ export default function CameraView({
           <button className="btn" onClick={capture} disabled={!streaming}>Capture Still</button>
           <button className="btn bg-slate-700 hover:bg-slate-800" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
         </div>
-      </div>
+  </div>
+  ) : null}
       {/* Snapshot panel removed to reduce unused space */}
       <canvas ref={canvasRef} className="hidden"></canvas>
-      <div className="card">
-        <h2 className="text-xl font-semibold mb-3">Autoscore</h2>
-        <div className="text-sm opacity-80 mb-2">Click the camera overlay to autoscore. Use Manual Correction if the last auto is off.</div>
-        <div className="flex items-center gap-2 mb-2">
-          <span className="font-semibold">Last auto:</span>
-          <span>{lastAutoScore || '—'}</span>
-          <button className="btn" onClick={onAddAutoDart} disabled={pendingDarts>=3}>Add Auto Dart</button>
-          {nonRegCount>0 && <span className="text-sm opacity-80">No-registers: {nonRegCount}/3</span>}
-        </div>
-        <div className="mt-3">
-          <div className="text-sm font-semibold mb-1">Quick entry</div>
-          <div className="flex gap-2 mb-2">
-            <button className={`btn ${quickMult==='S'?'tab--active':''}`} onClick={()=>setQuickMult('S')}>S</button>
-            <button className={`btn ${quickMult==='D'?'tab--active':''}`} onClick={()=>setQuickMult('D')}>D</button>
-            <button className={`btn ${quickMult==='T'?'tab--active':''}`} onClick={()=>setQuickMult('T')}>T</button>
+      {/* Autoscore moved into a pill-triggered modal to reduce on-screen clutter */}
+      {/* Modal: Autoscore */}
+      {showAutoModal && (
+        <div className="fixed inset-0 bg-black/60 z-[100]" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <ResizableModal
+              storageKey="ndn:autoscore:size"
+              className="w-full max-w-3xl"
+              defaultWidth={720}
+              defaultHeight={520}
+              minWidth={420}
+              minHeight={320}
+              maxWidth={1400}
+              maxHeight={900}
+              initialFitHeight
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xl font-semibold">Autoscore</h2>
+                <div className="flex items-center gap-2">
+                  <button className="btn btn--ghost" onClick={()=>setShowAutoModal(false)}>Close</button>
+                </div>
+              </div>
+              <div className="text-sm opacity-80 mb-3">Click the camera overlay to autoscore. Use Manual Correction if the last auto is off.</div>
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <span className="font-semibold">Last auto:</span>
+                <span>{lastAutoScore || '—'}</span>
+                <button className="btn" onClick={onAddAutoDart} disabled={pendingDarts>=3}>Add Auto Dart</button>
+                {nonRegCount>0 && <span className="text-sm opacity-80">No-registers: {nonRegCount}/3</span>}
+              </div>
+              <div className="mt-2">
+                <div className="text-sm font-semibold mb-2">Quick entry</div>
+                {/* Bulls */}
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
+                    if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
+                      const c = nonRegCount + 1
+                      setNonRegCount(c)
+                      if (c >= 3) setShowRecalModal(true)
+                    } else setNonRegCount(0)
+                    addDart(25, 'BULL 25', 'BULL'); setHadRecentAuto(false)
+                  }}>25</button>
+                  <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
+                    if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
+                      const c = nonRegCount + 1
+                      setNonRegCount(c)
+                      if (c >= 3) setShowRecalModal(true)
+                    } else setNonRegCount(0)
+                    addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
+                  }}>50</button>
+                </div>
+                {/* Grouped dropdown: Doubles, Singles, Trebles */}
+                <div className="flex items-center gap-2 mb-3">
+                  <input
+                    className="input w-full max-w-sm"
+                    list="autoscore-quick-list"
+                    placeholder="Type or select (e.g., D16, T20, S5)"
+                    value={quickSelAuto}
+                    onChange={e=>setQuickSelAuto(e.target.value.toUpperCase())}
+                    onKeyDown={e=>{ if(e.key==='Enter'){ const m = quickSelAuto.match(/^(S|D|T)(\d{1,2})$/); if(m){ onQuickEntry(parseInt(m[2],10), m[1] as any); } }} }
+                  />
+                  <datalist id="autoscore-quick-list">
+                    {(['D','S','T'] as const).map(mult => (
+                      Array.from({length:20}, (_,i)=>i+1).map(num => (
+                        <option key={`${mult}${num}`} value={`${mult}${num}`} />
+                      ))
+                    ))}
+                  </datalist>
+                  <button
+                    className="btn"
+                    disabled={!quickSelAuto || pendingDarts>=3}
+                    onClick={()=>{
+                      const m = quickSelAuto.match(/^(S|D|T)(\d{1,2})$/)
+                      if (!m) return
+                      const mult = m[1] as 'S'|'D'|'T'
+                      const num = parseInt(m[2], 10)
+                      onQuickEntry(num, mult)
+                    }}
+                  >Add</button>
+                </div>
+              </div>
+            </ResizableModal>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {['20','19','18','17','16','15'].map(n => (
-              <button key={n} className="btn" disabled={pendingDarts>=3} onClick={()=>{
-                const mult = quickMult
-                const num = parseInt(n,10)
-                const val = num * (mult==='S'?1:mult==='D'?2:3)
-                const ring: Ring = mult==='S'?'SINGLE':mult==='D'?'DOUBLE':'TRIPLE'
-                if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
-                  const c = nonRegCount + 1
-                  setNonRegCount(c)
-                  if (c >= 3) setShowRecalModal(true)
-                } else {
-                  setNonRegCount(0)
-                }
-                addDart(val, `${mult}${n} ${val}`, ring)
-                setHadRecentAuto(false)
-              }}>{quickMult}{n}</button>
-            ))}
-            <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
-              if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
-                const c = nonRegCount + 1
-                setNonRegCount(c)
-                if (c >= 3) setShowRecalModal(true)
-              } else setNonRegCount(0)
-              addDart(25, 'BULL 25', 'BULL'); setHadRecentAuto(false)
-            }}>25</button>
-            <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
-              if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
-                const c = nonRegCount + 1
-                setNonRegCount(c)
-                if (c >= 3) setShowRecalModal(true)
-              } else setNonRegCount(0)
-              addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
-            }}>50</button>
-          </div>
         </div>
-      </div>
+      )}
       {showManualModal && (
         <div className="fixed inset-0 bg-black/60 z-[100]" role="dialog" aria-modal="true">
           <div className="absolute inset-0 flex flex-col">
@@ -501,30 +665,9 @@ export default function CameraView({
                   </div>
                   <div className="text-xs opacity-70 mb-4">Press Enter to Add · Shift+Enter to Replace Last</div>
                   <div className="mt-auto">
-                    <div className="text-sm font-semibold mb-1">Quick entry</div>
-                    <div className="flex gap-2 mb-2">
-                      <button className={`btn ${quickMult==='S'?'tab--active':''}`} onClick={()=>setQuickMult('S')}>S</button>
-                      <button className={`btn ${quickMult==='D'?'tab--active':''}`} onClick={()=>setQuickMult('D')}>D</button>
-                      <button className={`btn ${quickMult==='T'?'tab--active':''}`} onClick={()=>setQuickMult('T')}>T</button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {['20','19','18','17','16','15'].map(n => (
-                        <button key={n} className="btn" disabled={pendingDarts>=3} onClick={()=>{
-                          const mult = quickMult
-                          const num = parseInt(n,10)
-                          const val = num * (mult==='S'?1:mult==='D'?2:3)
-                          const ring: Ring = mult==='S'?'SINGLE':mult==='D'?'DOUBLE':'TRIPLE'
-                          if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
-                            const c = nonRegCount + 1
-                            setNonRegCount(c)
-                            if (c >= 3) setShowRecalModal(true)
-                          } else {
-                            setNonRegCount(0)
-                          }
-                          addDart(val, `${mult}${n} ${val}`, ring)
-                          setHadRecentAuto(false)
-                        }}>{quickMult}{n}</button>
-                      ))}
+                    <div className="text-sm font-semibold mb-2">Quick entry</div>
+                    {/* Bulls */}
+                    <div className="flex flex-wrap gap-2 mb-3">
                       <button className="btn" disabled={pendingDarts>=3} onClick={()=>{
                         if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
                           const c = nonRegCount + 1
@@ -542,10 +685,99 @@ export default function CameraView({
                         addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
                       }}>50</button>
                     </div>
+                    {/* Grouped dropdown: Doubles, Singles, Trebles */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <input
+                        className="input w-full max-w-sm"
+                        list="manual-quick-list"
+                        placeholder="Type or select (e.g., D16, T20, S5)"
+                        value={quickSelManual}
+                        onChange={e=>setQuickSelManual(e.target.value.toUpperCase())}
+                        onKeyDown={e=>{ if(e.key==='Enter'){ const m = quickSelManual.match(/^(S|D|T)(\d{1,2})$/); if(m){ onQuickEntry(parseInt(m[2],10), m[1] as any); } }} }
+                      />
+                      <datalist id="manual-quick-list">
+                        {(['D','S','T'] as const).map(mult => (
+                          Array.from({length:20}, (_,i)=>i+1).map(num => (
+                            <option key={`${mult}${num}`} value={`${mult}${num}`} />
+                          ))
+                        ))}
+                      </datalist>
+                      <button
+                        className="btn"
+                        disabled={!quickSelManual || pendingDarts>=3}
+                        onClick={()=>{
+                          const m = quickSelManual.match(/^(S|D|T)(\d{1,2})$/)
+                          if (!m) return
+                          const mult = m[1] as 'S'|'D'|'T'
+                          const num = parseInt(m[2], 10)
+                          onQuickEntry(num, mult)
+                        }}
+                      >Add</button>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {showScoringModal && (
+        <div className="fixed inset-0 bg-black/60 z-[100]" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <ResizableModal
+              storageKey="ndn:scoring:size"
+              className="w-full max-w-6xl"
+              defaultWidth={980}
+              defaultHeight={720}
+              minWidth={600}
+              minHeight={420}
+              maxWidth={1600}
+              maxHeight={1000}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xl font-semibold">Scoring</h2>
+                <div className="flex items-center gap-2">
+                  <button className="btn btn--ghost" onClick={()=>setShowScoringModal(false)}>Close</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Camera section */}
+                <div className="card">
+                  <h2 className="text-xl font-semibold mb-3">Camera</h2>
+                  <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={720} defaultHeight={405} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
+                    <CameraSelector />
+                    <video ref={videoRef} className="w-full h-full object-cover" />
+                    <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                  </ResizablePanel>
+                  <div className="flex gap-2 mt-3">
+                    {!streaming ? (
+                      <button className="btn" onClick={startCamera}>Start Camera</button>
+                    ) : (
+                      <button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
+                    )}
+                    <button className="btn" onClick={capture} disabled={!streaming}>Capture Still</button>
+                    <button className="btn bg-slate-700 hover:bg-slate-800" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
+                  </div>
+                </div>
+                {/* Pending Visit section */}
+                <div className="card">
+                  <h2 className="text-xl font-semibold mb-3">Pending Visit</h2>
+                  <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
+                  <ul className="text-sm mb-2 list-disc pl-5">
+                    {pendingEntries.length === 0 ? <li className="opacity-60">No darts yet</li> : pendingEntries.map((e,i) => <li key={i}>{e.label}</li>)}
+                  </ul>
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="font-semibold">Darts: {pendingDarts}/3</div>
+                    <div className="font-semibold">Total: {pendingScore}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="btn" onClick={onUndoDart} disabled={pendingDarts===0}>Undo Dart</button>
+                    <button className="btn" onClick={onCommitVisit} disabled={pendingDarts===0}>Commit Visit</button>
+                    <button className="btn" onClick={()=>{setPendingDarts(0);setPendingScore(0);setPendingEntries([])}} disabled={pendingDarts===0}>Clear</button>
+                  </div>
+                </div>
+              </div>
+            </ResizableModal>
           </div>
         </div>
       )}
@@ -562,7 +794,8 @@ export default function CameraView({
           </div>
         </div>
       )}
-      <div className="card">
+  {!hideInlinePanels ? (
+  <div className="card">
         <h2 className="text-xl font-semibold mb-3">Pending Visit</h2>
         <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
         <ul className="text-sm mb-2 list-disc pl-5">
@@ -577,7 +810,8 @@ export default function CameraView({
           <button className="btn" onClick={onCommitVisit} disabled={pendingDarts===0}>Commit Visit</button>
           <button className="btn" onClick={()=>{setPendingDarts(0);setPendingScore(0);setPendingEntries([])}} disabled={pendingDarts===0}>Clear</button>
         </div>
-      </div>
+  </div>
+  ) : null}
     </div>
   )
 }

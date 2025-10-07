@@ -1,0 +1,14 @@
+# Auto-detect text files and perform LF normalization
+* text=auto
+
+# Mark images/binaries
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg text eol=lf
+
+# Keep certs with LF
+*.pem text eol=lf
+*.crt text eol=lf
+*.key text eol=lf

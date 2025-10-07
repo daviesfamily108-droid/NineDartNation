@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 type WSMessage = any
 
@@ -12,7 +12,7 @@ type WSContextType = {
 
 const WSContext = createContext<WSContextType | null>(null)
 
-export function WSProvider({ children }: { children: React.ReactNode }) {
+export function WSProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false)
   const [status, setStatus] = useState<WSStatus>('connecting')
   const wsRef = useRef<WebSocket | null>(null)

@@ -61,6 +61,7 @@ function X01RulesPopup({ onClose }: { onClose: () => void }) {
 }
 
 export default function OfflinePlay({ user }: { user: any }) {
+  const { offlineLayout } = useUserSettings()
   const [selectedMode, setSelectedMode] = useState('X01');
   const [x01Score, setX01Score] = useState(501);
   const [ai, setAI] = useState('None');
@@ -82,8 +83,9 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [aiDelayMs, setAiDelayMs] = useState<number>(2000)
   // New: match popup state
   const [showMatchModal, setShowMatchModal] = useState(false)
-  const [maximized, setMaximized] = useState(true)
-  const [fitAll, setFitAll] = useState(true)
+  // Mirror Online layout defaults when in modern layout, otherwise keep classic feel
+  const [maximized, setMaximized] = useState(offlineLayout === 'modern')
+  const [fitAll, setFitAll] = useState(offlineLayout === 'modern')
   const [fitScale, setFitScale] = useState(1)
   const [isPlayerTurn, setIsPlayerTurn] = useState(true)
   // Per-dart input and stats
@@ -553,7 +555,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
   return (
   <div className="card relative overflow-hidden">
-      <h2 className="text-2xl font-bold text-brand-700 mb-4">Offline Game Modes</h2>
+  <h2 className="text-2xl font-bold text-brand-700 mb-4">Offline Game Modes {offlineLayout==='classic' ? <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">Classic layout</span> : <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">Modern layout</span>}</h2>
       <div className="mb-4 flex flex-col gap-3">
         <label className="font-semibold">Select game mode:</label>
         <select className="input w-full" value={selectedMode} onChange={e => setSelectedMode(e.target.value)}>
@@ -752,6 +754,38 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <CameraTile label="Your Board" autoStart={false} />
                 </div>
               </div>
+              {/* Match summary (offline) */}
+              <div className="mt-2 p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-white text-sm">
+                <div className="font-semibold mb-2">Match Summary</div>
+                {(() => {
+                  // In offline X01, player is vs AI or practice
+                  const currentThrower = isPlayerTurn ? (user?.username || 'You') : (ai === 'None' ? '—' : `${ai} AI`)
+                  const currentRemaining = isPlayerTurn ? playerScore : (ai === 'None' ? 0 : aiScore)
+                  const last = isPlayerTurn ? playerLastDart : aiLastDart
+                  const lastScoreVisit = isPlayerTurn ? playerVisitSum : aiVisitSum
+                  const dartsThrown = isPlayerTurn ? playerDartsThrown : aiDartsThrown
+                  const scored = (x01Score - (isPlayerTurn ? playerScore : (ai === 'None' ? x01Score : aiScore)))
+                  const avg3 = dartsThrown > 0 ? ((scored / dartsThrown) * 3) : 0
+                  const matchScore = `${playerLegs}-${aiLegs}`
+                  const bestLegText = legStats.length > 0 ? `${Math.min(...legStats.map(l=>l.doubleDarts + (l.checkoutDarts||0))) || 0} darts` : '—'
+                  return (
+                    <div className="grid grid-cols-2 gap-y-1">
+                      <div className="opacity-80">Current score</div>
+                      <div className="font-mono text-right">{matchScore}</div>
+                      <div className="opacity-80">Current thrower</div>
+                      <div className="text-right font-semibold">{currentThrower}</div>
+                      <div className="opacity-80">Score remaining</div>
+                      <div className="text-right font-mono">{currentRemaining}</div>
+                      <div className="opacity-80">3-dart avg</div>
+                      <div className="text-right font-mono">{avg3.toFixed(1)}</div>
+                      <div className="opacity-80">Last score</div>
+                      <div className="text-right font-mono">{lastScoreVisit || last}</div>
+                      <div className="opacity-80">Best leg</div>
+                      <div className="text-right">{bestLegText}</div>
+                    </div>
+                  )
+                })()}
+              </div>
               <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col h-full">
                 <div className="text-xs flex items-center justify-between opacity-80">
                   <span>{ai === 'None' ? 'Opponent' : `${ai} AI`} Remain</span>
@@ -785,6 +819,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span></div>
                 <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10">
                   <CameraView
+                    scoringMode="custom"
                     showToolbar={false}
                     onAutoDart={(value: number, ring: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', info?: { sector: number | null; mult: 0|1|2|3 }) => {
                       // Only accept DOUBLE or INNER_BULL to progress

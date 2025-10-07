@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react'
 
 type Props = {
   storageKey: string
-  children: React.ReactNode
+  children: ReactNode
   className?: string
   defaultWidth?: number
   defaultHeight?: number
@@ -55,7 +55,7 @@ export default function ResizablePanel({
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', endResize)
   }
-  function onMove(e: MouseEvent) {
+  function onMove(e: globalThis.MouseEvent) {
     const s = startRef.current; if (!s) return
     const dx = e.clientX - s.x; const dy = e.clientY - s.y
     let w = s.w; let h = s.h
@@ -67,7 +67,7 @@ export default function ResizablePanel({
   }
   function endResize() { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', endResize); startRef.current = null }
 
-  const style: React.CSSProperties = {
+  const style: CSSProperties = {
     width: size.width ? `${size.width}px` : undefined,
     height: size.height ? `${size.height}px` : undefined,
     maxWidth: '100%',

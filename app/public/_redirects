@@ -1,0 +1,5 @@
+# Netlify proxy rules to your Render backend
+# Service URL: https://ninedartnation.onrender.com
+
+/api/*      https://ninedartnation.onrender.com/api/:splat       200
+/webhook/*  https://ninedartnation.onrender.com/webhook/:splat   200

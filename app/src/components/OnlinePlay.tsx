@@ -38,7 +38,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const firstConnectDoneRef = useRef(false)
   const match = useMatch()
   const msgs = useMessages()
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale } = useUserSettings()
+  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate } = useUserSettings()
   // Turn-by-turn modal
   const [showMatchModal, setShowMatchModal] = useState(false)
   const [participants, setParticipants] = useState<string[]>([])
@@ -368,45 +368,6 @@ export default function OnlinePlay({ user }: { user?: any }) {
         connect()
       }, delay)
     }
-  }
-  // Small helper to render the match summary card
-  function RenderMatchSummary() {
-    const players = match.players || []
-    const curIdx = match.currentPlayerIdx || 0
-    const cur = players[curIdx]
-    const leg = cur?.legs?.[cur?.legs?.length - 1]
-    const remaining = leg ? leg.totalScoreRemaining : match.startingScore
-    const darts = leg?.dartsThrown || 0
-    const scored = leg ? (leg.totalScoreStart - leg.totalScoreRemaining) : 0
-    const avg3 = darts > 0 ? ((scored / darts) * 3) : 0
-    const lastScore = leg?.visits?.[leg.visits.length-1]?.score ?? 0
-    let matchScore = '—'
-    if (players.length === 2) {
-      matchScore = `${players[0]?.legsWon || 0}-${players[1]?.legsWon || 0}`
-    } else if (players.length > 2) {
-      matchScore = players.map(p => `${p.name}:${p.legsWon||0}`).join(' · ')
-    }
-    const best = match.bestLegThisMatch
-    const bestText = best ? `${best.darts} darts${(() => { const p = players.find(x=>x.id===best.playerId); return p?` (${p.name})`:'' })()}` : '—'
-    return (
-      <div className="p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-white text-sm">
-        <div className="font-semibold mb-2">Match Summary</div>
-        <div className="grid grid-cols-2 gap-y-1">
-          <div className="opacity-80">Current score</div>
-          <div className="font-mono text-right">{matchScore}</div>
-          <div className="opacity-80">Current thrower</div>
-          <div className="text-right font-semibold">{cur?.name || '—'}</div>
-          <div className="opacity-80">Score remaining</div>
-          <div className="text-right font-mono">{remaining}</div>
-          <div className="opacity-80">3-dart avg</div>
-          <div className="text-right font-mono">{avg3.toFixed(1)}</div>
-          <div className="opacity-80">Last score</div>
-          <div className="text-right font-mono">{lastScore}</div>
-          <div className="opacity-80">Best leg</div>
-          <div className="text-right">{bestText}</div>
-        </div>
-      </div>
-    )
   }
 
   // Subscribe to global WS messages if available
@@ -939,34 +900,24 @@ export default function OnlinePlay({ user }: { user?: any }) {
             )}
             {compactView ? (
               <div className="space-y-2">
-                {/* Top toolbar */}
+                {/* Turn-by-turn camera: show your camera when it's your turn */}
+                {/* Top toolbar above camera area */}
                 <div className="flex items-center gap-2 mb-2">
-                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
-                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
+                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ /* autoscore default */ closeManual() }}>Autoscore</button>
                   <button className="btn px-3 py-1 text-sm" onClick={openManual}>Manual Correction</button>
-                  <div className="ml-auto flex items-center gap-1 text-[11px]">
-                    <span className="opacity-70">Cam size</span>
-                    <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
-                    <span className="w-8 text-center">{Math.round(cameraScale*100)}%</span>
-                    <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
-                  </div>
                 </div>
-                {/* Summary (left) + Camera (right) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 items-start">
-                  <div className="order-1"><RenderMatchSummary /></div>
-                  <div className="order-2">
-                    {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
-                      <div className="min-w-[260px] relative z-10"><CameraTile label="Your Board" autoStart={false} /></div>
-                    ) : (
-                      <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
-                    )}
-                  </div>
+                <div className="flex items-center gap-3">
+                  {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
+                    <CameraTile label="Your Board" autoStart={false} />
+                  ) : (
+                    <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
+                  )}
                 </div>
                 <div className="font-semibold">Current: {match.players[match.currentPlayerIdx]?.name || '—'}</div>
                 {currentGame === 'X01' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                   <>
                     {/* Camera autoscore module; only render for current thrower */}
-                    <CameraView hideInlinePanels showToolbar={false} onVisitCommitted={(score, darts, finished) => {
+                    <CameraView showToolbar={false} onVisitCommitted={(score, darts, finished) => {
                       if (callerEnabled) {
                         const p = match.players[match.currentPlayerIdx]
                         const leg = p?.legs[p.legs.length-1]
@@ -982,7 +933,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       if (!finished) { match.nextPlayer() }
                       sendState()
                     }} />
-                    <div className="flex items-center gap-1.5 mb-2">
+                    <div className="flex items-center gap-1.5">
                       <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn px-2 py-0.5 text-xs" onClick={() => submitVisitManual(visitScore)}>Submit Visit</button>
                       <button className="btn px-2 py-0.5 text-xs bg-slate-700 hover:bg-slate-800" onClick={() => { match.undoVisit(); sendState(); }}>Undo</button>
@@ -994,7 +945,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                           <button key={v} className="btn px-2 py-0.5 text-xs" onClick={()=>submitVisitManual(v)}>{v}</button>
                         ))}
                       </div>
-                    <div className="mt-2 flex items-center gap-1.5 mb-2">
+                    <div className="mt-2 flex items-center gap-1.5">
                       <button className="btn px-2 py-0.5 text-xs" onClick={()=>setShowQuick(true)}>Quick Chat</button>
                       <button className="btn px-2 py-0.5 text-xs" onClick={()=>setShowMessages(true)}>Messages</button>
                     </div>
@@ -1052,28 +1003,15 @@ export default function OnlinePlay({ user }: { user?: any }) {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                {/* Left column: summary */}
-                <div className="space-y-1.5">
-                  <RenderMatchSummary />
-                </div>
-                {/* Main area: toolbar + camera + controls */}
                 <div className="md:col-span-2 space-y-1.5">
-                  {/* Toolbar row (separate) */}
-                  <div className="flex items-center gap-1.5 mt-2">
-                    <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
-                    <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
-                    <button className="btn px-2 py-0.5 text-xs" onClick={openManual}>Manual Correction</button>
-                    <div className="ml-auto flex items-center gap-1 text-[10px]">
-                      <span className="opacity-70">Cam</span>
-                      <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
-                      <span className="w-7 text-center">{Math.round(cameraScale*100)}%</span>
-                      <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                  <div className="flex items-center gap-2">
+                    {/* Top toolbar above camera area */}
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ closeManual() }}>Autoscore</button>
+                      <button className="btn px-2 py-0.5 text-xs" onClick={openManual}>Manual Correction</button>
                     </div>
-                  </div>
-                  {/* Camera row (under toolbar, left side) */}
-                  <div className="mt-2">
                     {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
-                      <div className="w-full max-w-full"><CameraTile label="Your Board" autoStart={false} /></div>
+                      <CameraTile label="Your Board" autoStart={false} />
                     ) : (
                       <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
                     )}
@@ -1081,7 +1019,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <div className="font-semibold text-sm md:text-base">Current: {match.players[match.currentPlayerIdx]?.name || '—'}</div>
                   {currentGame === 'X01' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                     <>
-                      <CameraView hideInlinePanels showToolbar={false} onVisitCommitted={(score, darts, finished) => {
+                      <CameraView showToolbar={false} onVisitCommitted={(score, darts, finished) => {
                         if (callerEnabled) {
                           const p = match.players[match.currentPlayerIdx]
                           const leg = p?.legs[p.legs.length-1]
@@ -1131,7 +1069,6 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <div className="text-2xl font-extrabold mb-2">{dpHits} / {DOUBLE_PRACTICE_ORDER.length}</div>
                       <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                         <CameraView
-                          scoringMode="custom"
                           showToolbar={false}
                           immediateAutoCommit
                           onAutoDart={(value, ring) => {
@@ -1240,7 +1177,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     <div className="text-xs text-rose-300 mt-1">PREMIUM required</div>
                   )}
                 </div>
-                </div>
+              </div>
+                <div className="md:col-span-2" />
               </div>
               <div className="sticky bottom-0 bg-slate-900/80 backdrop-blur border-t border-slate-700 z-10 px-2 py-2">
                 <button className="btn w-full" disabled={!user?.fullAccess && (premiumGames as readonly string[]).includes(game)} title={!user?.fullAccess && (premiumGames as readonly string[]).includes(game) ? 'PREMIUM game' : ''} onClick={()=>{

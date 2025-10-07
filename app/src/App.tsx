@@ -25,7 +25,6 @@ import AdminAccess from './components/AdminAccess'
 // AdminAccess already imported above
 import Drawer from './components/ui/Drawer'
 import { getDominantColorFromImage, stringToColor } from './utils/color'
-import OpsDashboard from './components/OpsDashboard'
 
 export default function App() {
   const ws = (() => { try { return useWS() } catch { return null } })()
@@ -319,11 +318,6 @@ export default function App() {
             {tab === 'admin' && (
               <ScrollFade>
                 <AdminDashboard user={user} />
-              </ScrollFade>
-            )}
-            {tab === 'ops' && (
-              <ScrollFade>
-                <OpsDashboard user={user} />
               </ScrollFade>
             )}
             {tab === 'fullaccess' && (
