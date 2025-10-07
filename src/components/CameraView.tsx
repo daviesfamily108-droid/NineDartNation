@@ -12,11 +12,13 @@ export default function CameraView({
   showToolbar = true,
   onAutoDart,
   immediateAutoCommit = false,
+  hideInlinePanels = false,
 }: {
   onVisitCommitted?: (score: number, darts: number, finished: boolean) => void
   showToolbar?: boolean
   onAutoDart?: (value: number, ring: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', info?: { sector: number | null; mult: 0|1|2|3 }) => void
   immediateAutoCommit?: boolean
+  hideInlinePanels?: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -44,12 +46,20 @@ export default function CameraView({
   const [activeTab, setActiveTab] = useState<'auto'|'manual'>('auto')
   const [showManualModal, setShowManualModal] = useState(false)
   const [showAutoModal, setShowAutoModal] = useState(false)
+  const [showScoringModal, setShowScoringModal] = useState(false)
   const manualPreviewRef = useRef<HTMLCanvasElement | null>(null)
   // Open Autoscore modal from parent via global event
   useEffect(() => {
     const onOpen = () => setShowAutoModal(true)
     window.addEventListener('ndn:open-autoscore' as any, onOpen)
     return () => window.removeEventListener('ndn:open-autoscore' as any, onOpen)
+  }, [])
+
+  // Open Scoring (Camera + Pending Visit) modal from parent via global event
+  useEffect(() => {
+    const onOpen = () => setShowScoringModal(true)
+    window.addEventListener('ndn:open-scoring' as any, onOpen)
+    return () => window.removeEventListener('ndn:open-scoring' as any, onOpen)
   }, [])
 
   // Allow parent to open/close the manual modal via global events
@@ -414,7 +424,8 @@ export default function CameraView({
           </div>
         </div>
       )}
-      <div className="card">
+  {!hideInlinePanels ? (
+  <div className="card">
         <h2 className="text-xl font-semibold mb-3">Camera</h2>
         <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={720} defaultHeight={405} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
           <video ref={videoRef} className="w-full h-full object-cover" />
@@ -430,7 +441,8 @@ export default function CameraView({
           <button className="btn" onClick={capture} disabled={!streaming}>Capture Still</button>
           <button className="btn bg-slate-700 hover:bg-slate-800" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
         </div>
-      </div>
+  </div>
+  ) : null}
       {/* Snapshot panel removed to reduce unused space */}
       <canvas ref={canvasRef} className="hidden"></canvas>
       {/* Autoscore moved into a pill-triggered modal to reduce on-screen clutter */}
@@ -485,28 +497,21 @@ export default function CameraView({
                 </div>
                 {/* Grouped dropdown: Doubles, Singles, Trebles */}
                 <div className="flex items-center gap-2 mb-3">
-                  <select
+                  <input
                     className="input w-full max-w-sm"
+                    list="autoscore-quick-list"
+                    placeholder="Type or select (e.g., D16, T20, S5)"
                     value={quickSelAuto}
-                    onChange={e=>setQuickSelAuto(e.target.value)}
-                  >
-                    <option value="" disabled>Select quick entry…</option>
-                    <optgroup label="Doubles">
-                      {Array.from({length:20}, (_,i)=>i+1).map(num => (
-                        <option key={`D${num}`} value={`D${num}`}>{`D${num}`}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Singles">
-                      {Array.from({length:20}, (_,i)=>i+1).map(num => (
-                        <option key={`S${num}`} value={`S${num}`}>{`S${num}`}</option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="Trebles">
-                      {Array.from({length:20}, (_,i)=>i+1).map(num => (
-                        <option key={`T${num}`} value={`T${num}`}>{`T${num}`}</option>
-                      ))}
-                    </optgroup>
-                  </select>
+                    onChange={e=>setQuickSelAuto(e.target.value.toUpperCase())}
+                    onKeyDown={e=>{ if(e.key==='Enter'){ const m = quickSelAuto.match(/^(S|D|T)(\d{1,2})$/); if(m){ onQuickEntry(parseInt(m[2],10), m[1] as any); } }} }
+                  />
+                  <datalist id="autoscore-quick-list">
+                    {(['D','S','T'] as const).map(mult => (
+                      Array.from({length:20}, (_,i)=>i+1).map(num => (
+                        <option key={`${mult}${num}`} value={`${mult}${num}`} />
+                      ))
+                    ))}
+                  </datalist>
                   <button
                     className="btn"
                     disabled={!quickSelAuto || pendingDarts>=3}
@@ -588,28 +593,21 @@ export default function CameraView({
                     </div>
                     {/* Grouped dropdown: Doubles, Singles, Trebles */}
                     <div className="flex items-center gap-2 mb-3">
-                      <select
+                      <input
                         className="input w-full max-w-sm"
+                        list="manual-quick-list"
+                        placeholder="Type or select (e.g., D16, T20, S5)"
                         value={quickSelManual}
-                        onChange={e=>setQuickSelManual(e.target.value)}
-                      >
-                        <option value="" disabled>Select quick entry…</option>
-                        <optgroup label="Doubles">
-                          {Array.from({length:20}, (_,i)=>i+1).map(num => (
-                            <option key={`D${num}`} value={`D${num}`}>{`D${num}`}</option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Singles">
-                          {Array.from({length:20}, (_,i)=>i+1).map(num => (
-                            <option key={`S${num}`} value={`S${num}`}>{`S${num}`}</option>
-                          ))}
-                        </optgroup>
-                        <optgroup label="Trebles">
-                          {Array.from({length:20}, (_,i)=>i+1).map(num => (
-                            <option key={`T${num}`} value={`T${num}`}>{`T${num}`}</option>
-                          ))}
-                        </optgroup>
-                      </select>
+                        onChange={e=>setQuickSelManual(e.target.value.toUpperCase())}
+                        onKeyDown={e=>{ if(e.key==='Enter'){ const m = quickSelManual.match(/^(S|D|T)(\d{1,2})$/); if(m){ onQuickEntry(parseInt(m[2],10), m[1] as any); } }} }
+                      />
+                      <datalist id="manual-quick-list">
+                        {(['D','S','T'] as const).map(mult => (
+                          Array.from({length:20}, (_,i)=>i+1).map(num => (
+                            <option key={`${mult}${num}`} value={`${mult}${num}`} />
+                          ))
+                        ))}
+                      </datalist>
                       <button
                         className="btn"
                         disabled={!quickSelManual || pendingDarts>=3}
@@ -629,6 +627,65 @@ export default function CameraView({
           </div>
         </div>
       )}
+      {showScoringModal && (
+        <div className="fixed inset-0 bg-black/60 z-[100]" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <ResizableModal
+              storageKey="ndn:scoring:size"
+              className="w-full max-w-6xl"
+              defaultWidth={980}
+              defaultHeight={720}
+              minWidth={600}
+              minHeight={420}
+              maxWidth={1600}
+              maxHeight={1000}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-xl font-semibold">Scoring</h2>
+                <div className="flex items-center gap-2">
+                  <button className="btn btn--ghost" onClick={()=>setShowScoringModal(false)}>Close</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Camera section */}
+                <div className="card">
+                  <h2 className="text-xl font-semibold mb-3">Camera</h2>
+                  <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={720} defaultHeight={405} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
+                    <video ref={videoRef} className="w-full h-full object-cover" />
+                    <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                  </ResizablePanel>
+                  <div className="flex gap-2 mt-3">
+                    {!streaming ? (
+                      <button className="btn" onClick={startCamera}>Start Camera</button>
+                    ) : (
+                      <button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
+                    )}
+                    <button className="btn" onClick={capture} disabled={!streaming}>Capture Still</button>
+                    <button className="btn bg-slate-700 hover:bg-slate-800" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
+                  </div>
+                </div>
+                {/* Pending Visit section */}
+                <div className="card">
+                  <h2 className="text-xl font-semibold mb-3">Pending Visit</h2>
+                  <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
+                  <ul className="text-sm mb-2 list-disc pl-5">
+                    {pendingEntries.length === 0 ? <li className="opacity-60">No darts yet</li> : pendingEntries.map((e,i) => <li key={i}>{e.label}</li>)}
+                  </ul>
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="font-semibold">Darts: {pendingDarts}/3</div>
+                    <div className="font-semibold">Total: {pendingScore}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="btn" onClick={onUndoDart} disabled={pendingDarts===0}>Undo Dart</button>
+                    <button className="btn" onClick={onCommitVisit} disabled={pendingDarts===0}>Commit Visit</button>
+                    <button className="btn" onClick={()=>{setPendingDarts(0);setPendingScore(0);setPendingEntries([])}} disabled={pendingDarts===0}>Clear</button>
+                  </div>
+                </div>
+              </div>
+            </ResizableModal>
+          </div>
+        </div>
+      )}
       {showRecalModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="card max-w-md w-full">
@@ -642,7 +699,8 @@ export default function CameraView({
           </div>
         </div>
       )}
-      <div className="card">
+  {!hideInlinePanels ? (
+  <div className="card">
         <h2 className="text-xl font-semibold mb-3">Pending Visit</h2>
         <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
         <ul className="text-sm mb-2 list-disc pl-5">
@@ -657,7 +715,8 @@ export default function CameraView({
           <button className="btn" onClick={onCommitVisit} disabled={pendingDarts===0}>Commit Visit</button>
           <button className="btn" onClick={()=>{setPendingDarts(0);setPendingScore(0);setPendingEntries([])}} disabled={pendingDarts===0}>Clear</button>
         </div>
-      </div>
+  </div>
+  ) : null}
     </div>
   )
 }

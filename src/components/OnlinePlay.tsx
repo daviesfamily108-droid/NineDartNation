@@ -904,6 +904,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 {/* Top toolbar above camera area */}
                 <div className="flex items-center gap-2 mb-2">
                   <button className="btn px-3 py-1 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
+                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
                   <button className="btn px-3 py-1 text-sm" onClick={openManual}>Manual Correction</button>
                 </div>
                 <div className="flex items-center gap-3">
@@ -917,7 +918,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 {currentGame === 'X01' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                   <>
                     {/* Camera autoscore module; only render for current thrower */}
-                    <CameraView showToolbar={false} onVisitCommitted={(score, darts, finished) => {
+                    <CameraView hideInlinePanels showToolbar={false} onVisitCommitted={(score, darts, finished) => {
                       if (callerEnabled) {
                         const p = match.players[match.currentPlayerIdx]
                         const leg = p?.legs[p.legs.length-1]
@@ -1008,6 +1009,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     {/* Top toolbar above camera area */}
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
                       <button className="btn px-2 py-0.5 text-xs" onClick={openManual}>Manual Correction</button>
                     </div>
                     {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
@@ -1019,7 +1021,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <div className="font-semibold text-sm md:text-base">Current: {match.players[match.currentPlayerIdx]?.name || '—'}</div>
                   {currentGame === 'X01' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                     <>
-                      <CameraView showToolbar={false} onVisitCommitted={(score, darts, finished) => {
+                      <CameraView hideInlinePanels showToolbar={false} onVisitCommitted={(score, darts, finished) => {
                         if (callerEnabled) {
                           const p = match.players[match.currentPlayerIdx]
                           const leg = p?.legs[p.legs.length-1]
