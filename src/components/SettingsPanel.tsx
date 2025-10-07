@@ -10,6 +10,7 @@ import { useUserSettings } from '../store/userSettings';
 import StatPills from './StatPills'
 import { getAllTime, getAllTimeAvg, getAllTimeFirstNineAvg, getMonthlyAvg3, getMonthlyFirstNineAvg, clearAllStats } from '../store/profileStats'
 import { formatAvg } from '../utils/stats'
+import { useUserSettings as useSettingsStore } from '../store/userSettings'
 
 const tips = [
   "Focus on your stance and grip for consistency.",
@@ -79,6 +80,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
     allowSpectate, setAllowSpectate,
     cameraScale, setCameraScale,
     calibrationGuide, setCalibrationGuide,
+    offlineLayout, setOfflineLayout,
   } = useUserSettings();
   const voices = (typeof window !== 'undefined' && window.speechSynthesis) ? window.speechSynthesis.getVoices() : [];
 
@@ -178,12 +180,12 @@ export default function SettingsPanel({ user }: { user?: any }) {
     <div className="card">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-bold text-brand-700 flex items-center gap-2"><User className="w-6 h-6 text-brand-400" /> Settings</h2>
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <button className={`btn ${subTab==='settings' ? 'bg-brand-600' : ''}`} onClick={()=>setSubTab('settings')}>Settings</button>
+        <div className="flex items-center gap-2">
+          <button className={`btn ${subTab==='settings' ? 'bg-brand-600' : ''}`} onClick={()=>setSubTab('settings')}>Settings</button>
+          {isAdmin && (
             <button className={`btn ${subTab==='admin' ? 'bg-brand-600' : ''}`} onClick={()=>setSubTab('admin')}>Admin</button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {subTab === 'admin' && isAdmin ? (
         <div className="mt-2">
@@ -281,6 +283,9 @@ export default function SettingsPanel({ user }: { user?: any }) {
           </div>
           <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 mt-4">
             <div className="font-semibold mb-2">Camera & Calibration</div>
+            <div className="mb-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-400/30 text-emerald-200 text-sm">
+              Connect your preferred camera setup that you already own! or use our own branded Autoscoring feature!
+            </div>
             <div className="grid grid-cols-3 gap-2 items-center text-sm mb-2">
               <div className="text-slate-600 col-span-1">Default camera size</div>
               <div className="col-span-2 flex items-center gap-2">
@@ -294,6 +299,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
               <input type="checkbox" className="accent-indigo-600" checked={calibrationGuide} onChange={e=>setCalibrationGuide(e.target.checked)} />
               Show preferred-view guide in Calibrator
             </label>
+            {/* Device picker */}
+            <DevicePicker />
           </div>
           <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 mt-4">
             <div className="font-semibold mb-2">Online & Privacy</div>
@@ -334,6 +341,15 @@ export default function SettingsPanel({ user }: { user?: any }) {
                 <div className="text-slate-600 mb-1">AI Level</div>
                 <select className="input w-full" value={lastOffline.aiLevel} onChange={e=>setLastOffline({ aiLevel: e.target.value })}>
                   {['None','Easy','Medium','Hardened'].map(l => <option key={l} value={l}>{l}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm mt-2">
+              <div>
+                <div className="text-slate-600 mb-1">Offline layout</div>
+                <select className="input w-full" value={offlineLayout || 'modern'} onChange={e=>setOfflineLayout((e.target.value as any) || 'modern')}>
+                  <option value="classic">Classic</option>
+                  <option value="modern">Modern</option>
                 </select>
               </div>
             </div>
@@ -483,4 +499,53 @@ export default function SettingsPanel({ user }: { user?: any }) {
       )}
     </div>
   );
+}
+
+function DevicePicker() {
+  const { preferredCameraId, preferredCameraLabel, setPreferredCamera } = useSettingsStore()
+  const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
+  const [err, setErr] = useState('')
+  async function enumerate() {
+    setErr('')
+    try {
+      // Ensure we have permission; otherwise labels may be empty.
+      try { await navigator.mediaDevices.getUserMedia({ video: true }); } catch {}
+      const list = await navigator.mediaDevices.enumerateDevices()
+      const cams = list.filter(d => d.kind === 'videoinput')
+      setDevices(cams)
+    } catch (e: any) {
+      setErr('Unable to list cameras. Grant camera permission in your browser.')
+    }
+  }
+  useEffect(() => { enumerate() }, [])
+  const sel = preferredCameraId || ''
+  return (
+    <div className="mt-3 p-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5">
+      <div className="font-semibold mb-2">Select camera device</div>
+      {err && <div className="text-rose-400 text-sm mb-2">{err}</div>}
+      <div className="grid grid-cols-3 gap-2 items-center text-sm">
+        <div className="col-span-2">
+          <select className="input w-full" value={sel} onChange={(e)=>{
+            const id = e.target.value || undefined
+            const label = devices.find(d=>d.deviceId===id)?.label || ''
+            setPreferredCamera(id, label)
+          }}>
+            <option value="">Auto (browser default)</option>
+            {devices.map(d => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label || 'Camera'} {d.label?.toLowerCase().includes('omni') ? '(OMNI)' : ''} {d.label?.toLowerCase().includes('vert') ? '(VERT)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="text-right">
+          <button className="btn px-2 py-1" onClick={enumerate}>Refresh</button>
+        </div>
+      </div>
+      {preferredCameraLabel && (
+        <div className="text-xs opacity-70 mt-1">Selected: {preferredCameraLabel}</div>
+      )}
+      <div className="text-xs opacity-70 mt-1">Tip: OMNI and VERT cameras are supported—select them here and then open Calibrator to align.</div>
+    </div>
+  )
 }

@@ -66,12 +66,36 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
 
   async function start() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      // Prefer saved camera if available
+      const { preferredCameraId, setPreferredCamera } = useUserSettings.getState()
+      const constraints: MediaStreamConstraints = preferredCameraId ? { video: { deviceId: { exact: preferredCameraId } }, audio: false } : { video: true, audio: false }
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints)
+      } catch (err: any) {
+        const name = (err && (err.name || err.code)) || ''
+        if (preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError')) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        } else {
+          throw err
+        }
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         await videoRef.current.play()
         setStreaming(true)
       }
+      // Update selected label after start
+      try {
+        const list = await navigator.mediaDevices.enumerateDevices()
+        const vidTrack = (stream.getVideoTracks?.()||[])[0]
+        const settings = vidTrack?.getSettings?.()
+        const id = settings?.deviceId as string | undefined
+        if (id) {
+          const label = list.find(d=>d.deviceId===id)?.label
+          setPreferredCamera(id, label||'')
+        }
+      } catch {}
     } catch {}
   }
   function stop() {

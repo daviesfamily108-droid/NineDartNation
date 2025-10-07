@@ -1,8 +1,8 @@
-import React, { PropsWithChildren, useEffect, useRef } from 'react'
+import React, { PropsWithChildren, useEffect, useRef, type CSSProperties } from 'react'
 
 type ScrollFadeProps = PropsWithChildren<{
   className?: string
-  style?: React.CSSProperties
+  style?: CSSProperties
 }>
 
 export default function ScrollFade({ children, className, style }: ScrollFadeProps) {

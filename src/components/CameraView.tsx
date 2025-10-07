@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useUserSettings } from '../store/userSettings'
 import { useCalibration } from '../store/calibration'
 import { useMatch } from '../store/match'
 import { BoardRadii, drawPolyline, sampleRing, scaleHomography, type Point } from '../utils/vision'
@@ -6,6 +7,9 @@ import { scoreFromImagePoint } from '../utils/autoscore'
 import { addSample } from '../store/profileStats'
 import ResizablePanel from './ui/ResizablePanel'
 import ResizableModal from './ui/ResizableModal'
+
+// Shared ring type across autoscore/manual flows
+type Ring = 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'
 
 export default function CameraView({
   onVisitCommitted,
@@ -27,6 +31,8 @@ export default function CameraView({
   onGenericReplace?: (value: number, ring: Ring, meta: { label: string }) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const { preferredCameraId, setPreferredCamera } = useUserSettings()
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const [streaming, setStreaming] = useState(false)
@@ -35,7 +41,6 @@ export default function CameraView({
   const [lastAutoScore, setLastAutoScore] = useState<string>('')
   const [manualScore, setManualScore] = useState<string>('')
   const [lastAutoValue, setLastAutoValue] = useState<number>(0)
-  type Ring = 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'
   const [lastAutoRing, setLastAutoRing] = useState<Ring>('MISS')
   const [pendingDarts, setPendingDarts] = useState<number>(0)
   const [pendingScore, setPendingScore] = useState<number>(0)
@@ -118,12 +123,37 @@ export default function CameraView({
 
   async function startCamera() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      // If a preferred camera is set, request it; otherwise default
+      const constraints: MediaStreamConstraints = preferredCameraId ? { video: { deviceId: { exact: preferredCameraId } }, audio: false } : { video: true, audio: false }
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints)
+      } catch (err: any) {
+        // Fallback if specific device isn't available
+        const name = (err && (err.name || err.code)) || ''
+        if (preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError')) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        } else {
+          throw err
+        }
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         await videoRef.current.play()
       }
       setStreaming(true)
+      // Capture device list for inline picker and remember selection
+      try {
+        const list = await navigator.mediaDevices.enumerateDevices()
+        setAvailableCameras(list.filter(d=>d.kind==='videoinput'))
+        const vidTrack = (stream.getVideoTracks?.()||[])[0]
+        const settings = vidTrack?.getSettings?.()
+        const id = settings?.deviceId as string | undefined
+        if (id) {
+          const label = list.find(d=>d.deviceId===id)?.label
+          setPreferredCamera(id, label||'')
+        }
+      } catch {}
     } catch (e) {
       alert('Camera permission denied or not available.')
     }
@@ -148,6 +178,31 @@ export default function CameraView({
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
     const url = canvas.toDataURL('image/png')
     setSnapshotUrl(url)
+  }
+
+  // Inline light-weight device switcher (optional)
+  function CameraSelector() {
+    if (!availableCameras.length) return null
+    return (
+      <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-black/40 rounded px-2 py-1 text-xs">
+        <span>Cam:</span>
+        <select
+          className="bg-black/20 rounded px-1 py-0.5"
+          value={preferredCameraId || ''}
+          onChange={async (e)=>{
+            const id = e.target.value || undefined
+            const label = availableCameras.find(d=>d.deviceId===id)?.label
+            setPreferredCamera(id, label||'')
+            stopCamera(); await startCamera()
+          }}
+        >
+          <option value="">Auto</option>
+          {availableCameras.map(d => (
+            <option key={d.deviceId} value={d.deviceId}>{d.label || 'Camera'}</option>
+          ))}
+        </select>
+      </div>
+    )
   }
 
   function drawOverlay() {
@@ -466,6 +521,7 @@ export default function CameraView({
   <div className="card">
         <h2 className="text-xl font-semibold mb-3">Camera</h2>
         <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={720} defaultHeight={405} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
+          <CameraSelector />
           <video ref={videoRef} className="w-full h-full object-cover" />
           <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
         </ResizablePanel>
@@ -689,6 +745,7 @@ export default function CameraView({
                 <div className="card">
                   <h2 className="text-xl font-semibold mb-3">Camera</h2>
                   <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={720} defaultHeight={405} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
+                    <CameraSelector />
                     <video ref={videoRef} className="w-full h-full object-cover" />
                     <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
                   </ResizablePanel>

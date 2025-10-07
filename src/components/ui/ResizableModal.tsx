@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react'
 
 type Props = {
   storageKey: string
-  children: React.ReactNode
+  children: ReactNode
   className?: string
   defaultWidth?: number
   defaultHeight?: number
@@ -139,7 +139,7 @@ export default function ResizableModal({
   }
 
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const style: React.CSSProperties = fullScreen
+  const style: CSSProperties = fullScreen
     ? { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%' }
     : {
         width: size.width ? `${size.width}px` : undefined,

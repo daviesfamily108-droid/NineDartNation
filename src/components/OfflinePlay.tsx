@@ -61,6 +61,7 @@ function X01RulesPopup({ onClose }: { onClose: () => void }) {
 }
 
 export default function OfflinePlay({ user }: { user: any }) {
+  const { offlineLayout } = useUserSettings()
   const [selectedMode, setSelectedMode] = useState('X01');
   const [x01Score, setX01Score] = useState(501);
   const [ai, setAI] = useState('None');
@@ -82,8 +83,9 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [aiDelayMs, setAiDelayMs] = useState<number>(2000)
   // New: match popup state
   const [showMatchModal, setShowMatchModal] = useState(false)
-  const [maximized, setMaximized] = useState(true)
-  const [fitAll, setFitAll] = useState(true)
+  // Mirror Online layout defaults when in modern layout, otherwise keep classic feel
+  const [maximized, setMaximized] = useState(offlineLayout === 'modern')
+  const [fitAll, setFitAll] = useState(offlineLayout === 'modern')
   const [fitScale, setFitScale] = useState(1)
   const [isPlayerTurn, setIsPlayerTurn] = useState(true)
   // Per-dart input and stats
@@ -553,7 +555,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
   return (
   <div className="card relative overflow-hidden">
-      <h2 className="text-2xl font-bold text-brand-700 mb-4">Offline Game Modes</h2>
+  <h2 className="text-2xl font-bold text-brand-700 mb-4">Offline Game Modes {offlineLayout==='classic' ? <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">Classic layout</span> : <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">Modern layout</span>}</h2>
       <div className="mb-4 flex flex-col gap-3">
         <label className="font-semibold">Select game mode:</label>
         <select className="input w-full" value={selectedMode} onChange={e => setSelectedMode(e.target.value)}>

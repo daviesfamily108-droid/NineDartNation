@@ -1,12 +1,12 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, type ReactNode } from 'react'
 
 type DrawerProps = {
   open: boolean
   onClose: () => void
   width?: number | string
   title?: string
-  footer?: React.ReactNode
-  children: React.ReactNode
+  footer?: ReactNode
+  children: ReactNode
   side?: 'left' | 'right'
 }
 
