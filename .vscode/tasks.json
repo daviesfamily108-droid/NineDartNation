@@ -1,0 +1,28 @@
+{
+  // VS Code tasks to help run dev scripts on Windows PowerShell
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Install root deps (PowerShell-safe)",
+      "type": "shell",
+      "command": "npm install",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run dev (PowerShell-safe)",
+      "type": "shell",
+      "command": "npm install; npm run dev",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run server to smoke-test endpoints",
+      "type": "shell",
+      "command": "cd server; node server.js",
+      "isBackground": true,
+      "group": "build",
+      "problemMatcher": []
+    }
+  ]
+}
