@@ -907,9 +907,9 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <button className="btn px-3 py-1 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
                   <button className="btn px-3 py-1 text-sm" onClick={openManual}>Manual Correction</button>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3 mt-2">
                   {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
-                    <div className="flex-1 min-w-[300px]"><CameraTile label="Your Board" autoStart={false} /></div>
+                    <div className="flex-1 min-w-[300px] relative z-10"><CameraTile label="Your Board" autoStart={false} /></div>
                   ) : (
                     <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
                   )}
@@ -934,7 +934,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       if (!finished) { match.nextPlayer() }
                       sendState()
                     }} />
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 mb-2">
                       <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn px-2 py-0.5 text-xs" onClick={() => submitVisitManual(visitScore)}>Submit Visit</button>
                       <button className="btn px-2 py-0.5 text-xs bg-slate-700 hover:bg-slate-800" onClick={() => { match.undoVisit(); sendState(); }}>Undo</button>
@@ -946,7 +946,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                           <button key={v} className="btn px-2 py-0.5 text-xs" onClick={()=>submitVisitManual(v)}>{v}</button>
                         ))}
                       </div>
-                    <div className="mt-2 flex items-center gap-1.5">
+                    <div className="mt-2 flex items-center gap-1.5 mb-2">
                       <button className="btn px-2 py-0.5 text-xs" onClick={()=>setShowQuick(true)}>Quick Chat</button>
                       <button className="btn px-2 py-0.5 text-xs" onClick={()=>setShowMessages(true)}>Messages</button>
                     </div>
@@ -1005,18 +1005,19 @@ export default function OnlinePlay({ user }: { user?: any }) {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <div className="md:col-span-2 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                      {/* Top toolbar above camera area */}
-                      <div className="flex items-center gap-1.5 mb-1.5 shrink-0">
-                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
-                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
-                      <button className="btn px-2 py-0.5 text-xs" onClick={openManual}>Manual Correction</button>
-                    </div>
-                      {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
-                        <div className="flex-1 min-w-[360px]"><CameraTile label="Your Board" autoStart={false} /></div>
-                      ) : (
-                        <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
-                      )}
+                  {/* Toolbar row (separate) */}
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
+                    <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
+                    <button className="btn px-2 py-0.5 text-xs" onClick={openManual}>Manual Correction</button>
+                  </div>
+                  {/* Camera row (under toolbar, left side) */}
+                  <div className="mt-2">
+                    {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
+                      <div className="w-full max-w-full"><CameraTile label="Your Board" autoStart={false} /></div>
+                    ) : (
+                      <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
+                    )}
                   </div>
                   <div className="font-semibold text-sm md:text-base">Current: {match.players[match.currentPlayerIdx]?.name || '—'}</div>
                   {currentGame === 'X01' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
