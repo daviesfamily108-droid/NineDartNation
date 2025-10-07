@@ -643,6 +643,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 font-semibold text-xs">Game Mode</span>
                   <span className="font-bold">{selectedMode}{selectedMode==='X01' ? ` / ${x01Score}` : ''}</span>
                   <span className="text-sm opacity-70">First to {firstTo} · Legs {playerLegs}-{aiLegs}</span>
+                  <span className={`ml-2 px-2 py-0.5 rounded-full border text-xs ${offlineLayout==='modern' ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30' : 'bg-white/10 text-white/70 border-white/20'}`}>{offlineLayout==='modern' ? 'Modern layout' : 'Classic layout'}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <button
@@ -712,6 +713,111 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span>
                 </div>
                 <div className="text-3xl font-extrabold tracking-tight">{dpHits} / 21</div>
+              </div>
+            ) : offlineLayout === 'modern' ? (
+              <div className="grid grid-cols-1 md:grid-cols-[1.1fr_1.4fr] gap-2 mb-2 items-stretch min-w-0">
+                {/* Left column: Player panel, Match Summary, Opponent panel stacked */}
+                <div className="flex flex-col gap-2 min-w-0">
+                  <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col">
+                    <div className="text-xs text-slate-600 flex items-center justify-between">
+                      <span className="opacity-80">You Remain</span>
+                      {isPlayerTurn ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">THROWING</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-200 text-xs font-bold">WAITING TO THROW</span>
+                      )}
+                    </div>
+                    <div className="text-3xl font-extrabold tracking-tight">{playerScore}</div>
+                    <div className="h-1.5 w-full bg-white/10 rounded-full mt-2 overflow-hidden">
+                      <div className="h-full bg-emerald-400/70" style={{ width: `${Math.max(0, Math.min(100, (1 - (playerScore / x01Score)) * 100))}%` }} />
+                    </div>
+                    <div className="text-sm mt-1 opacity-90">Last dart: <span className="font-semibold">{playerLastDart}</span></div>
+                    <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{playerDartsThrown>0 ? (((x01Score - playerScore)/playerDartsThrown)*3).toFixed(1) : '0.0'}</span></div>
+                    <div className="text-xs opacity-70 flex items-center gap-2">
+                      <span>Darts thrown: {playerDartsThrown}</span>
+                      <span className="inline-flex items-center gap-1" aria-label="Visit darts">
+                        {[0,1,2].map(i => (
+                          <span key={i} className={`w-2 h-2 rounded-full ${i < playerVisitDarts ? 'bg-emerald-400' : 'bg-white/20'}`}></span>
+                        ))}
+                      </span>
+                    </div>
+                    <div className="text-xs opacity-80 mt-1">Doubles: <span className="font-semibold">Att {playerDoublesAtt} · Hit {playerDoublesHit}</span></div>
+                    {playerScore <= 170 && playerScore > 0 && (
+                      (() => {
+                        const sugs = suggestCheckouts(playerScore, favoriteDouble)
+                        const first = sugs[0] || '—'
+                        return (
+                          <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-white text-sm">
+                            <span className="opacity-70">Checkout</span>
+                            <span className="font-semibold">{first}</span>
+                          </div>
+                        )
+                      })()
+                    )}
+                  </div>
+                  {/* Match Summary */}
+                  <div className="p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-white text-sm">
+                    <div className="font-semibold mb-2">Match Summary</div>
+                    {(() => {
+                      const currentThrower = isPlayerTurn ? (user?.username || 'You') : (ai === 'None' ? '—' : `${ai} AI`)
+                      const currentRemaining = isPlayerTurn ? playerScore : (ai === 'None' ? 0 : aiScore)
+                      const last = isPlayerTurn ? playerLastDart : aiLastDart
+                      const lastScoreVisit = isPlayerTurn ? playerVisitSum : aiVisitSum
+                      const dartsThrown = isPlayerTurn ? playerDartsThrown : aiDartsThrown
+                      const scored = (x01Score - (isPlayerTurn ? playerScore : (ai === 'None' ? x01Score : aiScore)))
+                      const avg3 = dartsThrown > 0 ? ((scored / dartsThrown) * 3) : 0
+                      const matchScore = `${playerLegs}-${aiLegs}`
+                      const bestLegText = legStats.length > 0 ? `${Math.min(...legStats.map(l=>l.doubleDarts + (l.checkoutDarts||0))) || 0} darts` : '—'
+                      return (
+                        <div className="grid grid-cols-2 gap-y-1">
+                          <div className="opacity-80">Current score</div>
+                          <div className="font-mono text-right">{matchScore}</div>
+                          <div className="opacity-80">Current thrower</div>
+                          <div className="text-right font-semibold">{currentThrower}</div>
+                          <div className="opacity-80">Score remaining</div>
+                          <div className="text-right font-mono">{currentRemaining}</div>
+                          <div className="opacity-80">3-dart avg</div>
+                          <div className="text-right font-mono">{avg3.toFixed(1)}</div>
+                          <div className="opacity-80">Last score</div>
+                          <div className="text-right font-mono">{lastScoreVisit || last}</div>
+                          <div className="opacity-80">Best leg</div>
+                          <div className="text-right">{bestLegText}</div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                  {/* Opponent panel */}
+                  <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col">
+                    <div className="text-xs flex items-center justify-between opacity-80">
+                      <span>{ai === 'None' ? 'Opponent' : `${ai} AI`} Remain</span>
+                      {!isPlayerTurn ? (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">THROWING</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-200 text-xs font-bold">WAITING TO THROW</span>
+                      )}
+                    </div>
+                    <div className="text-3xl font-extrabold tracking-tight">{ai !== 'None' ? aiScore : 'N/A'}</div>
+                    {ai !== 'None' && (
+                      <div className="h-1.5 w-full bg-white/10 rounded-full mt-2 overflow-hidden">
+                        <div className="h-full bg-fuchsia-400/70" style={{ width: `${Math.max(0, Math.min(100, (1 - (aiScore / x01Score)) * 100))}%` }} />
+                      </div>
+                    )}
+                    <div className="text-sm mt-1 opacity-90">Last dart: <span className="font-semibold">{ai === 'None' ? 0 : aiLastDart}</span></div>
+                    <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{ai !== 'None' ? (aiDartsThrown>0 ? (((x01Score - aiScore)/aiDartsThrown)*3).toFixed(1) : '0.0') : '—'}</span></div>
+                    {ai !== 'None' && (
+                      <div className="text-xs opacity-70">Darts thrown: {aiDartsThrown}</div>
+                    )}
+                    {ai !== 'None' && (
+                      <div className="text-xs opacity-80 mt-1">Doubles: <span className="font-semibold">Att {aiDoublesAtt} · Hit {aiDoublesHit}</span></div>
+                    )}
+                  </div>
+                </div>
+                {/* Right column: Camera tile */}
+                <div className="flex items-stretch justify-center min-w-0">
+                  <div className="w-full max-w-3xl min-w-0 aspect-video rounded-2xl overflow-hidden bg-black/70 border border-white/10">
+                    <CameraTile label="Your Board" autoStart={false} />
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:[grid-template-columns:1fr_1.2fr_1fr] gap-2 mb-2 items-stretch min-w-0">
