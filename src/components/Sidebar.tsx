@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom';
 import { getFreeRemaining } from '../utils/quota'
 import { useIsAdmin } from '../utils/admin'
 
-export type TabKey = 'score' | 'online' | 'offline' | 'friends' | 'stats' | 'calibrate' | 'settings' | 'admin' | 'tournaments' | 'fullaccess';
+export type TabKey = 'score' | 'online' | 'offline' | 'friends' | 'stats' | 'calibrate' | 'settings' | 'ops' | 'admin' | 'tournaments' | 'fullaccess';
 
 export function getTabs(user: any) {
   const baseTabs = [
@@ -36,10 +36,19 @@ export function Sidebar({
   const tabs = getTabs(user);
   const isAdmin = useIsAdmin(user?.email)
   // Ensure Admin tab is shown only for admins: insert it before Settings for better grouping
+  // Also add an Ops tab for admins/owner to view server status and controls
   if (isAdmin && !tabs.some(t => t.key === 'admin')) {
     const idx = tabs.findIndex(t => t.key === 'settings')
     const adminTab = { key: 'admin', label: 'Admin', icon: Settings } as const
-    if (idx >= 0) tabs.splice(idx, 0, adminTab as any); else tabs.push(adminTab as any)
+    const opsTab = { key: 'ops', label: 'Ops', icon: LayoutDashboard } as const
+    if (idx >= 0) {
+      // Insert Ops then Admin for proximity
+      tabs.splice(idx, 0, opsTab as any)
+      tabs.splice(idx + 1, 0, adminTab as any)
+    } else {
+      tabs.push(opsTab as any)
+      tabs.push(adminTab as any)
+    }
   }
   const [showDiscord, setShowDiscord] = useState(false);
   const freeLeft = user?.username && !user?.fullAccess ? getFreeRemaining(user.username) : Infinity
@@ -52,7 +61,7 @@ export function Sidebar({
   return (
     <aside className={`${user?.fullAccess ? 'premium-sidebar' : ''} sidebar glass w-60 p-2 sm:p-4 rounded-2xl hidden sm:flex sm:flex-col gap-2 overflow-y-auto overflow-x-hidden fixed top-2 bottom-2 sm:top-4 sm:bottom-4`}>
       {tabs.map(({ key, label, icon: Icon }) => {
-        if (key === 'admin' && !isAdmin) return null
+  if ((key === 'admin' || key === 'ops') && !isAdmin) return null
         return (
         <button
           key={key}
