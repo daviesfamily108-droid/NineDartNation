@@ -1072,6 +1072,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <div className="text-2xl font-extrabold mb-2">{dpHits} / {DOUBLE_PRACTICE_ORDER.length}</div>
                       <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                         <CameraView
+                          scoringMode="custom"
                           showToolbar={false}
                           immediateAutoCommit
                           onAutoDart={(value, ring) => {

@@ -785,6 +785,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span></div>
                 <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10">
                   <CameraView
+                    scoringMode="custom"
                     showToolbar={false}
                     onAutoDart={(value: number, ring: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', info?: { sector: number | null; mult: 0|1|2|3 }) => {
                       // Only accept DOUBLE or INNER_BULL to progress

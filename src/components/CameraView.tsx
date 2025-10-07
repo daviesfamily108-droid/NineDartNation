@@ -13,12 +13,18 @@ export default function CameraView({
   onAutoDart,
   immediateAutoCommit = false,
   hideInlinePanels = false,
+  scoringMode = 'x01',
+  onGenericDart,
+  onGenericReplace,
 }: {
   onVisitCommitted?: (score: number, darts: number, finished: boolean) => void
   showToolbar?: boolean
   onAutoDart?: (value: number, ring: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', info?: { sector: number | null; mult: 0|1|2|3 }) => void
   immediateAutoCommit?: boolean
   hideInlinePanels?: boolean
+  scoringMode?: 'x01' | 'custom'
+  onGenericDart?: (value: number, ring: Ring, meta: { label: string }) => void
+  onGenericReplace?: (value: number, ring: Ring, meta: { label: string }) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -222,6 +228,18 @@ export default function CameraView({
   }
 
   function addDart(value: number, label: string, ring: Ring) {
+    // In generic mode, delegate to parent without X01 bust/finish rules
+    if (scoringMode === 'custom') {
+      if (onGenericDart) try { onGenericDart(value, ring, { label }) } catch {}
+      // Maintain a lightweight pending list for UI only
+      if (pendingDarts >= 3) return
+      const newDarts = pendingDarts + 1
+      setPendingDarts(newDarts)
+      setPendingScore(s => s + value)
+      setPendingEntries(e => [...e, { label, value, ring }])
+      return
+    }
+
     if (pendingDarts >= 3) return
     const newDarts = pendingDarts + 1
     const newScore = pendingScore + value
@@ -295,6 +313,21 @@ export default function CameraView({
     if (!parsed) { alert('Enter like T20, D16, 5, 25, 50'); return }
     if (pendingDarts === 0 || pendingEntries.length === 0) {
       onApplyManual()
+      return
+    }
+    if (scoringMode === 'custom') {
+      // Let parent handle replacement semantics
+      if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
+        const c = nonRegCount + 1
+        setNonRegCount(c)
+        if (c >= 3) setShowRecalModal(true)
+      } else setNonRegCount(0)
+
+      // Update local pending UI
+      setPendingEntries((e)=>[...e.slice(0,-1), { label: parsed.label, value: parsed.value, ring: parsed.ring }])
+      if (onGenericReplace) try { onGenericReplace(parsed.value, parsed.ring, { label: parsed.label }) } catch {}
+      setManualScore('')
+      setHadRecentAuto(false)
       return
     }
     if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
@@ -397,6 +430,11 @@ export default function CameraView({
 
   function onCommitVisit() {
     if (pendingDarts === 0) return
+    if (scoringMode === 'custom') {
+      // For custom mode, simply clear local pending (parent maintains its own scoring)
+      setPendingDarts(0); setPendingScore(0); setPendingEntries([])
+      return
+    }
     addVisit(pendingScore, pendingDarts)
     try {
       const name = matchState.players[matchState.currentPlayerIdx]?.name
