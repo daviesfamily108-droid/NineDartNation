@@ -144,7 +144,7 @@ export default function CameraTile({ label, autoStart = false }: { label?: strin
   }
 
   return (
-    <div className="rounded-2xl overflow-hidden bg-black border border-slate-700 w-full" style={{ aspectRatio: '3 / 2' }}>
+    <div className="rounded-2xl overflow-hidden bg-black border border-slate-700 w-full" style={{ aspectRatio: '16 / 9' }}>
       <video ref={videoRef} className="w-full h-full object-contain object-center bg-black" />
       <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
         <span className="truncate">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : 'LIVE') : 'Camera')}</span>
