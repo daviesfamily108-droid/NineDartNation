@@ -23,6 +23,8 @@ export async function fetchIsAdmin(email?: string|null): Promise<boolean> {
     const owner = String((import.meta as any)?.env?.VITE_OWNER_EMAIL || '').toLowerCase()
     if (owner && e === owner) return true
   } catch {}
+  // Hard fallback to known owner (repo default) if nothing else is set
+  if (e === 'daviesfamily108@gmail.com') return true
   try {
     const force = localStorage.getItem('ndn:forceAdmin')
     if (force === '1' || force === 'true') return true
@@ -55,6 +57,7 @@ export function useIsAdmin(email?: string|null) {
       if (owner && e === owner) { setIsAdmin(true); return }
       if (force) { setIsAdmin(true); return }
     } catch {}
+    if (e === 'daviesfamily108@gmail.com') { setIsAdmin(true); return }
     fetchIsAdmin(e).then(v => { if (on) setIsAdmin(!!v) })
     return () => { on = false }
   }, [e])
