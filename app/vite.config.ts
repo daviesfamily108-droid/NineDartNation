@@ -3,9 +3,6 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  esbuild: {
-    jsxInject: `import React from 'react'`,
-  },
   server: {
     host: true,
     // Allow overriding API proxy target via env when server runs on a different port
