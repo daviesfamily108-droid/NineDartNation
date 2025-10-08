@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { formatAvg } from '../utils/stats'
 import { getAllTime } from '../store/profileStats'
 import { STRIPE_CHECKOUT_URL } from '../utils/stripe'
+import { useUserSettings } from '../store/userSettings'
 
 function goTab(tab: string) {
   try { window.dispatchEvent(new CustomEvent('ndn:change-tab', { detail: { tab } })) } catch {}
@@ -11,6 +12,7 @@ export default function Home({ user }: { user?: any }) {
   const [showLegal, setShowLegal] = useState(false);
   const [showHowTo, setShowHowTo] = useState(false);
   const [fact, setFact] = useState<string>('');
+  const { lastOffline } = useUserSettings()
 
   // Rotate a random "Did you know?" each time Home mounts
   useEffect(() => {
@@ -54,7 +56,33 @@ export default function Home({ user }: { user?: any }) {
         )}
 
         <div className="flex flex-wrap gap-4 md:gap-6 justify-center mb-8">
-          <button onClick={()=>goTab('score')} className="px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 transition-transform flex items-center gap-2 text-lg md:text-xl"><span aria-hidden>🎯</span> Start New Match</button>
+          <button
+            onClick={()=>{
+              // Switch to Offline and auto-start using the last saved offline settings
+              goTab('offline');
+              try {
+                // Preconfigure format and starting score
+                window.dispatchEvent(new CustomEvent('ndn:offline-format', {
+                  detail: {
+                    formatType: 'first',
+                    formatCount: Number(lastOffline?.firstTo) || 1,
+                    startScore: Number(lastOffline?.x01Start) || 501,
+                  }
+                }))
+              } catch {}
+              try {
+                // Give the Offline tab a tick to mount, then auto-start the chosen mode
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('ndn:auto-start', {
+                    detail: { mode: lastOffline?.mode || 'X01' }
+                  }))
+                }, 50)
+              } catch {}
+            }}
+            className="px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 transition-transform flex items-center gap-2 text-lg md:text-xl"
+          >
+            <span aria-hidden>🎯</span> Start New Match
+          </button>
           <button onClick={()=>goTab('stats')} className="px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold shadow-xl hover:scale-105 transition-transform flex items-center gap-2 text-lg md:text-xl"><span aria-hidden>📊</span> View Stats</button>
           <button onClick={()=>goTab('online')} className="px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-green-500 to-blue-400 text-white font-bold shadow-xl hover:scale-105 transition-transform flex items-center gap-2 text-lg md:text-xl"><span aria-hidden>🏆</span> Join Online League</button>
           <button onClick={()=>{ goTab('offline'); try { window.dispatchEvent(new CustomEvent('ndn:auto-start', { detail: { mode: 'Double Practice' } })) } catch {} }} className="px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-pink-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 transition-transform flex items-center gap-2 text-lg md:text-xl"><span aria-hidden>💡</span> Practice Doubles</button>

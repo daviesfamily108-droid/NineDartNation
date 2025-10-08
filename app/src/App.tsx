@@ -222,13 +222,13 @@ export default function App() {
                 <h1 className="text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap">NINE-DART-NATION 🎯</h1>
               </div>
               {/* Middle: Welcome band (full width on mobile) */}
-              <div className="order-3 md:order-2 w-full md:w-auto flex-1 flex flex-col items-center justify-center text-center md:text-left">
-                <span className="text-base md:text-lg font-semibold flex items-center gap-2 max-w-full truncate" style={nameColor ? { color: nameColor } : undefined}>
-                  <span className="hidden sm:inline">Welcome,</span>
+              <div className="order-3 md:order-2 w-full md:w-auto flex-1 flex flex-col items-center justify-center text-center md:text-left !text-black">
+                <span className="text-base md:text-lg font-semibold flex items-center gap-2 max-w-full truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>
+                  <span className="hidden sm:inline !text-black">Welcome,</span>
                   <img src={avatar || fallbackAvatar} alt="avatar" className="w-6 h-6 md:w-7 md:h-7 rounded-full ring-2 ring-white/20" />
-                  <span className="truncate">{user.username}🎯</span>
+                  <span className="truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{user.username}🎯</span>
                 </span>
-                <span className="hidden sm:inline text-xs md:text-sm opacity-80">All-time 3-dart avg: <span className="font-semibold">{allTimeAvg.toFixed(2)}</span></span>
+                <span className="hidden sm:inline text-xs md:text-sm !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>All-time 3-dart avg: <span className="font-semibold !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{allTimeAvg.toFixed(2)}</span></span>
               </div>
               {/* Right: Status + Actions */}
               <div className="order-2 md:order-3 ml-0 md:ml-auto flex items-center gap-2 flex-wrap">

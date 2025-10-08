@@ -133,7 +133,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   // Manual correction input for offline (matches CameraView UX)
   const [manualBox, setManualBox] = useState<string>('')
   // Settings: favourite double and caller
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale } = useUserSettings()
+  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect } = useUserSettings()
   // Fit-all scaling measurement
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -639,15 +639,15 @@ export default function OfflinePlay({ user }: { user: any }) {
             >
               <div ref={(el)=>{ (headerBarRef as any).current = el }} className="sticky top-0 relative overflow-hidden flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-xl bg-white/10 border border-white/10 z-10 backdrop-blur-sm">
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900/30 via-slate-900/10 to-transparent" />
-                <div className="flex items-center gap-2 text-sm leading-none whitespace-nowrap">
-                  <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 font-semibold text-xs">Game Mode</span>
-                  <span className="font-bold">{selectedMode}{selectedMode==='X01' ? ` / ${x01Score}` : ''}</span>
-                  <span className="text-sm opacity-70">First to {firstTo} · Legs {playerLegs}-{aiLegs}</span>
+                <div className="flex items-center gap-2 text-sm leading-none flex-wrap">
+                  <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-xs">Game Mode</span>
+                  <span className="font-medium">{selectedMode}{selectedMode==='X01' ? ` / ${x01Score}` : ''}</span>
+                  <span className="text-sm opacity-80">First to {firstTo} · Legs {playerLegs}-{aiLegs}</span>
                   <span className={`ml-2 px-2 py-0.5 rounded-full border text-xs ${offlineLayout==='modern' ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30' : 'bg-white/10 text-white/70 border-white/20'}`}>{offlineLayout==='modern' ? 'Modern layout' : 'Classic layout'}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   {/* Camera scale controls (match Online UI) */}
-                  <div className="hidden sm:flex items-center gap-2 mr-2 text-xs">
+                  <div className="hidden items-center gap-2 mr-2 text-xs">
                     <span className="opacity-80">Cam</span>
                     <button
                       className="btn btn--ghost px-2 py-1"
@@ -730,7 +730,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 <div className="text-3xl font-extrabold tracking-tight">{dpHits} / 21</div>
               </div>
             ) : offlineLayout === 'modern' ? (
-              <div className="grid grid-cols-1 md:grid-cols-[1fr_1.6fr] gap-2 mb-2 items-stretch min-w-0">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2 items-stretch min-w-0">
                 {/* Left column: Player panel, Match Summary, Opponent panel stacked */}
                 <div className="flex flex-col gap-2 min-w-0">
                   <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col">
@@ -827,10 +827,22 @@ export default function OfflinePlay({ user }: { user: any }) {
                     )}
                   </div>
                 </div>
-                {/* Right column: Camera tile */}
-                <div className="flex items-stretch justify-center min-w-0">
-                  <div className="w-full min-w-0 aspect-video rounded-2xl overflow-hidden bg-black/70 border border-white/10">
-                    <CameraTile label="Your Board" autoStart={false} />
+                {/* Right area: toolbar + camera (span 2) */}
+                <div className="md:col-span-2 min-w-0 space-y-2">
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <div className="ml-auto flex items-center gap-1 text-[10px]">
+                      <span className="opacity-70">Cam</span>
+                      <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
+                      <span className="w-7 text-center">{Math.round(cameraScale*100)}%</span>
+                      <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                      <span className="opacity-50">|</span>
+                      <button className="btn px-1 py-0.5" title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
+                    </div>
+                  </div>
+                  <div className="flex items-stretch justify-end min-w-0">
+                    <div className={`w-full min-w-0 ${cameraAspect==='square'?'aspect-square':'aspect-video'} rounded-2xl overflow-hidden bg-black`}>
+                      <CameraTile label="Your Board" autoStart={false} />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -874,9 +886,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                   })()
                 )}
               </div>
-              {/* Center camera preview stretches to minimize gap between score boxes */}
-              <div className="flex items-stretch justify-center md:px-3 min-w-0">
-                <div className="w-full max-w-xl min-w-0 aspect-video rounded-2xl overflow-hidden bg-black/70 border border-white/10">
+              {/* Center camera preview: right-aligned and square when selected */}
+              <div className="flex items-stretch justify-end md:px-3 min-w-0">
+                <div className={`w-full max-w-xl min-w-0 rounded-2xl overflow-hidden bg-black ${ cameraAspect === 'square' ? 'aspect-square' : 'aspect-video' }`}>
                   <CameraTile label="Your Board" autoStart={false} />
                 </div>
               </div>
@@ -943,7 +955,7 @@ export default function OfflinePlay({ user }: { user: any }) {
             {selectedMode === 'Double Practice' ? (
               <div className="space-y-2">
                 <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span></div>
-                <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10">
+                <div className="rounded-2xl overflow-hidden bg-black">
                   <CameraView
                     scoringMode="custom"
                     showToolbar={false}

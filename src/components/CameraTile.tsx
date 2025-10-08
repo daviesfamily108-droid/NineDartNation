@@ -185,7 +185,7 @@ function CameraFrame(props: any) {
   const scale = Math.max(0.5, Math.min(1.25, Number(props.scaleOverride ?? cameraScale ?? 1)))
   const { label, start, stopAll, startPhonePairing, videoRef, streaming, mode, setMode, pairCode, mobileUrl, ttl, qrDataUrl, regenerateCode, httpsInfo, showTips, setShowTips } = props
   return (
-    <div className="rounded-2xl overflow-hidden bg-black border border-slate-700 w-full" style={{ aspectRatio: '16 / 9', transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+    <div className="rounded-2xl overflow-hidden bg-black w-full mx-auto" style={{ aspectRatio: '16 / 9', transform: `scale(${scale})`, transformOrigin: 'center' }}>
       <video ref={videoRef} className="w-full h-full object-contain object-center bg-black" />
       <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
         <span className="truncate">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : 'LIVE') : 'Camera')}</span>
@@ -202,7 +202,7 @@ function CameraFrame(props: any) {
         </div>
       </div>
       {mode==='phone' && pairCode && !streaming && (
-        <div className="p-2 text-white text-[10px] bg-black/50 border-t border-slate-700">
+        <div className="p-2 text-white text-[10px] bg-black/50">
           <div>Open on your phone:</div>
           <div className="font-mono">{mobileUrl}</div>
           <div>Code: <span className="font-mono">{pairCode}</span></div>

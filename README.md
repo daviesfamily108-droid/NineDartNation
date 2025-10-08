@@ -119,6 +119,20 @@ Desktop: hover a message to reveal a small red X (delete) plus Report/Block butt
 
 This setup hosts the static site on Netlify and the Node/WebSocket API on Render.
 
+Root build (recommended)
+- Base directory: repository root
+- Build command: `npm ci && npm run build`
+- Publish directory: `dist`
+- SPA fallback: ensure `public/_redirects` contains `/*  /index.html  200` (already included)
+- Environment: set `NODE_VERSION=18` (already set in `netlify.toml`)
+- Optional: set `VITE_WS_URL` to your Render WebSocket URL (wss://…)
+
+Alternative app/ subfolder build
+- Base directory: `app`
+- Build command: `npm ci && npm run build`
+- Publish directory: `app/dist`
+- Same SPA fallback and env vars apply; use `app/public/_redirects`
+
 1) Deploy the server to Render
 - Create a new Web Service in Render pointing to `server/`.
 - Runtime: Node. Build command: `npm install` (Render autodetect). Start command: `node server.js`.
@@ -129,10 +143,11 @@ This setup hosts the static site on Netlify and the Node/WebSocket API on Render
   - NDN_TLS_KEY, NDN_TLS_CERT: only if `NDN_HTTPS=1`.
 - After deploy, copy the public URL, e.g., `https://your-service.onrender.com`.
 
-2) Configure Netlify for the app
-- Base directory: `app`
-- Build command: `npm ci && npm run build`
-- Publish directory: `app/dist`
+2) Configure Netlify for the app (pick one of the approaches above)
+If using root build (netlify.toml is already configured):
+- No changes required. Netlify will use `npm ci && npm run build` and publish `dist`.
+If using the app/ subfolder approach:
+- Adjust site settings accordingly.
 - Netlify environment variables (Site settings → Build & deploy → Environment):
   - VITE_WS_URL: set to your Render URL with wss scheme, e.g., `wss://your-service.onrender.com`
   - (Optional dev-only) VITE_API_TARGET: used by Vite proxy locally; not needed in production builds.
@@ -154,10 +169,10 @@ Option B — Checkout Session + Webhook (recommended for enforcement)
 - Add a real webhook handler at `/webhook/stripe` to mark a credit upon `checkout.session.completed`.
 
 3) Proxy /api and /webhook requests from Netlify to Render
-- The app uses relative `/api/...` and `/webhook/...` calls. Add a Netlify redirects file so those calls hit your Render server.
-- File: `app/public/_redirects`
-  - `/api/*  https://your-service.onrender.com/api/:splat  200`
-  - `/webhook/*  https://your-service.onrender.com/webhook/:splat  200`
+- The app uses relative `/api/...` and `/webhook/...` calls. Redirects are already included:
+  - Root build: `public/_redirects`
+  - app/ build: `app/public/_redirects`
+  Ensure the host matches your Render service URL.
 
 Where these are used in code
 - WebSocket URL (VITE_WS_URL): `app/src/components/WSProvider.tsx` (primary), also referenced in `CameraTile.tsx` and `Calibrator.tsx` for helpers.

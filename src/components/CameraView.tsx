@@ -5,6 +5,7 @@ import { useMatch } from '../store/match'
 import { BoardRadii, drawPolyline, sampleRing, scaleHomography, type Point } from '../utils/vision'
 import { scoreFromImagePoint } from '../utils/autoscore'
 import { addSample } from '../store/profileStats'
+import { subscribeExternalWS } from '../utils/scoring'
 import ResizablePanel from './ui/ResizablePanel'
 import ResizableModal from './ui/ResizableModal'
 
@@ -31,7 +32,7 @@ export default function CameraView({
   onGenericReplace?: (value: number, ring: Ring, meta: { label: string }) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const { preferredCameraId, setPreferredCamera } = useUserSettings()
+  const { preferredCameraId, setPreferredCamera, autoscoreProvider, autoscoreWsUrl } = useUserSettings()
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -231,6 +232,21 @@ export default function CameraView({
     return () => clearInterval(id)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [H, imageSize, streaming])
+
+  // External autoscore subscription
+  useEffect(() => {
+    if (autoscoreProvider !== 'external-ws' || !autoscoreWsUrl) return
+    const sub = subscribeExternalWS(autoscoreWsUrl, (d) => {
+      // Prefer parent hook if provided; otherwise add to visit directly
+      if (onAutoDart) {
+        try { onAutoDart(d.value, d.ring as any, { sector: d.sector ?? null, mult: (d.mult as any) ?? 0 }) } catch {}
+      } else {
+        const label = d.ring === 'INNER_BULL' ? 'INNER_BULL 50' : d.ring === 'BULL' ? 'BULL 25' : `${d.ring[0]}${(d.value/(d.mult||1))||d.value} ${d.value}`
+        addDart(d.value, label, d.ring as any)
+      }
+    })
+    return () => sub.close()
+  }, [autoscoreProvider, autoscoreWsUrl])
 
   function onOverlayClick(e: React.MouseEvent<HTMLCanvasElement>) {
     if (!overlayRef.current || !H || !imageSize) return

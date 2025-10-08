@@ -16,6 +16,8 @@ export default function Calibrator() {
 	const [mode, setMode] = useState<CamMode>(() => (localStorage.getItem('ndn:cal:mode') as CamMode) || 'local')
 	const [dstPoints, setDstPoints] = useState<Point[]>([]) // image points clicked in order TOP, RIGHT, BOTTOM, LEFT
 	const [snapshotSet, setSnapshotSet] = useState(false)
+	// Zoom for pixel-perfect point picking (0.5x – 2.0x)
+	const [zoom, setZoom] = useState<number>(1)
 	const { H, setCalibration, reset, errorPx } = useCalibration()
   const { calibrationGuide } = useUserSettings()
 
@@ -259,8 +261,13 @@ export default function Calibrator() {
 	function onClickOverlay(e: React.MouseEvent<HTMLCanvasElement>) {
 		if (phase !== 'select') return
 		const rect = (e.target as HTMLCanvasElement).getBoundingClientRect()
-		const x = e.clientX - rect.left
-		const y = e.clientY - rect.top
+		const cssX = e.clientX - rect.left
+		const cssY = e.clientY - rect.top
+		const dpr = window.devicePixelRatio || 1
+		const scale = zoom || 1
+		// Convert visual coords back to canvas pixel coords
+		const x = (cssX / scale) * dpr
+		const y = (cssY / scale) * dpr
 		const pts = [...dstPoints, { x, y }]
 		if (pts.length <= 4) {
 			setDstPoints(pts)
@@ -313,18 +320,48 @@ export default function Calibrator() {
 					Click the four points where the outer edge of the double ring touches TOP, RIGHT, BOTTOM, LEFT.
 					Then compute to fit the board overlay. Aim for error &lt; 2px for best accuracy.
 				</p>
-				<div className="flex items-center gap-2 mb-2">
-					<span className="text-xs opacity-70">Video Source:</span>
-					<div className="flex items-center gap-1 text-xs">
-						<button className={`btn px-2 py-1 ${mode==='local'?'bg-emerald-600':''}`} onClick={() => setMode('local')}>Local</button>
-						<button className={`btn px-2 py-1 ${mode==='phone'?'bg-emerald-600':''}`} onClick={() => setMode('phone')}>Phone</button>
-					</div>
-				</div>
-				<div className="relative rounded-xl overflow-hidden border border-indigo-400/30 bg-black">
-					<video ref={videoRef} className={`w-full ${snapshotSet ? 'opacity-0 absolute -z-10' : 'opacity-100'}`} />
-					<canvas ref={canvasRef} className={`${snapshotSet ? 'opacity-100' : 'opacity-0 absolute -z-10'} w-full`} />
-					<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 w-full h-full" />
-				</div>
+						<div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-2 items-start">
+							<div className="md:col-span-4">
+								<div className="flex items-center gap-2 mb-2">
+									<span className="text-xs opacity-70">Video Source:</span>
+									<div className="flex items-center gap-1 text-xs">
+										<button className={`btn px-2 py-1 ${mode==='local'?'bg-emerald-600':''}`} onClick={() => setMode('local')}>Local</button>
+										<button className={`btn px-2 py-1 ${mode==='phone'?'bg-emerald-600':''}`} onClick={() => setMode('phone')}>Phone</button>
+									</div>
+								</div>
+								<div className="flex items-center gap-1 text-[11px]">
+									<span className="opacity-70">Zoom</span>
+									<button className="btn px-2 py-0.5" onClick={()=>setZoom(z=>Math.max(0.5, Math.round((z-0.1)*10)/10))}>−</button>
+									<span className="w-10 text-center">{Math.round((zoom||1)*100)}%</span>
+									<button className="btn px-2 py-0.5" onClick={()=>setZoom(z=>Math.min(2, Math.round((z+0.1)*10)/10))}>+</button>
+									<button className="btn px-2 py-0.5" onClick={()=>setZoom(1)}>Actual</button>
+								</div>
+								{/* Vertical action buttons */}
+								<div className="flex flex-col gap-2 mt-3">
+									{!streaming ? (
+										<button className="btn" onClick={startCamera}>{mode==='local' ? 'Start Camera' : 'Pair Phone Camera'}</button>
+									) : (
+										<>
+											<button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
+											<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture Frame</button>
+										</>
+									)}
+									<button className="btn" disabled={dstPoints.length !== 4} onClick={compute}>Compute</button>
+									<button className="btn" disabled={dstPoints.length === 0} onClick={undoPoint}>Undo</button>
+									<button className="btn" disabled={dstPoints.length === 0} onClick={refinePoints}>Refine Points</button>
+									<button className="btn" onClick={resetAll}>Reset</button>
+								</div>
+							</div>
+							<div className="md:col-span-8 flex items-center justify-end">
+								<div className="relative aspect-square w-full max-w-[min(100%,60vh)] rounded-2xl overflow-hidden border border-indigo-400/30 bg-black">
+									<div className="absolute inset-0" style={{ transform: `scale(${zoom||1})`, transformOrigin: 'center center' }}>
+										<video ref={videoRef} className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-0 -z-10' : 'opacity-100'}`} />
+										<canvas ref={canvasRef} className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-100' : 'opacity-0 -z-10'}`} />
+										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 w-full h-full" />
+									</div>
+								</div>
+							</div>
+						</div>
 				{mode==='phone' && !streaming && (
 					<div className="mt-2 p-2 rounded-lg bg-black/40 border border-white/10 text-white text-xs">
 						<div>Open on your phone:</div>
@@ -349,20 +386,7 @@ export default function Calibrator() {
 						)}
 					</div>
 				)}
-				<div className="flex flex-wrap gap-2 mt-3">
-					{!streaming ? (
-						<button className="btn" onClick={startCamera}>{mode==='local' ? 'Start Camera' : 'Pair Phone Camera'}</button>
-					) : (
-						<>
-							<button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
-							<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture Frame</button>
-						</>
-					)}
-					<button className="btn" disabled={dstPoints.length !== 4} onClick={compute}>Compute</button>
-					<button className="btn" disabled={dstPoints.length === 0} onClick={undoPoint}>Undo</button>
-								<button className="btn" disabled={dstPoints.length === 0} onClick={refinePoints}>Refine Points</button>
-					<button className="btn" onClick={resetAll}>Reset</button>
-				</div>
+				{/* action buttons moved to left column; removed bottom row */}
 				<div className="mt-2 text-sm opacity-80">
 					<div>Phase: {phase}</div>
 					<div>Clicked: {dstPoints.length} / 4</div>

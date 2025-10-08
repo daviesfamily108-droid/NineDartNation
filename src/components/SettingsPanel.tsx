@@ -79,7 +79,10 @@ export default function SettingsPanel({ user }: { user?: any }) {
     compactHeader, setCompactHeader,
     allowSpectate, setAllowSpectate,
     cameraScale, setCameraScale,
+    cameraAspect, setCameraAspect,
     calibrationGuide, setCalibrationGuide,
+    autoscoreProvider, setAutoscoreProvider,
+    autoscoreWsUrl, setAutoscoreWsUrl,
     offlineLayout, setOfflineLayout,
   } = useUserSettings();
   const voices = (typeof window !== 'undefined' && window.speechSynthesis) ? window.speechSynthesis.getVoices() : [];
@@ -110,7 +113,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
   }
 
   const isAdmin = useIsAdmin(user?.email)
-  const [subTab, setSubTab] = useState<'settings'|'admin'>('settings')
+  const [subTab, setSubTab] = useState<'settings'>('settings')
   function resetLayout() {
     // Broadcast a layout reset event; ResizableModal listens for this and clears local storage
     try { window.dispatchEvent(new Event('ndn:layout-reset' as any)) } catch {}
@@ -182,16 +185,19 @@ export default function SettingsPanel({ user }: { user?: any }) {
         <h2 className="text-2xl font-bold text-brand-700 flex items-center gap-2"><User className="w-6 h-6 text-brand-400" /> Settings</h2>
         <div className="flex items-center gap-2">
           <button className={`btn ${subTab==='settings' ? 'bg-brand-600' : ''}`} onClick={()=>setSubTab('settings')}>Settings</button>
-          {isAdmin && (
-            <button className={`btn ${subTab==='admin' ? 'bg-brand-600' : ''}`} onClick={()=>setSubTab('admin')}>Admin</button>
-          )}
+          <button
+            className="btn bg-rose-600 hover:bg-rose-700"
+            onClick={() => {
+              try {
+                localStorage.removeItem('ndn:avatar')
+                localStorage.removeItem('ndn:settings')
+              } catch {}
+              try { window.dispatchEvent(new Event('ndn:logout' as any)) } catch {}
+            }}
+          >Log out</button>
         </div>
       </div>
-      {subTab === 'admin' && isAdmin ? (
-        <div className="mt-2">
-          <AdminDashboard user={user} />
-        </div>
-      ) : (
+      {
       <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <label className="block font-semibold mb-1 flex items-center gap-2"><Image className="w-5 h-5 text-brand-400" /> Profile avatar:</label>
@@ -284,7 +290,22 @@ export default function SettingsPanel({ user }: { user?: any }) {
           <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 mt-4">
             <div className="font-semibold mb-2">Camera & Calibration</div>
             <div className="mb-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-400/30 text-emerald-200 text-sm">
-              Connect your preferred camera setup that you already own! or use our own branded Autoscoring feature!
+              Use any camera or autoscore system you already own. Choose our built-in autoscore, or connect an external provider over WebSocket.
+            </div>
+            <div className="grid grid-cols-2 gap-2 items-end text-sm mb-3">
+              <div>
+                <div className="text-slate-600 mb-1">Autoscore provider</div>
+                <select className="input w-full" value={autoscoreProvider || 'built-in'} onChange={e=>setAutoscoreProvider((e.target.value as any)||'built-in')}>
+                  <option value="built-in">Built-in (click overlay)</option>
+                  <option value="external-ws">External (WebSocket)</option>
+                </select>
+              </div>
+              {autoscoreProvider === 'external-ws' && (
+                <div>
+                  <div className="text-slate-600 mb-1">WS URL (wss://...)</div>
+                  <input className="input w-full" placeholder="wss://example.com/autoscore" value={autoscoreWsUrl||''} onChange={e=>setAutoscoreWsUrl(e.target.value)} />
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-2 items-center text-sm mb-2">
               <div className="text-slate-600 col-span-1">Default camera size</div>
@@ -293,6 +314,15 @@ export default function SettingsPanel({ user }: { user?: any }) {
                 <input className="flex-1" type="range" min={0.5} max={1.25} step={0.05} value={cameraScale} onChange={e=>setCameraScale(parseFloat(e.target.value))} />
                 <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
                 <div className="w-10 text-right">{Math.round(cameraScale*100)}%</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 items-center text-sm mb-2">
+              <div className="text-slate-600 col-span-1">Camera aspect</div>
+              <div className="col-span-2">
+                <select className="input w-full" value={cameraAspect || 'wide'} onChange={e=>setCameraAspect((e.target.value as any) || 'wide')}>
+                  <option value="wide">Wide (16:9)</option>
+                  <option value="square">Square (1:1)</option>
+                </select>
               </div>
             </div>
             <label className="flex items-center gap-2 text-sm">
@@ -456,8 +486,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
             </label>
           </div>
         </div>
-      </div>
-      )}
+  </div>
+  }
   <label className="block font-semibold mb-1 flex items-center gap-2"><Lightbulb className="w-5 h-5 text-cyan-300" /> Darts Tips:</label>
       <button className="btn mb-4" onClick={() => setShowTips(true)}>Show Tips to Improve Your Game</button>
       <button className="btn w-full">Save Settings</button>
