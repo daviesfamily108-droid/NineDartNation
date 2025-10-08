@@ -16,6 +16,8 @@ export default function Calibrator() {
 	const [mode, setMode] = useState<CamMode>(() => (localStorage.getItem('ndn:cal:mode') as CamMode) || 'local')
 	const [dstPoints, setDstPoints] = useState<Point[]>([]) // image points clicked in order TOP, RIGHT, BOTTOM, LEFT
 	const [snapshotSet, setSnapshotSet] = useState(false)
+	// Track current frame (video/snapshot) size to preserve aspect ratio in the preview container
+	const [frameSize, setFrameSize] = useState<{ w: number, h: number } | null>(null)
 	// Zoom for pixel-perfect point picking (0.5x – 2.0x)
 	const [zoom, setZoom] = useState<number>(1)
 	const { H, setCalibration, reset, errorPx } = useCalibration()
@@ -203,6 +205,7 @@ export default function Calibrator() {
 		const ctx = c.getContext('2d')!
 		ctx.drawImage(v, 0, 0, c.width, c.height)
 		setSnapshotSet(true)
+		setFrameSize({ w: c.width, h: c.height })
 		setPhase('select')
 		setDstPoints([])
 	}
@@ -215,8 +218,15 @@ export default function Calibrator() {
 		const ctx = o.getContext('2d')!
 		ctx.clearRect(0, 0, o.width, o.height)
 
-		// Draw clicked points
-		currentPoints.forEach((p) => drawCross(ctx, p, '#f472b6'))
+		// Draw clicked points (with order labels to guide TOP, RIGHT, BOTTOM, LEFT)
+		currentPoints.forEach((p, i) => {
+			drawCross(ctx, p, '#f472b6')
+			ctx.save()
+			ctx.fillStyle = '#f472b6'
+			ctx.font = '14px sans-serif'
+			ctx.fillText(String(i + 1), p.x + 6, p.y - 6)
+			ctx.restore()
+		})
 
 		// If we have a homography, draw rings
 		const Huse = HH || H
@@ -260,14 +270,15 @@ export default function Calibrator() {
 
 	function onClickOverlay(e: React.MouseEvent<HTMLCanvasElement>) {
 		if (phase !== 'select') return
-		const rect = (e.target as HTMLCanvasElement).getBoundingClientRect()
+		const el = (e.target as HTMLCanvasElement)
+		const rect = el.getBoundingClientRect()
 		const cssX = e.clientX - rect.left
 		const cssY = e.clientY - rect.top
-		const dpr = window.devicePixelRatio || 1
-		const scale = zoom || 1
-		// Convert visual coords back to canvas pixel coords
-		const x = (cssX / scale) * dpr
-		const y = (cssY / scale) * dpr
+		// Map CSS coordinates back to the overlay canvas pixel coordinates, accounting for CSS scaling and zoom
+		const scaleX = el.width > 0 ? (el.width / rect.width) : 1
+		const scaleY = el.height > 0 ? (el.height / rect.height) : 1
+		const x = cssX * scaleX
+		const y = cssY * scaleY
 		const pts = [...dstPoints, { x, y }]
 		if (pts.length <= 4) {
 			setDstPoints(pts)
@@ -353,9 +364,21 @@ export default function Calibrator() {
 								</div>
 							</div>
 							<div className="md:col-span-8 flex items-center justify-end">
-								<div className="relative aspect-square w-full max-w-[min(100%,60vh)] rounded-2xl overflow-hidden border border-indigo-400/30 bg-black">
+								<div
+									className="relative w-full max-w-[min(100%,60vh)] rounded-2xl overflow-hidden border border-indigo-400/30 bg-black"
+									style={{ aspectRatio: frameSize ? `${frameSize.w} / ${frameSize.h}` : '16 / 9' }}
+								>
 									<div className="absolute inset-0" style={{ transform: `scale(${zoom||1})`, transformOrigin: 'center center' }}>
-										<video ref={videoRef} className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-0 -z-10' : 'opacity-100'}`} />
+										<video
+											ref={videoRef}
+											onLoadedMetadata={(ev) => {
+												try {
+													const v = ev.currentTarget as HTMLVideoElement
+													if (v.videoWidth && v.videoHeight) setFrameSize({ w: v.videoWidth, h: v.videoHeight })
+												} catch {}
+											}}
+											className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-0 -z-10' : 'opacity-100'}`}
+										/>
 										<canvas ref={canvasRef} className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-100' : 'opacity-0 -z-10'}`} />
 										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 w-full h-full" />
 									</div>
