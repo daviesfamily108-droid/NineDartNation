@@ -350,6 +350,7 @@ app.get('/api/email/preview', (req, res) => {
   let out
   if (kind === 'reset') out = EmailTemplates.passwordReset({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...emailCopy.reset })
   else if (kind === 'reminder') out = EmailTemplates.passwordReminder({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...emailCopy.reminder })
+  else if (kind === 'username') out = EmailTemplates.usernameReminder({ username: 'Alex', actionUrl: 'https://example.com/app', ...emailCopy.username })
   else if (kind === 'confirm-email') out = EmailTemplates.emailChangeConfirm({ username: 'Alex', newEmail: 'alex+new@example.com', actionUrl: 'https://example.com/confirm?token=demo', ...emailCopy.confirmEmail })
   else if (kind === 'changed') out = EmailTemplates.passwordChangedNotice({ username: 'Alex', supportUrl: 'https://example.com/support', ...emailCopy.changed })
   else return res.status(400).send('Unknown kind')
@@ -368,7 +369,7 @@ app.post('/api/admin/email-copy', (req, res) => {
   if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   }
-  const map = { 'reset':'reset', 'reminder':'reminder', 'confirm-email':'confirmEmail', 'changed':'changed' }
+  const map = { 'reset':'reset', 'reminder':'reminder', 'username':'username', 'confirm-email':'confirmEmail', 'changed':'changed' }
   const key = map[String(kind)]
   if (!key) return res.status(400).json({ ok: false, error: 'BAD_KIND' })
   emailCopy[key] = {
