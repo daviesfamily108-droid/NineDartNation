@@ -31,3 +31,31 @@ export function parseManualDart(input: string): number | null {
 	const multVal = mult==='S'?1:mult==='D'?2:3
 	return num * multVal
 }
+
+// Parse a detailed dart string like "T20", "D16", "S5", "25", "50", "BULL", returning a structured Dart.
+export function parseDartDetailed(input: string): Dart | null {
+	const t = input.trim().toUpperCase()
+	if (!t) return null
+	if (t === '50' || t === 'BULL' || t === 'DBULL' || t === 'IBULL' || t === 'INNER BULL' || t === 'INNER_BULL') return { bull: 50 }
+	if (t === '25' || t === 'OBULL' || t === 'OUTER BULL' || t === 'BULL25') return { bull: 25 }
+	const m = t.match(/^(S|D|T)?\s*(\d{1,2})$/)
+	if (!m) return null
+	const mult = (m[1] || 'S') as DartMult
+	const num = parseInt(m[2], 10)
+	if (num < 1 || num > 20) return null
+	return { mult, num }
+}
+
+// Convert autoscore ring+sector data into a structured Dart
+// ring: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'
+// sector: 1..20 for numbered segments; null/undefined for bull/miss
+export function ringSectorToDart(ring?: string, sector?: number | null): Dart | null {
+	if (!ring || ring === 'MISS') return null
+	if (ring === 'BULL') return { bull: 25 }
+	if (ring === 'INNER_BULL') return { bull: 50 }
+	if (typeof sector === 'number' && sector >= 1 && sector <= 20) {
+		const mult: DartMult = ring === 'DOUBLE' ? 'D' : ring === 'TRIPLE' ? 'T' : 'S'
+		return { mult, num: sector }
+	}
+	return null
+}

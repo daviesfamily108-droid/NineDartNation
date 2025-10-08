@@ -7,10 +7,34 @@ import CameraView from './CameraView'
 import { getUserCurrency, formatPriceInCurrency } from '../utils/config';
 import { bumpGameMode } from '../store/profileStats'
 import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart } from '../game/types'
+import { ATC_ORDER } from '../game/aroundTheClock'
+import { createCricketState, applyCricketDart, CRICKET_NUMBERS, hasClosedAll as cricketClosedAll } from '../game/cricket'
+import { createShanghaiState, applyShanghaiDart, endShanghaiTurn } from '../game/shanghai'
+import { createDefaultHalveIt, getCurrentHalveTarget, applyHalveItDart, endHalveItTurn } from '../game/halveIt'
+import { createHighLow, applyHighLowDart, endHighLowTurn } from '../game/highLow'
+import { createKillerState, assignKillerNumbers, applyKillerDart, killerWinner, KillerState } from '../game/killer'
+import { createBaseball, applyBaseballDart } from '../game/baseball'
+import { createGolf, applyGolfDart } from '../game/golf'
+import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
+import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS, hasClosedAllAm } from '../game/americanCricket'
 import ResizableModal from './ui/ResizableModal'
 
 const freeGames = ['X01', 'Double Practice'];
-const premiumGames = ['Around the Clock', 'Cricket', 'Halve It', 'Shanghai', 'Killer', 'Golf', 'Tic Tac Toe', 'High Score', 'Low Score', 'Treble 20', 'Treble 19', 'Treble 18', 'Treble 17', 'Treble 16', 'Treble 15', 'Treble 14', 'Treble 13', 'Treble 12', 'Treble 11', 'Treble 10', 'Treble 9', 'Treble 8', 'Treble 7', 'Treble 6', 'Treble 5', 'Treble 4', 'Treble 3', 'Treble 2', 'Treble 1'];
+const premiumGames = [
+  'Around the Clock',
+  'Cricket',
+  'Halve It',
+  'Shanghai',
+  'High-Low',
+  'Killer',
+  "Bob's 27",
+  'Count-Up',
+  'High Score',
+  'Low Score',
+  'Checkout 170',
+  'Checkout 121',
+  'Treble Practice',
+];
 const aiLevels = ['Easy', 'Medium', 'Hardened'];
 
 function clamp(n: number, min: number, max: number) {
@@ -97,6 +121,61 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [playerDartPoints, setPlayerDartPoints] = useState<number>(0)
   const [dpIndex, setDpIndex] = useState<number>(0) // 0..20 (DBULL at 20)
   const [dpHits, setDpHits] = useState<number>(0)
+  // Around the Clock (offline practice)
+  const [atcIndex, setAtcIndex] = useState<number>(0)
+  const [atcHits, setAtcHits] = useState<number>(0)
+  // Practice mode states
+  const [cricket, setCricket] = useState(createCricketState())
+  const [shanghai, setShanghai] = useState(createShanghaiState())
+  const [halve, setHalve] = useState(createDefaultHalveIt())
+  const [highlow, setHighlow] = useState(createHighLow())
+  const [practiceTurnDarts, setPracticeTurnDarts] = useState<number>(0)
+  // Phase 1 practice modes
+  const [b27Stage, setB27Stage] = useState<number>(1)
+  const [b27Score, setB27Score] = useState<number>(27)
+  const [b27Darts, setB27Darts] = useState<number>(0)
+  const [b27Hits, setB27Hits] = useState<number>(0)
+  const [b27Finished, setB27Finished] = useState<boolean>(false)
+  const [cuRound, setCuRound] = useState<number>(1)
+  const [cuScore, setCuScore] = useState<number>(0)
+  const [cuDarts, setCuDarts] = useState<number>(0)
+  const cuMaxRounds = 8
+  const [hsRound, setHsRound] = useState<number>(1)
+  const [hsScore, setHsScore] = useState<number>(0)
+  const [hsDarts, setHsDarts] = useState<number>(0)
+  const hsMaxRounds = 10
+  const [lsRound, setLsRound] = useState<number>(1)
+  const [lsScore, setLsScore] = useState<number>(0)
+  const [lsDarts, setLsDarts] = useState<number>(0)
+  const lsMaxRounds = 10
+  const [co170Rem, setCo170Rem] = useState<number>(170)
+  const [co170Darts, setCo170Darts] = useState<number>(0)
+  const [co170Attempts, setCo170Attempts] = useState<number>(0)
+  const [co170Successes, setCo170Successes] = useState<number>(0)
+  const [co121Rem, setCo121Rem] = useState<number>(121)
+  const [co121Darts, setCo121Darts] = useState<number>(0)
+  const [co121Attempts, setCo121Attempts] = useState<number>(0)
+  const [co121Successes, setCo121Successes] = useState<number>(0)
+  const [trebleTarget, setTrebleTarget] = useState<number>(20)
+  const [trebleHits, setTrebleHits] = useState<number>(0)
+  const [trebleDarts, setTrebleDarts] = useState<number>(0)
+  // Phase 2 states
+  const [baseball, setBaseball] = useState(createBaseball())
+  const [golf, setGolf] = useState(createGolf())
+  const [ttt, setTTT] = useState(createTicTacToe())
+  const [amCricket, setAmCricket] = useState(createAmCricketState())
+  // Killer (hotseat) state
+  const [killerPlayers, setKillerPlayers] = useState<Array<{ id: string; name: string }>>([
+    { id: 'p1', name: 'Player 1' },
+    { id: 'p2', name: 'Player 2' },
+  ])
+  const [killerStates, setKillerStates] = useState<Record<string, KillerState>>({})
+  const [killerAssigned, setKillerAssigned] = useState<Record<string, number>>({})
+  const [killerSetupDone, setKillerSetupDone] = useState<boolean>(false)
+  const [killerTurnIdx, setKillerTurnIdx] = useState<number>(0)
+  const [killerDarts, setKillerDarts] = useState<number>(0)
+  const [killerWinnerId, setKillerWinnerId] = useState<string | null>(null)
+  const [killerLastEvent, setKillerLastEvent] = useState<string>('')
   const [playerDartsThrown, setPlayerDartsThrown] = useState<number>(0)
   const [playerLastDart, setPlayerLastDart] = useState<number>(0)
   const [playerVisitDarts, setPlayerVisitDarts] = useState<number>(0)
@@ -457,6 +536,186 @@ export default function OfflinePlay({ user }: { user: any }) {
     setManualBox('')
   }
 
+  // Bob's 27
+  function addB27Auto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    if (b27Finished) return
+    const target = b27Stage
+    const hit = (ring === 'DOUBLE' && sector === target) || (!ring && value === target*2)
+    if (hit) setB27Hits(h => h + 1)
+    setB27Darts(d => {
+      const nd = d + 1
+      if (nd >= 3) {
+        const totalHits = b27Hits + (hit?1:0)
+        if (totalHits > 0) setB27Score(s => s + totalHits * target * 2)
+        else setB27Score(s => s - target * 2)
+        const next = target + 1
+        setB27Stage(next)
+        setB27Hits(0)
+        if (next > 20) setB27Finished(true)
+        return 0
+      }
+      return nd
+    })
+  }
+  function addB27Numeric() { addB27Auto(Math.max(0, playerDartPoints|0)); setPlayerDartPoints(0) }
+  function resetB27() { setB27Stage(1); setB27Score(27); setB27Darts(0); setB27Hits(0); setB27Finished(false) }
+
+  // Count-Up / High Score / Low Score
+  function addCountUpAuto(value: number) { setCuScore(s => s + Math.max(0, value|0)); setCuDarts(d => { const nd=d+1; if(nd>=3){ setCuRound(r=>r+1); return 0 } return nd }) }
+  function addHighScoreAuto(value: number) { setHsScore(s => s + Math.max(0, value|0)); setHsDarts(d => { const nd=d+1; if(nd>=3){ setHsRound(r=>r+1); return 0 } return nd }) }
+  function addLowScoreAuto(value: number) { setLsScore(s => s + Math.max(0, value|0)); setLsDarts(d => { const nd=d+1; if(nd>=3){ setLsRound(r=>r+1); return 0 } return nd }) }
+
+  // Checkout routines (double out)
+  function applyCheckout(rem: number, setRem: (n:number)=>void, darts: number, setDarts: (f:(n:number)=>number)=>void, setAttempts: (f:(n:number)=>number)=>void, setSuccesses: (f:(n:number)=>number)=>void, value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL') {
+    const next = rem - value
+    if (next < 0) {
+      // bust: ignore progress during attempt
+    } else if (next === 0) {
+      if (ring === 'DOUBLE' || ring === 'INNER_BULL') {
+        setSuccesses(s => s + 1)
+        setAttempts(a => a + 1)
+        setDarts(()=>0)
+        setRem(rem) // caller will reset to initial value right after
+        return
+      }
+    } else {
+      setRem(next)
+    }
+    setDarts(d => { const nd = d + 1; if (nd>=3) { setAttempts(a=>a+1); return 0 } return nd })
+  }
+  function addCo170Auto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL') { applyCheckout(co170Rem, setCo170Rem, co170Darts, setCo170Darts, setCo170Attempts, setCo170Successes, value, ring); if (co170Darts+1>=3) setCo170Rem(170) }
+  function addCo121Auto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL') { applyCheckout(co121Rem, setCo121Rem, co121Darts, setCo121Darts, setCo121Attempts, setCo121Successes, value, ring); if (co121Darts+1>=3) setCo121Rem(121) }
+  function addCoManual(is170: boolean) {
+    const v = parseManualDart(manualBox)
+    if (v == null) { alert('Enter like T20, D16, 25, 50'); return }
+    const t = manualBox.trim().toUpperCase()
+    const isDouble = t.startsWith('D') || t === '50' || t === 'BULL' || t === 'DBULL' || t === 'IBULL' || t.includes('INNER')
+    if (is170) addCo170Auto(v, isDouble?'DOUBLE':undefined); else addCo121Auto(v, isDouble?'DOUBLE':undefined)
+    setManualBox('')
+  }
+  function resetCo170() { setCo170Rem(170); setCo170Darts(0); setCo170Attempts(0); setCo170Successes(0) }
+  function resetCo121() { setCo121Rem(121); setCo121Darts(0); setCo121Attempts(0); setCo121Successes(0) }
+
+  // Treble practice
+  function addTrebleAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) { if (ring==='TRIPLE' && sector===trebleTarget) setTrebleHits(h=>h+1); else if(!ring && value===trebleTarget*3) setTrebleHits(h=>h+1); setTrebleDarts(d=>d+1) }
+  function resetTreble() { setTrebleHits(0); setTrebleDarts(0) }
+
+  // Baseball
+  function addBaseballAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE', sector?: number | null) {
+    setBaseball(prev => { const cp = { ...prev }; applyBaseballDart(cp as any, value, ring as any, sector); return cp })
+  }
+  function resetBaseball() { setBaseball(createBaseball()) }
+
+  // Golf
+  function addGolfAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE', sector?: number | null) {
+    setGolf(prev => { const cp = { ...prev }; applyGolfDart(cp as any, value, ring as any, sector); return cp })
+  }
+  function resetGolf() { setGolf(createGolf()) }
+
+  // Tic Tac Toe
+  function addTttAuto(cell: number, value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    setTTT(prev => { const cp = { ...prev, board: [...prev.board] as any }; tryClaimCell(cp as any, cell as any, value, ring as any, sector); return cp })
+  }
+  function resetTtt() { setTTT(createTicTacToe()) }
+
+  // American Cricket
+  function addAmCricketAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    setAmCricket(prev => { const cp = { ...prev, marks: { ...prev.marks } }; applyAmCricketDart(cp as any, value, ring as any, sector, () => false); return cp })
+  }
+  function resetAmCricket() { setAmCricket(createAmCricketState()) }
+
+  // --- Around the Clock helpers ---
+  function addAtcValue(val: number, ring?: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    const target = ATC_ORDER[atcIndex]
+    let hit = false
+    if (typeof sector === 'number' && sector === target && (ring === 'SINGLE' || ring === 'DOUBLE' || ring === 'TRIPLE')) hit = true
+    if (target === 25 && (ring === 'BULL' || val === 25)) hit = true
+    if (target === 50 && (ring === 'INNER_BULL' || val === 50)) hit = true
+    if (!hit) {
+      // Fallback by value only
+      if (val === target || val === target * 2 || val === target * 3) hit = true
+    }
+    if (hit) {
+      const newHits = atcHits + 1
+      setAtcHits(newHits)
+      setAtcIndex(i => i + 1)
+    }
+  }
+  function addAtcNumeric() { addAtcValue(Math.max(0, playerDartPoints|0)); setPlayerDartPoints(0) }
+  function addAtcManual() {
+    const v = parseManualDart(manualBox)
+    if (v == null) { alert('Enter like T20, D5, 25, 50'); return }
+    addAtcValue(v)
+    setManualBox('')
+  }
+
+  // --- Cricket helpers (solo practice) ---
+  function addCricketAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    setCricket(prev => {
+      const copy = { ...prev, marks: { ...prev.marks } }
+      applyCricketDart(copy as any, value, ring, sector, () => false)
+      return copy
+    })
+    setPracticeTurnDarts(d => {
+      const nd = d + 1; if (nd >= 3) return 0; return nd
+    })
+  }
+  function addCricketNumeric() { addCricketAuto(Math.max(0, playerDartPoints|0)); setPlayerDartPoints(0) }
+
+  // --- Shanghai helpers ---
+  function addShanghaiAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    setShanghai(prev => {
+      const copy = { ...prev, turnHits: { ...prev.turnHits } }
+      applyShanghaiDart(copy as any, value, ring, sector)
+      return copy
+    })
+    setPracticeTurnDarts(d => {
+      const nd = d + 1
+      if (nd >= 3) {
+        setShanghai(prev => { const cp = { ...prev, turnHits: { ...prev.turnHits } }; endShanghaiTurn(cp as any); return cp })
+        return 0
+      }
+      return nd
+    })
+  }
+  function addShanghaiNumeric() { addShanghaiAuto(Math.max(0, playerDartPoints|0)); setPlayerDartPoints(0) }
+
+  // --- Halve It helpers ---
+  function addHalveAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    setHalve(prev => {
+      const copy = { ...prev, targets: [...prev.targets] }
+      applyHalveItDart(copy as any, value, ring, sector)
+      return copy
+    })
+    setPracticeTurnDarts(d => {
+      const nd = d + 1
+      if (nd >= 3) {
+        setHalve(prev => { const cp = { ...prev, targets: [...prev.targets] }; endHalveItTurn(cp as any); return cp })
+        return 0
+      }
+      return nd
+    })
+  }
+  function addHalveNumeric() { addHalveAuto(Math.max(0, playerDartPoints|0)); setPlayerDartPoints(0) }
+
+  // --- High-Low helpers ---
+  function addHighLowAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    setHighlow(prev => {
+      const copy = { ...prev }
+      applyHighLowDart(copy as any, value, ring, sector)
+      return copy
+    })
+    setPracticeTurnDarts(d => {
+      const nd = d + 1
+      if (nd >= 3) {
+        setHighlow(prev => { const cp = { ...prev }; endHighLowTurn(cp as any); return cp })
+        return 0
+      }
+      return nd
+    })
+  }
+  function addHighLowNumeric() { addHighLowAuto(Math.max(0, playerDartPoints|0)); setPlayerDartPoints(0) }
+
   function parseManualBox(): number | null {
     const t = manualBox.trim().toUpperCase()
     if (!t) return null
@@ -680,7 +939,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 className="will-change-transform"
                 style={fitAll ? { transform: `scale(${fitScale})`, transformOrigin: 'top left', width: '100%', fontSize: `${Math.max(0.8, Math.min(1, fitScale))}em` } : undefined}
               >
-            <h3 className="text-xl font-bold mb-2 mt-1 leading-tight">{selectedMode === 'Double Practice' ? 'Double Practice' : 'X01 Match'}</h3>
+            <h3 className="text-xl font-bold mb-2 mt-1 leading-tight">{selectedMode === 'X01' ? 'X01 Match' : selectedMode}</h3>
             <div className="flex items-center gap-2 mb-2 text-xs flex-wrap">
               <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">Mode: {selectedMode}</span>
               <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">Start: {x01Score}</span>
@@ -721,13 +980,171 @@ export default function OfflinePlay({ user }: { user: any }) {
               </div>
               <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">Legs: {playerLegs}–{aiLegs}</span>
             </div>
-            {selectedMode === 'Double Practice' ? (
+            {selectedMode !== 'X01' ? (
               <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col h-full mb-2">
-                <div className="text-xs text-slate-600 flex items-center justify-between">
-                  <span className="opacity-80">Current Target</span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span>
-                </div>
-                <div className="text-3xl font-extrabold tracking-tight">{dpHits} / 21</div>
+                {selectedMode === 'Double Practice' && (
+                  <>
+                    <div className="text-xs text-slate-600 flex items-center justify-between">
+                      <span className="opacity-80">Current Target</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span>
+                    </div>
+                    <div className="text-3xl font-extrabold tracking-tight">{dpHits} / 21</div>
+                  </>
+                )}
+                {selectedMode === 'Around the Clock' && (
+                  <>
+                    <div className="text-xs text-slate-600 flex items-center justify-between">
+                      <span className="opacity-80">Current Target</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">{ATC_ORDER[atcIndex] === 25 ? '25 (Outer Bull)' : ATC_ORDER[atcIndex] === 50 ? '50 (Inner Bull)' : (ATC_ORDER[atcIndex] || '—')}</span>
+                    </div>
+                    <div className="text-3xl font-extrabold tracking-tight">{atcHits} / {ATC_ORDER.length}</div>
+                  </>
+                )}
+                {selectedMode === 'Cricket' && (
+                  <>
+                    <div className="text-xs text-slate-600 mb-1">Cricket — Close 20–15 and Bull; overflow scores points</div>
+                    <div className="grid grid-cols-7 gap-1 text-center text-[11px] mb-2">
+                      {CRICKET_NUMBERS.map(n => (
+                        <div key={n} className="p-1 rounded bg-slate-800/50 border border-slate-700/50">
+                          <div className="opacity-70">{n===25?'Bull':n}</div>
+                          <div className="font-semibold">{Math.min(3, cricket.marks?.[n]||0)} / 3</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-sm">Points: <span className="font-semibold">{cricket.points}</span></div>
+                    {cricketClosedAll(cricket) && (
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={()=>{ setCricket(createCricketState()); setPracticeTurnDarts(0) }}>Reset</button></div>
+                    )}
+                  </>
+                )}
+                {selectedMode === 'Shanghai' && (
+                  <>
+                    <div className="text-xs text-slate-600 flex items-center justify-between"><span>Round</span><span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{shanghai.round}</span></div>
+                    <div className="text-3xl font-extrabold tracking-tight">Score: {shanghai.score}</div>
+                    {shanghai.finished && (
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={()=>{ setShanghai(createShanghaiState()); setPracticeTurnDarts(0) }}>Reset</button></div>
+                    )}
+                  </>
+                )}
+                {selectedMode === 'Halve It' && (
+                  <>
+                    <div className="text-xs text-slate-600 flex items-center justify-between"><span>Stage</span><span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{halve.stage+1}/{halve.targets.length}</span></div>
+                    <div className="text-sm">Target: <span className="font-semibold">{(() => { const t = getCurrentHalveTarget(halve); if (!t) return '—'; if (t.kind==='ANY_NUMBER') return 'Any'; if (t.kind==='BULL') return 'Bull'; if (t.kind==='DOUBLE' || t.kind==='TRIPLE' || t.kind==='NUMBER') return `${t.kind} ${(t as any).num}`; return '—' })()}</span></div>
+                    <div className="text-3xl font-extrabold tracking-tight">Score: {halve.score}</div>
+                    {halve.finished && (
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={()=>{ setHalve(createDefaultHalveIt()); setPracticeTurnDarts(0) }}>Reset</button></div>
+                    )}
+                  </>
+                )}
+                {selectedMode === 'High-Low' && (
+                  <>
+                    <div className="text-xs text-slate-600">Round {highlow.round} · Target {highlow.target}</div>
+                    <div className="text-3xl font-extrabold tracking-tight">Score: {highlow.score}</div>
+                    {highlow.finished && (
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={()=>{ setHighlow(createHighLow()); setPracticeTurnDarts(0) }}>Reset</button></div>
+                    )}
+                  </>
+                )}
+                {selectedMode === "Bob's 27" && (
+                  <>
+                    <div className="text-xs text-slate-600 flex items-center justify-between"><span>Target</span><span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-semibold">D{b27Stage}</span></div>
+                    <div className="text-3xl font-extrabold tracking-tight">Score: {b27Score}</div>
+                    {b27Finished && (
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={resetB27}>Reset</button></div>
+                    )}
+                  </>
+                )}
+                {selectedMode === 'Count-Up' && (
+                  <>
+                    <div className="text-xs text-slate-600">Round {cuRound}/8</div>
+                    <div className="text-3xl font-extrabold tracking-tight">Score: {cuScore}</div>
+                  </>
+                )}
+                {selectedMode === 'High Score' && (
+                  <>
+                    <div className="text-xs text-slate-600">Round {hsRound}/10</div>
+                    <div className="text-3xl font-extrabold tracking-tight">Score: {hsScore}</div>
+                  </>
+                )}
+                {selectedMode === 'Low Score' && (
+                  <>
+                    <div className="text-xs text-slate-600">Round {lsRound}/10</div>
+                    <div className="text-3xl font-extrabold tracking-tight">Score: {lsScore}</div>
+                  </>
+                )}
+                {selectedMode === 'Checkout 170' && (
+                  <>
+                    <div className="text-xs text-slate-600">Remaining</div>
+                    <div className="text-3xl font-extrabold tracking-tight">{co170Rem}</div>
+                    <div className="text-xs text-slate-400 mt-1">Attempts: {co170Attempts} · Successes: {co170Successes}</div>
+                  </>
+                )}
+                {selectedMode === 'Checkout 121' && (
+                  <>
+                    <div className="text-xs text-slate-600">Remaining</div>
+                    <div className="text-3xl font-extrabold tracking-tight">{co121Rem}</div>
+                    <div className="text-xs text-slate-400 mt-1">Attempts: {co121Attempts} · Successes: {co121Successes}</div>
+                  </>
+                )}
+                {selectedMode === 'Treble Practice' && (
+                  <>
+                    <div className="text-xs text-slate-600">Treble Target: T{trebleTarget}</div>
+                    <div className="text-3xl font-extrabold tracking-tight">Hits: {trebleHits}</div>
+                  </>
+                )}
+                {selectedMode === 'Baseball' && (
+                  <>
+                    <div className="text-xs text-slate-600">Inning</div>
+                    <div className="text-3xl font-extrabold tracking-tight">{baseball.inning}</div>
+                    <div className="text-sm">Score: <span className="font-semibold">{baseball.score}</span></div>
+                  </>
+                )}
+                {selectedMode === 'Golf' && (
+                  <>
+                    <div className="text-xs text-slate-600">Hole</div>
+                    <div className="text-3xl font-extrabold tracking-tight">{golf.hole}</div>
+                    <div className="text-sm">Strokes: <span className="font-semibold">{golf.strokes}</span></div>
+                  </>
+                )}
+                {selectedMode === 'Tic Tac Toe' && (
+                  <>
+                    <div className="text-xs text-slate-600">Turn</div>
+                    <div className="text-3xl font-extrabold tracking-tight">{ttt.turn}</div>
+                    {ttt.finished && <div className="mt-1 text-xs">Winner: {ttt.winner || '—'}</div>}
+                  </>
+                )}
+                {selectedMode === 'American Cricket' && (
+                  <>
+                    <div className="text-xs text-slate-600 mb-1">Close 20–12 and Bull; overflow scores points</div>
+                    <div className="grid grid-cols-10 gap-1 text-center text-[11px] mb-2">
+                      {AM_CRICKET_NUMBERS.map(n => (
+                        <div key={n} className="p-1 rounded bg-slate-800/50 border border-slate-700/50">
+                          <div className="opacity-70">{n===25?'Bull':n}</div>
+                          <div className="font-semibold">{Math.min(3, amCricket.marks?.[n]||0)} / 3</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="text-sm">Points: <span className="font-semibold">{amCricket.points}</span></div>
+                    {hasClosedAllAm(amCricket) && (
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={resetAmCricket}>Reset</button></div>
+                    )}
+                  </>
+                )}
+                {selectedMode === 'Killer' && (
+                  <>
+                    {!killerSetupDone ? (
+                      <div className="text-xs text-slate-600">Setup players and assign numbers</div>
+                    ) : (
+                      <>
+                        <div className="text-xs text-slate-600 flex items-center justify-between">
+                          <span>Turn</span>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">{killerPlayers[killerTurnIdx]?.name || '—'}</span>
+                        </div>
+                        <div className="text-3xl font-extrabold tracking-tight">{killerWinnerId ? `${killerPlayers.find(p=>p.id===killerWinnerId)?.name || 'Winner'} Wins` : (killerLastEvent || 'Ready')}</div>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             ) : offlineLayout === 'modern' ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2 items-stretch min-w-0">
@@ -841,7 +1258,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   </div>
                   <div className="flex items-stretch justify-end min-w-0">
                     <div className={`w-full min-w-0 ${cameraAspect==='square'?'aspect-square':'aspect-video'} rounded-2xl overflow-hidden bg-black`}>
-                      <CameraTile label="Your Board" autoStart={false} />
+                      <CameraTile label="Your Board" autoStart={true} />
                     </div>
                   </div>
                 </div>
@@ -889,7 +1306,7 @@ export default function OfflinePlay({ user }: { user: any }) {
               {/* Center camera preview: right-aligned and square when selected */}
               <div className="flex items-stretch justify-end md:px-3 min-w-0">
                 <div className={`w-full max-w-xl min-w-0 rounded-2xl overflow-hidden bg-black ${ cameraAspect === 'square' ? 'aspect-square' : 'aspect-video' }`}>
-                  <CameraTile label="Your Board" autoStart={false} />
+                  <CameraTile label="Your Board" autoStart={true} />
                 </div>
               </div>
               {/* Match summary (offline) */}
@@ -952,57 +1369,399 @@ export default function OfflinePlay({ user }: { user: any }) {
             </div>
             )}
             {/* Turn area */}
-            {selectedMode === 'Double Practice' ? (
+            {selectedMode !== 'X01' ? (
               <div className="space-y-2">
-                <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span></div>
-                <div className="rounded-2xl overflow-hidden bg-black">
-                  <CameraView
-                    scoringMode="custom"
-                    showToolbar={false}
-                    onAutoDart={(value: number, ring: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', info?: { sector: number | null; mult: 0|1|2|3 }) => {
-                      // Only accept DOUBLE or INNER_BULL to progress
-                      if (ring === 'DOUBLE' || ring === 'INNER_BULL') {
-                        const hit = isDoubleHit(value, dpIndex)
-                        if (hit) {
-                          const nh = dpHits + 1
-                          const ni = dpIndex + 1
-                          setDpHits(nh)
-                          setDpIndex(ni)
-                          if (nh >= DOUBLE_PRACTICE_ORDER.length) {
-                            // Completed round; reset for replay
-                            setTimeout(() => { setDpHits(0); setDpIndex(0) }, 250)
-                          }
+                {selectedMode === 'Double Practice' && (
+                  <>
+                    <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span></div>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} onAutoDart={(value, ring) => {
+                        if (ring === 'DOUBLE' || ring === 'INNER_BULL') {
+                          const hit = isDoubleHit(value, dpIndex)
+                          if (hit) { const nh = dpHits + 1; const ni = dpIndex + 1; setDpHits(nh); setDpIndex(ni); if (nh >= DOUBLE_PRACTICE_ORDER.length) setTimeout(()=>{ setDpHits(0); setDpIndex(0) }, 250) }
                         }
-                      }
-                    }}
-                    immediateAutoCommit
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <input
-                      className="input w-24"
-                      type="number"
-                      min={0}
-                      max={60}
-                      value={playerDartPoints}
-                      onChange={e => setPlayerDartPoints(Number(e.target.value||0))}
-                      onKeyDown={e => { if (e.key==='Enter') addDpNumeric() }}
-                    />
-                    <button className="btn px-3 py-1 text-sm" onClick={addDpNumeric}>Add Dart</button>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      className="input w-44"
-                      placeholder="Manual (D16, 50, 25, T20)"
-                      value={manualBox}
-                      onChange={e=>setManualBox(e.target.value)}
-                      onKeyDown={e => { if (e.key==='Enter') addDpManual() }}
-                    />
-                    <button className="btn px-3 py-1 text-sm" onClick={addDpManual}>Add</button>
-                  </div>
-                </div>
-                <div className="text-xs text-slate-300">Progress: {dpHits} of 21</div>
+                      }} immediateAutoCommit />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-2">
+                        <input className="input w-24" type="number" min={0} max={60} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e => { if (e.key==='Enter') addDpNumeric() }} />
+                        <button className="btn px-3 py-1 text-sm" onClick={addDpNumeric}>Add Dart</button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input className="input w-44" placeholder="Manual (D16, 50, 25, T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e => { if (e.key==='Enter') addDpManual() }} />
+                        <button className="btn px-3 py-1 text-sm" onClick={addDpManual}>Add</button>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-300">Progress: {dpHits} of 21</div>
+                  </>
+                )}
+                {selectedMode === 'Around the Clock' && (
+                  <>
+                    <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{ATC_ORDER[atcIndex] === 25 ? '25 (Outer Bull)' : ATC_ORDER[atcIndex] === 50 ? '50 (Inner Bull)' : (ATC_ORDER[atcIndex] || '—')}</span></div>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addAtcValue(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addAtcNumeric() }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={addAtcNumeric}>Add Dart</button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-44" placeholder="Manual (T20, D5, 25, 50)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addAtcManual() }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={addAtcManual}>Add</button>
+                    </div>
+                    {atcHits >= ATC_ORDER.length && (
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={()=>{ setAtcHits(0); setAtcIndex(0) }}>Reset</button></div>
+                    )}
+                  </>
+                )}
+                {selectedMode === 'Cricket' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addCricketAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addCricketNumeric() }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={addCricketNumeric}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setCricket(createCricketState()); setPracticeTurnDarts(0) }}>Reset</button>
+                    </div>
+                  </>
+                )}
+                {selectedMode === 'Shanghai' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addShanghaiAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addShanghaiNumeric() }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={addShanghaiNumeric}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setShanghai(createShanghaiState()); setPracticeTurnDarts(0) }}>Reset</button>
+                    </div>
+                  </>
+                )}
+                {selectedMode === 'Halve It' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHalveAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addHalveNumeric() }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={addHalveNumeric}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setHalve(createDefaultHalveIt()); setPracticeTurnDarts(0) }}>Reset</button>
+                    </div>
+                  </>
+                )}
+                {selectedMode === 'High-Low' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHighLowAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addHighLowNumeric() }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={addHighLowNumeric}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setHighlow(createHighLow()); setPracticeTurnDarts(0) }}>Reset</button>
+                    </div>
+                  </>
+                )}
+                {selectedMode === "Bob's 27" && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addB27Auto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addB27Numeric() }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={addB27Numeric}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetB27}>Reset</button>
+                    </div>
+                  </>
+                )}
+                {selectedMode === 'Count-Up' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value) => addCountUpAuto(value)} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addCountUpAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>{ addCountUpAuto(playerDartPoints); setPlayerDartPoints(0) }}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setCuRound(1); setCuScore(0); setCuDarts(0) }}>Reset</button>
+                    </div>
+                    <div className="text-xs text-slate-400">Round {cuRound}/{cuMaxRounds}</div>
+                  </>
+                )}
+                {selectedMode === 'High Score' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value) => addHighScoreAuto(value)} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addHighScoreAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>{ addHighScoreAuto(playerDartPoints); setPlayerDartPoints(0) }}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setHsRound(1); setHsScore(0); setHsDarts(0) }}>Reset</button>
+                    </div>
+                    <div className="text-xs text-slate-400">Round {hsRound}/{hsMaxRounds}</div>
+                  </>
+                )}
+                {selectedMode === 'Low Score' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value) => addLowScoreAuto(value)} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addLowScoreAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>{ addLowScoreAuto(playerDartPoints); setPlayerDartPoints(0) }}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setLsRound(1); setLsScore(0); setLsDarts(0) }}>Reset</button>
+                    </div>
+                    <div className="text-xs text-slate-400">Round {lsRound}/{lsMaxRounds}</div>
+                  </>
+                )}
+                {selectedMode === 'Checkout 170' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring) => addCo170Auto(value, ring === 'MISS' ? undefined : ring)} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="text" placeholder="Manual (D16, T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addCoManual(true) }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>addCoManual(true)}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetCo170}>Reset</button>
+                    </div>
+                    <div className="text-xs text-slate-400">Remaining: {co170Rem} · Attempts: {co170Attempts} · Successes: {co170Successes}</div>
+                  </>
+                )}
+                {selectedMode === 'Checkout 121' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring) => addCo121Auto(value, ring === 'MISS' ? undefined : ring)} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="text" placeholder="Manual (D16, T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addCoManual(false) }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>addCoManual(false)}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetCo121}>Reset</button>
+                    </div>
+                    <div className="text-xs text-slate-400">Remaining: {co121Rem} · Attempts: {co121Attempts} · Successes: {co121Successes}</div>
+                  </>
+                )}
+                {selectedMode === 'Treble Practice' && (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm">Target</label>
+                      <select className="input w-24" value={trebleTarget} onChange={e=> setTrebleTarget(parseInt(e.target.value,10))}>
+                        {Array.from({length:20},(_,i)=>i+1).map(n=> <option key={n} value={n}>{n}</option>)}
+                      </select>
+                      <button className="btn px-3 py-1 text-sm" onClick={resetTreble}>Reset</button>
+                    </div>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addTrebleAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="text" placeholder="Manual (T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') { const v = parseManualDart(manualBox); if (v!=null) addTrebleAuto(v, undefined, undefined); setManualBox('') } }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>{ const v = parseManualDart(manualBox); if (v!=null) addTrebleAuto(v, undefined, undefined); setManualBox('') }}>Add Dart</button>
+                    </div>
+                    <div className="text-xs text-slate-400">Hits: {trebleHits} · Darts: {trebleDarts}</div>
+                  </>
+                )}
+                {selectedMode === 'Baseball' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addBaseballAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetBaseball}>Reset</button>
+                    </div>
+                  </>
+                )}
+                {selectedMode === 'Golf' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addGolfAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetGolf}>Reset</button>
+                    </div>
+                  </>
+                )}
+                {selectedMode === 'Tic Tac Toe' && (
+                  <>
+                    <div className="grid grid-cols-3 gap-1 mb-2">
+                      {Array.from({length:9},(_,i)=>i).map(cell => (
+                        <button key={cell} className={`h-16 rounded-xl border ${ttt.board[cell]?'bg-emerald-500/20 border-emerald-400/30':'bg-slate-800/50 border-slate-700/50'}`} onClick={()=>{
+                          if (ttt.finished || ttt.board[cell]) return
+                          // One-tap claim attempt using autoscore last dart; fallback: prompt numeric
+                          // For simplicity here, we use a no-op value and rely on next autoscore dart; as a usable fallback, open a numeric prompt
+                          const promptVal = Number(prompt('Enter dart score for this cell (e.g., 20, 40, 60; 25 or 50 for center)')||0)
+                          const ring = promptVal%3===0?'TRIPLE': promptVal%2===0?'DOUBLE':'SINGLE'
+                          const tcell = cell as unknown as 0|1|2|3|4|5|6|7|8
+                          const tgt = TTT_TARGETS[tcell]
+                          const num = tgt.type==='BULL'?null:(tgt.num||null)
+                          addTttAuto(tcell, promptVal, ring as any, num as any)
+                        }}>{ttt.board[cell] || ''}</button>
+                      ))}
+                    </div>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => {
+                        // Attempt to claim the currently tapped-looking cell not tracked; as a simple flow, map by round-robin preference or let user click a cell button above.
+                        // No-op here; primary interaction is via buttons with prompt for now.
+                      }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetTtt}>Reset</button>
+                    </div>
+                  </>
+                )}
+                {selectedMode === 'American Cricket' && (
+                  <>
+                    <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addAmCricketAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetAmCricket}>Reset</button>
+                    </div>
+                  </>
+                )}
+                {selectedMode === 'Killer' && (
+                  <>
+                    {!killerSetupDone ? (
+                      <div className="space-y-2">
+                        <div className="font-semibold">Players</div>
+                        <div className="space-y-1">
+                          {killerPlayers.map((p, idx) => (
+                            <div key={p.id} className="flex items-center gap-2">
+                              <input className="input" value={p.name} onChange={e=>{
+                                const name = e.target.value
+                                setKillerPlayers(list => list.map((it,i)=> i===idx?{...it,name}:it))
+                              }} />
+                              <button className="btn px-2 py-1" onClick={()=> setKillerPlayers(list => list.filter((_,i)=>i!==idx))} disabled={killerPlayers.length<=2}>Remove</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button className="btn px-2 py-1" onClick={()=> setKillerPlayers(list => {
+                            const id = `p${list.length+1}`; return [...list, { id, name: `Player ${list.length+1}` }]
+                          })}>Add Player</button>
+                          <button className="btn bg-emerald-600 hover:bg-emerald-700 px-3 py-1" onClick={()=>{
+                            if (killerPlayers.length < 2) { alert('Need at least 2 players'); return }
+                            const ids = killerPlayers.map(p=>p.id)
+                            const assigned = assignKillerNumbers(ids)
+                            const initStates: Record<string,KillerState> = {}
+                            ids.forEach(id => { initStates[id] = createKillerState(assigned[id]) })
+                            setKillerAssigned(assigned)
+                            setKillerStates(initStates)
+                            setKillerTurnIdx(0)
+                            setKillerDarts(0)
+                            setKillerWinnerId(null)
+                            setKillerLastEvent('Assigned numbers')
+                            setKillerSetupDone(true)
+                          }}>Assign Numbers & Start</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                          {killerPlayers.map(p => {
+                            const st = killerStates[p.id]
+                            const num = killerAssigned[p.id]
+                            return (
+                              <div key={p.id} className={`p-2 rounded-xl border ${st?.eliminated? 'opacity-50 border-red-500/40 bg-red-500/10' : 'border-slate-700/50 bg-slate-800/50'}`}>
+                                <div className="flex items-center justify-between text-xs">
+                                  <div className="font-semibold">{p.name}</div>
+                                  <div className={`text-[10px] px-1.5 py-0.5 rounded ${st?.isKiller?'bg-purple-500/20 text-purple-200 border border-purple-400/30':'bg-slate-600/30 text-slate-300'}`}>{st?.isKiller? 'Killer' : 'Not Killer'}</div>
+                                </div>
+                                <div className="mt-1 text-sm">Number: <span className="font-semibold">{num}</span></div>
+                                <div className="text-sm">Lives: <span className="font-semibold">{st?.lives ?? 0}</span></div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="rounded-2xl overflow-hidden bg-black">
+                          <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => {
+                            if (killerWinnerId) return
+                            const r = ring === 'MISS' ? undefined : ring
+                            const sector = info?.sector ?? null
+                            const cur = killerPlayers[killerTurnIdx]
+                            if (!cur) return
+                            setKillerStates(prev => {
+                              const copy: Record<string,KillerState> = {}
+                              Object.keys(prev).forEach(k => copy[k] = { ...prev[k] })
+                              const res = applyKillerDart(cur.id, copy, r as any, sector)
+                              if (res.becameKiller) setKillerLastEvent(`${cur.name} became a Killer`)
+                              else if (res.victimId) {
+                                const v = killerPlayers.find(p=>p.id===res.victimId)
+                                setKillerLastEvent(`${cur.name} hit ${v?.name}'s ${killerAssigned[res.victimId]} (${res.livesRemoved} life${(res.livesRemoved||0)>1?'s':''})`)
+                              } else setKillerLastEvent('No effect')
+                              // Check winner
+                              const win = killerWinner(copy)
+                              if (win) setKillerWinnerId(win)
+                              return copy
+                            })
+                            setKillerDarts(d => {
+                              const nd = d + 1
+                              if (nd >= 3) {
+                                // advance to next alive
+                                let next = killerTurnIdx
+                                for (let i=1;i<=killerPlayers.length;i++) {
+                                  const idx = (killerTurnIdx + i) % killerPlayers.length
+                                  const pid = killerPlayers[idx].id
+                                  const st = killerStates[pid]
+                                  if (st && !st.eliminated && st.lives > 0) { next = idx; break }
+                                }
+                                setKillerTurnIdx(next)
+                                return 0
+                              }
+                              return nd
+                            })
+                          }} />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input className="input w-40" placeholder="Manual (D16, T5)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') {
+                            if (killerWinnerId) return
+                            const t = manualBox.trim().toUpperCase()
+                            const m = t.match(/^(S|D|T)?\s*(\d{1,2})$/)
+                            if (!m) { setManualBox(''); return }
+                            const mult = (m[1]||'S') as 'S'|'D'|'T'
+                            const num = parseInt(m[2],10)
+                            const ring = mult==='D'?'DOUBLE': mult==='T'?'TRIPLE':'SINGLE'
+                            const cur = killerPlayers[killerTurnIdx]
+                            setKillerStates(prev => {
+                              const copy: Record<string,KillerState> = {}
+                              Object.keys(prev).forEach(k => copy[k] = { ...prev[k] })
+                              const res = applyKillerDart(cur.id, copy, ring as any, num)
+                              if (res.becameKiller) setKillerLastEvent(`${cur.name} became a Killer`)
+                              else if (res.victimId) {
+                                const v = killerPlayers.find(p=>p.id===res.victimId)
+                                setKillerLastEvent(`${cur.name} hit ${v?.name}'s ${killerAssigned[res.victimId]} (${res.livesRemoved} life${(res.livesRemoved||0)>1?'s':''})`)
+                              } else setKillerLastEvent('No effect')
+                              const win = killerWinner(copy); if (win) setKillerWinnerId(win)
+                              return copy
+                            })
+                            setManualBox('')
+                            setKillerDarts(d => {
+                              const nd = d + 1
+                              if (nd >= 3) { let next = killerTurnIdx; for (let i=1;i<=killerPlayers.length;i++){ const idx=(killerTurnIdx+i)%killerPlayers.length; const pid=killerPlayers[idx].id; const st=killerStates[pid]; if (st && !st.eliminated && st.lives>0) { next=idx; break } } setKillerTurnIdx(next); return 0 } return nd
+                            })
+                          } }} />
+                          <button className="btn px-3 py-1 text-sm" onClick={()=>{
+                            // Skip to next alive player
+                            let next = killerTurnIdx
+                            for (let i=1;i<=killerPlayers.length;i++) {
+                              const idx = (killerTurnIdx + i) % killerPlayers.length
+                              const pid = killerPlayers[idx].id
+                              const st = killerStates[pid]
+                              if (st && !st.eliminated && st.lives > 0) { next = idx; break }
+                            }
+                            setKillerTurnIdx(next); setKillerDarts(0)
+                          }}>Next Player</button>
+                          <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{
+                            // Reset Killer
+                            setKillerStates({}); setKillerAssigned({}); setKillerSetupDone(false); setKillerTurnIdx(0); setKillerDarts(0); setKillerWinnerId(null); setKillerLastEvent('')
+                          }}>Reset</button>
+                        </div>
+                        {killerWinnerId && (
+                          <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Winner: {killerPlayers.find(p=>p.id===killerWinnerId)?.name} <button className="ml-2 underline" onClick={()=>{
+                            setKillerStates({}); setKillerAssigned({}); setKillerSetupDone(false); setKillerTurnIdx(0); setKillerDarts(0); setKillerWinnerId(null); setKillerLastEvent('')
+                          }}>Play Again</button></div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
             ) : isPlayerTurn ? (
               <div className="space-y-2">
