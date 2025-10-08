@@ -41,10 +41,10 @@ export default function Home({ user }: { user?: any }) {
       </div>
 
       {/* Foreground content */}
-  <div className="relative z-10 w-full max-w-3xl mx-auto bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-10 flex flex-col items-center">
-        <h2 className="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-400 to-blue-400 mb-4 drop-shadow-xl">Welcome to Nine Dart Nation</h2>
-        <p className="text-xl md:text-2xl text-white/80 mb-2 font-semibold">Your home for competitive darts, stats, and online play.</p>
-        <p className="text-base md:text-lg text-white/60 mb-4 italic">"Where every dart counts and every player matters."</p>
+  <div className="relative z-10 w-full max-w-3xl mx-auto bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-6 sm:p-8 md:p-10 flex flex-col items-center">
+  <h2 className="text-3xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-400 to-blue-400 mb-3 md:mb-4 drop-shadow-xl text-center">Welcome to Nine Dart Nation</h2>
+  <p className="text-lg md:text-2xl text-white/80 mb-2 font-semibold text-center">Your home for competitive darts, stats, and online play.</p>
+  <p className="text-sm md:text-lg text-white/60 mb-4 italic text-center">"Where every dart counts and every player matters."</p>
 
         {/* Did You Know - moved up for full visibility and randomized each mount */}
         {fact && (
@@ -55,7 +55,7 @@ export default function Home({ user }: { user?: any }) {
           </div>
         )}
 
-        <div className="flex flex-wrap gap-4 md:gap-6 justify-center mb-8">
+  <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-6 justify-center mb-6 md:mb-8 w-full">
           <button
             onClick={()=>{
               // Switch to Offline and auto-start using the last saved offline settings

@@ -31,7 +31,7 @@ export default function Drawer({ open, onClose, width = 700, title, footer, chil
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 sticky top-0 bg-slate-900 z-10">
           <div className="text-lg font-semibold">{title}</div>
-          <button className="btn px-2 py-1" onClick={onClose}>Close</button>
+          <button className="btn px-3 py-1 text-sm" onClick={onClose}>Close</button>
         </div>
         {/* Body */}
         <div className="flex-1 overflow-auto p-4">

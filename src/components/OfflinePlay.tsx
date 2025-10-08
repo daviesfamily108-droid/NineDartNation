@@ -637,15 +637,15 @@ export default function OfflinePlay({ user }: { user: any }) {
               style={{ overflowY: fitAll ? 'hidden' as any : 'auto' }}
               ref={(el) => { (scrollerRef as any).current = el }}
             >
-              <div ref={(el)=>{ (headerBarRef as any).current = el }} className="sticky top-0 relative overflow-hidden flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-xl bg-white/10 border border-white/10 z-10 backdrop-blur-sm">
+              <div ref={(el)=>{ (headerBarRef as any).current = el }} className="sticky top-0 relative overflow-hidden flex items-center justify-between gap-2 mb-2 px-2 sm:px-3 py-2 rounded-xl bg-white/10 border border-white/10 z-10 backdrop-blur-sm">
                 <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900/30 via-slate-900/10 to-transparent" />
-                <div className="flex items-center gap-2 text-sm leading-none flex-wrap">
-                  <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-xs">Game Mode</span>
-                  <span className="font-medium">{selectedMode}{selectedMode==='X01' ? ` / ${x01Score}` : ''}</span>
-                  <span className="text-sm opacity-80">First to {firstTo} · Legs {playerLegs}-{aiLegs}</span>
-                  <span className={`ml-2 px-2 py-0.5 rounded-full border text-xs ${offlineLayout==='modern' ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30' : 'bg-white/10 text-white/70 border-white/20'}`}>{offlineLayout==='modern' ? 'Modern layout' : 'Classic layout'}</span>
+                <div className="flex items-center gap-2 text-xs sm:text-sm leading-none flex-wrap">
+                  <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">Game Mode</span>
+                  <span className="font-medium whitespace-nowrap">{selectedMode}{selectedMode==='X01' ? ` / ${x01Score}` : ''}</span>
+                  <span className="opacity-80 whitespace-nowrap">First to {firstTo} · Legs {playerLegs}-{aiLegs}</span>
+                  <span className={`ml-2 px-2 py-0.5 rounded-full border text-[10px] sm:text-xs ${offlineLayout==='modern' ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30' : 'bg-white/10 text-white/70 border-white/20'}`}>{offlineLayout==='modern' ? 'Modern layout' : 'Classic layout'}</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 flex-wrap justify-end">
                   {/* Camera scale controls (match Online UI) */}
                   <div className="hidden items-center gap-2 mr-2 text-xs">
                     <span className="opacity-80">Cam</span>

@@ -53,7 +53,7 @@ export function Sidebar({
     return () => document.removeEventListener('keydown', onKey)
   }, [showDiscord])
   return (
-    <aside className={`${user?.fullAccess ? 'premium-sidebar' : ''} sidebar glass w-60 p-2 sm:p-4 rounded-2xl ${className ?? 'hidden sm:flex'} flex-col gap-2 overflow-y-auto overflow-x-hidden ${className ? '' : 'fixed top-2 bottom-2 sm:top-4 sm:bottom-4'}`}>
+    <aside className={`${user?.fullAccess ? 'premium-sidebar' : ''} sidebar glass ${className ? '' : 'w-60'} p-2 sm:p-4 rounded-2xl ${className ?? 'hidden sm:flex'} flex-col gap-2 overflow-y-auto overflow-x-hidden ${className ? '' : 'fixed top-2 bottom-2 sm:top-4 sm:bottom-4'}`}>
       {tabs.map(({ key, label, icon: Icon }) => {
   if (key === 'admin' && !isAdmin) return null
         return (

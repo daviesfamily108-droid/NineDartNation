@@ -361,9 +361,9 @@ export default function App() {
 // Lightweight mobile drawer that reuses the same Sidebar
 function MobileNav({ open, onClose, active, onChange, user }: { open: boolean; onClose: () => void; active: TabKey; onChange: (k: TabKey)=>void; user: any }) {
   return (
-    <Drawer open={open} onClose={onClose} width={300} side="left" title="Navigate">
+    <Drawer open={open} onClose={onClose} width={320} side="left" title="Navigate">
       <div className="mt-2">
-        <Sidebar active={active} onChange={onChange} user={user} className="flex relative static max-h-[80vh]" />
+        <Sidebar active={active} onChange={onChange} user={user} className="flex relative static max-h-[80vh] w-full" />
       </div>
     </Drawer>
   )

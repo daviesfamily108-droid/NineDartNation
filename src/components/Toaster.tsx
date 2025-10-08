@@ -5,7 +5,7 @@ export default function Toaster() {
   const remove = useToastStore(s => s.remove)
   if (!toasts.length) return null
   return (
-    <div className="fixed bottom-4 right-4 z-50 space-y-2">
+    <div className="fixed bottom-4 right-4 z-50 space-y-2 sm:right-4 sm:left-auto left-1/2 -translate-x-1/2 sm:translate-x-0 w-[calc(100%-1.5rem)] sm:w-auto max-w-sm">
       {toasts.map(t => (
         <div key={t.id} className={`p-3 rounded-lg shadow-lg border text-sm ${
           t.type === 'error' ? 'bg-rose-700/80 border-rose-500/60 text-white' :
