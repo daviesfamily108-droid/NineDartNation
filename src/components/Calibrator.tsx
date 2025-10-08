@@ -21,15 +21,18 @@ export default function Calibrator() {
 	const [frameSize, setFrameSize] = useState<{ w: number, h: number } | null>(null)
 	// Zoom for pixel-perfect point picking (0.5x – 2.0x)
 	const [zoom, setZoom] = useState<number>(1)
-	const { H, setCalibration, reset, errorPx } = useCalibration()
+		const { H, setCalibration, reset, errorPx, locked } = useCalibration()
   const { calibrationGuide, setCalibrationGuide } = useUserSettings()
-	// Detected ring data (from auto-detect) in image pixels
+		// Detected ring data (from auto-detect) in image pixels
 	const [detected, setDetected] = useState<null | {
 		cx: number; cy: number;
 		bullInner: number; bullOuter: number;
 		trebleInner: number; trebleOuter: number;
 		doubleInner: number; doubleOuter: number;
 	}>(null)
+		// Live detection and confidence state
+		const [liveDetect, setLiveDetect] = useState<boolean>(false)
+		const [confidence, setConfidence] = useState<number>(0)
 
 	// Phone pairing state (mirrors CameraTile)
 	const [ws, setWs] = useState<WebSocket | null>(null)
@@ -235,7 +238,7 @@ export default function Calibrator() {
 		try { e.target.value = '' } catch {}
 	}
 
-	function captureFrame() {
+		function captureFrame() {
 		if (!videoRef.current || !canvasRef.current) return
 		const v = videoRef.current
 		const c = canvasRef.current
@@ -247,6 +250,8 @@ export default function Calibrator() {
 		setFrameSize({ w: c.width, h: c.height })
 		setPhase('select')
 		setDstPoints([])
+			// If liveDetect is on, kick a detect on this captured frame
+			if (liveDetect) setTimeout(() => { autoDetectRings() }, 0)
 	}
 
 	function drawOverlay(currentPoints = dstPoints, HH: Homography | null = null) {
@@ -371,7 +376,7 @@ export default function Calibrator() {
 	}
 
 	// --- Auto-detect the double rim from the current snapshot and compute homography ---
-	async function autoDetectRings() {
+		async function autoDetectRings() {
 		if (!canvasRef.current) return alert('Load a photo or capture a frame first.')
 		const src = canvasRef.current
 		// Downscale for speed
@@ -471,7 +476,25 @@ export default function Calibrator() {
 		const tInner = refineAround(dOuter * ratios.trebleInner)
 		const bOuter = refineAround(dOuter * ratios.bullOuter)
 		const bInner = refineAround(dOuter * ratios.bullInner)
-		setDetected({ cx: OCX, cy: OCY, bullInner: bInner, bullOuter: bOuter, trebleInner: tInner, trebleOuter: tOuter, doubleInner: dInner, doubleOuter: dOuter })
+			setDetected({ cx: OCX, cy: OCY, bullInner: bInner, bullOuter: bOuter, trebleInner: tInner, trebleOuter: tOuter, doubleInner: dInner, doubleOuter: dOuter })
+			// Estimate confidence: ratio of ring scores around expected vs local baseline
+			// Use normalized edge magnitude at found radii to compute a 0-1 score, then scale to percent
+			const totalEdge = (r: number) => {
+				const samples = 180
+				let s = 0
+				for (let a = 0; a < samples; a++) {
+					const ang = (a * Math.PI) / 90
+					const x = Math.round(best.cx + (r*scale) * Math.cos(ang))
+					const y = Math.round(best.cy + (r*scale) * Math.sin(ang))
+					if (x <= 0 || x >= dw-1 || y <= 0 || y >= dh-1) continue
+					s += mag[y*dw + x]
+				}
+				return s / samples
+			}
+			const score = totalEdge(best.r) + totalEdge(tOuter) + totalEdge(tInner) + totalEdge(dInner) + totalEdge(bOuter) + totalEdge(bInner)
+			const norm = score / (maxMag * 6)
+			const conf = Math.max(0, Math.min(1, norm))
+			setConfidence(Math.round(conf * 100))
 		// Seed the four calibration points and compute
 		const pts: Point[] = [
 			{ x: OCX,       y: OCY - dOuter },
@@ -481,13 +504,28 @@ export default function Calibrator() {
 		]
 		setDstPoints(pts)
 		drawOverlay(pts)
-		try { compute() } catch {}
+			try { compute() } catch {}
+			// Auto-lock if confidence high and error small
+			const autoLock = conf >= 0.85
+			setCalibration({ locked: autoLock })
 	}
 
-	useEffect(() => {
-		drawOverlay()
-	// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [snapshotSet, H])
+		useEffect(() => {
+			drawOverlay()
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		}, [snapshotSet, H])
+
+		// Live detection loop (runs only when streaming and liveDetect is on)
+		useEffect(() => {
+			if (!liveDetect || !streaming) return
+			let raf = 0
+			const tick = () => {
+				try { captureFrame() } catch {}
+				raf = requestAnimationFrame(tick)
+			}
+			raf = requestAnimationFrame(tick)
+			return () => cancelAnimationFrame(raf)
+		}, [liveDetect, streaming])
 
 	return (
 		<div className="space-y-4">
@@ -506,13 +544,18 @@ export default function Calibrator() {
 										<button className={`btn px-2 py-1 ${mode==='phone'?'bg-emerald-600':''}`} onClick={() => setMode('phone')}>Phone</button>
 									</div>
 								</div>
-								<div className="flex items-center gap-1 text-[11px]">
-									<span className="opacity-70">Zoom</span>
-									<button className="btn px-2 py-0.5" onClick={()=>setZoom(z=>Math.max(0.5, Math.round((z-0.1)*10)/10))}>−</button>
-									<span className="w-10 text-center">{Math.round((zoom||1)*100)}%</span>
-									<button className="btn px-2 py-0.5" onClick={()=>setZoom(z=>Math.min(2, Math.round((z+0.1)*10)/10))}>+</button>
-									<button className="btn px-2 py-0.5" onClick={()=>setZoom(1)}>Actual</button>
-								</div>
+												<div className="flex items-center gap-2 text-[11px]">
+													<span className="opacity-70">View Zoom</span>
+													<input type="range" min={50} max={200} step={5} value={Math.round((zoom||1)*100)} onChange={e=>setZoom(Math.max(0.5, Math.min(2, Number(e.target.value)/100)))} />
+													<span className="w-10 text-center">{Math.round((zoom||1)*100)}%</span>
+													<button className="btn px-2 py-0.5" onClick={()=>setZoom(1)}>Actual</button>
+												</div>
+												<div className="mt-2 flex items-center gap-2 text-xs">
+													<label className="inline-flex items-center gap-2">
+														<input type="checkbox" className="accent-indigo-600" checked={liveDetect} onChange={e=>setLiveDetect(e.target.checked)} /> Live auto-detect
+													</label>
+													<span className={`px-2 py-0.5 rounded-full border ${confidence>=85?'bg-emerald-500/15 border-emerald-400/30':'bg-white/10 border-white/20'}`}>Confidence: {confidence}%</span>
+												</div>
 								<label className="mt-2 flex items-center gap-2 text-xs">
 									<input type="checkbox" className="accent-indigo-600" checked={calibrationGuide} onChange={e=>setCalibrationGuide(e.target.checked)} />
 									Show preferred-view guide overlay
@@ -524,7 +567,7 @@ export default function Calibrator() {
 									) : (
 										<>
 											<button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
-											<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture Frame</button>
+																<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture Frame</button>
 										</>
 									)}
 									<div className="flex items-center gap-2 mt-1">
@@ -532,7 +575,11 @@ export default function Calibrator() {
 										<button className="btn" onClick={triggerUpload}>Upload Photo</button>
 										<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Auto Detect</button>
 									</div>
-									<button className="btn" disabled={dstPoints.length !== 4} onClick={compute}>Compute</button>
+														<button className="btn" disabled={dstPoints.length !== 4} onClick={compute}>Compute</button>
+														<div className="flex items-center gap-2 mt-1">
+															<button className={`btn ${locked? 'bg-emerald-600 hover:bg-emerald-700':''}`} onClick={()=>setCalibration({ locked: !locked })}>{locked ? 'Unlock' : 'Lock In'}</button>
+															{locked && <span className="text-xs opacity-80">Calibration saved{errorPx!=null?` · error ${errorPx.toFixed(2)}px`:''}</span>}
+														</div>
 									<button className="btn" disabled={dstPoints.length === 0} onClick={undoPoint}>Undo</button>
 									<button className="btn" disabled={dstPoints.length === 0} onClick={refinePoints}>Refine Points</button>
 									<button className="btn" onClick={resetAll}>Reset</button>

@@ -8,6 +8,7 @@ type CalibrationState = {
   errorPx: number | null
   imageSize: { w: number; h: number } | null
   anchors: { src: Point[]; dst: Point[] } | null
+  locked: boolean
   setCalibration: (c: Partial<Omit<CalibrationState, 'setCalibration' | 'reset'>>) => void
   reset: () => void
 }
@@ -18,8 +19,9 @@ export const useCalibration = create<CalibrationState>()(persist((set) => ({
   errorPx: null,
   imageSize: null,
   anchors: null,
+  locked: false,
   setCalibration: (c) => set((s) => ({ ...s, ...c })),
-  reset: () => set({ H: null, createdAt: null, errorPx: null, imageSize: null, anchors: null }),
+  reset: () => set({ H: null, createdAt: null, errorPx: null, imageSize: null, anchors: null, locked: false }),
 }), {
   name: 'ndn-calibration-v1'
 }))
