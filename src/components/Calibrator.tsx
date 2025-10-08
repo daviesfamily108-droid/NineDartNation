@@ -11,6 +11,7 @@ export default function Calibrator() {
 	const videoRef = useRef<HTMLVideoElement>(null)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const overlayRef = useRef<HTMLCanvasElement>(null)
+	const fileInputRef = useRef<HTMLInputElement>(null)
 	const [streaming, setStreaming] = useState(false)
 	const [phase, setPhase] = useState<Phase>('camera')
 	const [mode, setMode] = useState<CamMode>(() => (localStorage.getItem('ndn:cal:mode') as CamMode) || 'local')
@@ -22,6 +23,13 @@ export default function Calibrator() {
 	const [zoom, setZoom] = useState<number>(1)
 	const { H, setCalibration, reset, errorPx } = useCalibration()
   const { calibrationGuide } = useUserSettings()
+	// Detected ring data (from auto-detect) in image pixels
+	const [detected, setDetected] = useState<null | {
+		cx: number; cy: number;
+		bullInner: number; bullOuter: number;
+		trebleInner: number; trebleOuter: number;
+		doubleInner: number; doubleOuter: number;
+	}>(null)
 
 	// Phone pairing state (mirrors CameraTile)
 	const [ws, setWs] = useState<WebSocket | null>(null)
@@ -196,6 +204,37 @@ export default function Calibrator() {
 		}
 	}
 
+	// Allow uploading a photo instead of using a live camera
+	function triggerUpload() {
+		try { fileInputRef.current?.click() } catch {}
+	}
+
+	function onUploadPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+		const f = e.target.files?.[0]
+		if (!f) return
+		const img = new Image()
+		img.onload = () => {
+			try {
+				if (!canvasRef.current) return
+				const c = canvasRef.current
+				c.width = img.naturalWidth
+				c.height = img.naturalHeight
+				const ctx = c.getContext('2d')!
+				ctx.drawImage(img, 0, 0, c.width, c.height)
+				setSnapshotSet(true)
+				setFrameSize({ w: c.width, h: c.height })
+				setPhase('select')
+				setDstPoints([])
+				// Clear any previous video stream
+				stopCamera()
+			} catch {}
+		}
+		img.onerror = () => { alert('Could not load image. Please try a different photo.') }
+		img.src = URL.createObjectURL(f)
+		// reset input value so the same file can be reselected
+		try { e.target.value = '' } catch {}
+	}
+
 	function captureFrame() {
 		if (!videoRef.current || !canvasRef.current) return
 		const v = videoRef.current
@@ -228,7 +267,7 @@ export default function Calibrator() {
 			ctx.restore()
 		})
 
-		// If we have a homography, draw rings
+		// If we have a homography, draw rings (precise, perspective-correct)
 		const Huse = HH || H
 		if (Huse) {
 			const rings = [BoardRadii.bullInner, BoardRadii.bullOuter, BoardRadii.trebleInner, BoardRadii.trebleOuter, BoardRadii.doubleInner, BoardRadii.doubleOuter]
@@ -236,6 +275,19 @@ export default function Calibrator() {
 				const poly = sampleRing(Huse, r, 360)
 				drawPolyline(ctx, poly, r === BoardRadii.doubleOuter ? '#22d3ee' : '#a78bfa', r === BoardRadii.doubleOuter ? 3 : 2)
 			}
+		}
+		// Otherwise, if we have detected circles, draw them as previews (circles in image space)
+		if (!Huse && detected) {
+			const drawCircle = (r: number, color: string, w = 2) => {
+				ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = w
+				ctx.beginPath(); ctx.arc(detected.cx, detected.cy, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore()
+			}
+			drawCircle(detected.doubleOuter, '#22d3ee', 3)
+			drawCircle(detected.doubleInner, '#22d3ee', 2)
+			drawCircle(detected.trebleOuter, '#fde047', 2)
+			drawCircle(detected.trebleInner, '#fde047', 2)
+			drawCircle(detected.bullOuter, '#34d399', 2)
+			drawCircle(detected.bullInner, '#10b981', 3)
 		}
 
 		// Preferred-view framing guide (if enabled): shaded safe zone and angle lines
@@ -318,6 +370,120 @@ export default function Calibrator() {
 		reset()
 	}
 
+	// --- Auto-detect the double rim from the current snapshot and compute homography ---
+	async function autoDetectRings() {
+		if (!canvasRef.current) return alert('Load a photo or capture a frame first.')
+		const src = canvasRef.current
+		// Downscale for speed
+		const maxW = 800
+		const scale = Math.min(1, maxW / src.width)
+		const dw = Math.max(1, Math.round(src.width * scale))
+		const dh = Math.max(1, Math.round(src.height * scale))
+		const tmp = document.createElement('canvas')
+		tmp.width = dw; tmp.height = dh
+		const tctx = tmp.getContext('2d')!
+		tctx.drawImage(src, 0, 0, dw, dh)
+		const img = tctx.getImageData(0, 0, dw, dh)
+		// Grayscale + Sobel edge magnitude
+		const gray = new Float32Array(dw * dh)
+		for (let i = 0, p = 0; i < img.data.length; i += 4, p++) {
+			const r = img.data[i], g = img.data[i+1], b = img.data[i+2]
+			gray[p] = 0.299*r + 0.587*g + 0.114*b
+		}
+		const gx = new Float32Array(dw * dh)
+		const gy = new Float32Array(dw * dh)
+		for (let y = 1; y < dh-1; y++) {
+			for (let x = 1; x < dw-1; x++) {
+				const i = y*dw + x
+				const a = gray[i - dw - 1], b = gray[i - dw], c = gray[i - dw + 1]
+				const d0 = gray[i - 1],        /*e*/       f0 = gray[i + 1]
+				const g0 = gray[i + dw - 1], h0 = gray[i + dw], j0 = gray[i + dw + 1]
+				gx[i] = (-a - 2*d0 - g0) + (c + 2*f0 + j0)
+				gy[i] = (-a - 2*b - c) + (g0 + 2*h0 + j0)
+			}
+		}
+		const mag = new Float32Array(dw * dh)
+		let maxMag = 1
+		for (let i = 0; i < mag.length; i++) { const m = Math.hypot(gx[i], gy[i]); mag[i] = m; if (m > maxMag) maxMag = m }
+		// Coarse circle search around center for double outer
+		const cx0 = Math.floor(dw/2), cy0 = Math.floor(dh/2)
+		const rMin = Math.floor(Math.min(dw, dh) * 0.35)
+		const rMax = Math.floor(Math.min(dw, dh) * 0.52)
+		let best = { score: -1, cx: cx0, cy: cy0, r: Math.floor((rMin + rMax)/2) }
+		const stepC = Math.max(2, Math.floor(Math.min(dw, dh) * 0.01)) // center step
+		const stepR = Math.max(2, Math.floor(Math.min(dw, dh) * 0.01)) // radius step
+		for (let cy = cy0 - Math.floor(dh*0.08); cy <= cy0 + Math.floor(dh*0.08); cy += stepC) {
+			for (let cx = cx0 - Math.floor(dw*0.08); cx <= cx0 + Math.floor(dw*0.08); cx += stepC) {
+				for (let r = rMin; r <= rMax; r += stepR) {
+					let s = 0
+					const samples = 360
+					for (let a = 0; a < samples; a++) {
+						const ang = (a * Math.PI) / 180
+						const x = Math.round(cx + r * Math.cos(ang))
+						const y = Math.round(cy + r * Math.sin(ang))
+						if (x <= 0 || x >= dw-1 || y <= 0 || y >= dh-1) continue
+						s += mag[y*dw + x]
+					}
+					if (s > best.score) best = { score: s, cx, cy, r }
+				}
+			}
+		}
+		// Map back to original canvas coords
+		const inv = 1/scale
+		const OCX = best.cx * inv
+		const OCY = best.cy * inv
+		const OR  = best.r  * inv
+		// With center/doubleOuter radius fixed, locate other rings via 1D radial search
+		function radialScore(rPx: number) {
+			let s = 0
+			const rScaled = rPx * scale
+			const samples = 360
+			for (let a = 0; a < samples; a++) {
+				const ang = (a * Math.PI) / 180
+				const x = Math.round(best.cx + rScaled * Math.cos(ang))
+				const y = Math.round(best.cy + rScaled * Math.sin(ang))
+				if (x <= 0 || x >= dw-1 || y <= 0 || y >= dh-1) continue
+				s += mag[y*dw + x]
+			}
+			return s
+		}
+		const ratios = {
+			bullInner: BoardRadii.bullInner / BoardRadii.doubleOuter,
+			bullOuter: BoardRadii.bullOuter / BoardRadii.doubleOuter,
+			trebleInner: BoardRadii.trebleInner / BoardRadii.doubleOuter,
+			trebleOuter: BoardRadii.trebleOuter / BoardRadii.doubleOuter,
+			doubleInner: BoardRadii.doubleInner / BoardRadii.doubleOuter,
+			doubleOuter: 1,
+		} as const
+		function refineAround(expectedR: number, pctWindow = 0.10) {
+			const lo = Math.max(1, Math.floor(expectedR * (1 - pctWindow)))
+			const hi = Math.max(lo+1, Math.floor(expectedR * (1 + pctWindow)))
+			let bestR = lo, bestS = -1
+			for (let r = lo; r <= hi; r++) {
+				const s = radialScore(r)
+				if (s > bestS) { bestS = s; bestR = r }
+			}
+			return bestR
+		}
+		const dOuter = OR
+		const dInner = refineAround(dOuter * ratios.doubleInner)
+		const tOuter = refineAround(dOuter * ratios.trebleOuter)
+		const tInner = refineAround(dOuter * ratios.trebleInner)
+		const bOuter = refineAround(dOuter * ratios.bullOuter)
+		const bInner = refineAround(dOuter * ratios.bullInner)
+		setDetected({ cx: OCX, cy: OCY, bullInner: bInner, bullOuter: bOuter, trebleInner: tInner, trebleOuter: tOuter, doubleInner: dInner, doubleOuter: dOuter })
+		// Seed the four calibration points and compute
+		const pts: Point[] = [
+			{ x: OCX,       y: OCY - dOuter },
+			{ x: OCX + dOuter,  y: OCY      },
+			{ x: OCX,       y: OCY + dOuter },
+			{ x: OCX - dOuter,  y: OCY      },
+		]
+		setDstPoints(pts)
+		drawOverlay(pts)
+		try { compute() } catch {}
+	}
+
 	useEffect(() => {
 		drawOverlay()
 	// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -357,6 +523,11 @@ export default function Calibrator() {
 											<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture Frame</button>
 										</>
 									)}
+									<div className="flex items-center gap-2 mt-1">
+										<input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onUploadPhotoChange} />
+										<button className="btn" onClick={triggerUpload}>Upload Photo</button>
+										<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Auto Detect</button>
+									</div>
 									<button className="btn" disabled={dstPoints.length !== 4} onClick={compute}>Compute</button>
 									<button className="btn" disabled={dstPoints.length === 0} onClick={undoPoint}>Undo</button>
 									<button className="btn" disabled={dstPoints.length === 0} onClick={refinePoints}>Refine Points</button>
