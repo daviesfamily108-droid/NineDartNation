@@ -7,4 +7,16 @@ export default defineConfig({
   build: {
     sourcemap: true,
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+      },
+      '/webhook': {
+        target: 'http://localhost:8787',
+        changeOrigin: true,
+      },
+    }
+  },
 })

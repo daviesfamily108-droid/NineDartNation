@@ -48,9 +48,32 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
     }
   }
 
-  function handleReset(e: any) {
+  async function handleReset(e: any) {
     e.preventDefault();
-    setError('Password reset link sent to email (demo).');
+    setError('');
+    if (!email || !email.includes('@')) { setError('Enter your email address.'); return }
+    try {
+      const r = await fetch('/api/auth/send-reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+      const j = await r.json()
+      if (!j?.ok) throw new Error(j?.error || 'Failed to send reset email')
+      setError('Password reset link sent to your email.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to send reset email');
+    }
+  }
+
+  async function handleSendUsername(e: any) {
+    e.preventDefault();
+    setError('');
+    if (!email || !email.includes('@')) { setError('Enter your email address.'); return }
+    try {
+      const r = await fetch('/api/auth/send-username', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+      const j = await r.json()
+      if (!j?.ok) throw new Error(j?.error || 'Failed to send username email')
+      setError('Your username has been emailed to you.');
+    } catch (err: any) {
+      setError(err?.message || 'Failed to send username email');
+    }
   }
 
   return (
@@ -65,10 +88,12 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
             <span className="badge">Welcome</span>
           </div>
           <h2 className="text-2xl font-bold">{mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Reset Password'}</h2>
-          {mode === 'signup' && (
+          {(mode === 'signup' || mode === 'reset') && (
             <input className="input w-full" type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
           )}
-          <input className="input w-full" type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required />
+          {mode !== 'reset' && (
+            <input className="input w-full" type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required />
+          )}
           {mode !== 'reset' && (
             <div className="relative">
               <input
@@ -99,6 +124,9 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
           )}
           {error && <div className="text-red-400 font-semibold text-sm">{error}</div>}
           <button className="btn w-full" type="submit">{mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Sign Up' : 'Send Reset Link'}</button>
+          {mode === 'reset' && (
+            <button className="btn w-full mt-2 bg-white/10 hover:bg-white/20" type="button" onClick={handleSendUsername}>Email me my username</button>
+          )}
           <div className="flex justify-between text-sm mt-2">
             <button type="button" className="underline" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>{mode === 'signin' ? 'Need an account? Sign Up' : 'Already have an account? Sign In'}</button>
             <button type="button" className="underline" onClick={() => setMode('reset')}>Forgot password?</button>

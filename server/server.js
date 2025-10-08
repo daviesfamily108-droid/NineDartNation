@@ -9,6 +9,7 @@ import https from 'https'
 import path from 'path'
 import Filter from 'bad-words'
 import * as EmailTemplates from './emails/templates.js'
+import nodemailer from 'nodemailer'
 import helmet from 'helmet'
 import compression from 'compression'
 import rateLimit from 'express-rate-limit'
@@ -83,6 +84,7 @@ const reports = []
 const emailCopy = {
   reset: { title: '', intro: '', buttonLabel: '' },
   reminder: { title: '', intro: '', buttonLabel: '' },
+  username: { title: '', intro: '', buttonLabel: '' },
   confirmEmail: { title: '', intro: '', buttonLabel: '' },
   changed: { title: '', intro: '', buttonLabel: '' },
 }
@@ -378,6 +380,105 @@ app.post('/api/admin/email-copy', (req, res) => {
     buttonLabel: typeof buttonLabel === 'string' ? buttonLabel : (emailCopy[key]?.buttonLabel||''),
   }
   res.json({ ok: true, copy: emailCopy })
+})
+
+// --- Email sending (SMTP via environment) ---
+// Configure env vars in your host: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+let mailer = null
+try {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env
+  if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS) {
+    mailer = nodemailer.createTransport({
+      host: SMTP_HOST,
+      port: Number(SMTP_PORT),
+      secure: Number(SMTP_PORT) === 465,
+      auth: { user: SMTP_USER, pass: SMTP_PASS },
+    })
+  }
+} catch (e) {
+  console.warn('[Email] transporter init failed', e?.message||e)
+}
+
+async function sendMail(to, subject, html) {
+  if (!mailer) throw new Error('EMAIL_NOT_CONFIGURED')
+  const from = process.env.SMTP_FROM || `Nine Dart Nation <no-reply@${(process.env.MAIL_DOMAIN||'example.com')}>`
+  await mailer.sendMail({ from, to, subject, html })
+}
+
+// Very simple in-memory token store for demo
+const resetTokens = new Map() // email -> { token, exp }
+function issueToken(email, ttlMs = 30*60*1000) {
+  const token = nanoid(24)
+  const exp = Date.now() + ttlMs
+  resetTokens.set(email, { token, exp })
+  return token
+}
+function verifyToken(token) {
+  for (const [email, rec] of resetTokens.entries()) {
+    if (rec.token === token && rec.exp > Date.now()) return email
+  }
+  return null
+}
+
+// Send password reset by email
+app.post('/api/auth/send-reset', async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').toLowerCase()
+    if (!email || !email.includes('@')) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+    const token = issueToken(email)
+    const host = req.headers['x-forwarded-host'] || req.headers.host
+    const proto = (req.headers['x-forwarded-proto'] || 'https')
+    const base = `${proto}://${host}`
+    const actionUrl = `${base}/reset?token=${encodeURIComponent(token)}`
+    const tpl = EmailTemplates.passwordReset({ username: email.split('@')[0], actionUrl, ...emailCopy.reset })
+    await sendMail(email, 'Reset your Nine Dart Nation password', tpl.html)
+    res.json({ ok: true })
+  } catch (e) {
+    const msg = e?.message || 'SEND_FAILED'
+    res.status(500).json({ ok: false, error: msg })
+  }
+})
+
+// Send username reminder to email
+app.post('/api/auth/send-username', async (req, res) => {
+  try {
+    const email = String(req.body?.email || '').toLowerCase()
+    const username = String(req.body?.username || '').trim()
+    if (!email || !email.includes('@')) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+    const host = req.headers['x-forwarded-host'] || req.headers.host
+    const proto = (req.headers['x-forwarded-proto'] || 'https')
+    const base = `${proto}://${host}`
+    const actionUrl = `${base}/`
+    const tpl = EmailTemplates.usernameReminder({ username: username || email.split('@')[0], actionUrl, ...emailCopy.username })
+    await sendMail(email, 'Your Nine Dart Nation username', tpl.html)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message||'SEND_FAILED' })
+  }
+})
+
+// Confirm password reset with token (demo: verifies token only; replace with real user persistence)
+app.post('/api/auth/confirm-reset', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body || {}
+    const t = String(token || '')
+    if (!t) return res.status(400).json({ ok: false, error: 'TOKEN_REQUIRED' })
+    const email = verifyToken(t)
+    if (!email) return res.status(400).json({ ok: false, error: 'TOKEN_INVALID' })
+    if (typeof newPassword !== 'string' || newPassword.length < 10) {
+      return res.status(400).json({ ok: false, error: 'WEAK_PASSWORD' })
+    }
+    // In a real app, hash and store password for the user identified by `email`
+    // For demo, consume token so it can't be reused
+    resetTokens.delete(email)
+    try {
+      const tpl = EmailTemplates.passwordChangedNotice({ username: email.split('@')[0], supportUrl: 'https://example.com/support', ...emailCopy.changed })
+      await sendMail(email, 'Your Nine Dart Nation password was changed', tpl.html)
+    } catch {}
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'RESET_FAILED' })
+  }
 })
 
 // SPA fallback: serve index.html for any non-API, non-static route when app/dist exists

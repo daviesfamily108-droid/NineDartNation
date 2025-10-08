@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
 import App from './App'
+import ResetPassword from './components/ResetPassword'
 import { WSProvider } from './components/WSProvider'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -13,8 +14,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <WSProvider>
-        <App />
+        <Root />
       </WSProvider>
     </ErrorBoundary>
   </StrictMode>,
 )
+
+function Root() {
+  const path = window.location.pathname
+  if (path === '/reset') return <ResetPassword />
+  return <App />
+}
+
