@@ -22,7 +22,7 @@ export default function Calibrator() {
 	// Zoom for pixel-perfect point picking (0.5x – 2.0x)
 	const [zoom, setZoom] = useState<number>(1)
 	const { H, setCalibration, reset, errorPx } = useCalibration()
-  const { calibrationGuide } = useUserSettings()
+  const { calibrationGuide, setCalibrationGuide } = useUserSettings()
 	// Detected ring data (from auto-detect) in image pixels
 	const [detected, setDetected] = useState<null | {
 		cx: number; cy: number;
@@ -513,6 +513,10 @@ export default function Calibrator() {
 									<button className="btn px-2 py-0.5" onClick={()=>setZoom(z=>Math.min(2, Math.round((z+0.1)*10)/10))}>+</button>
 									<button className="btn px-2 py-0.5" onClick={()=>setZoom(1)}>Actual</button>
 								</div>
+								<label className="mt-2 flex items-center gap-2 text-xs">
+									<input type="checkbox" className="accent-indigo-600" checked={calibrationGuide} onChange={e=>setCalibrationGuide(e.target.checked)} />
+									Show preferred-view guide overlay
+								</label>
 								{/* Vertical action buttons */}
 								<div className="flex flex-col gap-2 mt-3">
 									{!streaming ? (

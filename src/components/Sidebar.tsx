@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFreeRemaining } from '../utils/quota'
 import { useIsAdmin } from '../utils/admin'
+import { DISCORD_INVITE_URL } from '../utils/config'
 
 export type TabKey = 'score' | 'online' | 'offline' | 'friends' | 'stats' | 'calibrate' | 'settings' | 'admin' | 'tournaments' | 'fullaccess';
 
@@ -98,8 +99,8 @@ export function Sidebar({
                 <MessageCircle className="w-6 h-6" /> BullseyeDartsLeague
               </h3>
               <div className="mb-4 text-lg font-semibold">Join this fantastic Online Darts League with divisions and other cool stuff included</div>
-              <a
-                href="https://discord.gg/8GtbZ6RU"
+        <a
+          href={DISCORD_INVITE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn bg-[#5865F2] text-white w-full font-bold text-lg"

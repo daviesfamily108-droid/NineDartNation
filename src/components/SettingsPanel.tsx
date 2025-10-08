@@ -288,9 +288,9 @@ export default function SettingsPanel({ user }: { user?: any }) {
             </div>
           </div>
           <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 mt-4">
-            <div className="font-semibold mb-2">Camera & Calibration</div>
+            <div className="font-semibold mb-2">Camera</div>
             <div className="mb-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-400/30 text-emerald-200 text-sm">
-              Use any camera or autoscore system you already own. Choose our built-in autoscore, or connect an external provider over WebSocket.
+              Use any camera or autoscore system you already own. Choose our built-in autoscore, or connect an external provider over WebSocket. To calibrate the board, open the Calibrate tab.
             </div>
             <div className="grid grid-cols-2 gap-2 items-end text-sm mb-3">
               <div>
@@ -325,10 +325,6 @@ export default function SettingsPanel({ user }: { user?: any }) {
                 </select>
               </div>
             </div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" className="accent-indigo-600" checked={calibrationGuide} onChange={e=>setCalibrationGuide(e.target.checked)} />
-              Show preferred-view guide in Calibrator
-            </label>
             {/* Device picker */}
             <DevicePicker />
           </div>

@@ -138,7 +138,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
             </li>
           </ul>
           <a
-            href="https://discord.gg/8GtbZ6RU"
+            href={(import.meta as any).env?.VITE_DISCORD_INVITE_URL || 'https://discord.gg/8GtbZ6RU'}
             target="_blank"
             rel="noopener noreferrer"
             className="btn mt-4 flex items-center justify-center gap-2"
