@@ -10,7 +10,7 @@ import AdminDashboard from './components/AdminDashboard'
 import SettingsPanel from './components/SettingsPanel'
 import Auth from './components/Auth'
 import { ThemeProvider } from './components/ThemeContext'
-import { useWS, WSProvider } from './components/WSProvider'
+import { useWS } from './components/WSProvider'
 import StatusDot from './components/ui/StatusDot'
 import { getRollingAvg, getAllTimeAvg } from './store/profileStats'
 import { useUserSettings } from './store/userSettings'
@@ -210,7 +210,6 @@ export default function App() {
   }
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username||'NDN')}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`
   return (
-    <WSProvider>
     <ThemeProvider>
   <div ref={appRef} className={`${user?.fullAccess ? 'premium-body' : ''} h-screen overflow-hidden p-2 sm:p-4`}>
         <Toaster />
@@ -354,7 +353,6 @@ export default function App() {
         </div>
       </div>
     </ThemeProvider>
-    </WSProvider>
   )
 }
 
