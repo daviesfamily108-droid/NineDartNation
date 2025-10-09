@@ -79,6 +79,75 @@ if (staticBase) {
   console.warn('[SPA] No built frontend found at ../dist or ../app/dist; "/" will 404 (API+WS OK).')
 }
 
+
+// Signup endpoint
+app.post('/api/auth/signup', async (req, res) => {
+  const { email, username, password } = req.body
+  if (!email || !username || !password) {
+    return res.status(400).json({ error: 'Email, username, and password required.' })
+  }
+  // Check if username exists
+  for (const u of users.values()) {
+    if (u.username === username) {
+      return res.status(409).json({ error: 'Username already exists.' })
+    }
+    if (u.email === email) {
+      return res.status(409).json({ error: 'Email already exists.' })
+    }
+  }
+  const user = { email, username, password, admin: false }
+  users.set(email, user)
+  return res.json({ user })
+})
+
+// Login endpoint
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required.' })
+  }
+  let user = null
+  for (const u of users.values()) {
+    if (u.username === username && u.password === password) {
+      user = u
+      break
+    }
+  }
+  if (user) {
+    return res.json({ user })
+  } else {
+    return res.status(401).json({ error: 'Invalid username or password.' })
+  }
+})
+
+// Signup endpoint
+app.post('/api/auth/signup', async (req, res) => {
+  const { email, username, password } = req.body
+  if (!email || !username || !password) {
+    return res.status(400).json({ error: 'Email, username, and password required.' })
+  }
+  if (users[username]) {
+    return res.status(409).json({ error: 'Username already exists.' })
+  }
+  const user = { email, username, password, admin: false }
+  users[username] = user
+  return res.json({ user })
+})
+
+// Login endpoint
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required.' })
+  }
+  const user = users[username]
+  if (user && user.password === password) {
+    return res.json({ user })
+  } else {
+    return res.status(401).json({ error: 'Invalid username or password.' })
+  }
+})
+
 // In-memory subscription store (demo)
 let subscription = { fullAccess: false };
 // Winner-based per-email premium grants (demo) email -> expiry (ms since epoch)
