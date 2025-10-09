@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { Eye, EyeOff, Trophy, Users, BarChart3, ShieldCheck, MessageCircle } from 'lucide-react';
 
-const ADMIN_EMAIL = 'daviesfamily108@gmail.com';
-const ADMIN_USERNAME = 'DartsWithG';
-const ADMIN_PASSWORD = 'Cymru-2015';
+// Demo-only admin credentials. Allow build-time override via Vite env vars so
+// deployments (e.g., Netlify) can set their own values without editing code.
+// SECURITY NOTE: These live in the client bundle and are NOT secure; for demo only.
+const ADMIN_EMAIL = ((import.meta as any).env?.VITE_ADMIN_EMAIL as string) || 'daviesfamily108@gmail.com';
+const ADMIN_USERNAME = ((import.meta as any).env?.VITE_ADMIN_USERNAME as string) || 'DartsWithG';
+const ADMIN_PASSWORD = ((import.meta as any).env?.VITE_ADMIN_PASSWORD as string) || 'Cymru-2015';
 
 function validatePassword(password: string) {
   return password.length >= 10 && /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
