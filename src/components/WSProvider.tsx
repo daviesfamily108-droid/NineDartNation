@@ -30,7 +30,8 @@ export function WSProvider({ children }: { children: ReactNode }) {
     if (endpointsRef.current) return endpointsRef.current
     const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined
     if (envUrl && envUrl.length > 0) {
-      endpointsRef.current = [envUrl]
+      const normalized = envUrl.endsWith('/ws') ? envUrl : envUrl.replace(/\/$/, '') + '/ws'
+      endpointsRef.current = [normalized]
       return endpointsRef.current
     }
     const proto = (window.location.protocol === 'https:' ? 'wss' : 'ws')
@@ -39,10 +40,10 @@ export function WSProvider({ children }: { children: ReactNode }) {
     // Candidate endpoints: prefer same-origin first (works when server serves SPA),
     // then common local ports for dev fallbacks.
     const bases = [
-      sameOrigin,
-      `${proto}://${host}`,
-      `${proto}://${host}:8787`,
-      `${proto}://${host}:3000`,
+      sameOrigin + '/ws',
+      `${proto}://${host}/ws`,
+      `${proto}://${host}:8787/ws`,
+      `${proto}://${host}:3000/ws`,
     ]
     // Deduplicate
     endpointsRef.current = Array.from(new Set(bases))

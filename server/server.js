@@ -523,8 +523,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
 });
 // Constrain ws payload size for safety
-const wss = new WebSocketServer({ server, maxPayload: 128 * 1024 });
-console.log(`[WS] WebSocket attached to same server`);
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
+console.log(`[WS] WebSocket attached to same server at path /ws`);
 wsConnections.set(0)
 
 // Optional HTTPS server for iOS camera (requires certs)
@@ -696,7 +696,8 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
   }
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  try { console.log(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
   ws._id = nanoid(8);
   clients.set(ws._id, ws)
   wsConnections.inc()
