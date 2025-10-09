@@ -704,6 +704,10 @@ wss.on('connection', (ws, req) => {
   // Heartbeat
   ws.isAlive = true
   ws.on('pong', () => { ws.isAlive = true })
+  // Log low-level socket errors
+  ws.on('error', (err) => {
+    try { console.warn(`[WS] error id=${ws._id} message=${err?.message||err}`) } catch {}
+  })
   // Token-bucket rate limit: 10 msg/sec, burst 20
   ws._bucket = { tokens: 20, last: Date.now(), rate: 10, capacity: 20 }
   function allowMessage() {
@@ -1060,7 +1064,9 @@ wss.on('connection', (ws, req) => {
     }
   });
 
-  ws.on('close', () => {
+  ws.on('close', (code, reasonBuf) => {
+    const reason = (() => { try { return reasonBuf ? reasonBuf.toString() : '' } catch { return '' } })()
+    try { console.log(`[WS] close id=${ws._id} code=${code} reason=${reason}`) } catch {}
     // Clean up room
     leaveRoom(ws);
     try { wsConnections.dec() } catch {}
