@@ -23,32 +23,40 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
 
   function handleSignIn(e: any) {
     e.preventDefault();
-    // Debug log
-    console.log('Sign in attempt:', { username, password });
-    // Only admin can sign in
-    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-      onAuth({ email: ADMIN_EMAIL, username: username, admin: true });
+    if (!username || !password) {
+      setError('Username and password required.');
+      return;
+    }
+    // Simulate login: fetch user from localStorage
+    const users = JSON.parse(localStorage.getItem('ndn:users') || '{}');
+    const user = users[username];
+    if (user && user.password === password) {
+      setError('');
+      localStorage.setItem('ndn:currentUser', JSON.stringify(user));
+      onAuth(user);
     } else {
-      setError('Invalid credentials or not admin.');
+      setError('Invalid username or password.');
     }
   }
 
   function handleSignUp(e: any) {
     e.preventDefault();
-    if (password !== ADMIN_PASSWORD) {
-      setError('Password must be Cymru-2015 for admin.');
+    if (!email || !username || !password) {
+      setError('Email, username, and password required.');
       return;
     }
-    if (!email || !username) {
-      setError('Email and username required.');
+    // Simulate signup: store user in localStorage
+    const users = JSON.parse(localStorage.getItem('ndn:users') || '{}');
+    if (users[username]) {
+      setError('Username already exists.');
       return;
     }
-    // Only admin can sign up
-    if (email === ADMIN_EMAIL && username === ADMIN_USERNAME) {
-      onAuth({ email, username, admin: true });
-    } else {
-      setError('Only admin can sign up in demo.');
-    }
+    const user = { email, username, password, admin: false };
+    users[username] = user;
+    localStorage.setItem('ndn:users', JSON.stringify(users));
+    localStorage.setItem('ndn:currentUser', JSON.stringify(user));
+    setError('');
+    onAuth(user);
   }
 
   async function handleReset(e: any) {
