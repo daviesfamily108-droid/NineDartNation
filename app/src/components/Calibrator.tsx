@@ -86,17 +86,15 @@ export default function Calibrator() {
 
 	function ensureWS() {
 		if (ws && ws.readyState === WebSocket.OPEN) return ws
-		// Prefer secure WS endpoint when server HTTPS is available, regardless of current page protocol
+		// Prefer configured WS endpoint; normalize to include '/ws'. Fallback to same-origin '/ws'.
 			const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined
-			let socket: WebSocket
-			if (envUrl && envUrl.length > 0) {
-				socket = new WebSocket(envUrl)
-			} else {
-				const useSecure = !!httpsInfo?.https
-				const proto = useSecure ? 'wss' : 'ws'
-				const port = useSecure ? (httpsInfo?.port || 8788) : 8787
-				socket = new WebSocket(`${proto}://${window.location.hostname}:${port}`)
-			}
+			const normalizedEnv = envUrl && envUrl.length > 0
+				? (envUrl.endsWith('/ws') ? envUrl : envUrl.replace(/\/$/, '') + '/ws')
+				: undefined
+			const proto = (window.location.protocol === 'https:' ? 'wss' : 'ws')
+			const sameOrigin = `${proto}://${window.location.host}/ws`
+			const url = normalizedEnv || sameOrigin
+			let socket: WebSocket = new WebSocket(url)
 		setWs(socket)
 		return socket
 	}

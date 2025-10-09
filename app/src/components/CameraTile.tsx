@@ -86,10 +86,16 @@ export default function CameraTile({ label, autoStart = false }: { label?: strin
   function ensureWS() {
     if (ws && ws.readyState === WebSocket.OPEN) return ws
     const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined
+    // Normalize env URL to ensure it targets the WS endpoint path
+    const normalizedEnv = envUrl && envUrl.length > 0
+      ? (envUrl.endsWith('/ws') ? envUrl : envUrl.replace(/\/$/, '') + '/ws')
+      : undefined
+    // Fallbacks prefer same-origin when available; always include '/ws'
     const proto = (window.location.protocol === 'https:' ? 'wss' : 'ws')
+    const sameOrigin = `${proto}://${window.location.host}/ws`
     const host = window.location.hostname
-    const fallback = `${proto}://${host}${window.location.port ? '' : ':8787'}`
-    const url = envUrl && typeof envUrl === 'string' && envUrl.length > 0 ? envUrl : fallback
+    const fallbacks = [sameOrigin, `${proto}://${host}:8787/ws`, `${proto}://${host}:3000/ws`]
+    const url = normalizedEnv || fallbacks[0]
     const socket = new WebSocket(url)
     setWs(socket)
     return socket
