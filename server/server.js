@@ -72,6 +72,12 @@ if (fs.existsSync(rootDistPath)) {
   staticBase = appDistPath
   app.use(express.static(appDistPath))
 }
+// Log whether we found a built SPA to serve
+if (staticBase) {
+  console.log(`[SPA] Serving static frontend from ${staticBase}`)
+} else {
+  console.warn('[SPA] No built frontend found at ../dist or ../app/dist; "/" will 404 (API+WS OK).')
+}
 
 // In-memory subscription store (demo)
 let subscription = { fullAccess: false };
