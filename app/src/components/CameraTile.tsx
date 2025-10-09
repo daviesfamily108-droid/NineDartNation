@@ -104,7 +104,11 @@ export default function CameraTile({ label, autoStart = false }: { label?: strin
     setMode('phone')
     setPaired(false)
     const socket = ensureWS()
-    socket.onopen = () => socket.send(JSON.stringify({ type: 'cam-create' }))
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'cam-create' }))
+    } else {
+      socket.onopen = () => socket.send(JSON.stringify({ type: 'cam-create' }))
+    }
     socket.onmessage = async (ev) => {
       const data = JSON.parse(ev.data)
       if (data.type === 'cam-code') {

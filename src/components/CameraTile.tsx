@@ -29,8 +29,21 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
     }).catch(()=>{})
   }, [])
   const mobileUrl = useMemo(() => {
-    const host = (lanHost || window.location.hostname)
     const code = pairCode || '____'
+    // If a hosted WS URL is configured (e.g., Render), derive the server origin from it
+    const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined
+    if (envUrl && envUrl.length > 0) {
+      try {
+        // Convert ws(s)://host[/ws] -> http(s)://host (strip trailing /ws)
+        const u = new URL(envUrl)
+        const isSecure = u.protocol === 'wss:'
+        const origin = `${isSecure ? 'https' : 'http'}://${u.host}${u.pathname.endsWith('/ws') ? '' : u.pathname}`
+        const base = origin.replace(/\/?ws$/i, '')
+        return `${base}/mobile-cam.html?code=${code}`
+      } catch {}
+    }
+    // Fallback to local development: prefer LAN host if detected
+    const host = (lanHost || window.location.hostname)
     const useHttps = !!httpsInfo?.https
     const port = useHttps ? (httpsInfo?.port || 8788) : 8787
     const proto = useHttps ? 'https' : 'http'
@@ -129,7 +142,11 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
     setMode('phone')
     setPaired(false)
     const socket = ensureWS()
-    socket.onopen = () => socket.send(JSON.stringify({ type: 'cam-create' }))
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'cam-create' }))
+    } else {
+      socket.onopen = () => socket.send(JSON.stringify({ type: 'cam-create' }))
+    }
     socket.onmessage = async (ev) => {
       const data = JSON.parse(ev.data)
       if (data.type === 'cam-code') {

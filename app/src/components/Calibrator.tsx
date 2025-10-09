@@ -93,7 +93,9 @@ export default function Calibrator() {
 				: undefined
 			const proto = (window.location.protocol === 'https:' ? 'wss' : 'ws')
 			const sameOrigin = `${proto}://${window.location.host}/ws`
-			const url = normalizedEnv || sameOrigin
+			const host = window.location.hostname
+			const fallbacks = [sameOrigin, `${proto}://${host}:8787/ws`, `${proto}://${host}:3000/ws`]
+			const url = normalizedEnv || fallbacks[0]
 			let socket: WebSocket = new WebSocket(url)
 		setWs(socket)
 		return socket

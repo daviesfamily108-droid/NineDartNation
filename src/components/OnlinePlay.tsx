@@ -16,6 +16,7 @@ import { useWS } from './WSProvider'
 import { useMessages } from '../store/messages'
 import { censorProfanity, containsProfanity } from '../utils/profanity'
 import { useBlocklist } from '../store/blocklist'
+import TabPills from './ui/TabPills'
 import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart, ringSectorToDart } from '../game/types'
 import { ATC_ORDER } from '../game/aroundTheClock'
 import { createCricketState, applyCricketDart, CRICKET_NUMBERS, hasClosedAll as cricketClosedAll, cricketWinner } from '../game/cricket'
@@ -1026,7 +1027,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       )}
       {/* Global toaster is mounted in App */}
 
-      {/* World Lobby with filters */}
+  {/* World Lobby with filters */}
       {connected && (
         <div className="mt-4 p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 flex-1 overflow-auto">
           <div className="flex items-center justify-between mb-3">
@@ -1043,48 +1044,51 @@ export default function OnlinePlay({ user }: { user?: any }) {
             </div>
           </div>
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-2 mb-3">
+          <div className="space-y-3 mb-3">
             <div>
               <label className="block text-xs opacity-70 mb-1">Mode</label>
-              <select className="input w-full" value={filterMode} onChange={e=>setFilterMode(e.target.value as any)}>
-                <option value="all">All</option>
-                <option value="bestof">Best Of</option>
-                <option value="firstto">First To</option>
-              </select>
+              <TabPills
+                tabs={[{ key: 'all', label: 'All' }, { key: 'bestof', label: 'Best of' }, { key: 'firstto', label: 'First to' }]}
+                active={filterMode}
+                onChange={(k)=> setFilterMode(k as any)}
+              />
             </div>
-            <div>
-              <label className="block text-xs opacity-70 mb-1">Game</label>
-              <select className="input w-full" value={filterGame as any} onChange={e=>setFilterGame(e.target.value as any)}>
-                <option value="all">All</option>
-                {allGames.map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs opacity-70 mb-1">Starting Score</label>
-              <select className="input w-full" value={filterStart as any} onChange={e=>{
-                const v = e.target.value
-                if (v==='all') setFilterStart('all'); else setFilterStart(Number(v) as any)
-              }} disabled={filterGame !== 'all' && filterGame !== 'X01'}>
-                <option value="all">All</option>
-                <option value="301">301</option>
-                <option value="501">501</option>
-                <option value="701">701</option>
-              </select>
-            </div>
-            <div className="flex items-end gap-2">
-              <div className="flex items-center gap-2">
-                <input id="nearavg" type="checkbox" className="accent-purple-500" checked={nearAvg} onChange={e=>setNearAvg(e.target.checked)} disabled={!myAvg} />
-                <label htmlFor="nearavg" className={`text-sm ${!myAvg ? 'opacity-50' : ''}`}>Near my avg{myAvg ? ` (${myAvg.toFixed(1)})` : ''}</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs opacity-70 mb-1">Game</label>
+                <select className="input w-full" value={filterGame as any} onChange={e=>setFilterGame(e.target.value as any)}>
+                  <option value="all">All</option>
+                  {allGames.map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs opacity-70 mb-1">Starting Score</label>
+                <select className="input w-full" value={filterStart as any} onChange={e=>{
+                  const v = e.target.value
+                  if (v==='all') setFilterStart('all'); else setFilterStart(Number(v) as any)
+                }} disabled={filterGame !== 'all' && filterGame !== 'X01'}>
+                  <option value="all">All</option>
+                  <option value="301">301</option>
+                  <option value="501">501</option>
+                  <option value="701">701</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs opacity-70 mb-1">Opponent near my avg</label>
+                <div className="flex items-center gap-2">
+                  <input id="nearavg" type="checkbox" className="accent-purple-500" checked={nearAvg} onChange={e=>setNearAvg(e.target.checked)} disabled={!myAvg} />
+                  <input className="input w-24" type="number" min={5} max={40} step={1} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
+                </div>
               </div>
             </div>
-            <div>
-              <label className={`block text-xs opacity-70 mb-1 ${!nearAvg ? 'opacity-40' : ''}`}>Avg tolerance (±)</label>
-              <input className="w-full" type="range" min={1} max={50} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
-              <div className="text-xs opacity-70 mt-1">± {avgTolerance}</div>
-            </div>
-            <div className="flex items-end">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 max-w-sm">
+                <label className={`block text-xs opacity-70 mb-1 ${!nearAvg ? 'opacity-40' : ''}`}>Avg tolerance (±)</label>
+                <input className="w-full" type="range" min={1} max={50} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
+                <div className="text-xs opacity-70 mt-1">± {avgTolerance}</div>
+              </div>
               <button className="btn px-3 py-1 text-sm" onClick={()=>{ setFilterMode('all'); setFilterGame('all'); setFilterStart('all'); setNearAvg(false); setAvgTolerance(10) }}>Reset</button>
             </div>
           </div>

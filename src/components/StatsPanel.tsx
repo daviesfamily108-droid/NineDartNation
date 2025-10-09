@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import BarChart from './BarChart'
 import { getGameModeStats, getMonthlyAvg3, getMonthlyFirstNineAvg, getAllTimeAvg, getAllTimeFirstNineAvg, getAllTime } from '../store/profileStats'
 import { allGames } from '../utils/games'
+import TabPills from './ui/TabPills'
 
 export default function StatsPanel({ user }: { user?: any }) {
   const { players, inProgress, startingScore, newMatch } = useMatch()
@@ -105,15 +106,16 @@ export default function StatsPanel({ user }: { user?: any }) {
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold">Match Stats</h2>
-        <div className="flex items-center gap-2">
-          <label className="text-sm opacity-80">Game:</label>
-          <select className="input py-1" value={family} onChange={e => setFamily(e.target.value as any)}>
-            <option value="x01">X01 (170–1001)</option>
-            <option value="other">Other Modes</option>
-          </select>
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xl font-semibold">Match Stats</h2>
+          <span className="text-xs opacity-70">View</span>
         </div>
+        <TabPills
+          tabs={[{ key: 'x01', label: 'X01' }, { key: 'other', label: 'Other Modes' }]}
+          active={family}
+          onChange={(k)=> setFamily((k as 'x01'|'other'))}
+        />
       </div>
       {players.length === 0 && (
         <div className="mb-4 p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">

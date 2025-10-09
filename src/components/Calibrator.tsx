@@ -67,8 +67,20 @@ export default function Calibrator() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [mode])
 	const mobileUrl = useMemo(() => {
-		const host = (lanHost || window.location.hostname)
 		const code = pairCode || '____'
+		// Prefer configured WS host (Render) when available to build the correct server origin
+		const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined
+		if (envUrl && envUrl.length > 0) {
+			try {
+				const u = new URL(envUrl)
+				const isSecure = u.protocol === 'wss:'
+				const origin = `${isSecure ? 'https' : 'http'}://${u.host}${u.pathname.endsWith('/ws') ? '' : u.pathname}`
+				const base = origin.replace(/\/?ws$/i, '')
+				return `${base}/mobile-cam.html?code=${code}`
+			} catch {}
+		}
+		// Local dev fallback using detected LAN or current host
+		const host = (lanHost || window.location.hostname)
 		const useHttps = !!httpsInfo?.https
 		const port = useHttps ? (httpsInfo?.port || 8788) : 8787
 		const proto = useHttps ? 'https' : 'http'
@@ -110,7 +122,9 @@ export default function Calibrator() {
 				: undefined
 			const proto = (window.location.protocol === 'https:' ? 'wss' : 'ws')
 			const sameOrigin = `${proto}://${window.location.host}/ws`
-			const url = normalizedEnv || sameOrigin
+			const host = window.location.hostname
+			const fallbacks = [sameOrigin, `${proto}://${host}:8787/ws`, `${proto}://${host}:3000/ws`]
+			const url = normalizedEnv || fallbacks[0]
 			let socket: WebSocket = new WebSocket(url)
 		setWs(socket)
 		return socket

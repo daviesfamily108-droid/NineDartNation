@@ -195,6 +195,28 @@ export default function App() {
     return () => window.removeEventListener('ndn:logout' as any, onLogout as any)
   }, [])
 
+  // Apply username changes from Settings globally and propagate via WS presence
+  useEffect(() => {
+    const onName = (e: any) => {
+      try {
+        const next = String(e?.detail?.username || '').trim()
+        if (!next) return
+        setUser((prev: any) => {
+          const u = prev ? { ...prev, username: next } : prev
+          return u
+        })
+        // Recompute name color on next effect pass based on new username/avatar
+        // Send presence update so friends/lobby reflect the new name
+        try {
+          const email = (user?.email || '').toLowerCase()
+          if (ws && next && email) ws.send({ type: 'presence', username: next, email })
+        } catch {}
+      } catch {}
+    }
+    window.addEventListener('ndn:username-changed' as any, onName as any)
+    return () => window.removeEventListener('ndn:username-changed' as any, onName as any)
+  }, [ws, user?.email])
+
   async function fetchSubscription(u: any) {
     try {
       const q = u?.email ? `?email=${encodeURIComponent(u.email)}` : ''

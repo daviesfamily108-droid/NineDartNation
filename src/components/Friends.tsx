@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useToast } from '../store/toast'
 import { useMessages } from '../store/messages'
 import { censorProfanity } from '../utils/profanity'
+import TabPills from './ui/TabPills'
 
 type Friend = { email: string, username?: string, status?: 'online'|'offline'|'ingame', lastSeen?: number, roomId?: string|null, match?: { game: string, mode: string, value: number, startingScore?: number } | null }
 
@@ -94,16 +95,21 @@ export default function Friends({ user }: { user?: any }) {
       <div className="text-xs opacity-70 mb-3">Online: {friends.filter(f=>f.status==='online').length} · In-game: {friends.filter(f=>f.status==='ingame').length} · Offline: {friends.filter(f=>!f.status || f.status==='offline').length}</div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-        <div className="md:col-span-2 p-3 rounded-xl bg-slate-50/10 border border-slate-200/20">
+        <div className="md:col-span-2 p-3 rounded-2xl bg-black/30 border border-white/10">
           <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold">Your Friends</div>
-            <div className="flex gap-2">
-              <button className={`btn ${filter==='all'?'bg-brand-600':''}`} onClick={()=>setFilter('all')}>All</button>
-              <button className={`btn ${filter==='online'?'bg-brand-600':''}`} onClick={()=>setFilter('online')}>Online</button>
-              <button className={`btn ${filter==='ingame'?'bg-brand-600':''}`} onClick={()=>setFilter('ingame')}>In-Game</button>
-              <button className={`btn ${filter==='offline'?'bg-brand-600':''}`} onClick={()=>setFilter('offline')}>Offline</button>
-            </div>
+            <div className="font-semibold text-white/90">Your Friends</div>
           </div>
+          <TabPills
+            tabs={[
+              { key: 'all', label: 'All' },
+              { key: 'online', label: 'Online' },
+              { key: 'ingame', label: 'In-Game' },
+              { key: 'offline', label: 'Offline' },
+            ]}
+            active={filter}
+            onChange={(k)=>setFilter(k as any)}
+            className="mb-3"
+          />
           <ul className="space-y-2">
             {filtered.map(f => (
               <li key={f.email} className="p-2 rounded bg-black/20 flex items-center justify-between">
@@ -147,8 +153,8 @@ export default function Friends({ user }: { user?: any }) {
           </ul>
         </div>
 
-        <div className="p-3 rounded-xl bg-slate-50/10 border border-slate-200/20">
-          <div className="font-semibold mb-2">Find Friends</div>
+        <div className="p-3 rounded-2xl bg-black/20 border border-white/10">
+          <div className="font-semibold mb-2 text-white/90">Find Friends</div>
           <input className="input w-full mb-2" placeholder="Search by name or email" value={q} onChange={e=>search(e.target.value)} />
           <ul className="space-y-1 mb-3 max-h-48 overflow-auto">
             {results.map(r => (
@@ -162,7 +168,7 @@ export default function Friends({ user }: { user?: any }) {
             ))}
             {results.length === 0 && <li className="text-xs opacity-60">Type to search…</li>}
           </ul>
-          <div className="font-semibold mb-1">Suggested</div>
+          <div className="font-semibold mb-1 text-white/90">Suggested</div>
           <ul className="space-y-1 max-h-48 overflow-auto">
             {suggested.map(s => (
               <li key={s.email} className="flex items-center justify-between p-2 rounded bg-black/10">

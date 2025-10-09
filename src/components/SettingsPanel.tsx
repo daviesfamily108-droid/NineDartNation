@@ -87,6 +87,11 @@ export default function SettingsPanel({ user }: { user?: any }) {
   } = useUserSettings();
   const voices = (typeof window !== 'undefined' && window.speechSynthesis) ? window.speechSynthesis.getVoices() : [];
 
+  useEffect(() => {
+    // Initialize from current user on mount
+    if (user?.username) setDisplayName(user.username)
+  }, [user?.username])
+
   function handleDisplayNameChange(e: any) {
     setError('');
     const newName = e.target.value;
@@ -105,7 +110,22 @@ export default function SettingsPanel({ user }: { user?: any }) {
     }
     if (nameChangeCount < 2) {
       setNameChangeCount(nameChangeCount + 1);
-      // Save logic here (API call)
+      // Persist locally and broadcast change event
+      try {
+        // Maintain a small local change log for auditing
+        const key = 'ndn:username-log'
+        const prev = JSON.parse(localStorage.getItem(key) || '[]')
+        const from = user?.username || ''
+        const to = displayName.trim()
+        const rec = { from, to, ts: Date.now() }
+        localStorage.setItem(key, JSON.stringify([rec, ...prev].slice(0, 20)))
+        // Also store the current username for next session convenience
+        localStorage.setItem('ndn:username', to)
+      } catch {}
+      try {
+        // Notify app to update in-memory user + propagate to WS presence
+        window.dispatchEvent(new CustomEvent('ndn:username-changed' as any, { detail: { username: displayName.trim() } } as any))
+      } catch {}
       setError('Display name changed successfully!');
     } else {
       setShowStripe(true);
