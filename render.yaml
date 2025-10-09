@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: nine-dart-nation-api
+    env: node
+    rootDirectory: server
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /readyz
+    autoDeploy: true
+    plan: free
+    envVars:
+      - key: LOG_LEVEL
+        value: info
+      # Add these in the Render dashboard or here if you prefer
+      # - key: SMTP_HOST
+      #   sync: false
+      # - key: SMTP_PORT
+      #   sync: false
+      # - key: SMTP_USER
+      #   sync: false
+      # - key: SMTP_PASS
+      #   sync: false
+      # - key: SMTP_FROM
+      #   sync: false
+      # - key: STRIPE_SECRET_KEY
+      #   sync: false
+      # - key: STRIPE_PRICE_ID_USERNAME_CHANGE
+      #   sync: false
+      # - key: STRIPE_WEBHOOK_SECRET
+      #   sync: false
