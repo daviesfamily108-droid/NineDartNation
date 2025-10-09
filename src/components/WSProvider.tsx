@@ -138,7 +138,7 @@ export function WSProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('online', connect)
       window.removeEventListener('beforeunload', beforeUnload)
     }
-  }, [connect, connected])
+  }, [connect])
 
   const send = useCallback((msg: WSMessage) => {
     try {
