@@ -52,9 +52,34 @@
   background: #A084E8 !important;
   color: #fff !important;
 }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Custom scrollbars for all scrollable areas */
+body, .overflow-auto, .overflow-x-auto, .overflow-y-auto {
+  scrollbar-width: thin;
+  scrollbar-color: #8F43EE #18122B;
+}
+
+body::-webkit-scrollbar, .overflow-auto::-webkit-scrollbar, .overflow-x-auto::-webkit-scrollbar, .overflow-y-auto::-webkit-scrollbar {
+  width: 8px;
+  background: #18122B;
+}
+
+body::-webkit-scrollbar-thumb, .overflow-auto::-webkit-scrollbar-thumb, .overflow-x-auto::-webkit-scrollbar-thumb, .overflow-y-auto::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #8F43EE 0%, #A084E8 100%);
+  border-radius: 8px;
+}
+
+body::-webkit-scrollbar-track, .overflow-auto::-webkit-scrollbar-track, .overflow-x-auto::-webkit-scrollbar-track, .overflow-y-auto::-webkit-scrollbar-track {
+  background: #18122B;
+}
+
+/* Remove any white scrollbars and maximize space */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 :root {
   --card: white;

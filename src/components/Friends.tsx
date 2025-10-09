@@ -25,19 +25,22 @@ export default function Friends({ user }: { user?: any }) {
   const [suggested, setSuggested] = useState<Friend[]>([])
   const [results, setResults] = useState<Friend[]>([])
   const [q, setQ] = useState('')
-  const [filter, setFilter] = useState<'all'|'online'|'offline'|'ingame'>('all')
+  const [filter, setFilter] = useState<'all'|'online'|'offline'|'ingame'|'requests'>('all')
   const [loading, setLoading] = useState(false)
   const msgs = useMessages()
+  const [requests, setRequests] = useState<Array<{ email: string; username?: string }>>([])
 
   async function refresh() {
     if (!email) return
     try {
-      const [fl, sg] = await Promise.all([
+      const [fl, sg, rq] = await Promise.all([
         fetch(`/api/friends/list?email=${encodeURIComponent(email)}`).then(r=>r.json()),
         fetch(`/api/friends/suggested?email=${encodeURIComponent(email)}`).then(r=>r.json()),
+        fetch(`/api/friends/requests?email=${encodeURIComponent(email)}`).then(r=>r.json()),
       ])
       setFriends(fl.friends || [])
       setSuggested(sg.suggestions || [])
+      setRequests(rq.requests || [])
     } catch {}
   }
 
@@ -88,6 +91,8 @@ export default function Friends({ user }: { user?: any }) {
     } catch {}
   }
 
+  // Friend Requests pill: use real requests data
+  const requestsCount = requests.length;
   return (
     <div className="card">
       <h2 className="text-2xl font-bold text-brand-700 mb-2">Friends</h2>
@@ -105,52 +110,81 @@ export default function Friends({ user }: { user?: any }) {
               { key: 'online', label: 'Online' },
               { key: 'ingame', label: 'In-Game' },
               { key: 'offline', label: 'Offline' },
+              { key: 'requests', label: `Requests ${requestsCount > 0 ? '(' + requestsCount + ')' : ''}` },
             ]}
             active={filter}
             onChange={(k)=>setFilter(k as any)}
             className="mb-3"
           />
-          <ul className="space-y-2">
-            {filtered.map(f => (
-              <li key={f.email} className="p-2 rounded bg-black/20 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className={`inline-block w-2 h-2 rounded-full ${f.status==='online'?'bg-emerald-400':f.status==='ingame'?'bg-amber-400':'bg-slate-400'}`}></span>
-                  <span className="font-semibold">{f.username || f.email}</span>
-                  <span className="text-xs opacity-70">{f.status || 'offline'}{(f.status!=='online' && f.lastSeen) ? ` · ${timeAgo(f.lastSeen)}` : ''}</span>
-                  {f.status==='ingame' && f.match && (
-                    <span className="text-[10px] opacity-70 px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-600/30">{f.match.game} {f.match.mode==='firstto'?'FT':'BO'} {f.match.value}{f.match.game==='X01' && f.match.startingScore ? ` · ${f.match.startingScore}`:''}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {f.status==='ingame' && f.roomId && (
-                    <button className="btn" onClick={()=>spectate(f.roomId!)}>Spectate</button>
-                  )}
-                  <button className="btn" disabled={loading || (f.status!=='online' && f.status!=='ingame')} onClick={async()=>{
+          {filter === 'requests' ? (
+            <ul className="space-y-2">
+              {requestsCount > 0 ? requests.map(r => (
+                <li key={r.email} className="p-2 rounded bg-black/20 flex items-center justify-between">
+                  <span className="font-semibold">{r.username || r.email}</span>
+                  <button className="btn bg-emerald-600 hover:bg-emerald-700" onClick={async()=>{
                     setLoading(true)
                     try {
-                      const res = await fetch('/api/friends/invite', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fromEmail: email, toEmail: f.email, game: 'X01', mode: 'bestof', value: 3, startingScore: 501 }) })
-                      const data = await res.json().catch(()=>({}))
-                      if (data?.delivered) toast('Invite sent', { type: 'success' })
-                      else toast('Friend is offline; invite queued', { type: 'info' })
+                      await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.email }) })
+                      await refresh()
+                      toast('Friend request accepted', { type: 'success' })
                     } finally { setLoading(false) }
-                  }}>Invite</button>
-                  <button className="btn" disabled={loading} onClick={async()=>{
-                    const m = prompt('Message:')
-                    if (!m) return
+                  }}>Accept</button>
+                  <button className="btn bg-rose-600 hover:bg-rose-700" onClick={async()=>{
                     setLoading(true)
                     try {
-                      await fetch('/api/friends/message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fromEmail: email, toEmail: f.email, message: m }) })
-                      toast('Message sent', { type: 'success' })
+                      await fetch('/api/friends/decline', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.email }) })
+                      await refresh()
+                      toast('Friend request declined', { type: 'info' })
                     } finally { setLoading(false) }
-                  }}>Message</button>
-                  <button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={()=>removeFriend(f.email)}>Remove</button>
-                </div>
-              </li>
-            ))}
-            {filtered.length === 0 && (
-              <li className="text-sm opacity-70">No friends {filter !== 'all' ? `in ${filter}` : ''} yet.</li>
-            )}
-          </ul>
+                  }}>Decline</button>
+                </li>
+              )) : (
+                <li className="text-sm opacity-70">No friend requests yet.</li>
+              )}
+            </ul>
+          ) : (
+            <ul className="space-y-2">
+              {filtered.map(f => (
+                <li key={f.email} className="p-2 rounded bg-black/20 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block w-2 h-2 rounded-full ${f.status==='online'?'bg-emerald-400':f.status==='ingame'?'bg-amber-400':'bg-slate-400'}`}></span>
+                    <span className="font-semibold">{f.username || f.email}</span>
+                    <span className="text-xs opacity-70">{f.status || 'offline'}{(f.status!=='online' && f.lastSeen) ? ` · ${timeAgo(f.lastSeen)}` : ''}</span>
+                    {f.status==='ingame' && f.match && (
+                      <span className="text-[10px] opacity-70 px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-600/30">{f.match.game} {f.match.mode==='firstto'?'FT':'BO'} {f.match.value}{f.match.game==='X01' && f.match.startingScore ? ` · ${f.match.startingScore}`:''}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {f.status==='ingame' && f.roomId && (
+                      <button className="btn" onClick={()=>spectate(f.roomId!)}>Spectate</button>
+                    )}
+                    <button className="btn" disabled={loading || (f.status!=='online' && f.status!=='ingame')} onClick={async()=>{
+                      setLoading(true)
+                      try {
+                        const res = await fetch('/api/friends/invite', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fromEmail: email, toEmail: f.email, game: 'X01', mode: 'bestof', value: 3, startingScore: 501 }) })
+                        const data = await res.json().catch(()=>({}))
+                        if (data?.delivered) toast('Invite sent', { type: 'success' })
+                        else toast('Friend is offline; invite queued', { type: 'info' })
+                      } finally { setLoading(false) }
+                    }}>Invite</button>
+                    <button className="btn" disabled={loading} onClick={async()=>{
+                      const m = prompt('Message:')
+                      if (!m) return
+                      setLoading(true)
+                      try {
+                        await fetch('/api/friends/message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fromEmail: email, toEmail: f.email, message: m }) })
+                        toast('Message sent', { type: 'success' })
+                      } finally { setLoading(false) }
+                    }}>Message</button>
+                    <button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={()=>removeFriend(f.email)}>Remove</button>
+                  </div>
+                </li>
+              ))}
+              {filtered.length === 0 && (
+                <li className="text-sm opacity-70">No friends {filter !== 'all' ? `in ${filter}` : ''} yet.</li>
+              )}
+            </ul>
+          )}
         </div>
 
         <div className="p-3 rounded-2xl bg-black/20 border border-white/10">

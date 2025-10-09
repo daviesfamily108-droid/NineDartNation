@@ -21,42 +21,52 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  function handleSignIn(e: any) {
+  async function handleSignIn(e: any) {
     e.preventDefault();
+    setError('');
     if (!username || !password) {
       setError('Username and password required.');
       return;
     }
-    // Simulate login: fetch user from localStorage
-    const users = JSON.parse(localStorage.getItem('ndn:users') || '{}');
-    const user = users[username];
-    if (user && user.password === password) {
-      setError('');
-      localStorage.setItem('ndn:currentUser', JSON.stringify(user));
-      onAuth(user);
-    } else {
-      setError('Invalid username or password.');
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (res.ok && data?.user) {
+        onAuth(data.user);
+      } else {
+        setError(data?.error || 'Invalid username or password.');
+      }
+    } catch {
+      setError('Network error.');
     }
   }
 
-  function handleSignUp(e: any) {
+  async function handleSignUp(e: any) {
     e.preventDefault();
+    setError('');
     if (!email || !username || !password) {
       setError('Email, username, and password required.');
       return;
     }
-    // Simulate signup: store user in localStorage
-    const users = JSON.parse(localStorage.getItem('ndn:users') || '{}');
-    if (users[username]) {
-      setError('Username already exists.');
-      return;
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, username, password })
+      });
+      const data = await res.json();
+      if (res.ok && data?.user) {
+        onAuth(data.user);
+      } else {
+        setError(data?.error || 'Signup failed.');
+      }
+    } catch {
+      setError('Network error.');
     }
-    const user = { email, username, password, admin: false };
-    users[username] = user;
-    localStorage.setItem('ndn:users', JSON.stringify(users));
-    localStorage.setItem('ndn:currentUser', JSON.stringify(user));
-    setError('');
-    onAuth(user);
   }
 
   async function handleReset(e: any) {
