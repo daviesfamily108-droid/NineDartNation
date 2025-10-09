@@ -960,25 +960,26 @@ export default function OnlinePlay({ user }: { user?: any }) {
           You have {unread} unread message{unread>1?'s':''}. Check the Friends tab.
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-2 justify-between">
-        <div className="flex items-center gap-2">
-          <input className="input" value={roomId} onChange={e => setRoomId(e.target.value)} placeholder="Room ID" />
-          {!connected ? (
-            <button className="btn bg-rose-600 hover:bg-rose-700" onClick={connect}>Connect</button>
+      <div className="relative">
+        <div className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2">
+            <label className="text-xs opacity-70 shrink-0">Room</label>
+            <input className="input w-28" value={roomId} onChange={e => setRoomId(e.target.value)} placeholder="room-1" />
+          </div>
+          {connected ? (
+            <span className="text-[11px] px-2 py-1 rounded-full bg-emerald-600/20 text-emerald-200 border border-emerald-400/40 shrink-0">Connected</span>
           ) : (
-            <span className="text-[11px] px-2 py-1 rounded-full bg-emerald-600/20 text-emerald-200 border border-emerald-400/40">Connected</span>
+            <button className="btn bg-rose-600 hover:bg-rose-700 shrink-0" onClick={connect}>Connect</button>
           )}
-          <button className="btn" onClick={sendState} disabled={!connected}>Sync</button>
-          {connected && (
-            <button className="btn" onClick={() => setShowMatchModal(true)} disabled={locked} title={locked ? 'Weekly free games used' : ''}>Open Match</button>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
+          <button className="btn shrink-0" onClick={sendState} disabled={!connected}>Sync</button>
           <button
-            className="text-[11px] px-3 py-1 rounded-full bg-indigo-500/25 text-indigo-100 border border-indigo-400/40 hover:bg-indigo-500/40"
+            className="text-[11px] px-3 py-1 rounded-full bg-indigo-500/25 text-indigo-100 border border-indigo-400/40 hover:bg-indigo-500/40 shrink-0"
             title="Open a simulated online match demo"
             onClick={() => { try { window.dispatchEvent(new CustomEvent('ndn:online-match-demo', { detail: { game: 'X01', start: 501 } })) } catch {} }}
           >DEMO</button>
+          {connected && (
+            <button className="btn shrink-0" onClick={() => setShowMatchModal(true)} disabled={locked} title={locked ? 'Weekly free games used' : ''}>Open Match</button>
+          )}
         </div>
       </div>
       {/* Create Match+ box (top-right area) */}
