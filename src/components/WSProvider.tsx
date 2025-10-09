@@ -35,11 +35,14 @@ export function WSProvider({ children }: { children: ReactNode }) {
     }
     const proto = (window.location.protocol === 'https:' ? 'wss' : 'ws')
     const host = window.location.hostname
-    // Candidate endpoints (primary port + common alternate + same origin path if proxying)
+    const sameOrigin = `${proto}://${window.location.host}` // includes port if present
+    // Candidate endpoints: prefer same-origin first (works when server serves SPA),
+    // then common local ports for dev fallbacks.
     const bases = [
+      sameOrigin,
+      `${proto}://${host}`,
       `${proto}://${host}:8787`,
       `${proto}://${host}:3000`,
-      `${proto}://${host}${window.location.port ? '' : ':8787'}`,
     ]
     // Deduplicate
     endpointsRef.current = Array.from(new Set(bases))
