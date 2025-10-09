@@ -13,6 +13,17 @@ export default defineConfig({
     // Respect platform-provided PORT if present; fall back locally
     port: Number(process.env.PORT) || 5173,
     strictPort: true,
+    // Allow Render (or other PaaS) hostnames when running dev/preview remotely
+    allowedHosts: (() => {
+      const hosts: string[] = []
+      const envUrl = process.env.RENDER_EXTERNAL_URL
+      if (envUrl) {
+        try { hosts.push(new URL(envUrl).hostname) } catch {}
+      }
+      const extra = process.env.VITE_ALLOWED_HOSTS
+      if (extra) hosts.push(...extra.split(',').map(s => s.trim()).filter(Boolean))
+      return hosts
+    })(),
     proxy: {
       '/api': {
         target: 'http://localhost:8787',
