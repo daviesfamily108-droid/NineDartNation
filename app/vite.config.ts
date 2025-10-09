@@ -5,6 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: true,
+    port: Number(process.env.PORT) || 5173,
+    strictPort: true,
     // Allow overriding API proxy target via env when server runs on a different port
     // Set VITE_API_TARGET=http://localhost:8788 (for example)
     proxy: {
@@ -17,5 +19,9 @@ export default defineConfig({
         changeOrigin: true,
       },
     }
+  },
+  preview: {
+    host: true,
+    port: Number(process.env.PORT) || 5173,
   }
 })

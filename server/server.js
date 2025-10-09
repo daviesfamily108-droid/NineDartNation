@@ -61,9 +61,15 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '100kb' }));
 // Serve static assets (mobile camera page)
 app.use(express.static('public'))
-// In production, also serve the built client app from ../app/dist if present
+// In production, also serve the built client app. Prefer root ../dist, fallback to ../app/dist.
+const rootDistPath = path.resolve(process.cwd(), '..', 'dist')
 const appDistPath = path.resolve(process.cwd(), '..', 'app', 'dist')
-if (fs.existsSync(appDistPath)) {
+let staticBase = null
+if (fs.existsSync(rootDistPath)) {
+  staticBase = rootDistPath
+  app.use(express.static(rootDistPath))
+} else if (fs.existsSync(appDistPath)) {
+  staticBase = appDistPath
   app.use(express.static(appDistPath))
 }
 
@@ -481,14 +487,14 @@ app.post('/api/auth/confirm-reset', async (req, res) => {
   }
 })
 
-// SPA fallback: serve index.html for any non-API, non-static route when app/dist exists
-if (fs.existsSync(appDistPath)) {
+// SPA fallback: serve index.html for any non-API, non-static route when a dist exists
+if (staticBase) {
   app.get('*', (req, res, next) => {
     const p = req.path || ''
     if (p.startsWith('/api') || p === '/health') return next()
     // mobile camera page is a static file in /public
     if (p === '/mobile-cam.html') return next()
-    const indexPath = path.join(appDistPath, 'index.html')
+    const indexPath = path.join(staticBase, 'index.html')
     if (fs.existsSync(indexPath)) return res.sendFile(indexPath)
     next()
   })

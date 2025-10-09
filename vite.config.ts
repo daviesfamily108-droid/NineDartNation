@@ -8,6 +8,11 @@ export default defineConfig({
     sourcemap: true,
   },
   server: {
+    // Bind to all interfaces so Render (and other PaaS) can detect the open port
+    host: true,
+    // Respect platform-provided PORT if present; fall back locally
+    port: Number(process.env.PORT) || 5173,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:8787',
@@ -18,5 +23,10 @@ export default defineConfig({
         changeOrigin: true,
       },
     }
+  },
+  // Ensure vite preview also binds correctly in hosted environments
+  preview: {
+    host: true,
+    port: Number(process.env.PORT) || 5173,
   },
 })
