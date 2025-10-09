@@ -1,3 +1,6 @@
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
 import 'dotenv/config'
 import { WebSocketServer } from 'ws';
 import { nanoid } from 'nanoid';
@@ -102,51 +105,45 @@ app.post('/api/auth/signup', async (req, res) => {
 
 // Login endpoint
 app.post('/api/auth/login', async (req, res) => {
-  const { username, password } = req.body
+  const { username, password } = req.body;
   if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required.' })
+    return res.status(400).json({ error: 'Username and password required.' });
   }
-  let user = null
+  let user = null;
   for (const u of users.values()) {
     if (u.username === username && u.password === password) {
-      user = u
-      break
+      user = u;
+      break;
     }
   }
   if (user) {
-    return res.json({ user })
+    // Create JWT token
+  const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+    return res.json({ user, token });
   } else {
-    return res.status(401).json({ error: 'Invalid username or password.' })
+    return res.status(401).json({ error: 'Invalid username or password.' });
   }
-})
+});
 
-// Signup endpoint
-app.post('/api/auth/signup', async (req, res) => {
-  const { email, username, password } = req.body
-  if (!email || !username || !password) {
-    return res.status(400).json({ error: 'Email, username, and password required.' })
+// Route to verify token and get user info
+app.get('/api/auth/me', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    // Find user by username
+    for (const u of users.values()) {
+      if (u.username === decoded.username) {
+        return res.json({ user: u });
+      }
+    }
+    return res.status(404).json({ error: 'User not found.' });
+  } catch {
+    return res.status(401).json({ error: 'Invalid token.' });
   }
-  if (users[username]) {
-    return res.status(409).json({ error: 'Username already exists.' })
-  }
-  const user = { email, username, password, admin: false }
-  users[username] = user
-  return res.json({ user })
-})
+});
 
-// Login endpoint
-app.post('/api/auth/login', async (req, res) => {
-  const { username, password } = req.body
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required.' })
-  }
-  const user = users[username]
-  if (user && user.password === password) {
-    return res.json({ user })
-  } else {
-    return res.status(401).json({ error: 'Invalid username or password.' })
-  }
-})
 
 // In-memory subscription store (demo)
 let subscription = { fullAccess: false };
@@ -658,6 +655,15 @@ const tournaments = new Map();
 // Simple in-memory users and friendships (demo)
 // users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
 const users = new Map();
+// Migration: If any old users exist in global object, migrate them to Map
+if (global.oldUsers && typeof global.oldUsers === 'object') {
+  for (const key of Object.keys(global.oldUsers)) {
+    const u = global.oldUsers[key];
+    if (u && u.email && u.username && u.password) {
+      users.set(u.email, u);
+    }
+  }
+}
 // friends: email -> Set(friendEmail)
 const friendships = new Map();
 // simple messages store: recipientEmail -> [{ id, from, message, ts }]

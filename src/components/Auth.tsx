@@ -35,7 +35,8 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
         body: JSON.stringify({ username, password })
       });
       const data = await res.json();
-      if (res.ok && data?.user) {
+      if (res.ok && data?.user && data?.token) {
+        localStorage.setItem('authToken', data.token);
         onAuth(data.user);
       } else {
         setError(data?.error || 'Invalid username or password.');
@@ -59,7 +60,8 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
         body: JSON.stringify({ email, username, password })
       });
       const data = await res.json();
-      if (res.ok && data?.user) {
+      if (res.ok && data?.user && data?.token) {
+        localStorage.setItem('authToken', data.token);
         onAuth(data.user);
       } else {
         setError(data?.error || 'Signup failed.');

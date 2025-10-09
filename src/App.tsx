@@ -35,6 +35,24 @@ export default function App() {
   const [user, setUser] = useState<any>(null)
   const [allTimeAvg, setAllTimeAvg] = useState<number>(0)
   const { avgMode } = useUserSettings()
+
+  // Restore user session from JWT token
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.user) {
+            setUser(data.user);
+          } else {
+            localStorage.removeItem('authToken');
+          }
+        });
+    }
+  }, []);
   // Avatar state/effect must be declared before any conditional return to keep hooks order stable
   const [avatar, setAvatar] = useState<string>('')
   const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null)
