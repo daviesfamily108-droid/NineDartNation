@@ -20,6 +20,7 @@
     "jsonwebtoken": "^9.0.2",
     "nanoid": "^5.0.7",
     "nodemailer": "^6.9.13",
+    "pg": "^8.16.3",
     "pino": "^9.4.0",
     "pino-http": "^10.3.0",
     "prom-client": "^15.1.3",
