@@ -21,6 +21,9 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  // Use VITE_API_URL for API requests, fallback to relative path for local dev
+  const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+
   async function handleSignIn(e: any) {
     e.preventDefault();
     setError('');
@@ -29,7 +32,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       return;
     }
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -54,7 +57,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       return;
     }
     try {
-      const res = await fetch('/api/auth/signup', {
+      const res = await fetch(`${API_URL}/api/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, username, password })
@@ -76,7 +79,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
     setError('');
     if (!email || !email.includes('@')) { setError('Enter your email address.'); return }
     try {
-      const r = await fetch('/api/auth/send-reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+      const r = await fetch(`${API_URL}/api/auth/send-reset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
       const j = await r.json()
       if (!j?.ok) throw new Error(j?.error || 'Failed to send reset email')
       setError('Password reset link sent to your email.');
@@ -90,7 +93,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
     setError('');
     if (!email || !email.includes('@')) { setError('Enter your email address.'); return }
     try {
-      const r = await fetch('/api/auth/send-username', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
+      const r = await fetch(`${API_URL}/api/auth/send-username`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
       const j = await r.json()
       if (!j?.ok) throw new Error(j?.error || 'Failed to send username email')
       setError('Your username has been emailed to you.');
@@ -136,6 +139,8 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
                 onMouseDown={e => { e.preventDefault(); setShowPassword(true); }}
                 onMouseUp={e => { e.preventDefault(); setShowPassword(false); }}
                 onMouseLeave={() => setShowPassword(false)}
+                onTouchStart={e => { e.preventDefault(); setShowPassword(true); }}
+                onTouchEnd={e => { e.preventDefault(); setShowPassword(false); }}
                 aria-label="Toggle password visibility"
               >
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
