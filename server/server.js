@@ -1,25 +1,23 @@
 const jwt = require('jsonwebtoken');
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your_jwt_secret';
-import 'dotenv/config'
-import { WebSocketServer } from 'ws';
-import { nanoid } from 'nanoid';
-import express from 'express';
-import cors from 'cors';
-import fs from 'fs'
-import os from 'os'
-import https from 'https'
-import path from 'path'
-import Filter from 'bad-words'
-import * as EmailTemplates from './emails/templates.js'
-import nodemailer from 'nodemailer'
-import helmet from 'helmet'
-import compression from 'compression'
-import rateLimit from 'express-rate-limit'
-import pino from 'pino'
-import pinoHttp from 'pino-http'
-import client from 'prom-client'
-import Stripe from 'stripe'
+const dotenv = require('dotenv'); dotenv.config();
+const { WebSocketServer } = require('ws');
+const { nanoid } = require('nanoid');
+const express = require('express');
+const cors = require('cors');
+const fs = require('fs');
+const os = require('os');
+const https = require('https');
+const path = require('path');
+const Filter = require('bad-words');
+const EmailTemplates = require('./emails/templates.js');
+const nodemailer = require('nodemailer');
+const helmet = require('helmet');
+const compression = require('compression');
+const rateLimit = require('express-rate-limit');
+const pino = require('pino');
+const pinoHttp = require('pino-http');
+const client = require('prom-client');
+const Stripe = require('stripe');
 
 const PORT = process.env.PORT || 8787;
 // Track HTTPS runtime status and port
