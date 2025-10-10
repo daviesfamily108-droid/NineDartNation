@@ -1,3 +1,22 @@
+const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+// Automated notification sender using support email
+function sendNotificationEmail({ to, subject, text }) {
+  const transporter = nodemailer.createTransport({
+    service: 'Outlook',
+    auth: {
+      user: SUPPORT_EMAIL,
+      pass: process.env.SUPPORT_EMAIL_PASSWORD // Set this in your environment variables
+    }
+  });
+  return transporter.sendMail({
+    from: SUPPORT_EMAIL,
+    to,
+    subject,
+    text
+  });
+}
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
 const { WebSocketServer } = require('ws');
@@ -83,23 +102,29 @@ if (staticBase) {
 
 // Signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
-  const { email, username, password } = req.body
+  const { email, username, password } = req.body;
   if (!email || !username || !password) {
-    return res.status(400).json({ error: 'Email, username, and password required.' })
+    return res.status(400).json({ error: 'Email, username, and password required.' });
   }
-  // Check if username exists
-  for (const u of users.values()) {
-    if (u.username === username) {
-      return res.status(409).json({ error: 'Username already exists.' })
+  try {
+    // Check for existing user
+    const exists = await pool.query('SELECT 1 FROM users WHERE email = $1 OR username = $2', [email, username]);
+    if (exists.rowCount > 0) {
+      return res.status(409).json({ error: 'Email or username already exists.' });
     }
-    if (u.email === email) {
-      return res.status(409).json({ error: 'Email already exists.' })
-    }
+    // Hash password
+    const password_hash = await bcrypt.hash(password, 10);
+    // Insert user
+    const result = await pool.query(
+      'INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING id, email, username, created_at',
+      [email, username, password_hash]
+    );
+    return res.json({ user: result.rows[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Signup failed.' });
   }
-  const user = { email, username, password, admin: false }
-  users.set(email, user)
-  return res.json({ user })
-})
+});
 
 // Login endpoint
 app.post('/api/auth/login', async (req, res) => {
@@ -107,36 +132,44 @@ app.post('/api/auth/login', async (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required.' });
   }
-  let user = null;
-  for (const u of users.values()) {
-    if (u.username === username && u.password === password) {
-      user = u;
-      break;
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    console.log('Login attempt:', { username });
+    if (result.rowCount === 0) {
+      console.log('No user found for username:', username);
+      return res.status(401).json({ error: 'Invalid username or password.' });
     }
-  }
-  if (user) {
+    const user = result.rows[0];
+    console.log('User found:', { id: user.id, username: user.username, email: user.email });
+    const valid = await bcrypt.compare(password, user.password_hash);
+    console.log('Password valid:', valid);
+    if (!valid) {
+      console.log('Password mismatch for user:', username);
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
     // Create JWT token
-  const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
-    return res.json({ user, token });
-  } else {
-    return res.status(401).json({ error: 'Invalid username or password.' });
+    const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+    console.log('Login successful for user:', username);
+    return res.json({ user: { id: user.id, email: user.email, username: user.username, created_at: user.created_at }, token });
+  } catch (err) {
+    console.error('Login error:', err);
+    return res.status(500).json({ error: 'Login failed.' });
   }
 });
 
 // Route to verify token and get user info
-app.get('/api/auth/me', (req, res) => {
+app.get('/api/auth/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    // Find user by username
-    for (const u of users.values()) {
-      if (u.username === decoded.username) {
-        return res.json({ user: u });
-      }
+    // Find user by username in Postgres
+    const result = await pool.query('SELECT id, email, username, created_at FROM users WHERE username = $1', [decoded.username]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'User not found.' });
     }
-    return res.status(404).json({ error: 'User not found.' });
+    return res.json({ user: result.rows[0] });
   } catch {
     return res.status(401).json({ error: 'Invalid token.' });
   }
@@ -149,7 +182,8 @@ let subscription = { fullAccess: false };
 const premiumWinners = new Map();
 // In-memory admin store (demo)
 const OWNER_EMAIL = 'daviesfamily108@gmail.com'
-const adminEmails = new Set([OWNER_EMAIL])
+const SUPPORT_EMAIL = 'ninedartnation@outlook.com'
+const adminEmails = new Set([OWNER_EMAIL, SUPPORT_EMAIL])
 // In-memory ops flags (demo)
 let maintenanceMode = false
 let lastAnnouncement = null
@@ -163,6 +197,7 @@ const emailCopy = {
   username: { title: '', intro: '', buttonLabel: '' },
   confirmEmail: { title: '', intro: '', buttonLabel: '' },
   changed: { title: '', intro: '', buttonLabel: '' },
+  support: { title: 'Support', intro: `For support, contact us at ${SUPPORT_EMAIL}.`, buttonLabel: 'Contact Support' }
 }
 
 app.get('/api/subscription', (req, res) => {
