@@ -128,6 +128,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
                 placeholder="Password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
+                autoComplete="current-password"
                 required
                 onFocus={() => setShowPassword(false)}
                 onBlur={() => setShowPassword(false)}
