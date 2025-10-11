@@ -4,10 +4,10 @@ app/node_modules/
 server/node_modules/
 
 # Build output
-/dist/
+# /dist/
 /build/
-app/dist/
-server/dist/
+# app/dist/
+# server/dist/
 .vite/
 
 # Logs

@@ -1,3 +1,5 @@
+// ...existing requires...
+// ...existing code...
 // Prevent caching of API responses
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
@@ -45,11 +47,7 @@ const pinoHttp = require('pino-http');
 const client = require('prom-client');
 const Stripe = require('stripe');
 
-const PORT = process.env.PORT || 8787;
-// Track HTTPS runtime status and port
-let HTTPS_ACTIVE = false
-let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
-const app = express();
+// ...existing code...
 // Observability: metrics registry
 const register = new client.Registry()
 client.collectDefaultMetrics({ register })
