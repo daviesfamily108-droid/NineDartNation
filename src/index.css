@@ -1,4 +1,8 @@
 /* Theme classes for dynamic switching */
+html, :host {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 .theme-default {
   background: linear-gradient(135deg, #18122B 0%, #393053 100%);
   color: #F5F5F5;
@@ -120,6 +124,7 @@ body {
   background: rgba(17, 24, 39, 0.35);
   box-shadow: 0 8px 28px -10px rgba(17, 24, 39, 0.35);
   border-radius: 1.25rem;
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
   backdrop-filter: blur(10px) saturate(120%);
   line-break: auto;
   -webkit-line-break: auto;
@@ -160,6 +165,7 @@ body {
   box-shadow: 0 10px 32px -8px rgba(49,46,129,0.25), 0 1.5px 8px rgba(160,132,232,0.10);
   border-radius: 1.5rem;
   padding: 2rem;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   color: #F5F5F5;
   border: 1.5px solid #8F43EE44;
