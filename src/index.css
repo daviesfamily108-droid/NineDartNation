@@ -105,6 +105,7 @@ body {
   background: radial-gradient(circle at 20% 30%, #22d3ee33 0%, transparent 60%),
               radial-gradient(circle at 80% 70%, #8F43EE33 0%, transparent 60%),
               linear-gradient(120deg, #18122B 0%, #635985 60%, #8F43EE 100%);
+  -webkit-animation: gradientMove 8s ease-in-out infinite alternate;
   animation: gradientMove 8s ease-in-out infinite alternate;
 }
 
@@ -114,10 +115,14 @@ body {
 }
 
 .glass {
+  -webkit-background-clip: padding-box;
+  background-clip: padding-box;
   background: rgba(17, 24, 39, 0.35);
   box-shadow: 0 8px 28px -10px rgba(17, 24, 39, 0.35);
   border-radius: 1.25rem;
   backdrop-filter: blur(10px) saturate(120%);
+  line-break: auto;
+  -webkit-line-break: auto;
   border: 1px solid rgba(143, 67, 238, 0.25);
 }
 

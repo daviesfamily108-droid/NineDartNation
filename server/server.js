@@ -65,6 +65,18 @@ app.use(cors())
 app.use(compression())
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
 app.use(limiter)
+// Custom security and performance headers
+app.use((req, res, next) => {
+  // Set Cache-Control for static assets and API responses
+  if (req.method === 'GET') {
+    res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
+  }
+  // Prevent MIME type sniffing
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Use Content-Security-Policy frame-ancestors instead of X-Frame-Options
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
+  next();
+});
 // Logging
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
 app.use(pinoHttp({ logger, genReqId: (req) => req.headers['x-request-id'] || nanoid(12) }))
@@ -103,13 +115,16 @@ if (staticBase) {
 // Signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
   const { email, username, password } = req.body;
+  console.log('Signup attempt:', { email, username });
   if (!email || !username || !password) {
+    console.log('Missing fields:', { email, username, password });
     return res.status(400).json({ error: 'Email, username, and password required.' });
   }
   try {
     // Check for existing user
     const exists = await pool.query('SELECT 1 FROM users WHERE email = $1 OR username = $2', [email, username]);
     if (exists.rowCount > 0) {
+      console.log('User already exists:', { email, username });
       return res.status(409).json({ error: 'Email or username already exists.' });
     }
     // Hash password
@@ -119,10 +134,11 @@ app.post('/api/auth/signup', async (req, res) => {
       'INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING id, email, username, created_at',
       [email, username, password_hash]
     );
+    console.log('Signup successful:', result.rows[0]);
     return res.json({ user: result.rows[0] });
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: 'Signup failed.' });
+    console.error('Signup error:', err.message, err);
+    return res.status(500).json({ error: 'Signup failed.', details: err.message });
   }
 });
 
