@@ -61,7 +61,10 @@ register.registerMetric(celebrations180Total)
 
 // Security & performance
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
-app.use(cors())
+app.use(cors({
+  origin: ['https://ninedartnation.netlify.app', 'https://ninedartnation.onrender.com'],
+  credentials: true
+}))
 app.use(compression())
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
 app.use(limiter)

@@ -11,7 +11,7 @@ export default defineConfig({
     // Bind to all interfaces so Render (and other PaaS) can detect the open port
     host: true,
     // Respect platform-provided PORT if present; fall back locally
-    port: Number(process.env.PORT) || 5173,
+  port: Number(process.env.PORT) || 5173,
     strictPort: true,
     // Allow Render (or other PaaS) hostnames when running dev/preview remotely
     allowedHosts: (() => {
