@@ -28,6 +28,10 @@ import { getDominantColorFromImage, stringToColor } from './utils/color'
 import OpsDashboard from './components/OpsDashboard'
 
 export default function App() {
+  const appRef = useRef<HTMLDivElement | null>(null);
+  const [avatar, setAvatar] = useState<string>('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null);
   const ws = (() => { try { return useWS() } catch { return null } })()
   const [tab, setTab] = useState<TabKey>('score')
   const [isMobile, setIsMobile] = useState<boolean>(false)
@@ -36,159 +40,24 @@ export default function App() {
   const [allTimeAvg, setAllTimeAvg] = useState<number>(0)
   const { avgMode } = useUserSettings()
 
-  // Restore user session from JWT token
+
+  // Restore user from localStorage on mount
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data.user) {
-            setUser(data.user);
-          } else {
-            localStorage.removeItem('authToken');
-          }
-        });
-    }
+    const savedUser = localStorage.getItem('mockUser');
+    if (savedUser) setUser(JSON.parse(savedUser));
   }, []);
-  // Avatar state/effect must be declared before any conditional return to keep hooks order stable
-  const [avatar, setAvatar] = useState<string>('')
-  const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null)
-  const appRef = useRef<HTMLDivElement | null>(null)
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const [nameColor, setNameColor] = useState<string | null>(null)
+
   useEffect(() => {
-    // Detect mobile layout via viewport width and user agent; update on resize
-    const mq = window.matchMedia('(max-width: 768px)')
-    const uaMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
-    const update = () => setIsMobile(mq.matches || uaMobile)
-    update()
-    try { mq.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
-    return () => {
-      try { mq.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) }
-    }
-  }, [])
-  // Demo deep-links: ?demo=offline-format&format=best|first&value=5&start=501
-  useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search)
-      if (sp.get('demo') === 'offline-format') {
-        const f = (sp.get('format') || 'first').toLowerCase() === 'best' ? 'best' : 'first'
-        const v = Number(sp.get('value') || '1')
-        const s = Number(sp.get('start') || '501')
-        window.dispatchEvent(new CustomEvent('ndn:offline-format', { detail: { formatType: f, formatCount: isFinite(v)? v : 1, startScore: isFinite(s)? s : 501 } }))
-        // Switch to Offline and auto-start X01
-        setTab('offline')
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('ndn:auto-start', { detail: { mode: 'X01' } }))
-        }, 50)
-      }
-      // Demo for Online create-match: ?demo=online-create&game=X01&mode=firstto|bestof&value=3&start=501
-      if (sp.get('demo') === 'online-create') {
-        const game = sp.get('game') || 'X01'
-        const mode = (sp.get('mode') || 'firstto').toLowerCase() === 'bestof' ? 'bestof' : 'firstto'
-        const value = Number(sp.get('value') || '3')
-        const start = Number(sp.get('start') || '501')
-        setTab('online')
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('ndn:online-demo', { detail: { game, mode, value: isFinite(value)? value : 3, start: isFinite(start)? start : 501 } }))
-        }, 80)
-      }
-      // Demo: open a live-looking online match view with fake data
-      if (sp.get('demo') === 'online-match') {
-        setTab('online')
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('ndn:online-match-demo', { detail: { game: 'X01', start: 501 } }))
-        }, 120)
-      }
-    } catch {}
-  }, [])
-  // Fullscreen change tracking
-  useEffect(() => {
-    const onFs = () => setIsFullscreen(!!document.fullscreenElement)
-    document.addEventListener('fullscreenchange', onFs)
-    return () => document.removeEventListener('fullscreenchange', onFs)
-  }, [])
-  useEffect(() => {
-    if (!isMobile) setNavOpen(false)
-  }, [isMobile])
-  // Avatar state/effect must be declared before any conditional return to keep hooks order stable
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try { setAvatar(localStorage.getItem('ndn:avatar') || '') } catch {}
-    const onUpdate = (e: Event) => {
+    const onLogout = () => {
       try {
-        // Prefer payload for immediate update; fallback to localStorage
-        const detail = (e as CustomEvent<string>).detail
-        if (typeof detail === 'string') setAvatar(detail)
-        else setAvatar(localStorage.getItem('ndn:avatar') || '')
-      } catch {
-        try { setAvatar(localStorage.getItem('ndn:avatar') || '') } catch {}
-      }
-    }
-    window.addEventListener('ndn:avatar-updated' as any, onUpdate as any)
-    return () => window.removeEventListener('ndn:avatar-updated' as any, onUpdate as any)
-  }, [])
-  // Derive a name color from avatar image or username fallback
-  useEffect(() => {
-    let cancelled = false
-    async function run() {
-      const src = avatar || ''
-      const fallback = user?.username ? stringToColor(user.username) : null
-      if (src) {
-        const col = await getDominantColorFromImage(src)
-        if (!cancelled) setNameColor(col || fallback)
-      } else {
-        setNameColor(fallback)
-      }
-    }
-    run()
-    // re-run when username or avatar changes
-  }, [avatar, user?.username])
-  // Detect HTTPS server availability for phone pairing
-  useEffect(() => {
-    let cancelled = false
-    async function check() {
-      try {
-        const res = await fetch(`/api/https-info`)
-        const j = await res.json()
-        if (!cancelled && j && typeof j.https === 'boolean') setHttpsInfo({ https: !!j.https, port: Number(j.port)||8788 })
+        localStorage.removeItem('mockUser');
       } catch {}
-    }
-    check()
-    const id = setInterval(check, 15000)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [])
-  // Listen for recalibration requests from other components (must be declared before any conditional return)
-  useEffect(() => {
-    const handler = () => setTab('calibrate')
-    const listener = () => handler()
-    window.addEventListener('ndn:request-calibrate', listener)
-    const onTab = (e: any) => {
-      const t = e?.detail?.tab as TabKey | undefined
-      if (t) setTab(t)
-    }
-    window.addEventListener('ndn:change-tab', onTab as any)
-    // Friend Spectate: listen for a request, switch to Online, then dispatch the room event for OnlinePlay
-    const onSpectateReq = (e: any) => {
-      try {
-        const detail = e?.detail
-        setTab('online')
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('ndn:spectate-room', { detail }))
-        }, 60)
-      } catch {}
-    }
-    window.addEventListener('ndn:spectate-request', onSpectateReq as any)
-    return () => { window.removeEventListener('ndn:request-calibrate', listener); window.removeEventListener('ndn:change-tab', onTab as any); window.removeEventListener('ndn:spectate-request', onSpectateReq as any) }
-  }, [])
-  // Reset scroll to top on tab change so nothing appears above the header
-  useEffect(() => {
-    const scroller = document.getElementById('ndn-main-scroll')
-    if (scroller) scroller.scrollTo({ top: 0, behavior: 'auto' })
-  }, [tab])
+      setUser(null);
+      setTab('score');
+    };
+    window.addEventListener('ndn:logout' as any, onLogout as any);
+    return () => window.removeEventListener('ndn:logout' as any, onLogout as any);
+  }, []);
   // Refresh all-time avg when user changes or stats update
   useEffect(() => {
     if (!user?.username) return

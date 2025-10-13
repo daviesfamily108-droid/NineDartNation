@@ -7,9 +7,9 @@ app.use((req, res, next) => {
   }
   next();
 });
-const { Pool } = require('pg');
+const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcrypt');
-const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const db = new sqlite3.Database('./mydb.sqlite');
 // Automated notification sender using support email
 function sendNotificationEmail({ to, subject, text }) {
   const transporter = nodemailer.createTransport({
@@ -130,20 +130,38 @@ app.post('/api/auth/signup', async (req, res) => {
   }
   try {
     // Check for existing user
-    const exists = await pool.query('SELECT 1 FROM users WHERE email = $1 OR username = $2', [email, username]);
-    if (exists.rowCount > 0) {
-      console.log('User already exists:', { email, username });
-      return res.status(409).json({ error: 'Email or username already exists.' });
-    }
-    // Hash password
-    const password_hash = await bcrypt.hash(password, 10);
-    // Insert user
-    const result = await pool.query(
-      'INSERT INTO users (email, username, password_hash) VALUES ($1, $2, $3) RETURNING id, email, username, created_at',
-      [email, username, password_hash]
-    );
-    console.log('Signup successful:', result.rows[0]);
-    return res.json({ user: result.rows[0] });
+    db.get('SELECT 1 FROM users WHERE email = ? OR username = ?', [email, username], async (err, exists) => {
+      if (err) {
+        console.error('Signup error:', err.message, err);
+        return res.status(500).json({ error: 'Signup failed.', details: err.message });
+      }
+      if (exists) {
+        console.log('User already exists:', { email, username });
+        return res.status(409).json({ error: 'Email or username already exists.' });
+      }
+      // Hash password
+      const password_hash = await bcrypt.hash(password, 10);
+      // Insert user
+      db.run(
+        'INSERT INTO users (email, username, password_hash) VALUES (?, ?, ?)',
+        [email, username, password_hash],
+        function (err) {
+          if (err) {
+            console.error('Signup error:', err.message, err);
+            return res.status(500).json({ error: 'Signup failed.', details: err.message });
+          }
+          // Fetch the newly created user
+          db.get('SELECT id, email, username, created_at FROM users WHERE id = ?', [this.lastID], (err, user) => {
+            if (err) {
+              console.error('Signup error:', err.message, err);
+              return res.status(500).json({ error: 'Signup failed.', details: err.message });
+            }
+            console.log('Signup successful:', user);
+            return res.json({ user });
+          });
+        }
+      );
+    });
   } catch (err) {
     console.error('Signup error:', err.message, err);
     return res.status(500).json({ error: 'Signup failed.', details: err.message });
@@ -157,24 +175,28 @@ app.post('/api/auth/login', async (req, res) => {
     return res.status(400).json({ error: 'Username and password required.' });
   }
   try {
-    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
-    console.log('Login attempt:', { username });
-    if (result.rowCount === 0) {
-      console.log('No user found for username:', username);
-      return res.status(401).json({ error: 'Invalid username or password.' });
-    }
-    const user = result.rows[0];
-    console.log('User found:', { id: user.id, username: user.username, email: user.email });
-    const valid = await bcrypt.compare(password, user.password_hash);
-    console.log('Password valid:', valid);
-    if (!valid) {
-      console.log('Password mismatch for user:', username);
-      return res.status(401).json({ error: 'Invalid username or password.' });
-    }
-    // Create JWT token
-    const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
-    console.log('Login successful for user:', username);
-    return res.json({ user: { id: user.id, email: user.email, username: user.username, created_at: user.created_at }, token });
+    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
+      console.log('Login attempt:', { username });
+      if (err) {
+        console.error('Login error:', err.message, err.stack);
+        return res.status(500).json({ error: 'Login failed.' });
+      }
+      if (!user) {
+        console.log('No user found for username:', username);
+        return res.status(401).json({ error: 'Invalid username or password.' });
+      }
+      console.log('User found:', { id: user.id, username: user.username, email: user.email });
+      const valid = await bcrypt.compare(password, user.password_hash);
+      console.log('Password valid:', valid);
+      if (!valid) {
+        console.log('Password mismatch for user:', username);
+        return res.status(401).json({ error: 'Invalid username or password.' });
+      }
+      // Create JWT token
+      const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+      console.log('Login successful for user:', username);
+      return res.json({ user: { id: user.id, email: user.email, username: user.username, created_at: user.created_at }, token });
+    });
   } catch (err) {
     console.error('Login error:', err.message, err.stack);
     return res.status(500).json({ error: 'Login failed.' });
@@ -188,12 +210,15 @@ app.get('/api/auth/me', async (req, res) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    // Find user by username in Postgres
-    const result = await pool.query('SELECT id, email, username, created_at FROM users WHERE username = $1', [decoded.username]);
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: 'User not found.' });
-    }
-    return res.json({ user: result.rows[0] });
+    db.get('SELECT id, email, username, created_at FROM users WHERE username = ?', [decoded.username], (err, user) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error.' });
+      }
+      if (!user) {
+        return res.status(404).json({ error: 'User not found.' });
+      }
+      return res.json({ user });
+    });
   } catch {
     return res.status(401).json({ error: 'Invalid token.' });
   }

@@ -22,6 +22,12 @@ const tips = [
 ];
 
 export default function SettingsPanel({ user }: { user?: any }) {
+  // Logout pill for mock login
+  function handleLogout() {
+    setTimeout(() => {
+      window.dispatchEvent(new Event('ndn:logout'));
+    }, 100);
+  }
   const { theme, setTheme } = useTheme();
   const [displayName, setDisplayName] = useState('');
   const [avatar, setAvatar] = useState('');
@@ -507,6 +513,20 @@ export default function SettingsPanel({ user }: { user?: any }) {
   <label className="block font-semibold mb-1 flex items-center gap-2"><Lightbulb className="w-5 h-5 text-cyan-300" /> Darts Tips:</label>
       <button className="btn mb-4" onClick={() => setShowTips(true)}>Show Tips to Improve Your Game</button>
       <button className="btn w-full">Save Settings</button>
+      {/* Logout pill styled like StatPills */}
+      {user && (
+        <div className="mt-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <button
+              className="relative p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 text-lg font-semibold text-indigo-700 hover:bg-indigo-500/20 transition"
+              style={{ width: '100%' }}
+              onClick={handleLogout}
+            >
+              Log Out
+            </button>
+          </div>
+        </div>
+      )}
       {showTips && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <div className="card max-w-md w-full relative text-left bg-[#2d2250] text-white p-6 rounded-xl shadow-xl">
