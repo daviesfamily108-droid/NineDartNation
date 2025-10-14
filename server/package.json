@@ -10,6 +10,7 @@
     "https": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:NDN_HTTPS='1'; if (-not $env:HTTPS_PORT) { $env:HTTPS_PORT='8788' }; node server.js\""
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.75.0",
     "bad-words": "^3.0.4",
     "bcrypt": "^6.0.0",
     "compression": "^1.7.4",
