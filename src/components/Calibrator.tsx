@@ -309,8 +309,8 @@ export default function Calibrator() {
 			drawCircle(detected.bullInner, '#10b981', 3)
 		}
 
-		// Preferred-view framing guide (if enabled): shaded safe zone and angle lines
-		if (calibrationGuide) {
+		// Preferred-view framing guide (if enabled and not yet calibrated)
+		if (calibrationGuide && !locked) {
 			ctx.save()
 			// Semi-transparent vignette to encourage centered, face-on framing
 			ctx.fillStyle = 'rgba(59,130,246,0.10)'
@@ -332,10 +332,13 @@ export default function Calibrator() {
 			ctx.beginPath(); ctx.moveTo(ax, ay+30); ctx.lineTo(ax+60, ay); ctx.stroke()
 			ctx.beginPath(); ctx.moveTo(o.width-ax, ay+30); ctx.lineTo(o.width-ax-60, ay); ctx.stroke()
 			ctx.restore()
-			// Legend
+			// Legend - draw at fixed size regardless of zoom
+			ctx.save()
+			ctx.scale(1/zoom, 1/zoom) // Inverse scale to keep text static
 			ctx.fillStyle = 'rgba(255,255,255,0.85)'
 			ctx.font = '12px sans-serif'
-			ctx.fillText('Tip: Frame board centered, edges parallel; slight top-down is okay. Keep bull near center.', pad+6, pad+18)
+			ctx.fillText('Tip: Frame board centered, edges parallel; slight top-down is okay. Keep bull near center.', pad * zoom, (pad + 18) * zoom)
+			ctx.restore()
 		}
 	}
 
