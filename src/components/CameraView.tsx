@@ -738,74 +738,60 @@ export default function CameraView({
         </div>
       )}
       {showScoringModal && (
-        <div className="fixed inset-0 bg-black/60 z-[100]" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <ResizableModal
-              storageKey="ndn:scoring:size"
-              className="w-full max-w-6xl"
-              defaultWidth={980}
-              defaultHeight={720}
-              minWidth={600}
-              minHeight={420}
-              maxWidth={1600}
-              maxHeight={1000}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xl font-semibold">Scoring</h2>
-                <div className="flex items-center gap-2">
-                  <button className="btn btn--ghost" onClick={()=>setShowScoringModal(false)}>Close</button>
+        <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center">
+          <div className="card w-full max-w-4xl relative text-left bg-[#2d2250] text-white p-6 rounded-xl shadow-xl">
+            <button className="absolute top-2 right-2 btn px-2 py-1 bg-purple-500 text-white font-bold" onClick={()=>setShowScoringModal(false)}>Close</button>
+            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">Scoring</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Camera section */}
+              <div className="bg-black/30 rounded-2xl p-4">
+                <h2 className="text-lg font-semibold mb-3">Camera</h2>
+                <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={720} defaultHeight={405} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
+                  <CameraSelector />
+                  <video ref={videoRef} className="w-full h-full object-cover" />
+                  <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                </ResizablePanel>
+                <div className="flex gap-2 mt-3">
+                  {!streaming ? (
+                    <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={startCamera}>Start Camera</button>
+                  ) : (
+                    <button className="btn bg-gradient-to-r from-rose-600 to-rose-700 text-white font-bold" onClick={stopCamera}>Stop Camera</button>
+                  )}
+                  <button className="btn bg-gradient-to-r from-indigo-500 to-indigo-700 text-white font-bold" onClick={capture} disabled={!streaming}>Capture Still</button>
+                  <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
                 </div>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                {/* Camera section */}
-                <div className="card">
-                  <h2 className="text-xl font-semibold mb-3">Camera</h2>
-                  <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={720} defaultHeight={405} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
-                    <CameraSelector />
-                    <video ref={videoRef} className="w-full h-full object-cover" />
-                    <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
-                  </ResizablePanel>
-                  <div className="flex gap-2 mt-3">
-                    {!streaming ? (
-                      <button className="btn" onClick={startCamera}>Start Camera</button>
-                    ) : (
-                      <button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
-                    )}
-                    <button className="btn" onClick={capture} disabled={!streaming}>Capture Still</button>
-                    <button className="btn bg-slate-700 hover:bg-slate-800" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
-                  </div>
+              {/* Pending Visit section */}
+              <div className="bg-black/30 rounded-2xl p-4">
+                <h2 className="text-lg font-semibold mb-3">Pending Visit</h2>
+                <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
+                <ul className="text-sm mb-2 list-disc pl-5">
+                  {pendingEntries.length === 0 ? <li className="opacity-60">No darts yet</li> : pendingEntries.map((e,i) => <li key={i}>{e.label}</li>)}
+                </ul>
+                <div className="flex items-center gap-4 mb-2">
+                  <div className="font-semibold">Darts: {pendingDarts}/3</div>
+                  <div className="font-semibold">Total: {pendingScore}</div>
                 </div>
-                {/* Pending Visit section */}
-                <div className="card">
-                  <h2 className="text-xl font-semibold mb-3">Pending Visit</h2>
-                  <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
-                  <ul className="text-sm mb-2 list-disc pl-5">
-                    {pendingEntries.length === 0 ? <li className="opacity-60">No darts yet</li> : pendingEntries.map((e,i) => <li key={i}>{e.label}</li>)}
-                  </ul>
-                  <div className="flex items-center gap-4 mb-2">
-                    <div className="font-semibold">Darts: {pendingDarts}/3</div>
-                    <div className="font-semibold">Total: {pendingScore}</div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="btn" onClick={onUndoDart} disabled={pendingDarts===0}>Undo Dart</button>
-                    <button className="btn" onClick={onCommitVisit} disabled={pendingDarts===0}>Commit Visit</button>
-                    <button className="btn" onClick={()=>{setPendingDarts(0);setPendingScore(0);setPendingEntries([])}} disabled={pendingDarts===0}>Clear</button>
-                  </div>
+                <div className="flex gap-2">
+                  <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={onUndoDart} disabled={pendingDarts===0}>Undo Dart</button>
+                  <button className="btn bg-gradient-to-r from-emerald-500 to-emerald-700 text-white font-bold" onClick={onCommitVisit} disabled={pendingDarts===0}>Commit Visit</button>
+                  <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={()=>{setPendingDarts(0);setPendingScore(0);setPendingEntries([])}} disabled={pendingDarts===0}>Clear</button>
                 </div>
               </div>
-            </ResizableModal>
+            </div>
           </div>
         </div>
       )}
       {showRecalModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="card max-w-md w-full">
-            <h3 className="text-xl font-semibold mb-2">Recalibration Recommended</h3>
-            <p className="opacity-80 mb-3">We detected 3 incorrect autoscores in a row. You can recalibrate now or reset calibration and try again.</p>
-            <div className="flex flex-wrap gap-2">
-              <button className="btn" onClick={onRecalibrateNow}>Go to Calibrate</button>
-              <button className="btn" onClick={onResetCalibration}>Reset Calibration</button>
-              <button className="btn bg-gray-200 text-gray-800" onClick={()=>{setShowRecalModal(false); setNonRegCount(0)}}>Dismiss</button>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
+          <div className="card max-w-md w-full relative text-left bg-[#2d2250] text-white p-6 rounded-xl shadow-xl">
+            <button className="absolute top-2 right-2 btn px-2 py-1 bg-purple-500 text-white font-bold" onClick={()=>{setShowRecalModal(false); setNonRegCount(0)}}>Close</button>
+            <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-white">Recalibration Recommended</h3>
+            <div className="mb-4 text-lg font-semibold text-indigo-200">We detected 3 incorrect autoscores in a row. You can recalibrate now or reset calibration and try again.</div>
+            <div className="flex gap-2">
+              <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={onRecalibrateNow}>Go to Calibrate</button>
+              <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={onResetCalibration}>Reset Calibration</button>
+              <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={()=>{setShowRecalModal(false); setNonRegCount(0)}}>Dismiss</button>
             </div>
           </div>
         </div>

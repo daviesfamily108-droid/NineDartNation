@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import DartLoader from './DartLoader'
+
 import QRCode from 'qrcode'
 import { useCalibration } from '../store/calibration'
 import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, type Homography, type Point } from '../utils/vision'
@@ -539,9 +541,60 @@ export default function Calibrator() {
 			return () => cancelAnimationFrame(raf)
 		}, [liveDetect, streaming])
 
-	return (
-		<div className="space-y-4">
-			<div className="card">
+		// DevicePicker moved from SettingsPanel
+		function DevicePicker() {
+			const { preferredCameraId, preferredCameraLabel, setPreferredCamera } = useUserSettings()
+			const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
+			const [err, setErr] = useState('')
+			async function enumerate() {
+				setErr('')
+				try {
+					// Ensure we have permission; otherwise labels may be empty.
+					try { await navigator.mediaDevices.getUserMedia({ video: true }); } catch {}
+					const list = await navigator.mediaDevices.enumerateDevices()
+					const cams = list.filter(d => d.kind === 'videoinput')
+					setDevices(cams)
+				} catch (e: any) {
+					setErr('Unable to list cameras. Grant camera permission in your browser.')
+				}
+			}
+			useEffect(() => { enumerate() }, [])
+			const sel = preferredCameraId || ''
+			return (
+				<div className="mt-3 p-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5">
+					<div className="font-semibold mb-2">Select camera device</div>
+					{err && <div className="text-rose-400 text-sm mb-2">{err}</div>}
+					<div className="grid grid-cols-3 gap-2 items-center text-sm">
+						<div className="col-span-2">
+							<select className="input w-full" value={sel} onChange={(e)=>{
+								const id = e.target.value || undefined
+								const label = devices.find(d=>d.deviceId===id)?.label || ''
+								setPreferredCamera(id, label)
+							}}>
+								<option value="">Auto (browser default)</option>
+								{devices.map(d => (
+									<option key={d.deviceId} value={d.deviceId}>
+										{d.label || 'Camera'} {d.label?.toLowerCase().includes('omni') ? '(OMNI)' : ''} {d.label?.toLowerCase().includes('vert') ? '(VERT)' : ''}
+									</option>
+								))}
+							</select>
+						</div>
+						<div className="text-right">
+							<button className="btn px-2 py-1" onClick={enumerate}>Refresh</button>
+						</div>
+					</div>
+					{preferredCameraLabel && (
+						<div className="text-xs opacity-70 mt-1">Selected: {preferredCameraLabel}</div>
+					)}
+					<div className="text-xs opacity-70 mt-1">Tip: OMNI and VERT cameras are supported—select them here and then open Calibrator to align.</div>
+				</div>
+			)
+		}
+		return (
+			<div className="space-y-4">
+				<div className="card">
+					{/* Camera device picker moved from SettingsPanel */}
+					<DevicePicker />
 				<h2 className="text-xl font-semibold mb-2">Board Calibrator</h2>
 				<p className="text-sm opacity-80 mb-3">
 					Click the four points where the outer edge of the double ring touches TOP, RIGHT, BOTTOM, LEFT.
@@ -599,9 +652,12 @@ export default function Calibrator() {
 							</div>
 							<div className="md:col-span-8 flex items-center justify-end">
 								<div
-									className="relative w-full max-w-[min(100%,60vh)] rounded-2xl overflow-hidden border border-indigo-400/30 bg-black"
+									className="relative w-full max-w-[min(100%,60vh)] rounded-2xl overflow-hidden border border-indigo-400/30 bg-black flex items-center justify-center"
 									style={{ aspectRatio: frameSize ? `${frameSize.w} / ${frameSize.h}` : '16 / 9' }}
 								>
+									{!streaming && (
+										<DartLoader calibrationComplete={phase === 'computed'} />
+									)}
 									<div className="absolute inset-0" style={{ transform: `scale(${zoom||1})`, transformOrigin: 'center center' }}>
 										<video
 											ref={videoRef}
@@ -617,6 +673,7 @@ export default function Calibrator() {
 										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 w-full h-full" />
 									</div>
 								</div>
+
 							</div>
 						</div>
 				{mode==='phone' && !streaming && (
