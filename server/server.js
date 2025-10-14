@@ -1,32 +1,4 @@
-// ...existing requires...
-// ...existing code...
-// Prevent caching of API responses
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api/')) {
-    res.setHeader('Cache-Control', 'no-store');
-  }
-  next();
-});
-const sqlite3 = require('sqlite3').verbose();
-const bcrypt = require('bcrypt');
-const db = new sqlite3.Database('./mydb.sqlite');
-// Automated notification sender using support email
-function sendNotificationEmail({ to, subject, text }) {
-  const transporter = nodemailer.createTransport({
-    service: 'Outlook',
-    auth: {
-      user: SUPPORT_EMAIL,
-      pass: process.env.SUPPORT_EMAIL_PASSWORD // Set this in your environment variables
-    }
-  });
-  return transporter.sendMail({
-    from: SUPPORT_EMAIL,
-    to,
-    subject,
-    text
-  });
-}
-const jwt = require('jsonwebtoken');
+﻿const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
 const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
@@ -47,7 +19,11 @@ const pinoHttp = require('pino-http');
 const client = require('prom-client');
 const Stripe = require('stripe');
 
-// ...existing code...
+const PORT = process.env.PORT || 8787;
+// Track HTTPS runtime status and port
+let HTTPS_ACTIVE = false
+let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
+const app = express();
 // Observability: metrics registry
 const register = new client.Registry()
 client.collectDefaultMetrics({ register })
@@ -66,25 +42,10 @@ register.registerMetric(celebrations180Total)
 
 // Security & performance
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
-app.use(cors({
-  origin: ['https://ninedartnation.netlify.app', 'https://ninedartnation.onrender.com'],
-  credentials: true
-}))
+app.use(cors())
 app.use(compression())
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
 app.use(limiter)
-// Custom security and performance headers
-app.use((req, res, next) => {
-  // Set Cache-Control for static assets and API responses
-  if (req.method === 'GET') {
-    res.setHeader('Cache-Control', 'public, max-age=3600, must-revalidate');
-  }
-  // Prevent MIME type sniffing
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  // Use Content-Security-Policy frame-ancestors instead of X-Frame-Options
-  res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
-  next();
-});
 // Logging
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
 app.use(pinoHttp({ logger, genReqId: (req) => req.headers['x-request-id'] || nanoid(12) }))
@@ -122,51 +83,23 @@ if (staticBase) {
 
 // Signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
-  const { email, username, password } = req.body;
-  console.log('Signup attempt:', { email, username });
+  const { email, username, password } = req.body
   if (!email || !username || !password) {
-    console.log('Missing fields:', { email, username, password });
-    return res.status(400).json({ error: 'Email, username, and password required.' });
+    return res.status(400).json({ error: 'Email, username, and password required.' })
   }
-  try {
-    // Check for existing user
-    db.get('SELECT 1 FROM users WHERE email = ? OR username = ?', [email, username], async (err, exists) => {
-      if (err) {
-        console.error('Signup error:', err.message, err);
-        return res.status(500).json({ error: 'Signup failed.', details: err.message });
-      }
-      if (exists) {
-        console.log('User already exists:', { email, username });
-        return res.status(409).json({ error: 'Email or username already exists.' });
-      }
-      // Hash password
-      const password_hash = await bcrypt.hash(password, 10);
-      // Insert user
-      db.run(
-        'INSERT INTO users (email, username, password_hash) VALUES (?, ?, ?)',
-        [email, username, password_hash],
-        function (err) {
-          if (err) {
-            console.error('Signup error:', err.message, err);
-            return res.status(500).json({ error: 'Signup failed.', details: err.message });
-          }
-          // Fetch the newly created user
-          db.get('SELECT id, email, username, created_at FROM users WHERE id = ?', [this.lastID], (err, user) => {
-            if (err) {
-              console.error('Signup error:', err.message, err);
-              return res.status(500).json({ error: 'Signup failed.', details: err.message });
-            }
-            console.log('Signup successful:', user);
-            return res.json({ user });
-          });
-        }
-      );
-    });
-  } catch (err) {
-    console.error('Signup error:', err.message, err);
-    return res.status(500).json({ error: 'Signup failed.', details: err.message });
+  // Check if username exists
+  for (const u of users.values()) {
+    if (u.username === username) {
+      return res.status(409).json({ error: 'Username already exists.' })
+    }
+    if (u.email === email) {
+      return res.status(409).json({ error: 'Email already exists.' })
+    }
   }
-});
+  const user = { email, username, password, admin: false }
+  users.set(email, user)
+  return res.json({ user })
+})
 
 // Login endpoint
 app.post('/api/auth/login', async (req, res) => {
@@ -174,51 +107,36 @@ app.post('/api/auth/login', async (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required.' });
   }
-  try {
-    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, user) => {
-      console.log('Login attempt:', { username });
-      if (err) {
-        console.error('Login error:', err.message, err.stack);
-        return res.status(500).json({ error: 'Login failed.' });
-      }
-      if (!user) {
-        console.log('No user found for username:', username);
-        return res.status(401).json({ error: 'Invalid username or password.' });
-      }
-      console.log('User found:', { id: user.id, username: user.username, email: user.email });
-      const valid = await bcrypt.compare(password, user.password_hash);
-      console.log('Password valid:', valid);
-      if (!valid) {
-        console.log('Password mismatch for user:', username);
-        return res.status(401).json({ error: 'Invalid username or password.' });
-      }
-      // Create JWT token
-      const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
-      console.log('Login successful for user:', username);
-      return res.json({ user: { id: user.id, email: user.email, username: user.username, created_at: user.created_at }, token });
-    });
-  } catch (err) {
-    console.error('Login error:', err.message, err.stack);
-    return res.status(500).json({ error: 'Login failed.' });
+  let user = null;
+  for (const u of users.values()) {
+    if (u.username === username && u.password === password) {
+      user = u;
+      break;
+    }
+  }
+  if (user) {
+    // Create JWT token
+  const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+    return res.json({ user, token });
+  } else {
+    return res.status(401).json({ error: 'Invalid username or password.' });
   }
 });
 
 // Route to verify token and get user info
-app.get('/api/auth/me', async (req, res) => {
+app.get('/api/auth/me', (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    db.get('SELECT id, email, username, created_at FROM users WHERE username = ?', [decoded.username], (err, user) => {
-      if (err) {
-        return res.status(500).json({ error: 'Database error.' });
+    // Find user by username
+    for (const u of users.values()) {
+      if (u.username === decoded.username) {
+        return res.json({ user: u });
       }
-      if (!user) {
-        return res.status(404).json({ error: 'User not found.' });
-      }
-      return res.json({ user });
-    });
+    }
+    return res.status(404).json({ error: 'User not found.' });
   } catch {
     return res.status(401).json({ error: 'Invalid token.' });
   }
@@ -231,8 +149,7 @@ let subscription = { fullAccess: false };
 const premiumWinners = new Map();
 // In-memory admin store (demo)
 const OWNER_EMAIL = 'daviesfamily108@gmail.com'
-const SUPPORT_EMAIL = 'ninedartnation@outlook.com'
-const adminEmails = new Set([OWNER_EMAIL, SUPPORT_EMAIL])
+const adminEmails = new Set([OWNER_EMAIL])
 // In-memory ops flags (demo)
 let maintenanceMode = false
 let lastAnnouncement = null
@@ -246,7 +163,6 @@ const emailCopy = {
   username: { title: '', intro: '', buttonLabel: '' },
   confirmEmail: { title: '', intro: '', buttonLabel: '' },
   changed: { title: '', intro: '', buttonLabel: '' },
-  support: { title: 'Support', intro: `For support, contact us at ${SUPPORT_EMAIL}.`, buttonLabel: 'Contact Support' }
 }
 
 app.get('/api/subscription', (req, res) => {
@@ -324,7 +240,7 @@ app.post('/webhook/stripe', (req, res) => {
   res.json({ ok: true })
 });
 
-// Stripe (optional): Create a Checkout Session for username change (£2)
+// Stripe (optional): Create a Checkout Session for username change (┬ú2)
 // Configure on Render with:
 //  - STRIPE_SECRET_KEY=sk_live_...
 //  - STRIPE_PRICE_ID_USERNAME_CHANGE=price_...
@@ -365,7 +281,7 @@ app.post('/api/stripe/create-session', async (req, res) => {
   }
 })
 
-// Admin management (demo; NOT secure — no auth/signature verification)
+// Admin management (demo; NOT secure ÔÇö no auth/signature verification)
 app.get('/api/admins', (req, res) => {
   res.json({ admins: Array.from(adminEmails) })
 })
@@ -398,7 +314,7 @@ app.post('/api/admins/revoke', (req, res) => {
   res.json({ ok: true, admins: Array.from(adminEmails) })
 })
 
-// Admin ops (owner-only; demo — not secure)
+// Admin ops (owner-only; demo ÔÇö not secure)
 app.get('/api/admin/status', (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
@@ -1467,7 +1383,7 @@ app.post('/api/wallet/withdraw', (req, res) => {
   if (method) {
     const ok = debitWallet(addr, curr, amt)
     if (!ok) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-    const item = { id, email: addr, currency: curr, amountCents: amt, status: 'paid', requestedAt: Date.now(), decidedAt: Date.now(), notes: `Paid to ${method.brand} •••• ${method.last4}` }
+    const item = { id, email: addr, currency: curr, amountCents: amt, status: 'paid', requestedAt: Date.now(), decidedAt: Date.now(), notes: `Paid to ${method.brand} ÔÇóÔÇóÔÇóÔÇó ${method.last4}` }
     withdrawals.set(id, item)
     return res.json({ ok: true, request: item, paid: true, method })
   }
@@ -1754,7 +1670,7 @@ function ensureOfficialWeekly() {
       game: 'X01',
       mode: 'bestof',
       value: 3,
-      description: 'Official weekly tournament — every Friday at 19:45. Max 32, starts with 8+. Winner earns 1 month PREMIUM.',
+      description: 'Official weekly tournament ÔÇö every Friday at 19:45. Max 32, starts with 8+. Winner earns 1 month PREMIUM.',
       startAt: getNextFridayAt1945(now),
       checkinMinutes: 30,
       capacity: 32,
@@ -1782,7 +1698,7 @@ function ensureOfficialWeekly() {
         game: 'X01',
         mode: 'bestof',
         value: 3,
-        description: 'Official weekly tournament — every Friday at 19:45. Max 32, starts with 8+. Winner earns 1 month PREMIUM.',
+        description: 'Official weekly tournament ÔÇö every Friday at 19:45. Max 32, starts with 8+. Winner earns 1 month PREMIUM.',
         startAt: nextStart,
         checkinMinutes: 30,
         capacity: 32,
@@ -1815,7 +1731,7 @@ setInterval(() => {
       const remindAt = t.startAt - (t.checkinMinutes * 60 * 1000)
       if (!t._reminded && now >= remindAt && now < t.startAt) {
         t._reminded = true
-        broadcastAll({ type: 'tournament-reminder', tournamentId: t.id, title: t.title, startAt: t.startAt, message: `Only ${t.checkinMinutes} minutes to go until the ${t.title} is live — check in ready or lose your spot at 19:45!` })
+        broadcastAll({ type: 'tournament-reminder', tournamentId: t.id, title: t.title, startAt: t.startAt, message: `Only ${t.checkinMinutes} minutes to go until the ${t.title} is live ÔÇö check in ready or lose your spot at 19:45!` })
       }
       // Start condition at start time with min participants 8 (for official) or 2 otherwise
       const minPlayers = t.official ? 8 : 2
