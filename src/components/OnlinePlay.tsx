@@ -397,7 +397,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
         // auto-clear after a bit
         setTimeout(()=>setErrorMsg(''), 3500)
       } else if (data.type === 'friend-invite') {
-        const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}${(data.game==='X01' && data.startingScore)?` ┬À ${data.startingScore}`:''}). Accept?`)
+        const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}${(data.game==='X01' && data.startingScore)?` = ${data.startingScore}`:''}). Accept?`)
         if (accept) {
           ws.send(JSON.stringify({ type: 'start-friend-match', toEmail: data.fromEmail, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore }))
         } else {
@@ -446,7 +446,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
     if (players.length === 2) {
       matchScore = `${players[0]?.legsWon || 0}-${players[1]?.legsWon || 0}`
     } else if (players.length > 2) {
-      matchScore = players.map(p => `${p.name}:${p.legsWon||0}`).join(' ┬À ')
+      matchScore = players.map(p => `${p.name}:${p.legsWon||0}`).join(' = ')
     }
     const best = match.bestLegThisMatch
     const bestText = best ? `${best.darts} darts${(() => { const p = players.find(x=>x.id===best.playerId); return p?` (${p.name})`:'' })()}` : 'ÔÇö'
@@ -542,7 +542,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
           }
           setTimeout(()=>setErrorMsg(''), 3500)
         } else if (data.type === 'friend-invite') {
-          const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}${(data.game==='X01' && data.startingScore)?` ┬À ${data.startingScore}`:''}). Accept?`)
+          const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}${(data.game==='X01' && data.startingScore)?` = ${data.startingScore}`:''}). Accept?`)
           if (accept) {
             wsGlobal.send({ type: 'start-friend-match', toEmail: data.fromEmail, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore })
           } else {
@@ -1149,7 +1149,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
             <div className="font-semibold">Online play locked</div>
             <div className="text-sm text-slate-200/80">YouÔÇÖve used your 3 free online games this week. Upgrade to PREMIUM to play all modes.</div>
             <a href="https://buy.stripe.com/test_00g7vQ8Qw2gQ0wA5kk" target="_blank" rel="noopener noreferrer" className="btn mt-3 bg-gradient-to-r from-indigo-500 to-fuchsia-600 text-white font-bold">
-              Upgrade to PREMIUM ┬À {formatPriceInCurrency(getUserCurrency(), 5)}
+              Upgrade to PREMIUM = {formatPriceInCurrency(getUserCurrency(), 5)}
             </a>
           </div>
         </div>
@@ -1282,23 +1282,23 @@ export default function OnlinePlay({ user }: { user?: any }) {
                         <span className="font-semibold">{p.name}</span>
                         {currentGame === 'X01' ? (
                           <>
-                            <span className="opacity-70"> ┬À </span>
+                            <span className="opacity-70"> = </span>
                             <span className="font-mono">{rem}</span>
                           </>
                         ) : (
                           <>
-                            <span className="opacity-70"> ┬À </span>
+                            <span className="opacity-70"> = </span>
                             <span className="font-mono">
                               {currentGame === 'Double Practice' ? `${dpHits}/${DOUBLE_PRACTICE_ORDER.length}`
                                 : currentGame === 'Around the Clock' ? `${atcHits}/${ATC_ORDER.length}`
                                 : currentGame === 'Cricket' ? `${(cricketById[p.id]?.points||0)} pts`
-                                : currentGame === 'Shanghai' ? `${(shanghaiById[p.id]?.score||0)} pts ┬À R${(shanghaiById[p.id]?.round||1)}`
-                                : currentGame === 'Halve It' ? `${(halveById[p.id]?.score||0)} pts ┬À S${(halveById[p.id]?.stage||0)+1}`
-                                : currentGame === 'High-Low' ? `${(highlowById[p.id]?.score||0)} pts ┬À ${(highlowById[p.id]?.target||'HIGH')}`
-                                : currentGame === 'Killer' ? (() => { const st = killerById[p.id]; return st ? `#${st.number} ┬À ${st.lives}ÔØñ ${st.isKiller?'┬À K':''}` : 'ÔÇö' })()
+                                : currentGame === 'Shanghai' ? `${(shanghaiById[p.id]?.score||0)} pts = R${(shanghaiById[p.id]?.round||1)}`
+                                : currentGame === 'Halve It' ? `${(halveById[p.id]?.score||0)} pts = S${(halveById[p.id]?.stage||0)+1}`
+                                : currentGame === 'High-Low' ? `${(highlowById[p.id]?.score||0)} pts = ${(highlowById[p.id]?.target||'HIGH')}`
+                                : currentGame === 'Killer' ? (() => { const st = killerById[p.id]; return st ? `#${st.number} = ${st.lives}ÔØñ ${st.isKiller?'= K':''}` : 'ÔÇö' })()
                                 : currentGame === 'American Cricket' ? `${(amCricketById[p.id]?.points||0)} pts`
-                                : currentGame === 'Baseball' ? (() => { const st = baseballById[p.id]; return st ? `R${st.score} ┬À I${st.inning}` : 'ÔÇö' })()
-                                : currentGame === 'Golf' ? (() => { const st = golfById[p.id]; return st ? `S${st.strokes} ┬À H${st.hole}` : 'ÔÇö' })()
+                                : currentGame === 'Baseball' ? (() => { const st = baseballById[p.id]; return st ? `R${st.score} = I${st.inning}` : 'ÔÇö' })()
+                                : currentGame === 'Golf' ? (() => { const st = golfById[p.id]; return st ? `S${st.strokes} = H${st.hole}` : 'ÔÇö' })()
                                 : currentGame === 'Tic Tac Toe' ? (() => { const x = (ttt.board||[]).filter((c:any)=>c==='X').length; const o = (ttt.board||[]).filter((c:any)=>c==='O').length; return `X${x}-O${o}` })()
                                 : currentGame}
                             </span>
@@ -1776,7 +1776,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                               return (
                                 <div key={pp.id} className="p-1 rounded bg-slate-800/50 border border-slate-700/50 flex items-center justify-between">
                                   <span className="opacity-80 truncate">{pp.name}</span>
-                                  <span className="font-mono">{s ? `#${s.number} ┬À ${s.lives}ÔØñ${s.isKiller?' ┬À K':''}` : 'ÔÇö'}</span>
+                                  <span className="font-mono">{s ? `#${s.number} = ${s.lives}ÔØñ${s.isKiller?' = K':''}` : 'ÔÇö'}</span>
                                 </div>
                               )
                             })}
