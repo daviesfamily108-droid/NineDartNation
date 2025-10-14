@@ -124,6 +124,20 @@ export default function App() {
     return () => window.removeEventListener('ndn:username-changed' as any, onName as any)
   }, [ws, user?.email])
 
+  // Handle tab changes from Home component quick access pills
+  useEffect(() => {
+    const onTabChange = (e: any) => {
+      try {
+        const tab = String(e?.detail?.tab || '').trim()
+        if (tab && ['score', 'offline', 'online', 'stats', 'settings', 'admin', 'tournaments', 'friends'].includes(tab)) {
+          setTab(tab as TabKey)
+        }
+      } catch {}
+    }
+    window.addEventListener('ndn:change-tab' as any, onTabChange as any)
+    return () => window.removeEventListener('ndn:change-tab' as any, onTabChange as any)
+  }, [])
+
   async function fetchSubscription(u: any) {
     try {
       const q = u?.email ? `?email=${encodeURIComponent(u.email)}` : ''
