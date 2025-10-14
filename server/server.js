@@ -300,7 +300,14 @@ app.get('/api/subscription', async (req, res) => {
   res.json({ fullAccess: false });
 });
 
-// Prometheus metrics endpoint
+// Debug endpoint to check Supabase status
+app.get('/api/debug/supabase', (req, res) => {
+  res.json({
+    supabaseConfigured: !!supabase,
+    userCount: users.size,
+    supabaseUrl: supabase ? 'configured' : 'not configured'
+  });
+});
 app.get('/metrics', async (req, res) => {
   try {
     res.setHeader('Content-Type', register.contentType)
@@ -836,6 +843,7 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
 (async () => {
   if (supabase) {
     try {
+      console.log('[DB] Loading users from Supabase...');
       const { data, error } = await supabase
         .from('users')
         .select('*');
@@ -843,6 +851,7 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
       if (error) {
         console.error('[DB] Failed to load users from Supabase:', error);
       } else if (data) {
+        let loadedCount = 0;
         for (const user of data) {
           users.set(user.email, {
             email: user.email,
@@ -851,12 +860,17 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
             admin: user.admin || false,
             subscription: user.subscription || { fullAccess: false }
           });
+          loadedCount++;
         }
-        console.log(`[DB] Loaded ${data.length} users from Supabase`);
+        console.log(`[DB] Successfully loaded ${loadedCount} users from Supabase`);
+      } else {
+        console.log('[DB] No users found in Supabase');
       }
     } catch (err) {
       console.error('[DB] Error loading users from Supabase:', err);
     }
+  } else {
+    console.warn('[DB] Supabase not configured - using in-memory storage only');
   }
 })();
 // Initialize demo admin user

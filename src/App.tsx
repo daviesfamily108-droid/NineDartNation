@@ -41,16 +41,35 @@ export default function App() {
   const { avgMode } = useUserSettings()
 
 
-  // Restore user from localStorage on mount
+  // Restore user from token on mount
   useEffect(() => {
-    const savedUser = localStorage.getItem('mockUser');
-    if (savedUser) setUser(JSON.parse(savedUser));
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      // Validate token with server
+      const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+      fetch(`${API_URL}/api/auth/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data?.user) {
+          setUser(data.user);
+        } else {
+          // Token invalid, remove it
+          localStorage.removeItem('authToken');
+        }
+      })
+      .catch(() => {
+        // Network error, keep token for offline retry
+      });
+    }
   }, []);
 
   useEffect(() => {
     const onLogout = () => {
       try {
         localStorage.removeItem('mockUser');
+        localStorage.removeItem('authToken');
       } catch {}
       setUser(null);
       setTab('score');
