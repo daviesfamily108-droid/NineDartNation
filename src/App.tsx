@@ -155,13 +155,6 @@ export default function App() {
             <header id="ndn-header" className={`header glass flex-col md:flex-row gap-2 md:gap-3`}>
               {/* Left: Brand */}
               <div className="flex items-center gap-2 order-1">
-                {isMobile && (
-                  <button
-                    className="btn px-3 py-1 mr-1"
-                    aria-label="Open navigation"
-                    onClick={()=> setNavOpen(true)}
-                  >☰</button>
-                )}
                 <h1
                   className="text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap cursor-pointer select-none"
                   onClick={() => { if (isMobile) setTab('score') }}
@@ -178,6 +171,13 @@ export default function App() {
                   <span className="truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{user.username}🎯</span>
                 </span>
                 <span className="hidden sm:inline text-xs md:text-sm !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>All-time 3-dart avg: <span className="font-semibold !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{allTimeAvg.toFixed(2)}</span></span>
+                {isMobile && (
+                  <button
+                    className="btn px-3 py-1 mt-1"
+                    aria-label="Open navigation"
+                    onClick={()=> setNavOpen(true)}
+                  >☰ Menu</button>
+                )}
               </div>
               {/* Right: Status + Actions */}
               <div className="order-2 md:order-3 ml-0 md:ml-auto flex items-center gap-2 flex-wrap">
