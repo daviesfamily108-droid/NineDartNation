@@ -68,6 +68,26 @@ export default function App() {
     return () => window.removeEventListener('ndn:stats-updated', onUpdate as any)
   }, [user?.username, avgMode])
 
+  // Detect mobile layout via viewport width and user agent; update on resize
+  useEffect(() => {
+    const update = () => {
+      const mq = window.matchMedia('(max-width: 1024px)')
+      const uaMobile = /Mobi|Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '')
+      const touchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+      const smallScreen = window.innerWidth < 1025
+      const isMobileDevice = mq.matches || uaMobile || touchScreen || smallScreen
+      setIsMobile(isMobileDevice)
+    }
+    update()
+    window.addEventListener('resize', update)
+    const mq = window.matchMedia('(max-width: 1024px)')
+    try { mq.addEventListener('change', update) } catch {}
+    return () => {
+      window.removeEventListener('resize', update)
+      try { mq.removeEventListener('change', update) } catch {}
+    }
+  }, [])
+
   // Global logout handler: return to sign-in screen and clear minimal local user context
   useEffect(() => {
     const onLogout = () => {
@@ -254,7 +274,7 @@ export default function App() {
             )}
             {tab === 'fullaccess' && (
               <ScrollFade>
-                <AdminAccess />
+                <AdminAccess user={user} />
               </ScrollFade>
             )}
             </main>

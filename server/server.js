@@ -18,6 +18,7 @@ const pino = require('pino');
 const pinoHttp = require('pino-http');
 const client = require('prom-client');
 const Stripe = require('stripe');
+const { createClient } = require('@supabase/supabase-js');
 
 const PORT = process.env.PORT || 8787;
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
@@ -25,6 +26,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-producti
 let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
 const app = express();
+
+// Initialize Supabase
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+
+if (!supabase) {
+  console.warn('[DB] Supabase not configured - using in-memory storage only');
+}
 // Observability: metrics registry
 const register = new client.Registry()
 client.collectDefaultMetrics({ register })
@@ -88,20 +98,67 @@ app.post('/api/auth/signup', async (req, res) => {
   if (!email || !username || !password) {
     return res.status(400).json({ error: 'Email, username, and password required.' })
   }
-  // Check if username exists
-  for (const u of users.values()) {
-    if (u.username === username) {
-      return res.status(409).json({ error: 'Username already exists.' })
+
+  try {
+    // Check if username exists in memory
+    for (const u of users.values()) {
+      if (u.username === username) {
+        return res.status(409).json({ error: 'Username already exists.' })
+      }
+      if (u.email === email) {
+        return res.status(409).json({ error: 'Email already exists.' })
+      }
     }
-    if (u.email === email) {
-      return res.status(409).json({ error: 'Email already exists.' })
+
+    // Check if user exists in Supabase
+    if (supabase) {
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('email, username')
+        .or(`email.eq.${email},username.eq.${username}`)
+        .single();
+
+      if (existingUser) {
+        if (existingUser.email === email) {
+          return res.status(409).json({ error: 'Email already exists.' })
+        }
+        if (existingUser.username === username) {
+          return res.status(409).json({ error: 'Username already exists.' })
+        }
+      }
     }
+
+    const user = { email, username, password, admin: false, subscription: { fullAccess: false } }
+
+    // Save to Supabase if available
+    if (supabase) {
+      const { error } = await supabase
+        .from('users')
+        .insert([{
+          email: user.email,
+          username: user.username,
+          password: user.password, // Note: In production, hash passwords!
+          admin: user.admin,
+          subscription: user.subscription,
+          created_at: new Date().toISOString()
+        }]);
+
+      if (error) {
+        console.error('[DB] Failed to save user to Supabase:', error);
+        return res.status(500).json({ error: 'Failed to create account.' });
+      }
+    }
+
+    // Also store in memory for current session
+    users.set(email, user)
+
+    // Create JWT token
+    const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+    return res.json({ user, token })
+  } catch (error) {
+    console.error('[SIGNUP] Error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
   }
-  const user = { email, username, password, admin: false }
-  users.set(email, user)
-  // Create JWT token
-  const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
-  return res.json({ user, token })
 })
 
 // Login endpoint
@@ -110,19 +167,50 @@ app.post('/api/auth/login', async (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required.' });
   }
-  let user = null;
-  for (const u of users.values()) {
-    if (u.username === username && u.password === password) {
-      user = u;
-      break;
+
+  try {
+    let user = null;
+
+    // First check in-memory users
+    for (const u of users.values()) {
+      if (u.username === username && u.password === password) {
+        user = u;
+        break;
+      }
     }
-  }
-  if (user) {
-    // Create JWT token
-  const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
-    return res.json({ user, token });
-  } else {
-    return res.status(401).json({ error: 'Invalid username or password.' });
+
+    // If not found in memory, check Supabase
+    if (!user && supabase) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.error('[DB] Supabase login error:', error);
+      } else if (data && data.password === password) {
+        user = {
+          email: data.email,
+          username: data.username,
+          password: data.password,
+          admin: data.admin || false
+        };
+        // Cache in memory for current session
+        users.set(data.email, user);
+      }
+    }
+
+    if (user) {
+      // Create JWT token
+      const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+      return res.json({ user, token });
+    } else {
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+  } catch (error) {
+    console.error('[LOGIN] Error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
   }
 });
 
@@ -168,22 +256,48 @@ const emailCopy = {
   changed: { title: '', intro: '', buttonLabel: '' },
 }
 
-app.get('/api/subscription', (req, res) => {
+app.get('/api/subscription', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
-  if (email) {
-    // Owner/admins always have premium in this demo
-    if (adminEmails.has(email)) {
-      return res.json({ fullAccess: true, source: 'admin' })
-    }
-    if (premiumWinners.has(email)) {
-      const exp = premiumWinners.get(email)
-      const now = Date.now()
-      if (exp && exp > now) {
-        return res.json({ fullAccess: true, source: 'tournament', expiresAt: exp })
-      }
+  if (!email) {
+    return res.json({ fullAccess: false });
+  }
+
+  // Owner/admins always have premium in this demo
+  if (adminEmails.has(email)) {
+    return res.json({ fullAccess: true, source: 'admin' })
+  }
+  if (premiumWinners.has(email)) {
+    const exp = premiumWinners.get(email)
+    const now = Date.now()
+    if (exp && exp > now) {
+      return res.json({ fullAccess: true, source: 'tournament', expiresAt: exp })
     }
   }
-  res.json(subscription);
+
+  // Check user's subscription from memory
+  const user = users.get(email);
+  if (user?.subscription) {
+    return res.json(user.subscription);
+  }
+
+  // Fallback: check Supabase if not in memory
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('subscription')
+        .eq('email', email)
+        .single();
+
+      if (!error && data?.subscription) {
+        return res.json(data.subscription);
+      }
+    } catch (err) {
+      console.error('[DB] Error fetching subscription:', err);
+    }
+  }
+
+  res.json({ fullAccess: false });
 });
 
 // Prometheus metrics endpoint
@@ -231,7 +345,30 @@ app.get('/api/hosts', (req, res) => {
 })
 
 // Placeholder webhook (accepts JSON; in production use Stripe raw body & verify signature)
-app.post('/webhook/stripe', (req, res) => {
+app.post('/webhook/stripe', async (req, res) => {
+  const { type, data } = req.body || {};
+  if (type === 'checkout.session.completed') {
+    const session = data?.object;
+    const email = session?.customer_email || session?.metadata?.email;
+    const purpose = session?.metadata?.purpose;
+    if (email && purpose === 'subscription') {
+      // Update user's subscription in memory and Supabase
+      const user = users.get(email);
+      if (user) {
+        user.subscription = { fullAccess: true, source: 'stripe', purchasedAt: new Date().toISOString() };
+      }
+      if (supabase) {
+        try {
+          await supabase
+            .from('users')
+            .update({ subscription: { fullAccess: true, source: 'stripe', purchasedAt: new Date().toISOString() } })
+            .eq('email', email);
+        } catch (err) {
+          console.error('[DB] Failed to update subscription:', err);
+        }
+      }
+    }
+  }
   // Demo: toggle fullAccess true and credit owner's wallet with premium revenue if provided
   subscription.fullAccess = true;
   try {
@@ -280,6 +417,36 @@ app.post('/api/stripe/create-session', async (req, res) => {
     return res.json({ ok: true, url: session.url })
   } catch (e) {
     console.error('[Stripe] create-session failed:', e?.message || e)
+    return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
+  }
+})
+
+app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  try {
+    if (!stripe || !process.env.STRIPE_PRICE_ID_SUBSCRIPTION) {
+      return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
+    }
+    const { email, successUrl, cancelUrl } = req.body || {}
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+    }
+    // Derive sensible defaults for success/cancel
+    const host = req.headers['x-forwarded-host'] || req.headers.host
+    const proto = (req.headers['x-forwarded-proto'] || 'https')
+    const base = `https://${host}`
+    const sUrl = (typeof successUrl === 'string' && successUrl.startsWith('http')) ? successUrl : `${base}/?subscription=success`
+    const cUrl = (typeof cancelUrl === 'string' && cancelUrl.startsWith('http')) ? cancelUrl : `${base}/?subscription=cancel`
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{ price: process.env.STRIPE_PRICE_ID_SUBSCRIPTION, quantity: 1 }],
+      customer_email: email,
+      metadata: { purpose: 'subscription', email: email },
+      success_url: sUrl,
+      cancel_url: cUrl,
+    })
+    return res.json({ ok: true, url: session.url })
+  } catch (e) {
+    console.error('[Stripe] create-checkout-session failed:', e?.message || e)
     return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
   }
 })
@@ -665,6 +832,33 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
     }
   }
 }
+// Load users from Supabase on startup
+(async () => {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*');
+
+      if (error) {
+        console.error('[DB] Failed to load users from Supabase:', error);
+      } else if (data) {
+        for (const user of data) {
+          users.set(user.email, {
+            email: user.email,
+            username: user.username,
+            password: user.password,
+            admin: user.admin || false,
+            subscription: user.subscription || { fullAccess: false }
+          });
+        }
+        console.log(`[DB] Loaded ${data.length} users from Supabase`);
+      }
+    } catch (err) {
+      console.error('[DB] Error loading users from Supabase:', err);
+    }
+  }
+})();
 // Initialize demo admin user
 if (!users.has('daviesfamily108@gmail.com')) {
   users.set('daviesfamily108@gmail.com', {
