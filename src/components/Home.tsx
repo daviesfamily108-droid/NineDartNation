@@ -104,7 +104,23 @@ export default function Home({ user }: { user?: any }) {
               {lock && (
                 <button
                   className="absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/35 hover:bg-slate-900/45 transition"
-                  onClick={() => window.open(STRIPE_CHECKOUT_URL, '_blank', 'noopener')}
+                  onClick={async () => {
+                    try {
+                      const res = await fetch('/api/stripe/create-checkout-session', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: user.email })
+                      });
+                      const data = await res.json();
+                      if (data.ok && data.url) {
+                        window.open(data.url, '_blank');
+                      } else {
+                        alert('Failed to create checkout session. Please try again.');
+                      }
+                    } catch (err) {
+                      alert('Error creating checkout. Please try again.');
+                    }
+                  }}
                   title="Unlock with PREMIUM"
                 >
                   <span className="text-[12px] font-semibold">Unlock PREMIUM</span>
