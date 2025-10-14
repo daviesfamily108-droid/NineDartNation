@@ -20,6 +20,7 @@ const client = require('prom-client');
 const Stripe = require('stripe');
 
 const PORT = process.env.PORT || 8787;
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
 // Track HTTPS runtime status and port
 let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
@@ -98,7 +99,9 @@ app.post('/api/auth/signup', async (req, res) => {
   }
   const user = { email, username, password, admin: false }
   users.set(email, user)
-  return res.json({ user })
+  // Create JWT token
+  const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+  return res.json({ user, token })
 })
 
 // Login endpoint
@@ -661,6 +664,15 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
       users.set(u.email, u);
     }
   }
+}
+// Initialize demo admin user
+if (!users.has('daviesfamily108@gmail.com')) {
+  users.set('daviesfamily108@gmail.com', {
+    email: 'daviesfamily108@gmail.com',
+    username: 'DartsWithG',
+    password: 'Cymru-2015',
+    admin: true
+  });
 }
 // friends: email -> Set(friendEmail)
 const friendships = new Map();
