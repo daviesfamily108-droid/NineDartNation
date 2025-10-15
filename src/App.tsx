@@ -87,23 +87,48 @@ export default function App() {
     return () => window.removeEventListener('ndn:stats-updated', onUpdate as any)
   }, [user?.username, avgMode])
 
-  // Detect mobile layout via viewport width and user agent; update on resize
+  // Detect mobile/tablet layout via comprehensive device detection
   useEffect(() => {
     const update = () => {
-      const mq = window.matchMedia('(max-width: 1024px)')
-      const uaMobile = /Mobi|Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '')
+      const width = window.innerWidth
+      const height = window.innerHeight
+      const pixelRatio = window.devicePixelRatio || 1
+
+      // Comprehensive mobile/tablet detection
+      const mqMobile = window.matchMedia('(max-width: 768px)').matches
+      const mqTablet = window.matchMedia('(max-width: 1024px) and (min-width: 769px)').matches
+      const uaMobile = /Mobi|Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini|Windows Phone/i.test(navigator.userAgent || '')
+      const uaTablet = /iPad|Android(?=.*\bMobile\b)|Tablet|PlayBook|Silk/i.test(navigator.userAgent || '')
       const touchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0
-      const smallScreen = window.innerWidth < 1025
-      const isMobileDevice = mq.matches || uaMobile || touchScreen || smallScreen
+      const smallScreen = width < 1025
+      const verySmallScreen = width < 769
+
+      // Determine device type
+      const isTablet = (mqTablet && touchScreen) || uaTablet || (width >= 769 && width <= 1024 && touchScreen)
+      const isMobile = mqMobile || uaMobile || verySmallScreen || (width < 769 && touchScreen)
+      const isMobileDevice = isMobile || isTablet
+
       setIsMobile(isMobileDevice)
     }
     update()
     window.addEventListener('resize', update)
-    const mq = window.matchMedia('(max-width: 1024px)')
-    try { mq.addEventListener('change', update) } catch {}
+    window.addEventListener('orientationchange', update)
+
+    const mqMobile = window.matchMedia('(max-width: 768px)')
+    const mqTablet = window.matchMedia('(max-width: 1024px) and (min-width: 769px)')
+
+    try {
+      mqMobile.addEventListener('change', update)
+      mqTablet.addEventListener('change', update)
+    } catch {}
+
     return () => {
       window.removeEventListener('resize', update)
-      try { mq.removeEventListener('change', update) } catch {}
+      window.removeEventListener('orientationchange', update)
+      try {
+        mqMobile.removeEventListener('change', update)
+        mqTablet.removeEventListener('change', update)
+      } catch {}
     }
   }, [])
 
@@ -173,23 +198,23 @@ export default function App() {
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username||'NDN')}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`
   return (
     <ThemeProvider>
-  <div ref={appRef} className={`${user?.fullAccess ? 'premium-body' : ''} h-screen overflow-hidden p-2 sm:p-4`}>
+  <div ref={appRef} className={`${user?.fullAccess ? 'premium-body' : ''} h-screen overflow-hidden p-1 xs:p-2 sm:p-3 md:p-4`}>
         <Toaster />
-  <div className="max-w-[1400px] mx-auto grid grid-cols-1 sm:grid-cols-[auto,1fr] gap-3 sm:gap-4 h-full overflow-hidden">
-          {/* Desktop sidebar; hidden on mobile */}
+  <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-2 xs:gap-3 sm:gap-4 h-full overflow-hidden">
+          {/* Desktop sidebar; hidden on mobile/tablet */}
           {!isMobile && (
-            <div className="relative" style={{ width: 240 }}>
+            <div className="relative hidden lg:block" style={{ width: 240 }}>
               <Sidebar active={tab} onChange={(k)=>{ setTab(k); }} user={user} />
             </div>
           )}
           {/* Wrap header + scroller in a column so header stays static and only content scrolls below it */}
           <div className="flex flex-col h-full overflow-hidden">
-            <div className="pt-2">
-            <header id="ndn-header" className={`header glass flex-col md:flex-row gap-2 md:gap-3`}>
+            <div className="pt-1 xs:pt-2">
+            <header id="ndn-header" className={`header glass flex-col xs:flex-col sm:flex-row gap-2 xs:gap-2 sm:gap-3`}>
               {/* Left: Brand */}
               <div className="flex items-center gap-2 order-1">
                 <h1
-                  className="text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap cursor-pointer select-none"
+                  className="text-lg xs:text-xl sm:text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap cursor-pointer select-none"
                   onClick={() => { if (isMobile) setTab('score') }}
                   title={isMobile ? 'Go Home' : undefined}
                 >
@@ -197,16 +222,16 @@ export default function App() {
                 </h1>
               </div>
               {/* Middle: Welcome band (full width on mobile) */}
-              <div className="order-3 md:order-2 w-full md:w-auto flex-1 flex flex-col items-center justify-center text-center md:text-left !text-black">
-                <span className="text-base md:text-lg font-semibold flex items-center gap-2 max-w-full truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>
-                  <span className="hidden sm:inline !text-black">Welcome,</span>
-                  <img src={avatar || fallbackAvatar} alt="avatar" className="w-6 h-6 md:w-7 md:h-7 rounded-full ring-2 ring-white/20" />
+              <div className="order-3 xs:order-3 sm:order-2 w-full sm:w-auto flex-1 flex flex-col items-center justify-center text-center sm:text-left !text-black">
+                <span className="text-sm xs:text-base sm:text-base md:text-lg font-semibold flex items-center gap-2 max-w-full truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>
+                  <span className="hidden xs:inline !text-black">Welcome,</span>
+                  <img src={avatar || fallbackAvatar} alt="avatar" className="w-5 h-5 xs:w-6 xs:h-6 sm:w-6 sm:h-6 md:w-7 md:h-7 rounded-full ring-2 ring-white/20" />
                   <span className="truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{user.username}🎯</span>
                 </span>
-                <span className="hidden sm:inline text-xs md:text-sm !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>All-time 3-dart avg: <span className="font-semibold !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{allTimeAvg.toFixed(2)}</span></span>
+                <span className="hidden xs:inline text-xs xs:text-xs sm:text-xs md:text-sm !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>All-time 3-dart avg: <span className="font-semibold !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{allTimeAvg.toFixed(2)}</span></span>
                 {isMobile && (
                   <button
-                    className="btn px-3 py-1 mt-1"
+                    className="btn px-3 py-1 xs:px-3 xs:py-1 sm:px-3 sm:py-1 mt-1 text-sm xs:text-sm"
                     aria-label="Open navigation"
                     onClick={()=> setNavOpen(true)}
                   >☰ Menu</button>
