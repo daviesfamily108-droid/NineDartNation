@@ -1,4 +1,4 @@
-﻿NEXT_PUBLIC_SUPABASE_URLNEXT_PUBLIC_SUPABASE_URLconst jwt = require('jsonwebtoken');
+﻿const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
 const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
