@@ -23,23 +23,8 @@ CREATE POLICY "Users can update own data" ON public.users
 CREATE POLICY "Allow user registration" ON public.users
     FOR INSERT WITH CHECK (true);
 
--- Allow admins to view all users
-CREATE POLICY "Admins can view all users" ON public.users
-    FOR SELECT USING (
-        EXISTS (
-            SELECT 1 FROM public.users
-            WHERE email = auth.uid()::text AND admin = true
-        )
-    );
-
--- Allow admins to update all users
-CREATE POLICY "Admins can update all users" ON public.users
-    FOR UPDATE USING (
-        EXISTS (
-            SELECT 1 FROM public.users
-            WHERE email = auth.uid()::text AND admin = true
-        )
-    );
+-- Note: Admin policies removed to avoid infinite recursion
+-- Admin access is handled by server-side application logic
 
 -- Create an index on username for faster lookups
 CREATE INDEX IF NOT EXISTS idx_users_username ON public.users(username);
