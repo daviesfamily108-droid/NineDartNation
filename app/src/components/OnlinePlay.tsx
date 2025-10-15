@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { useMatch } from '../store/match'
 import CameraView from './CameraView'
 import CameraTile from './CameraTile'
@@ -16,7 +16,19 @@ import { useWS } from './WSProvider'
 import { useMessages } from '../store/messages'
 import { censorProfanity, containsProfanity } from '../utils/profanity'
 import { useBlocklist } from '../store/blocklist'
-import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart } from '../game/types'
+import TabPills from './ui/TabPills'
+import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart, ringSectorToDart } from '../game/types'
+import { ATC_ORDER } from '../game/aroundTheClock'
+import { createCricketState, applyCricketDart, CRICKET_NUMBERS, hasClosedAll as cricketClosedAll, cricketWinner } from '../game/cricket'
+import { createShanghaiState, getRoundTarget as shanghaiTarget, applyShanghaiDart, endShanghaiTurn } from '../game/shanghai'
+import { createDefaultHalveIt, getCurrentHalveTarget, applyHalveItDart, endHalveItTurn } from '../game/halveIt'
+import { createHighLow, applyHighLowDart, endHighLowTurn } from '../game/highLow'
+import { assignKillerNumbers, createKillerState, applyKillerDart, killerWinner } from '../game/killer'
+// Phase 2 premium games (Online support)
+import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS } from '../game/americanCricket'
+import { createBaseball, applyBaseballDart } from '../game/baseball'
+import { createGolf, applyGolfDart, GOLF_TARGETS } from '../game/golf'
+import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
 
 export default function OnlinePlay({ user }: { user?: any }) {
   const wsGlobal = (() => { try { return useWS() } catch { return null } })()
@@ -38,7 +50,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const firstConnectDoneRef = useRef(false)
   const match = useMatch()
   const msgs = useMessages()
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate } = useUserSettings()
+  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale } = useUserSettings()
   // Turn-by-turn modal
   const [showMatchModal, setShowMatchModal] = useState(false)
   const [participants, setParticipants] = useState<string[]>([])
@@ -48,6 +60,22 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [dpIndex, setDpIndex] = useState(0)
   const [dpHits, setDpHits] = useState(0)
   const [dpManual, setDpManual] = useState('')
+  // Around the Clock (online) minimal state
+  const [atcIndex, setAtcIndex] = useState(0)
+  const [atcHits, setAtcHits] = useState(0)
+  const [atcManual, setAtcManual] = useState('')
+  // Per-player states for premium games
+  const [cricketById, setCricketById] = useState<Record<string, ReturnType<typeof createCricketState>>>({})
+  const [shanghaiById, setShanghaiById] = useState<Record<string, ReturnType<typeof createShanghaiState>>>({})
+  const [halveById, setHalveById] = useState<Record<string, ReturnType<typeof createDefaultHalveIt>>>({})
+  const [highlowById, setHighlowById] = useState<Record<string, ReturnType<typeof createHighLow>>>({})
+  const [killerById, setKillerById] = useState<Record<string, ReturnType<typeof createKillerState>>>({})
+  const [amCricketById, setAmCricketById] = useState<Record<string, ReturnType<typeof createAmCricketState>>>({})
+  const [baseballById, setBaseballById] = useState<Record<string, ReturnType<typeof createBaseball>>>({})
+  const [golfById, setGolfById] = useState<Record<string, ReturnType<typeof createGolf>>>({})
+  const [ttt, setTTT] = useState<ReturnType<typeof createTicTacToe>>(() => createTicTacToe())
+  // Track darts this turn for non-X01 games to auto-advance after 3
+  const [turnDarts, setTurnDarts] = useState(0)
   // View mode: compact player-by-player (mobile) vs full overview (desktop)
   const [compactView, setCompactView] = useState<boolean>(() => {
     try { const ua = navigator.userAgent || ''; return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) } catch { return false }
@@ -277,6 +305,40 @@ export default function OnlinePlay({ user }: { user?: any }) {
         const dh = Number((data.payload as any)._dpHits)
         if (Number.isFinite(di)) setDpIndex(Math.max(0, di))
         if (Number.isFinite(dh)) setDpHits(Math.max(0, dh))
+        // Pull Around the Clock progress if present
+        const ai = Number((data.payload as any)._atcIndex)
+        const ah = Number((data.payload as any)._atcHits)
+        if (Number.isFinite(ai)) setAtcIndex(Math.max(0, ai))
+        if (Number.isFinite(ah)) setAtcHits(Math.max(0, ah))
+        // Premium per-player states
+        try {
+          const _cr = (data.payload as any)._cricketById
+          if (_cr && typeof _cr === 'object') setCricketById(_cr)
+        } catch {}
+        try {
+          const _sh = (data.payload as any)._shanghaiById
+          if (_sh && typeof _sh === 'object') setShanghaiById(_sh)
+        } catch {}
+        try {
+          const _hv = (data.payload as any)._halveById
+          if (_hv && typeof _hv === 'object') setHalveById(_hv)
+        } catch {}
+        try {
+          const _hl = (data.payload as any)._highlowById
+          if (_hl && typeof _hl === 'object') setHighlowById(_hl)
+        } catch {}
+        try {
+          const _kr = (data.payload as any)._killerById
+          if (_kr && typeof _kr === 'object') setKillerById(_kr)
+        } catch {}
+        try { const _am = (data.payload as any)._amCricketById; if (_am && typeof _am === 'object') setAmCricketById(_am) } catch {}
+        try { const _bb = (data.payload as any)._baseballById; if (_bb && typeof _bb === 'object') setBaseballById(_bb) } catch {}
+        try { const _gf = (data.payload as any)._golfById; if (_gf && typeof _gf === 'object') setGolfById(_gf) } catch {}
+        try { const _tt = (data.payload as any)._tttState; if (_tt && typeof _tt === 'object') setTTT(_tt) } catch {}
+        try {
+          const _td = Number((data.payload as any)._turnDarts)
+          if (Number.isFinite(_td)) setTurnDarts(Math.max(0, _td))
+        } catch {}
       } else if (data.type === 'joined') {
         // joined room; keep our assigned id to label messages
         if (data.id) setSelfId(data.id)
@@ -335,7 +397,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
         // auto-clear after a bit
         setTimeout(()=>setErrorMsg(''), 3500)
       } else if (data.type === 'friend-invite') {
-        const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}${(data.game==='X01' && data.startingScore)?` · ${data.startingScore}`:''}). Accept?`)
+        const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}${(data.game==='X01' && data.startingScore)?` = ${data.startingScore}`:''}). Accept?`)
         if (accept) {
           ws.send(JSON.stringify({ type: 'start-friend-match', toEmail: data.fromEmail, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore }))
         } else {
@@ -369,6 +431,45 @@ export default function OnlinePlay({ user }: { user?: any }) {
       }, delay)
     }
   }
+  // Small helper to render the match summary card
+  function RenderMatchSummary() {
+    const players = match.players || []
+    const curIdx = match.currentPlayerIdx || 0
+    const cur = players[curIdx]
+    const leg = cur?.legs?.[cur?.legs?.length - 1]
+    const remaining = leg ? leg.totalScoreRemaining : match.startingScore
+    const darts = leg?.dartsThrown || 0
+    const scored = leg ? (leg.totalScoreStart - leg.totalScoreRemaining) : 0
+    const avg3 = darts > 0 ? ((scored / darts) * 3) : 0
+    const lastScore = leg?.visits?.[leg.visits.length-1]?.score ?? 0
+    let matchScore = 'ÔÇö'
+    if (players.length === 2) {
+      matchScore = `${players[0]?.legsWon || 0}-${players[1]?.legsWon || 0}`
+    } else if (players.length > 2) {
+      matchScore = players.map(p => `${p.name}:${p.legsWon||0}`).join(' = ')
+    }
+    const best = match.bestLegThisMatch
+    const bestText = best ? `${best.darts} darts${(() => { const p = players.find(x=>x.id===best.playerId); return p?` (${p.name})`:'' })()}` : 'ÔÇö'
+    return (
+      <div className="p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-white text-sm">
+        <div className="font-semibold mb-2">Match Summary</div>
+        <div className="grid grid-cols-2 gap-y-1">
+          <div className="opacity-80">Current score</div>
+          <div className="font-mono text-right">{matchScore}</div>
+          <div className="opacity-80">Current thrower</div>
+          <div className="text-right font-semibold">{cur?.name || 'ÔÇö'}</div>
+          <div className="opacity-80">Score remaining</div>
+          <div className="text-right font-mono">{remaining}</div>
+          <div className="opacity-80">3-dart avg</div>
+          <div className="text-right font-mono">{avg3.toFixed(1)}</div>
+          <div className="opacity-80">Last score</div>
+          <div className="text-right font-mono">{lastScore}</div>
+          <div className="opacity-80">Best leg</div>
+          <div className="text-right">{bestText}</div>
+        </div>
+      </div>
+    )
+  }
 
   // Subscribe to global WS messages if available
   useEffect(() => {
@@ -378,6 +479,28 @@ export default function OnlinePlay({ user }: { user?: any }) {
       try {
         if (data.type === 'state') {
           match.importState(data.payload)
+          // Pull synchronized premium states (when using WS provider)
+          try {
+            const di = Number((data.payload as any)._dpIndex); const dh = Number((data.payload as any)._dpHits)
+            if (Number.isFinite(di)) setDpIndex(Math.max(0, di))
+            if (Number.isFinite(dh)) setDpHits(Math.max(0, dh))
+          } catch {}
+          try {
+            const ai = Number((data.payload as any)._atcIndex); const ah = Number((data.payload as any)._atcHits)
+            if (Number.isFinite(ai)) setAtcIndex(Math.max(0, ai))
+            if (Number.isFinite(ah)) setAtcHits(Math.max(0, ah))
+          } catch {}
+          try { const _cr = (data.payload as any)._cricketById; if (_cr && typeof _cr === 'object') setCricketById(_cr) } catch {}
+          try { const _sh = (data.payload as any)._shanghaiById; if (_sh && typeof _sh === 'object') setShanghaiById(_sh) } catch {}
+          try { const _hv = (data.payload as any)._halveById; if (_hv && typeof _hv === 'object') setHalveById(_hv) } catch {}
+          try { const _hl = (data.payload as any)._highlowById; if (_hl && typeof _hl === 'object') setHighlowById(_hl) } catch {}
+          try { const _kr = (data.payload as any)._killerById; if (_kr && typeof _kr === 'object') setKillerById(_kr) } catch {}
+          // Phase 2
+          try { const _am = (data.payload as any)._amCricketById; if (_am && typeof _am === 'object') setAmCricketById(_am) } catch {}
+          try { const _bb = (data.payload as any)._baseballById; if (_bb && typeof _bb === 'object') setBaseballById(_bb) } catch {}
+          try { const _gf = (data.payload as any)._golfById; if (_gf && typeof _gf === 'object') setGolfById(_gf) } catch {}
+          try { const _tt = (data.payload as any)._tttState; if (_tt && typeof _tt === 'object') setTTT(_tt) } catch {}
+          try { const _td = Number((data.payload as any)._turnDarts); if (Number.isFinite(_td)) setTurnDarts(Math.max(0, _td)) } catch {}
         } else if (data.type === 'joined') {
           if (data.id) setSelfId(data.id)
         } else if (data.type === 'presence' || data.type === 'peer-joined') {
@@ -419,7 +542,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
           }
           setTimeout(()=>setErrorMsg(''), 3500)
         } else if (data.type === 'friend-invite') {
-          const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}${(data.game==='X01' && data.startingScore)?` · ${data.startingScore}`:''}). Accept?`)
+          const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}${(data.game==='X01' && data.startingScore)?` = ${data.startingScore}`:''}). Accept?`)
           if (accept) {
             wsGlobal.send({ type: 'start-friend-match', toEmail: data.fromEmail, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore })
           } else {
@@ -446,12 +569,12 @@ export default function OnlinePlay({ user }: { user?: any }) {
 
   function sendState() {
     if (wsGlobal) {
-      wsGlobal.send({ type: 'state', payload: { ...match, _turnIdx: turnIdx, _participants: participants, _dpIndex: dpIndex, _dpHits: dpHits } })
+  wsGlobal.send({ type: 'state', payload: { ...match, _turnIdx: turnIdx, _participants: participants, _dpIndex: dpIndex, _dpHits: dpHits, _atcIndex: atcIndex, _atcHits: atcHits, _cricketById: cricketById, _shanghaiById: shanghaiById, _halveById: halveById, _highlowById: highlowById, _killerById: killerById, _amCricketById: amCricketById, _baseballById: baseballById, _golfById: golfById, _tttState: ttt, _turnDarts: turnDarts } })
       return
     }
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return
-    ws.send(JSON.stringify({ type: 'state', payload: { ...match, _turnIdx: turnIdx, _participants: participants, _dpIndex: dpIndex, _dpHits: dpHits } }))
+  ws.send(JSON.stringify({ type: 'state', payload: { ...match, _turnIdx: turnIdx, _participants: participants, _dpIndex: dpIndex, _dpHits: dpHits, _atcIndex: atcIndex, _atcHits: atcHits, _cricketById: cricketById, _shanghaiById: shanghaiById, _halveById: halveById, _highlowById: highlowById, _killerById: killerById, _amCricketById: amCricketById, _baseballById: baseballById, _golfById: golfById, _tttState: ttt, _turnDarts: turnDarts } }))
   }
 
   function sendQuick(msg: string) {
@@ -500,6 +623,269 @@ export default function OnlinePlay({ user }: { user?: any }) {
     if (val == null) return
     addDpValue(val)
     setDpManual('')
+  }
+
+  // Around the Clock handlers
+  function isAtcHit(val: number, ring?: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    const target = ATC_ORDER[atcIndex]
+    if (target == null) return false
+    if (typeof sector === 'number' && sector >= 1 && sector <= 20) {
+      if (sector === target && (ring === 'SINGLE' || ring === 'DOUBLE' || ring === 'TRIPLE')) return true
+    }
+    if (target === 25) {
+      return ring === 'BULL' || val === 25
+    }
+    if (target === 50) {
+      return ring === 'INNER_BULL' || val === 50
+    }
+    return val === target || val === target * 2 || val === target * 3
+  }
+  function addAtcValue(val: number, ring?: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    if (isAtcHit(val, ring, sector)) {
+      const newHits = atcHits + 1
+      const nextIdx = atcIndex + 1
+      setAtcHits(newHits)
+      setAtcIndex(nextIdx)
+      try {
+        if (newHits >= ATC_ORDER.length) {
+          const who = match.players[match.currentPlayerIdx]?.name || 'Player'
+          triggerCelebration('leg', who)
+          setAtcHits(0)
+          setAtcIndex(0)
+        }
+      } catch {}
+    }
+    sendState()
+  }
+  function addAtcNumeric() {
+    const v = Math.max(0, Math.floor(visitScore|0))
+    addAtcValue(v)
+    setVisitScore(0)
+  }
+  function addAtcManual() {
+    const val = parseManualDart(atcManual)
+    if (val == null) return
+    addAtcValue(val)
+    setAtcManual('')
+  }
+
+  // Helpers for premium modes
+  function currentPlayerId(): string {
+    const p = match.players[match.currentPlayerIdx]
+    return p?.id ?? String(match.currentPlayerIdx)
+  }
+  // Ensure state exists for a given player id
+  function ensureCricket(pid: string) {
+    if (!cricketById[pid]) setCricketById(s => ({ ...s, [pid]: createCricketState() }))
+  }
+  function ensureShanghai(pid: string) {
+    if (!shanghaiById[pid]) setShanghaiById(s => ({ ...s, [pid]: createShanghaiState() }))
+  }
+  function ensureHalve(pid: string) {
+    if (!halveById[pid]) setHalveById(s => ({ ...s, [pid]: createDefaultHalveIt() }))
+  }
+  function ensureHighLow(pid: string) {
+    if (!highlowById[pid]) setHighlowById(s => ({ ...s, [pid]: createHighLow() }))
+  }
+  function ensureKiller(pid: string) {
+    if (!killerById[pid]) {
+      // If any existing assignments, pick the highest density or default to pid index
+      const used = new Set<number>(Object.values(killerById || {}).map(s => s.number))
+      const pool: number[] = []
+      for (let i=1;i<=20;i++){ if (!used.has(i)) pool.push(i) }
+      const num = pool.length>0 ? pool[Math.floor(Math.random()*pool.length)] : 20
+      setKillerById(s => ({ ...s, [pid]: createKillerState(num, 3) }))
+    }
+  }
+  function ensureAmCricket(pid: string) {
+    if (!amCricketById[pid]) setAmCricketById(s => ({ ...s, [pid]: createAmCricketState() }))
+  }
+  function ensureBaseball(pid: string) {
+    if (!baseballById[pid]) setBaseballById(s => ({ ...s, [pid]: createBaseball() }))
+  }
+  function ensureGolf(pid: string) {
+    if (!golfById[pid]) setGolfById(s => ({ ...s, [pid]: createGolf() }))
+  }
+  // Resets darts count on player change for non-X01 games
+  useEffect(() => { setTurnDarts(0) }, [match.currentPlayerIdx, currentGame])
+
+  // Compute whether all opponents have closed a cricket number
+  function allOpponentsClosed(num: 15|16|17|18|19|20|25, selfId: string): boolean {
+    const opps = match.players.filter(p => p.id !== selfId)
+    if (opps.length === 0) return false
+    return opps.every(p => (cricketById[p.id]?.marks?.[num] || 0) >= 3)
+  }
+
+  function applyCricketAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    const pid = currentPlayerId()
+    ensureCricket(pid)
+    setCricketById(prev => {
+      const copy = { ...prev }
+      const st = { ...(copy[pid] || createCricketState()) }
+      const pts = applyCricketDart(st, value, ring, sector, (n)=>allOpponentsClosed(n, pid))
+      copy[pid] = st
+      return copy
+    })
+    const nd = turnDarts + 1
+    setTurnDarts(nd)
+    if (nd >= 3) {
+      // end turn
+      setTurnDarts(0)
+      match.nextPlayer(); sendState()
+    } else { sendState() }
+  }
+
+  function applyShanghaiAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    const pid = currentPlayerId()
+    ensureShanghai(pid)
+    setShanghaiById(prev => {
+      const copy = { ...prev }
+      const st = { ...(copy[pid] || createShanghaiState()) }
+      applyShanghaiDart(st, value, ring, sector)
+      copy[pid] = st
+      return copy
+    })
+    const nd = turnDarts + 1
+    setTurnDarts(nd)
+    if (nd >= 3) {
+      setShanghaiById(prev => {
+        const copy = { ...prev }
+        const st = { ...(copy[pid] || createShanghaiState()) }
+        endShanghaiTurn(st)
+        copy[pid] = st
+        return copy
+      })
+      setTurnDarts(0)
+      match.nextPlayer(); sendState()
+    } else { sendState() }
+  }
+
+  function applyHalveAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    const pid = currentPlayerId()
+    ensureHalve(pid)
+    setHalveById(prev => {
+      const copy = { ...prev }
+      const st = { ...(copy[pid] || createDefaultHalveIt()) }
+      applyHalveItDart(st, value, ring, sector)
+      copy[pid] = st
+      return copy
+    })
+    const nd = turnDarts + 1
+    setTurnDarts(nd)
+    if (nd >= 3) {
+      setHalveById(prev => {
+        const copy = { ...prev }
+        const st = { ...(copy[pid] || createDefaultHalveIt()) }
+        endHalveItTurn(st)
+        copy[pid] = st
+        return copy
+      })
+      setTurnDarts(0)
+      match.nextPlayer(); sendState()
+    } else { sendState() }
+  }
+
+  function applyHighLowAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    const pid = currentPlayerId()
+    ensureHighLow(pid)
+    setHighlowById(prev => {
+      const copy = { ...prev }
+      const st = { ...(copy[pid] || createHighLow()) }
+      applyHighLowDart(st, value, ring, sector)
+      copy[pid] = st
+      return copy
+    })
+    const nd = turnDarts + 1
+    setTurnDarts(nd)
+    if (nd >= 3) {
+      setHighlowById(prev => {
+        const copy = { ...prev }
+        const st = { ...(copy[pid] || createHighLow()) }
+        endHighLowTurn(st)
+        copy[pid] = st
+        return copy
+      })
+      setTurnDarts(0)
+      match.nextPlayer(); sendState()
+    } else { sendState() }
+  }
+
+  function applyKillerAuto(ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    const pid = currentPlayerId()
+    // Ensure every player has an assignment before applying
+    match.players.forEach(p => ensureKiller(p.id))
+    setKillerById(prev => {
+      const copy: Record<string, ReturnType<typeof createKillerState>> = {}
+      for (const [id, st] of Object.entries(prev)) copy[id] = { ...st }
+      const res = applyKillerDart(pid, copy, ring, sector)
+      // Trigger simple winner check
+      const win = killerWinner(copy)
+      if (win) {
+        try { triggerCelebration('leg', match.players.find(p=>p.id===win)?.name || 'Player') } catch {}
+      }
+      return copy
+    })
+    const nd = turnDarts + 1
+    setTurnDarts(nd)
+    if (nd >= 3) { setTurnDarts(0); match.nextPlayer(); sendState() } else { sendState() }
+  }
+
+  function applyAmCricketAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    const pid = currentPlayerId()
+    ensureAmCricket(pid)
+    setAmCricketById(prev => {
+      const copy = { ...prev }
+      const base = (copy[pid] || createAmCricketState())
+      const st: ReturnType<typeof createAmCricketState> = { ...(base as any) }
+      const oppClosed = (n: 12|13|14|15|16|17|18|19|20|25) => match.players.filter(p=>p.id!==pid).every(p => (((amCricketById[p.id]?.marks as any)?.[n]||0) >= 3))
+      applyAmCricketDart(st, value, ring, sector, oppClosed)
+      copy[pid] = st
+      return copy
+    })
+    const nd = turnDarts + 1
+    setTurnDarts(nd)
+    if (nd >= 3) { setTurnDarts(0); match.nextPlayer(); sendState() } else { sendState() }
+  }
+
+  function applyBaseballAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE', sector?: number | null) {
+    const pid = currentPlayerId()
+    ensureBaseball(pid)
+    setBaseballById(prev => {
+      const copy = { ...prev }
+      const st = { ...(copy[pid] || createBaseball()) }
+      applyBaseballDart(st, value, ring as any, sector)
+      copy[pid] = st
+      return copy
+    })
+    const nd = turnDarts + 1
+    setTurnDarts(nd)
+    if (nd >= 3) { setTurnDarts(0); match.nextPlayer(); sendState() } else { sendState() }
+  }
+
+  function applyGolfAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE', sector?: number | null) {
+    const pid = currentPlayerId()
+    ensureGolf(pid)
+    setGolfById(prev => {
+      const copy = { ...prev }
+      const st = { ...(copy[pid] || createGolf()) }
+      applyGolfDart(st, value, ring as any, sector)
+      copy[pid] = st
+      return copy
+    })
+    const nd = turnDarts + 1
+    setTurnDarts(nd)
+    if (nd >= 3) { setTurnDarts(0); match.nextPlayer(); sendState() } else { sendState() }
+  }
+
+  function applyTttAuto(cell: number, value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    setTTT(prev => {
+      const cp = { ...prev, board: [...prev.board] as any }
+      tryClaimCell(cp as any, (cell as any), value, ring as any, sector)
+      return cp as any
+    })
+    const nd = turnDarts + 1
+    setTurnDarts(nd)
+    if (nd >= 3) { setTurnDarts(0); match.nextPlayer(); sendState() } else { sendState() }
   }
 
   // Open/close Manual Correction dialog in CameraView
@@ -574,25 +960,26 @@ export default function OnlinePlay({ user }: { user?: any }) {
           You have {unread} unread message{unread>1?'s':''}. Check the Friends tab.
         </div>
       )}
-      <div className="flex flex-wrap items-center gap-2 justify-between">
-        <div className="flex items-center gap-2">
-          <input className="input" value={roomId} onChange={e => setRoomId(e.target.value)} placeholder="Room ID" />
-          {!connected ? (
-            <button className="btn bg-rose-600 hover:bg-rose-700" onClick={connect}>Connect</button>
+      <div className="relative">
+        <div className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2">
+            <label className="text-xs opacity-70 shrink-0">Room</label>
+            <input className="input w-28" value={roomId} onChange={e => setRoomId(e.target.value)} placeholder="room-1" />
+          </div>
+          {connected ? (
+            <span className="text-[11px] px-2 py-1 rounded-full bg-emerald-600/20 text-emerald-200 border border-emerald-400/40 shrink-0">Connected</span>
           ) : (
-            <span className="text-[11px] px-2 py-1 rounded-full bg-emerald-600/20 text-emerald-200 border border-emerald-400/40">Connected</span>
+            <button className="btn bg-rose-600 hover:bg-rose-700 shrink-0" onClick={connect}>Connect</button>
           )}
-          <button className="btn" onClick={sendState} disabled={!connected}>Sync</button>
-          {connected && (
-            <button className="btn" onClick={() => setShowMatchModal(true)} disabled={locked} title={locked ? 'Weekly free games used' : ''}>Open Match</button>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
+          <button className="btn shrink-0" onClick={sendState} disabled={!connected}>Sync</button>
           <button
-            className="text-[11px] px-3 py-1 rounded-full bg-indigo-500/25 text-indigo-100 border border-indigo-400/40 hover:bg-indigo-500/40"
+            className="text-[11px] px-3 py-1 rounded-full bg-indigo-500/25 text-indigo-100 border border-indigo-400/40 hover:bg-indigo-500/40 shrink-0"
             title="Open a simulated online match demo"
             onClick={() => { try { window.dispatchEvent(new CustomEvent('ndn:online-match-demo', { detail: { game: 'X01', start: 501 } })) } catch {} }}
           >DEMO</button>
+          {connected && (
+            <button className="btn shrink-0" onClick={() => setShowMatchModal(true)} disabled={locked} title={locked ? 'Weekly free games used' : ''}>Open Match</button>
+          )}
         </div>
       </div>
       {/* Create Match+ box (top-right area) */}
@@ -611,7 +998,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       </div>
       <p className="text-sm text-slate-600 mt-3">Open this app on another device and join the same Room ID to sync scores.</p>
       {!user?.fullAccess && (
-        <div className="text-xs text-slate-400 mt-1">Weekly free online games remaining: {freeLeft === Infinity ? '—' : freeLeft}</div>
+        <div className="text-xs text-slate-400 mt-1">Weekly free online games remaining: {freeLeft === Infinity ? 'ÔÇö' : freeLeft}</div>
       )}
       {(!user?.fullAccess && freeLeft !== Infinity && freeLeft <= 0) && (
         <div className="mt-2 p-2 rounded-lg bg-rose-700/30 border border-rose-600/40 text-rose-200 text-sm">You've used your 3 free online games this week. PREMIUM required to continue.</div>
@@ -641,7 +1028,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       )}
       {/* Global toaster is mounted in App */}
 
-      {/* World Lobby with filters */}
+  {/* World Lobby with filters */}
       {connected && (
         <div className="mt-4 p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 flex-1 overflow-auto">
           <div className="flex items-center justify-between mb-3">
@@ -658,48 +1045,51 @@ export default function OnlinePlay({ user }: { user?: any }) {
             </div>
           </div>
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-2 mb-3">
+          <div className="space-y-3 mb-3">
             <div>
               <label className="block text-xs opacity-70 mb-1">Mode</label>
-              <select className="input w-full" value={filterMode} onChange={e=>setFilterMode(e.target.value as any)}>
-                <option value="all">All</option>
-                <option value="bestof">Best Of</option>
-                <option value="firstto">First To</option>
-              </select>
+              <TabPills
+                tabs={[{ key: 'all', label: 'All' }, { key: 'bestof', label: 'Best of' }, { key: 'firstto', label: 'First to' }]}
+                active={filterMode}
+                onChange={(k)=> setFilterMode(k as any)}
+              />
             </div>
-            <div>
-              <label className="block text-xs opacity-70 mb-1">Game</label>
-              <select className="input w-full" value={filterGame as any} onChange={e=>setFilterGame(e.target.value as any)}>
-                <option value="all">All</option>
-                {allGames.map(g => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs opacity-70 mb-1">Starting Score</label>
-              <select className="input w-full" value={filterStart as any} onChange={e=>{
-                const v = e.target.value
-                if (v==='all') setFilterStart('all'); else setFilterStart(Number(v) as any)
-              }} disabled={filterGame !== 'all' && filterGame !== 'X01'}>
-                <option value="all">All</option>
-                <option value="301">301</option>
-                <option value="501">501</option>
-                <option value="701">701</option>
-              </select>
-            </div>
-            <div className="flex items-end gap-2">
-              <div className="flex items-center gap-2">
-                <input id="nearavg" type="checkbox" className="accent-purple-500" checked={nearAvg} onChange={e=>setNearAvg(e.target.checked)} disabled={!myAvg} />
-                <label htmlFor="nearavg" className={`text-sm ${!myAvg ? 'opacity-50' : ''}`}>Near my avg{myAvg ? ` (${myAvg.toFixed(1)})` : ''}</label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs opacity-70 mb-1">Game</label>
+                <select className="input w-full" value={filterGame as any} onChange={e=>setFilterGame(e.target.value as any)}>
+                  <option value="all">All</option>
+                  {allGames.map(g => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs opacity-70 mb-1">Starting Score</label>
+                <select className="input w-full" value={filterStart as any} onChange={e=>{
+                  const v = e.target.value
+                  if (v==='all') setFilterStart('all'); else setFilterStart(Number(v) as any)
+                }} disabled={filterGame !== 'all' && filterGame !== 'X01'}>
+                  <option value="all">All</option>
+                  <option value="301">301</option>
+                  <option value="501">501</option>
+                  <option value="701">701</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs opacity-70 mb-1">Opponent near my avg</label>
+                <div className="flex items-center gap-2">
+                  <input id="nearavg" type="checkbox" className="accent-purple-500" checked={nearAvg} onChange={e=>setNearAvg(e.target.checked)} disabled={!myAvg} />
+                  <input className="input w-24" type="number" min={5} max={40} step={1} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
+                </div>
               </div>
             </div>
-            <div>
-              <label className={`block text-xs opacity-70 mb-1 ${!nearAvg ? 'opacity-40' : ''}`}>Avg tolerance (±)</label>
-              <input className="w-full" type="range" min={1} max={50} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
-              <div className="text-xs opacity-70 mt-1">± {avgTolerance}</div>
-            </div>
-            <div className="flex items-end">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex-1 max-w-sm">
+                <label className={`block text-xs opacity-70 mb-1 ${!nearAvg ? 'opacity-40' : ''}`}>Avg tolerance (┬▒)</label>
+                <input className="w-full" type="range" min={1} max={50} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
+                <div className="text-xs opacity-70 mt-1">┬▒ {avgTolerance}</div>
+              </div>
               <button className="btn px-3 py-1 text-sm" onClick={()=>{ setFilterMode('all'); setFilterGame('all'); setFilterStart('all'); setNearAvg(false); setAvgTolerance(10) }}>Reset</button>
             </div>
           </div>
@@ -708,10 +1098,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
           ) : (
             <div className="space-y-2">
               {filteredLobby.map((m:any)=> (
-                <div key={m.id} className="p-2 rounded-lg bg-black/20 flex items-center justify-between relative">
+                <div key={m.id} className="p-3 rounded-lg bg-black/20 flex items-center justify-between relative">
                   {selfId && m.creatorId === selfId && (
                     <button
-                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
+                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
                       title="Close this match"
                       onClick={()=>{
                         if (wsGlobal) wsGlobal.send({ type: 'cancel-match', matchId: m.id })
@@ -721,7 +1111,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     >×</button>
                   )}
                   <div className="text-sm">
-                    <div><span className="font-semibold">{m.creatorName}</span> • {m.game || 'X01'} • {m.mode==='bestof' ? `Best Of ${m.value}` : `First To ${m.value}`} {m.game==='X01' ? `• X01 ${m.startingScore}` : ''}</div>
+                    <div><span className="font-semibold">{m.creatorName}</span> ÔÇó {m.game || 'X01'} ÔÇó {m.mode==='bestof' ? `Best Of ${m.value}` : `First To ${m.value}`} {m.game==='X01' ? `ÔÇó X01 ${m.startingScore}` : ''}</div>
                     {m.requireCalibration && (
                       <div className="text-[11px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-600/30 mt-1">Calibration required</div>
                     )}
@@ -755,11 +1145,11 @@ export default function OnlinePlay({ user }: { user?: any }) {
         <div className="absolute inset-0 z-40 flex items-center justify-center">
           <div className="absolute inset-0 backdrop-blur-sm bg-slate-900/40" />
           <div className="relative z-10 p-4 rounded-xl bg-black/60 border border-slate-700 text-center">
-            <div className="text-3xl mb-2">🔒</div>
+            <div className="text-3xl mb-2">­ƒöÆ</div>
             <div className="font-semibold">Online play locked</div>
-            <div className="text-sm text-slate-200/80">You’ve used your 3 free online games this week. Upgrade to PREMIUM to play all modes.</div>
+            <div className="text-sm text-slate-200/80">YouÔÇÖve used your 3 free online games this week. Upgrade to PREMIUM to play all modes.</div>
             <a href="https://buy.stripe.com/test_00g7vQ8Qw2gQ0wA5kk" target="_blank" rel="noopener noreferrer" className="btn mt-3 bg-gradient-to-r from-indigo-500 to-fuchsia-600 text-white font-bold">
-              Upgrade to PREMIUM · {formatPriceInCurrency(getUserCurrency(), 5)}
+              Upgrade to PREMIUM = {formatPriceInCurrency(getUserCurrency(), 5)}
             </a>
           </div>
         </div>
@@ -782,7 +1172,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
             {celebration && (
               <div className="absolute inset-0 pointer-events-none flex items-start justify-center pt-8 z-20">
                 <div className={`px-4 py-2 rounded-full text-lg font-bold shadow ${celebration.kind==='leg' ? 'bg-indigo-500/20 border border-indigo-400/40 text-indigo-100' : 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-100'}`}>
-                  {celebration.kind==='leg' ? '🏁 LEG WON — ' : '🎯 ONE HUNDRED AND EIGHTY! — '}{celebration.by}
+                  {celebration.kind==='leg' ? '­ƒÅü LEG WON ÔÇö ' : '­ƒÄ» ONE HUNDRED AND EIGHTY! ÔÇö '}{celebration.by}
                 </div>
                 {/* Lightweight confetti for leg wins */}
                 {celebration.kind === 'leg' && (
@@ -839,13 +1229,13 @@ export default function OnlinePlay({ user }: { user?: any }) {
                         <div className="text-sm">3-Dart Avg: <span className="font-semibold">{avg.toFixed(1)}</span></div>
                         {isMe && idx===match.currentPlayerIdx && rem <= 170 && rem > 0 && (
                           <div className="mt-2 p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-900 text-sm">
-                            Checkout suggestions (fav {favoriteDouble}): {suggestCheckouts(rem, favoriteDouble).join('  •  ') || '—'}
+                            Checkout suggestions (fav {favoriteDouble}): {suggestCheckouts(rem, favoriteDouble).join('  ÔÇó  ') || 'ÔÇö'}
                           </div>
                         )}
                       </div>
                     )
                   }
-                  // Non-X01 (e.g., Double Practice): show target and hits instead of X01 remaining
+                  // Non-X01 (e.g., Double Practice, Around the Clock): show target and hits instead of X01 remaining
                   return (
                     <div className={`p-4 rounded-xl bg-brand-50 text-black ${idx===match.currentPlayerIdx?'ring-2 ring-brand-400':''}`}>
                       <div className="text-xs text-slate-600 flex items-center justify-between">
@@ -859,9 +1249,18 @@ export default function OnlinePlay({ user }: { user?: any }) {
                         <>
                           <div className="mt-1 text-xs flex items-center justify-between">
                             <span>Current target</span>
-                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || 'ÔÇö'}</span>
                           </div>
                           <div className="text-3xl font-extrabold">{dpHits} / {DOUBLE_PRACTICE_ORDER.length}</div>
+                        </>
+                      )}
+                      {currentGame === 'Around the Clock' && (
+                        <>
+                          <div className="mt-1 text-xs flex items-center justify-between">
+                            <span>Current target</span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{ATC_ORDER[atcIndex] === 25 ? '25 (Outer Bull)' : ATC_ORDER[atcIndex] === 50 ? '50 (Inner Bull)' : (ATC_ORDER[atcIndex] || 'ÔÇö')}</span>
+                          </div>
+                          <div className="text-3xl font-extrabold">{atcHits} / {ATC_ORDER.length}</div>
                         </>
                       )}
                     </div>
@@ -883,13 +1282,26 @@ export default function OnlinePlay({ user }: { user?: any }) {
                         <span className="font-semibold">{p.name}</span>
                         {currentGame === 'X01' ? (
                           <>
-                            <span className="opacity-70"> · </span>
+                            <span className="opacity-70"> = </span>
                             <span className="font-mono">{rem}</span>
                           </>
                         ) : (
                           <>
-                            <span className="opacity-70"> · </span>
-                            <span className="font-mono">{currentGame}</span>
+                            <span className="opacity-70"> = </span>
+                            <span className="font-mono">
+                              {currentGame === 'Double Practice' ? `${dpHits}/${DOUBLE_PRACTICE_ORDER.length}`
+                                : currentGame === 'Around the Clock' ? `${atcHits}/${ATC_ORDER.length}`
+                                : currentGame === 'Cricket' ? `${(cricketById[p.id]?.points||0)} pts`
+                                : currentGame === 'Shanghai' ? `${(shanghaiById[p.id]?.score||0)} pts = R${(shanghaiById[p.id]?.round||1)}`
+                                : currentGame === 'Halve It' ? `${(halveById[p.id]?.score||0)} pts = S${(halveById[p.id]?.stage||0)+1}`
+                                : currentGame === 'High-Low' ? `${(highlowById[p.id]?.score||0)} pts = ${(highlowById[p.id]?.target||'HIGH')}`
+                                : currentGame === 'Killer' ? (() => { const st = killerById[p.id]; return st ? `#${st.number} = ${st.lives}ÔØñ ${st.isKiller?'= K':''}` : 'ÔÇö' })()
+                                : currentGame === 'American Cricket' ? `${(amCricketById[p.id]?.points||0)} pts`
+                                : currentGame === 'Baseball' ? (() => { const st = baseballById[p.id]; return st ? `R${st.score} = I${st.inning}` : 'ÔÇö' })()
+                                : currentGame === 'Golf' ? (() => { const st = golfById[p.id]; return st ? `S${st.strokes} = H${st.hole}` : 'ÔÇö' })()
+                                : currentGame === 'Tic Tac Toe' ? (() => { const x = (ttt.board||[]).filter((c:any)=>c==='X').length; const o = (ttt.board||[]).filter((c:any)=>c==='O').length; return `X${x}-O${o}` })()
+                                : currentGame}
+                            </span>
                           </>
                         )}
                       </div>
@@ -900,24 +1312,34 @@ export default function OnlinePlay({ user }: { user?: any }) {
             )}
             {compactView ? (
               <div className="space-y-2">
-                {/* Turn-by-turn camera: show your camera when it's your turn */}
-                {/* Top toolbar above camera area */}
+                {/* Top toolbar */}
                 <div className="flex items-center gap-2 mb-2">
-                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ /* autoscore default */ closeManual() }}>Autoscore</button>
+                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
+                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
                   <button className="btn px-3 py-1 text-sm" onClick={openManual}>Manual Correction</button>
+                  <div className="ml-auto flex items-center gap-1 text-[11px]">
+                    <span className="opacity-70">Cam size</span>
+                    <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>ÔêÆ</button>
+                    <span className="w-8 text-center">{Math.round(cameraScale*100)}%</span>
+                    <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
-                    <CameraTile label="Your Board" autoStart={false} />
-                  ) : (
-                    <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
-                  )}
+                {/* Summary (left) + Camera (right) */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 items-start">
+                  <div className="order-1"><RenderMatchSummary /></div>
+                  <div className="order-2">
+                    {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
+                      <div className="min-w-[260px] relative z-10"><CameraTile label="Your Board" autoStart={false} /></div>
+                    ) : (
+                      <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
+                    )}
+                  </div>
                 </div>
-                <div className="font-semibold">Current: {match.players[match.currentPlayerIdx]?.name || '—'}</div>
+                <div className="font-semibold">Current: {match.players[match.currentPlayerIdx]?.name || 'ÔÇö'}</div>
                 {currentGame === 'X01' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                   <>
                     {/* Camera autoscore module; only render for current thrower */}
-                    <CameraView showToolbar={false} onVisitCommitted={(score, darts, finished) => {
+                    <CameraView hideInlinePanels showToolbar={false} onVisitCommitted={(score, darts, finished) => {
                       if (callerEnabled) {
                         const p = match.players[match.currentPlayerIdx]
                         const leg = p?.legs[p.legs.length-1]
@@ -933,7 +1355,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       if (!finished) { match.nextPlayer() }
                       sendState()
                     }} />
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 mb-2">
                       <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn px-2 py-0.5 text-xs" onClick={() => submitVisitManual(visitScore)}>Submit Visit</button>
                       <button className="btn px-2 py-0.5 text-xs bg-slate-700 hover:bg-slate-800" onClick={() => { match.undoVisit(); sendState(); }}>Undo</button>
@@ -945,17 +1367,17 @@ export default function OnlinePlay({ user }: { user?: any }) {
                           <button key={v} className="btn px-2 py-0.5 text-xs" onClick={()=>submitVisitManual(v)}>{v}</button>
                         ))}
                       </div>
-                    <div className="mt-2 flex items-center gap-1.5">
+                    <div className="mt-2 flex items-center gap-1.5 mb-2">
                       <button className="btn px-2 py-0.5 text-xs" onClick={()=>setShowQuick(true)}>Quick Chat</button>
                       <button className="btn px-2 py-0.5 text-xs" onClick={()=>setShowMessages(true)}>Messages</button>
                     </div>
                   </>
                 ) : (currentGame === 'Double Practice' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
                   <div className="p-3 rounded-xl bg-black/20">
-                    <div className="text-xs mb-1.5">Double Practice — Hit doubles D1→D20→DBULL</div>
+                    <div className="text-xs mb-1.5">Double Practice ÔÇö Hit doubles D1ÔåÆD20ÔåÆDBULL</div>
                     <div className="mb-1 text-sm flex items-center justify-between">
                       <span>Current target</span>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || 'ÔÇö'}</span>
                     </div>
                     <div className="text-2xl font-extrabold mb-2">{dpHits} / {DOUBLE_PRACTICE_ORDER.length}</div>
                     <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
@@ -978,9 +1400,181 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <button className="btn px-2 py-0.5 text-xs" onClick={addDpManual}>Add</button>
                     </div>
                   </div>
+                ) : (currentGame === 'Around the Clock' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                  <div className="p-3 rounded-xl bg-black/20">
+                    <div className="text-xs mb-1.5">Around the Clock ÔÇö Hit 1ÔåÆ20 then 25 (outer) and 50 (inner)</div>
+                    <div className="mb-1 text-sm flex items-center justify-between">
+                      <span>Current target</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{ATC_ORDER[atcIndex] === 25 ? '25 (Outer Bull)' : ATC_ORDER[atcIndex] === 50 ? '50 (Inner Bull)' : (ATC_ORDER[atcIndex] || 'ÔÇö')}</span>
+                    </div>
+                    <div className="text-2xl font-extrabold mb-2">{atcHits} / {ATC_ORDER.length}</div>
+                    <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                      <CameraView
+                        scoringMode="custom"
+                        showToolbar={false}
+                        immediateAutoCommit
+                        onAutoDart={(value, ring, info) => {
+                          addAtcValue(value, ring, info?.sector ?? null)
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} onKeyDown={e=>{ if(e.key==='Enter') addAtcNumeric() }} />
+                      <button className="btn px-2 py-0.5 text-xs" onClick={addAtcNumeric}>Add Dart</button>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <input className="input w-40 text-sm" placeholder="Manual (T20, D5, 25, 50)" value={atcManual} onChange={e=>setAtcManual(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addAtcManual() }} />
+                      <button className="btn px-2 py-0.5 text-xs" onClick={addAtcManual}>Add</button>
+                    </div>
+                  </div>
+                ) : (currentGame === 'Cricket' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                  <div className="p-3 rounded-xl bg-black/20">
+                    <div className="text-xs mb-1.5">Cricket ÔÇö Close 15-20 and Bull; overflow scores points</div>
+                    {(() => {
+                      const pid = currentPlayerId(); ensureCricket(pid); const st = cricketById[pid] || createCricketState()
+                      return (
+                        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[11px]">
+                          {CRICKET_NUMBERS.map(n => (
+                            <div key={n} className="p-1 rounded bg-slate-800/50 border border-slate-700/50">
+                              <div className="opacity-70">{n===25?'Bull':n}</div>
+                              <div className="font-semibold">{Math.min(3, st.marks?.[n]||0)} / 3</div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })()}
+                    <div className="text-sm mb-2">Points: <span className="font-semibold">{(cricketById[currentPlayerId()]?.points||0)}</span></div>
+                    <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => {
+                        {
+                          const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL')
+                          applyCricketAuto(value, r, info?.sector ?? null)
+                        }
+                      }} />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} onKeyDown={e=>{ if(e.key==='Enter'){ applyCricketAuto(Math.max(0, visitScore|0)); setVisitScore(0) } }} />
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ applyCricketAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                    </div>
+                  </div>
+                ) : (currentGame === 'Shanghai' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                  <div className="p-3 rounded-xl bg-black/20">
+                    {(() => { const pid = currentPlayerId(); ensureShanghai(pid); const st = shanghaiById[pid] || createShanghaiState(); return (
+                      <>
+                        <div className="text-xs mb-1.5">Shanghai ÔÇö Hit only the round's number; Single/Double/Triple score</div>
+                        <div className="mb-1 text-sm flex items-center justify-between"><span>Round</span><span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{st.round}</span></div>
+                        <div className="text-2xl font-extrabold mb-2">Score: {st.score}</div>
+                      </>
+                    ) })()}
+                    <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyShanghaiAuto(value, r, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} onKeyDown={e=>{ if(e.key==='Enter'){ applyShanghaiAuto(Math.max(0, visitScore|0)); setVisitScore(0) } }} />
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ applyShanghaiAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                    </div>
+                  </div>
+                ) : (currentGame === 'Halve It' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                  <div className="p-3 rounded-xl bg-black/20">
+                    {(() => { const pid = currentPlayerId(); ensureHalve(pid); const st = halveById[pid] || createDefaultHalveIt(); const t = getCurrentHalveTarget(st); return (
+                      <>
+                        <div className="text-xs mb-1.5">Halve It ÔÇö Hit the target each round or your score halves</div>
+                        <div className="mb-1 text-sm flex items-center justify-between">
+                          <span>Stage</span>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{st.stage+1}/{st.targets.length}</span>
+                        </div>
+                        <div className="text-sm">Target: <span className="font-semibold">{(() => { const tt = t; if (!tt) return 'ÔÇö'; if (tt.kind==='ANY_NUMBER') return 'Any'; if (tt.kind==='BULL') return 'Bull'; if (tt.kind==='DOUBLE' || tt.kind==='TRIPLE' || tt.kind==='NUMBER') return `${tt.kind} ${(tt as any).num}`; return 'ÔÇö' })()}</span></div>
+                        <div className="text-2xl font-extrabold mb-2">Score: {st.score}</div>
+                      </>
+                    ) })()}
+                    <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyHalveAuto(value, r, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} onKeyDown={e=>{ if(e.key==='Enter'){ applyHalveAuto(Math.max(0, visitScore|0)); setVisitScore(0) } }} />
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ applyHalveAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                    </div>
+                  </div>
+                ) : (currentGame === 'High-Low' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                  <div className="p-3 rounded-xl bg-black/20">
+                    {(() => { const pid = currentPlayerId(); ensureHighLow(pid); const st = highlowById[pid] || createHighLow(); return (
+                      <>
+                        <div className="text-xs mb-1.5">High-Low ÔÇö Alternate aiming for high then low segments</div>
+                        <div className="mb-1 text-sm flex items-center justify-between"><span>Round</span><span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{st.round}</span></div>
+                        <div className="text-sm">Target: <span className="font-semibold">{st.target}</span></div>
+                        <div className="text-2xl font-extrabold mb-2">Score: {st.score}</div>
+                      </>
+                    ) })()}
+                    <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyHighLowAuto(value, r, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} onKeyDown={e=>{ if(e.key==='Enter'){ applyHighLowAuto(Math.max(0, visitScore|0)); setVisitScore(0) } }} />
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ applyHighLowAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                    </div>
+                  </div>
+                ) : (currentGame === 'American Cricket' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                  <div className="p-3 rounded-xl bg-black/20">
+                    <div className="text-xs mb-1.5">American Cricket ÔÇö Close 12-20 and Bull; overflow scores</div>
+                    {(() => { const pid = currentPlayerId(); ensureAmCricket(pid); const st = amCricketById[pid] || createAmCricketState(); return (
+                      <div className="mb-2 grid grid-cols-5 gap-1 text-center text-[11px]">
+                        {AM_CRICKET_NUMBERS.map(n => (
+                          <div key={n} className="p-1 rounded bg-slate-800/50 border border-slate-700/50">
+                            <div className="opacity-70">{n===25?'Bull':n}</div>
+                            <div className="font-semibold">{Math.min(3, st.marks?.[n]||0)} / 3</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) })()}
+                    <div className="text-sm mb-2">Points: <span className="font-semibold">{(amCricketById[currentPlayerId()]?.points||0)}</span></div>
+                    <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:(ring as any); applyAmCricketAuto(value, r, info?.sector ?? null) }} />
+                    </div>
+                  </div>
+                ) : (currentGame === 'Baseball' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                  <div className="p-3 rounded-xl bg-black/20">
+                    {(() => { const pid = currentPlayerId(); ensureBaseball(pid); const st = baseballById[pid] || createBaseball(); return (
+                      <div className="text-xs mb-1.5">Baseball ÔÇö Inning {st.inning} ÔÇó Runs {st.score}</div>
+                    ) })()}
+                    <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:(ring as any); applyBaseballAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                  </div>
+                ) : (currentGame === 'Golf' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                  <div className="p-3 rounded-xl bg-black/20">
+                    {(() => { const pid = currentPlayerId(); ensureGolf(pid); const st = golfById[pid] || createGolf(); return (
+                      <div className="text-xs mb-1.5">Golf ÔÇö Hole {st.hole} (target {GOLF_TARGETS[st.hole]}) ÔÇó Strokes {st.strokes}</div>
+                    ) })()}
+                    <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:(ring as any); applyGolfAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                  </div>
+                ) : (currentGame === 'Tic Tac Toe' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                  <div className="p-3 rounded-xl bg-black/20">
+                    <div className="text-xs mb-1.5">Tic Tac Toe ÔÇö Tap a cell to claim by hitting its target</div>
+                    <div className="grid grid-cols-3 gap-1 mb-2">
+                      {Array.from({length:9},(_,i)=>i as 0|1|2|3|4|5|6|7|8).map(cell => (
+                        <button key={cell} className={`h-12 rounded-xl border ${ttt.board[cell]?'bg-emerald-500/20 border-emerald-400/30':'bg-slate-800/50 border-slate-700/50'}`} onClick={()=>{
+                          if (ttt.finished || ttt.board[cell]) return
+                          // ask user for which dart value to use for this claim (simple manual prompt)
+                          const tgt = TTT_TARGETS[cell]
+                          const manual = prompt(`Enter dart for cell ${cell} (target ${tgt.type==='BULL'?'Bull':tgt.num}) e.g. 20/40/60 or 25/50`)
+                          const v = Number(manual||0)
+                          const ring = (v%3===0)?'TRIPLE': (v%2===0?'DOUBLE':'SINGLE')
+                          const sector = tgt.type==='BULL'?null:(tgt.num||null)
+                          applyTttAuto(cell, v, ring as any, sector as any)
+                        }}>{ttt.board[cell] || ''}</button>
+                      ))}
+                    </div>
+                    <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => {
+                        // passive; primary interaction via tapping a cell above
+                      }} />
+                    </div>
+                  </div>
                 ) : (user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
                   <div className="p-3 rounded-xl bg-black/20">
-                    <div className="text-xs mb-1.5">{currentGame} (online) — manual turn entry</div>
+                    <div className="text-xs mb-1.5">{currentGame} (online) ÔÇö manual turn entry</div>
                     <div className="flex items-center gap-1.5">
                       <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                       <button className="btn" onClick={() => {
@@ -1003,23 +1597,36 @@ export default function OnlinePlay({ user }: { user?: any }) {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                {/* Left column: summary */}
+                <div className="space-y-1.5">
+                  <RenderMatchSummary />
+                </div>
+                {/* Main area: toolbar + camera + controls */}
                 <div className="md:col-span-2 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    {/* Top toolbar above camera area */}
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ closeManual() }}>Autoscore</button>
-                      <button className="btn px-2 py-0.5 text-xs" onClick={openManual}>Manual Correction</button>
+                  {/* Toolbar row (separate) */}
+                  <div className="flex items-center gap-1.5 mt-2">
+                    <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
+                    <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
+                    <button className="btn px-2 py-0.5 text-xs" onClick={openManual}>Manual Correction</button>
+                    <div className="ml-auto flex items-center gap-1 text-[10px]">
+                      <span className="opacity-70">Cam</span>
+                      <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>ÔêÆ</button>
+                      <span className="w-7 text-center">{Math.round(cameraScale*100)}%</span>
+                      <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
                     </div>
+                  </div>
+                  {/* Camera row (under toolbar, left side) */}
+                  <div className="mt-2">
                     {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
-                      <CameraTile label="Your Board" autoStart={false} />
+                      <div className="w-full max-w-full"><CameraTile label="Your Board" autoStart={false} /></div>
                     ) : (
                       <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
                     )}
                   </div>
-                  <div className="font-semibold text-sm md:text-base">Current: {match.players[match.currentPlayerIdx]?.name || '—'}</div>
+                  <div className="font-semibold text-sm md:text-base">Current: {match.players[match.currentPlayerIdx]?.name || 'ÔÇö'}</div>
                   {currentGame === 'X01' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                     <>
-                      <CameraView showToolbar={false} onVisitCommitted={(score, darts, finished) => {
+                      <CameraView hideInlinePanels showToolbar={false} onVisitCommitted={(score, darts, finished) => {
                         if (callerEnabled) {
                           const p = match.players[match.currentPlayerIdx]
                           const leg = p?.legs[p.legs.length-1]
@@ -1054,21 +1661,22 @@ export default function OnlinePlay({ user }: { user?: any }) {
                         const rem = leg ? leg.totalScoreRemaining : match.startingScore
                         return (rem > 0 && rem <= 170) ? (
                           <div className="mt-2 p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-900 text-sm">
-                            Checkout suggestions (fav {favoriteDouble}): {suggestCheckouts(rem, favoriteDouble).join('  •  ') || '—'}
+                            Checkout suggestions (fav {favoriteDouble}): {suggestCheckouts(rem, favoriteDouble).join('  ÔÇó  ') || 'ÔÇö'}
                           </div>
                         ) : null
                       })()}
                     </>
                   ) : (currentGame === 'Double Practice' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
                     <div className="p-3 rounded-xl bg-black/20">
-                      <div className="text-sm mb-2">Double Practice — Hit doubles D1→D20→DBULL</div>
+                      <div className="text-sm mb-2">Double Practice ÔÇö Hit doubles D1ÔåÆD20ÔåÆDBULL</div>
                       <div className="mb-1 text-sm flex items-center justify-between">
                         <span>Current target</span>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || 'ÔÇö'}</span>
                       </div>
                       <div className="text-2xl font-extrabold mb-2">{dpHits} / {DOUBLE_PRACTICE_ORDER.length}</div>
                       <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                         <CameraView
+                          scoringMode="custom"
                           showToolbar={false}
                           immediateAutoCommit
                           onAutoDart={(value, ring) => {
@@ -1087,9 +1695,102 @@ export default function OnlinePlay({ user }: { user?: any }) {
                         <button className="btn" onClick={addDpManual}>Add</button>
                       </div>
                     </div>
+                  ) : (currentGame === 'Cricket' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                    <div className="p-3 rounded-xl bg-black/20">
+                      <div className="text-sm mb-2">Cricket ÔÇö Close 15-20 and Bull; overflow scores points</div>
+                      {(() => { const pid = currentPlayerId(); ensureCricket(pid); const st = cricketById[pid] || createCricketState(); return (
+                        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[11px]">
+                          {CRICKET_NUMBERS.map(n => (
+                            <div key={n} className="p-1 rounded bg-slate-800/50 border border-slate-700/50">
+                              <div className="opacity-70">{n===25?'Bull':n}</div>
+                              <div className="font-semibold">{Math.min(3, st.marks?.[n]||0)} / 3</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) })()}
+                      <div className="text-sm mb-2">Points: <span className="font-semibold">{(cricketById[currentPlayerId()]?.points||0)}</span></div>
+                      <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                        <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyCricketAuto(value, r, info?.sector ?? null) }} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
+                        <button className="btn" onClick={() => { applyCricketAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                      </div>
+                    </div>
+                  ) : (currentGame === 'Shanghai' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                    <div className="p-3 rounded-xl bg-black/20">
+                      {(() => { const pid = currentPlayerId(); ensureShanghai(pid); const st = shanghaiById[pid] || createShanghaiState(); return (
+                        <>
+                          <div className="text-sm mb-2">Shanghai ÔÇö Round {st.round} ÔÇó Score {st.score}</div>
+                        </>
+                      ) })()}
+                      <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                        <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyShanghaiAuto(value, r, info?.sector ?? null) }} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
+                        <button className="btn" onClick={() => { applyShanghaiAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                      </div>
+                    </div>
+                  ) : (currentGame === 'Halve It' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                    <div className="p-3 rounded-xl bg-black/20">
+                      {(() => { const pid = currentPlayerId(); ensureHalve(pid); const st = halveById[pid] || createDefaultHalveIt(); const t = getCurrentHalveTarget(st); return (
+                        <>
+                          <div className="text-sm mb-2">Halve It ÔÇö Stage {st.stage+1}/{st.targets.length} ÔÇó Score {st.score}</div>
+                          <div className="text-sm">Target: <span className="font-semibold">{(() => { const tt = t; if (!tt) return 'ÔÇö'; if (tt.kind==='ANY_NUMBER') return 'Any'; if (tt.kind==='BULL') return 'Bull'; if (tt.kind==='DOUBLE' || tt.kind==='TRIPLE' || tt.kind==='NUMBER') return `${tt.kind} ${(tt as any).num}`; return 'ÔÇö' })()}</span></div>
+                        </>
+                      ) })()}
+                      <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                        <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyHalveAuto(value, r, info?.sector ?? null) }} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
+                        <button className="btn" onClick={() => { applyHalveAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                      </div>
+                    </div>
+                  ) : (currentGame === 'High-Low' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                    <div className="p-3 rounded-xl bg-black/20">
+                      {(() => { const pid = currentPlayerId(); ensureHighLow(pid); const st = highlowById[pid] || createHighLow(); return (
+                        <>
+                          <div className="text-sm mb-2">High-Low ÔÇö Round {st.round} ÔÇó Target {st.target} ÔÇó Score {st.score}</div>
+                        </>
+                      ) })()}
+                      <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                        <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyHighLowAuto(value, r, info?.sector ?? null) }} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
+                        <button className="btn" onClick={() => { applyHighLowAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                      </div>
+                    </div>
+                  ) : (currentGame === 'Killer' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                    <div className="p-3 rounded-xl bg-black/20">
+                      {(() => { const pid = currentPlayerId(); match.players.forEach(p=>ensureKiller(p.id)); const st = killerById[pid]; return (
+                        <>
+                          <div className="text-xs mb-1.5">Killer ÔÇö Hit your own double to become Killer; then remove othersÔÇÖ lives by hitting their doubles/triples.</div>
+                          <div className="mb-1 text-sm flex items-center justify-between"><span>Your number</span><span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{st?.number || 'ÔÇö'}</span></div>
+                          <div className="text-sm">Lives: <span className="font-semibold">{st?.lives ?? 'ÔÇö'}</span> {st?.isKiller ? <span className="ml-2 text-emerald-300">KILLER</span> : null}</div>
+                          <div className="mt-2 grid grid-cols-2 md:grid-cols-3 gap-1 text-[11px]">
+                            {match.players.map(pp => {
+                              const s = killerById[pp.id]
+                              return (
+                                <div key={pp.id} className="p-1 rounded bg-slate-800/50 border border-slate-700/50 flex items-center justify-between">
+                                  <span className="opacity-80 truncate">{pp.name}</span>
+                                  <span className="font-mono">{s ? `#${s.number} = ${s.lives}ÔØñ${s.isKiller?' = K':''}` : 'ÔÇö'}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </>
+                      ) })()}
+                      <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 my-2">
+                        <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyKillerAuto(r, info?.sector ?? null) }} />
+                      </div>
+                      <div className="text-xs opacity-70">Tip: Only doubles/triples on the opponentsÔÇÖ numbers remove lives. To become Killer, hit your own double.</div>
+                    </div>
                   ) : (user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
                     <div className="p-3 rounded-xl bg-black/20">
-                      <div className="text-sm mb-2">{currentGame} (online) — manual turn entry</div>
+                      <div className="text-sm mb-2">{currentGame} (online) ÔÇö manual turn entry</div>
                       <div className="flex items-center gap-2">
                         <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn" onClick={() => {
@@ -1150,7 +1851,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <div className="col-span-1">
                 <label className="block text-sm text-slate-300 mb-1">Value</label>
                 <input className="input w-full" type="number" min={1} value={modeValue} onChange={e=>setModeValue(parseInt(e.target.value||'1'))} />
-                <div className="text-xs opacity-70 mt-1">Example: Best Of 5 → first to 3</div>
+                <div className="text-xs opacity-70 mt-1">Example: Best Of 5 ÔåÆ first to 3</div>
               </div>
               <div className="col-span-1">
                 <label className="block text-sm text-slate-300 mb-1">Starting Score</label>
@@ -1172,13 +1873,12 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <div className="col-span-1">
                 <div className="p-3 rounded-lg bg-black/20 border border-slate-700/40">
                   <div className="text-xs text-slate-300 uppercase tracking-wide mb-1">Summary</div>
-                  <div className="text-sm font-semibold">{game} • {mode==='bestof' ? `Best Of ${modeValue}` : `First To ${modeValue}`} {game==='X01' ? `• ${startScore}` : ''}</div>
+                  <div className="text-sm font-semibold">{game} ÔÇó {mode==='bestof' ? `Best Of ${modeValue}` : `First To ${modeValue}`} {game==='X01' ? `ÔÇó ${startScore}` : ''}</div>
                   {!user?.fullAccess && (premiumGames as readonly string[]).includes(game) && (
                     <div className="text-xs text-rose-300 mt-1">PREMIUM required</div>
                   )}
                 </div>
-              </div>
-                <div className="md:col-span-2" />
+                </div>
               </div>
               <div className="sticky bottom-0 bg-slate-900/80 backdrop-blur border-t border-slate-700 z-10 px-2 py-2">
                 <button className="btn w-full" disabled={!user?.fullAccess && (premiumGames as readonly string[]).includes(game)} title={!user?.fullAccess && (premiumGames as readonly string[]).includes(game) ? 'PREMIUM game' : ''} onClick={()=>{
@@ -1212,7 +1912,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
             </div>
             {(pendingInvite.game || pendingInvite.mode) && (
               <div className="text-xs opacity-80 mb-3">
-                {pendingInvite.game || 'X01'} • {pendingInvite.mode==='firstto' ? `First To ${pendingInvite.value}` : `Best Of ${pendingInvite.value}`} {pendingInvite.game==='X01' && pendingInvite.startingScore ? `• ${pendingInvite.startingScore}` : ''}
+                {pendingInvite.game || 'X01'} ÔÇó {pendingInvite.mode==='firstto' ? `First To ${pendingInvite.value}` : `Best Of ${pendingInvite.value}`} {pendingInvite.game==='X01' && pendingInvite.startingScore ? `ÔÇó ${pendingInvite.startingScore}` : ''}
               </div>
             )}
             {pendingInvite.boardPreview ? (
@@ -1339,7 +2039,7 @@ function ChatList({ items, onDelete, onReport, onBlock }: { items: { key: string
                   title="Delete message"
                   aria-label="Delete message"
                   onClick={() => onDelete(i)}
-                >×</button>
+                >├ù</button>
                 {onBlock && (
                   <button
                     className="px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-800 text-slate-100 text-[11px]"

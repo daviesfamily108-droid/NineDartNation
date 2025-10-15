@@ -10,7 +10,7 @@ import AdminDashboard from './components/AdminDashboard'
 import SettingsPanel from './components/SettingsPanel'
 import Auth from './components/Auth'
 import { ThemeProvider } from './components/ThemeContext'
-import { useWS, WSProvider } from './components/WSProvider'
+import { useWS } from './components/WSProvider'
 import StatusDot from './components/ui/StatusDot'
 import { getRollingAvg, getAllTimeAvg } from './store/profileStats'
 import { useUserSettings } from './store/userSettings'
@@ -25,8 +25,13 @@ import AdminAccess from './components/AdminAccess'
 // AdminAccess already imported above
 import Drawer from './components/ui/Drawer'
 import { getDominantColorFromImage, stringToColor } from './utils/color'
+import OpsDashboard from './components/OpsDashboard'
 
 export default function App() {
+  const appRef = useRef<HTMLDivElement | null>(null);
+  const [avatar, setAvatar] = useState<string>('');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null);
   const ws = (() => { try { return useWS() } catch { return null } })()
   const [tab, setTab] = useState<TabKey>('score')
   const [isMobile, setIsMobile] = useState<boolean>(false)
@@ -34,142 +39,44 @@ export default function App() {
   const [user, setUser] = useState<any>(null)
   const [allTimeAvg, setAllTimeAvg] = useState<number>(0)
   const { avgMode } = useUserSettings()
-  // Avatar state/effect must be declared before any conditional return to keep hooks order stable
-  const [avatar, setAvatar] = useState<string>('')
-  const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null)
-  const appRef = useRef<HTMLDivElement | null>(null)
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const [nameColor, setNameColor] = useState<string | null>(null)
+
+
+  // Restore user from token on mount
   useEffect(() => {
-    // Detect mobile layout via viewport width and user agent; update on resize
-    const mq = window.matchMedia('(max-width: 768px)')
-    const uaMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')
-    const update = () => setIsMobile(mq.matches || uaMobile)
-    update()
-    try { mq.addEventListener('change', update) } catch { window.addEventListener('resize', update) }
-    return () => {
-      try { mq.removeEventListener('change', update) } catch { window.removeEventListener('resize', update) }
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      // Validate token with server
+      const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+      fetch(`${API_URL}/api/auth/me`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data?.user) {
+          setUser(data.user);
+        } else {
+          // Token invalid, remove it
+          localStorage.removeItem('authToken');
+        }
+      })
+      .catch(() => {
+        // Network error, keep token for offline retry
+      });
     }
-  }, [])
-  // Demo deep-links: ?demo=offline-format&format=best|first&value=5&start=501
+  }, []);
+
   useEffect(() => {
-    try {
-      const sp = new URLSearchParams(window.location.search)
-      if (sp.get('demo') === 'offline-format') {
-        const f = (sp.get('format') || 'first').toLowerCase() === 'best' ? 'best' : 'first'
-        const v = Number(sp.get('value') || '1')
-        const s = Number(sp.get('start') || '501')
-        window.dispatchEvent(new CustomEvent('ndn:offline-format', { detail: { formatType: f, formatCount: isFinite(v)? v : 1, startScore: isFinite(s)? s : 501 } }))
-        // Switch to Offline and auto-start X01
-        setTab('offline')
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('ndn:auto-start', { detail: { mode: 'X01' } }))
-        }, 50)
-      }
-      // Demo for Online create-match: ?demo=online-create&game=X01&mode=firstto|bestof&value=3&start=501
-      if (sp.get('demo') === 'online-create') {
-        const game = sp.get('game') || 'X01'
-        const mode = (sp.get('mode') || 'firstto').toLowerCase() === 'bestof' ? 'bestof' : 'firstto'
-        const value = Number(sp.get('value') || '3')
-        const start = Number(sp.get('start') || '501')
-        setTab('online')
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('ndn:online-demo', { detail: { game, mode, value: isFinite(value)? value : 3, start: isFinite(start)? start : 501 } }))
-        }, 80)
-      }
-      // Demo: open a live-looking online match view with fake data
-      if (sp.get('demo') === 'online-match') {
-        setTab('online')
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('ndn:online-match-demo', { detail: { game: 'X01', start: 501 } }))
-        }, 120)
-      }
-    } catch {}
-  }, [])
-  // Fullscreen change tracking
-  useEffect(() => {
-    const onFs = () => setIsFullscreen(!!document.fullscreenElement)
-    document.addEventListener('fullscreenchange', onFs)
-    return () => document.removeEventListener('fullscreenchange', onFs)
-  }, [])
-  useEffect(() => {
-    if (!isMobile) setNavOpen(false)
-  }, [isMobile])
-  // Avatar state/effect must be declared before any conditional return to keep hooks order stable
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    try { setAvatar(localStorage.getItem('ndn:avatar') || '') } catch {}
-    const onUpdate = (e: Event) => {
+    const onLogout = () => {
       try {
-        // Prefer payload for immediate update; fallback to localStorage
-        const detail = (e as CustomEvent<string>).detail
-        if (typeof detail === 'string') setAvatar(detail)
-        else setAvatar(localStorage.getItem('ndn:avatar') || '')
-      } catch {
-        try { setAvatar(localStorage.getItem('ndn:avatar') || '') } catch {}
-      }
-    }
-    window.addEventListener('ndn:avatar-updated' as any, onUpdate as any)
-    return () => window.removeEventListener('ndn:avatar-updated' as any, onUpdate as any)
-  }, [])
-  // Derive a name color from avatar image or username fallback
-  useEffect(() => {
-    let cancelled = false
-    async function run() {
-      const src = avatar || ''
-      const fallback = user?.username ? stringToColor(user.username) : null
-      if (src) {
-        const col = await getDominantColorFromImage(src)
-        if (!cancelled) setNameColor(col || fallback)
-      } else {
-        setNameColor(fallback)
-      }
-    }
-    run()
-    // re-run when username or avatar changes
-  }, [avatar, user?.username])
-  // Detect HTTPS server availability for phone pairing
-  useEffect(() => {
-    let cancelled = false
-    async function check() {
-      try {
-        const res = await fetch(`/api/https-info`)
-        const j = await res.json()
-        if (!cancelled && j && typeof j.https === 'boolean') setHttpsInfo({ https: !!j.https, port: Number(j.port)||8788 })
+        localStorage.removeItem('mockUser');
+        localStorage.removeItem('authToken');
       } catch {}
-    }
-    check()
-    const id = setInterval(check, 15000)
-    return () => { cancelled = true; clearInterval(id) }
-  }, [])
-  // Listen for recalibration requests from other components (must be declared before any conditional return)
-  useEffect(() => {
-    const handler = () => setTab('calibrate')
-    const listener = () => handler()
-    window.addEventListener('ndn:request-calibrate', listener)
-    const onTab = (e: any) => {
-      const t = e?.detail?.tab as TabKey | undefined
-      if (t) setTab(t)
-    }
-    window.addEventListener('ndn:change-tab', onTab as any)
-    // Friend Spectate: listen for a request, switch to Online, then dispatch the room event for OnlinePlay
-    const onSpectateReq = (e: any) => {
-      try {
-        const detail = e?.detail
-        setTab('online')
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent('ndn:spectate-room', { detail }))
-        }, 60)
-      } catch {}
-    }
-    window.addEventListener('ndn:spectate-request', onSpectateReq as any)
-    return () => { window.removeEventListener('ndn:request-calibrate', listener); window.removeEventListener('ndn:change-tab', onTab as any); window.removeEventListener('ndn:spectate-request', onSpectateReq as any) }
-  }, [])
-  // Reset scroll to top on tab change so nothing appears above the header
-  useEffect(() => {
-    const scroller = document.getElementById('ndn-main-scroll')
-    if (scroller) scroller.scrollTo({ top: 0, behavior: 'auto' })
-  }, [tab])
+      setUser(null);
+      setTab('score');
+    };
+    window.addEventListener('ndn:logout' as any, onLogout as any);
+    return () => window.removeEventListener('ndn:logout' as any, onLogout as any);
+  }, []);
   // Refresh all-time avg when user changes or stats update
   useEffect(() => {
     if (!user?.username) return
@@ -179,6 +86,76 @@ export default function App() {
     window.addEventListener('ndn:stats-updated', onUpdate as any)
     return () => window.removeEventListener('ndn:stats-updated', onUpdate as any)
   }, [user?.username, avgMode])
+
+  // Detect mobile layout via viewport width and user agent; update on resize
+  useEffect(() => {
+    const update = () => {
+      const mq = window.matchMedia('(max-width: 1024px)')
+      const uaMobile = /Mobi|Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '')
+      const touchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0
+      const smallScreen = window.innerWidth < 1025
+      const isMobileDevice = mq.matches || uaMobile || touchScreen || smallScreen
+      setIsMobile(isMobileDevice)
+    }
+    update()
+    window.addEventListener('resize', update)
+    const mq = window.matchMedia('(max-width: 1024px)')
+    try { mq.addEventListener('change', update) } catch {}
+    return () => {
+      window.removeEventListener('resize', update)
+      try { mq.removeEventListener('change', update) } catch {}
+    }
+  }, [])
+
+  // Global logout handler: return to sign-in screen and clear minimal local user context
+  useEffect(() => {
+    const onLogout = () => {
+      try {
+        // Clear any lightweight local flags (keep stats unless explicitly reset)
+        localStorage.removeItem('ndn:avatar')
+      } catch {}
+      setUser(null)
+      setTab('score')
+    }
+    window.addEventListener('ndn:logout' as any, onLogout as any)
+    return () => window.removeEventListener('ndn:logout' as any, onLogout as any)
+  }, [])
+
+  // Apply username changes from Settings globally and propagate via WS presence
+  useEffect(() => {
+    const onName = (e: any) => {
+      try {
+        const next = String(e?.detail?.username || '').trim()
+        if (!next) return
+        setUser((prev: any) => {
+          const u = prev ? { ...prev, username: next } : prev
+          return u
+        })
+        // Recompute name color on next effect pass based on new username/avatar
+        // Send presence update so friends/lobby reflect the new name
+        try {
+          const email = (user?.email || '').toLowerCase()
+          if (ws && next && email) ws.send({ type: 'presence', username: next, email })
+        } catch {}
+      } catch {}
+    }
+    window.addEventListener('ndn:username-changed' as any, onName as any)
+    return () => window.removeEventListener('ndn:username-changed' as any, onName as any)
+  }, [ws, user?.email])
+
+  // Handle tab changes from Home component quick access pills
+  useEffect(() => {
+    const onTabChange = (e: any) => {
+      try {
+        const tab = String(e?.detail?.tab || '').trim()
+        if (tab && ['score', 'offline', 'online', 'stats', 'settings', 'admin', 'tournaments', 'friends'].includes(tab)) {
+          setTab(tab as TabKey)
+        }
+      } catch {}
+    }
+    window.addEventListener('ndn:change-tab' as any, onTabChange as any)
+    return () => window.removeEventListener('ndn:change-tab' as any, onTabChange as any)
+  }, [])
 
   async function fetchSubscription(u: any) {
     try {
@@ -195,7 +172,6 @@ export default function App() {
   }
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username||'NDN')}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`
   return (
-    <WSProvider>
     <ThemeProvider>
   <div ref={appRef} className={`${user?.fullAccess ? 'premium-body' : ''} h-screen overflow-hidden p-2 sm:p-4`}>
         <Toaster />
@@ -212,14 +188,13 @@ export default function App() {
             <header id="ndn-header" className={`header glass flex-col md:flex-row gap-2 md:gap-3`}>
               {/* Left: Brand */}
               <div className="flex items-center gap-2 order-1">
-                {isMobile && (
-                  <button
-                    className="btn px-3 py-1 mr-1"
-                    aria-label="Open navigation"
-                    onClick={()=> setNavOpen(true)}
-                  >☰</button>
-                )}
-                <h1 className="text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap">NINE-DART-NATION 🎯</h1>
+                <h1
+                  className="text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap cursor-pointer select-none"
+                  onClick={() => { if (isMobile) setTab('score') }}
+                  title={isMobile ? 'Go Home' : undefined}
+                >
+                  NINE-DART-NATION 🎯
+                </h1>
               </div>
               {/* Middle: Welcome band (full width on mobile) */}
               <div className="order-3 md:order-2 w-full md:w-auto flex-1 flex flex-col items-center justify-center text-center md:text-left !text-black">
@@ -229,6 +204,13 @@ export default function App() {
                   <span className="truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{user.username}🎯</span>
                 </span>
                 <span className="hidden sm:inline text-xs md:text-sm !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>All-time 3-dart avg: <span className="font-semibold !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{allTimeAvg.toFixed(2)}</span></span>
+                {isMobile && (
+                  <button
+                    className="btn px-3 py-1 mt-1"
+                    aria-label="Open navigation"
+                    onClick={()=> setNavOpen(true)}
+                  >☰ Menu</button>
+                )}
               </div>
               {/* Right: Status + Actions */}
               <div className="order-2 md:order-3 ml-0 md:ml-auto flex items-center gap-2 flex-wrap">
@@ -317,12 +299,15 @@ export default function App() {
             )}
             {tab === 'admin' && (
               <ScrollFade>
-                <AdminDashboard user={user} />
+                <div className="space-y-6">
+                  <AdminDashboard user={user} />
+                  <OpsDashboard user={user} />
+                </div>
               </ScrollFade>
             )}
             {tab === 'fullaccess' && (
               <ScrollFade>
-                <AdminAccess />
+                <AdminAccess user={user} />
               </ScrollFade>
             )}
             </main>
@@ -330,16 +315,15 @@ export default function App() {
         </div>
       </div>
     </ThemeProvider>
-    </WSProvider>
   )
 }
 
 // Lightweight mobile drawer that reuses the same Sidebar
 function MobileNav({ open, onClose, active, onChange, user }: { open: boolean; onClose: () => void; active: TabKey; onChange: (k: TabKey)=>void; user: any }) {
   return (
-    <Drawer open={open} onClose={onClose} width={300} side="left" title="Navigate">
+    <Drawer open={open} onClose={onClose} width={320} side="left" title="Navigate">
       <div className="mt-2">
-        <Sidebar active={active} onChange={onChange} user={user} />
+        <Sidebar active={active} onChange={onChange} user={user} className="flex relative static max-h-[80vh] w-full" />
       </div>
     </Drawer>
   )

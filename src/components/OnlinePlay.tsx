@@ -1098,17 +1098,17 @@ export default function OnlinePlay({ user }: { user?: any }) {
           ) : (
             <div className="space-y-2">
               {filteredLobby.map((m:any)=> (
-                <div key={m.id} className="p-2 rounded-lg bg-black/20 flex items-center justify-between relative">
+                <div key={m.id} className="p-3 rounded-lg bg-black/20 flex items-center justify-between relative">
                   {selfId && m.creatorId === selfId && (
                     <button
-                      className="absolute top-1 right-1 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
+                      className="absolute top-2 right-2 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
                       title="Close this match"
                       onClick={()=>{
                         if (wsGlobal) wsGlobal.send({ type: 'cancel-match', matchId: m.id })
                         else wsRef.current?.send(JSON.stringify({ type: 'cancel-match', matchId: m.id }))
                       }}
                       aria-label="Close match"
-                    >├ù</button>
+                    >×</button>
                   )}
                   <div className="text-sm">
                     <div><span className="font-semibold">{m.creatorName}</span> ÔÇó {m.game || 'X01'} ÔÇó {m.mode==='bestof' ? `Best Of ${m.value}` : `First To ${m.value}`} {m.game==='X01' ? `ÔÇó X01 ${m.startingScore}` : ''}</div>

@@ -1,485 +1,484 @@
-import { useTheme } from './ThemeContext';
-import { useEffect, useState } from 'react';
-// Simulated user and username store (replace with real backend/API in production)
-const existingUsernames = ['DartsWithG', 'BullseyeChamp', 'SharpShooter'];
-import { STRIPE_CHECKOUT_URL } from '../utils/stripe'
-import { createUsernameChangeSession } from '../utils/payments'
-import { User, Globe, Bell, HelpCircle, Image, Lightbulb, Volume2, Shield, Wallet as WalletIcon, DollarSign } from 'lucide-react';
-import AdminDashboard from './AdminDashboard'
-import { useIsAdmin } from '../utils/admin'
+import React, { useEffect, useState } from 'react';
+import { User, Settings, Volume2, Camera, Gamepad2, Eye, Mic, Save, Edit3 } from 'lucide-react';
 import { useUserSettings } from '../store/userSettings';
-import StatPills from './StatPills'
-import { getAllTime, getAllTimeAvg, getAllTimeFirstNineAvg, getMonthlyAvg3, getMonthlyFirstNineAvg, clearAllStats } from '../store/profileStats'
-import { formatAvg } from '../utils/stats'
-
-const tips = [
-  "Focus on your stance and grip for consistency.",
-  "Practice doubles and finishing combinations regularly.",
-  "Keep your eyes on the target, not the dart.",
-  "Track your stats to identify areas for improvement.",
-  "Warm up before matches to get your rhythm.",
-  "Stay calm and confident, even under pressure."
-];
 
 export default function SettingsPanel({ user }: { user?: any }) {
-  const { theme, setTheme } = useTheme();
-  const [displayName, setDisplayName] = useState('');
-  const [avatar, setAvatar] = useState('');
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem('ndn:avatar')
-      if (saved) setAvatar(saved)
-    } catch {}
-  }, [])
-  const [language, setLanguage] = useState('English');
-  const [notifications, setNotifications] = useState(true);
-  const [showTips, setShowTips] = useState(false);
-  const [tipIdx, setTipIdx] = useState(0);
-  const [nameChangeCount, setNameChangeCount] = useState(0);
-  const [error, setError] = useState('');
-  const [showStripe, setShowStripe] = useState(false);
-  // Wallet state
-  const [wallet, setWallet] = useState<{ email: string, balances: Record<string, number> }|null>(null)
-  const [wCurrency, setWCurrency] = useState('GBP')
-  const [wAmount, setWAmount] = useState('')
-  const [wMsg, setWMsg] = useState('')
-  const [payout, setPayout] = useState<{ brand: string, last4: string }|null>(null)
-  const [pBrand, setPBrand] = useState('Visa')
-  const [pLast4, setPLast4] = useState('')
-  const [showResetConfirm, setShowResetConfirm] = useState(false)
-
-  function handleAvatarChange(e: any) {
-    const input = e.target as HTMLInputElement
-    const file = input?.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = () => {
-        const dataUrl = reader.result as string
-        setAvatar(dataUrl)
-        try { localStorage.setItem('ndn:avatar', dataUrl) } catch {}
-        // Notify the rest of the app to refresh header avatar immediately, with payload
-        try { window.dispatchEvent(new CustomEvent('ndn:avatar-updated' as any, { detail: dataUrl } as any)) } catch {}
-        // Allow selecting the same file again to re-trigger change
-        try { if (input) input.value = '' } catch {}
-      }
-      reader.readAsDataURL(file)
-    }
-  }
   const {
-    favoriteDouble, setFavoriteDouble,
-    callerEnabled, setCallerEnabled,
-    callerVoice, setCallerVoice,
-    callerVolume, setCallerVolume,
-    speakCheckoutOnly, setSpeakCheckoutOnly,
-    avgMode, setAvgMode,
-    autoStartOffline, setAutoStartOffline,
-    rememberLastOffline, setRememberLastOffline,
-    lastOffline, setLastOffline,
-    reducedMotion, setReducedMotion,
-    compactHeader, setCompactHeader,
-    allowSpectate, setAllowSpectate,
+    favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, avgMode,
+    autoStartOffline, rememberLastOffline, reducedMotion, compactHeader, allowSpectate,
+    cameraScale, cameraAspect, autoscoreProvider, autoscoreWsUrl, calibrationGuide,
+    preferredCameraId, preferredCameraLabel, offlineLayout,
+    setFavoriteDouble, setCallerEnabled, setCallerVoice, setCallerVolume, setSpeakCheckoutOnly,
+    setAvgMode, setAutoStartOffline, setRememberLastOffline, setReducedMotion, setCompactHeader,
+    setAllowSpectate, setCameraScale, setCameraAspect, setAutoscoreProvider, setAutoscoreWsUrl,
+    setCalibrationGuide, setPreferredCamera, setOfflineLayout
   } = useUserSettings();
-  const voices = (typeof window !== 'undefined' && window.speechSynthesis) ? window.speechSynthesis.getVoices() : [];
 
-  function handleDisplayNameChange(e: any) {
-    setError('');
-    const newName = e.target.value;
-    setDisplayName(newName);
-    // Check uniqueness
-    if (existingUsernames.includes(newName)) {
-      setError('This username is already taken. Please choose another.');
-    }
-  }
+  // Achievements state
+  const [achievements, setAchievements] = useState([
+    { key: 'first180', label: 'First 180', unlocked: false, icon: '🎯', desc: 'Score 180 in a match.' },
+    { key: 'hundredGames', label: '100 Games Played', unlocked: false, icon: '🏅', desc: 'Play 100 games.' },
+    { key: 'tournamentWin', label: 'Tournament Winner', unlocked: false, icon: '🥇', desc: 'Win a tournament.' },
+    { key: 'bestLeg', label: 'Best Leg', unlocked: false, icon: '⚡', desc: 'Finish a leg in 12 darts or less.' },
+    { key: 'comeback', label: 'Comeback', unlocked: false, icon: '🔥', desc: 'Win after trailing by 3 legs.' },
+  ]);
 
-  function handleSaveDisplayName() {
-    setError('');
-    if (existingUsernames.includes(displayName)) {
-      setError('This username is already taken. Please choose another.');
-      return;
-    }
-    if (nameChangeCount < 2) {
-      setNameChangeCount(nameChangeCount + 1);
-      // Save logic here (API call)
-      setError('Display name changed successfully!');
-    } else {
-      setShowStripe(true);
-    }
-  }
+  useEffect(() => {
+    const uname = user?.username || '';
+    if (!uname) return;
+    setAchievements(prev => prev.map(a => ({
+      ...a,
+      unlocked: !!localStorage.getItem(`ndn:achieve:${a.key}:${uname}`)
+    })));
+  }, [user?.username]);
 
-  const isAdmin = useIsAdmin(user?.email)
-  const [subTab, setSubTab] = useState<'settings'|'admin'>('settings')
-  function resetLayout() {
-    // Broadcast a layout reset event; ResizableModal listens for this and clears local storage
-    try { window.dispatchEvent(new Event('ndn:layout-reset' as any)) } catch {}
-  }
+  // Profile bio fields with edit mode
+  const [isEditing, setIsEditing] = useState(false);
+  const [favPlayer, setFavPlayer] = useState('');
+  const [favTeam, setFavTeam] = useState('');
+  const [favDarts, setFavDarts] = useState('');
+  const [bio, setBio] = useState('');
 
-  async function loadWallet() {
-    if (!user?.email) { setWallet(null); return }
+  useEffect(() => {
+    const uname = user?.username || '';
+    if (!uname) return;
     try {
-      const res = await fetch(`/api/wallet/balance?email=${encodeURIComponent(user.email)}`)
-      const data = await res.json()
-      if (data?.ok) setWallet(data.wallet)
+      setFavPlayer(localStorage.getItem(`ndn:bio:favPlayer:${uname}`) || '');
+      setFavTeam(localStorage.getItem(`ndn:bio:favTeam:${uname}`) || '');
+      setFavDarts(localStorage.getItem(`ndn:bio:favDarts:${uname}`) || '');
+      setBio(localStorage.getItem(`ndn:bio:bio:${uname}`) || '');
     } catch {}
-  }
+  }, [user?.username]);
 
-  async function loadPayout() {
-    if (!user?.email) { setPayout(null); return }
+  const saveBio = () => {
+    const uname = user?.username || '';
+    if (!uname) return;
     try {
-      const res = await fetch(`/api/wallet/payout-method?email=${encodeURIComponent(user.email)}`)
-      const data = await res.json()
-      if (data?.ok) setPayout(data.method || null)
+      localStorage.setItem(`ndn:bio:favPlayer:${uname}`, favPlayer);
+      localStorage.setItem(`ndn:bio:favTeam:${uname}`, favTeam);
+      localStorage.setItem(`ndn:bio:favDarts:${uname}`, favDarts);
+      localStorage.setItem(`ndn:bio:bio:${uname}`, bio);
+      setIsEditing(false);
     } catch {}
-  }
+  };
 
-  useEffect(() => { loadWallet(); loadPayout() }, [user?.email])
+  // Available voices for caller
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
-  async function savePayout() {
-    setWMsg('')
-    if (!user?.email) { setWMsg('Please sign in.'); return }
-    if (!/^\d{4}$/.test(pLast4)) { setWMsg('Enter last 4 digits.'); return }
-    try {
-      const res = await fetch('/api/wallet/link-card', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email: user.email, brand: pBrand, last4: pLast4 }) })
-      const d = await res.json()
-      if (!res.ok || !d?.ok) { setWMsg(d?.error || 'Failed to link'); return }
-      setPayout(d.method)
-      setPLast4('')
-      setWMsg('Payout method saved.')
-    } catch { setWMsg('Network error') }
-  }
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = speechSynthesis.getVoices();
+      setAvailableVoices(voices.filter(v => v.lang.startsWith('en')));
+    };
+    loadVoices();
+    speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
 
-  async function requestWithdraw() {
-    setWMsg('')
-    if (!user?.email) { setWMsg('Please sign in.'); return }
-    const amt = Number(wAmount)
-    if (!Number.isFinite(amt) || amt <= 0) { setWMsg('Enter a valid amount.'); return }
-    try {
-      const res = await fetch('/api/wallet/withdraw', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, currency: wCurrency, amount: amt }) })
-      if (!res.ok) {
-        const d = await res.json().catch(()=>null)
-        setWMsg(d?.error || 'Request failed')
-        return
-      }
-      const d = await res.json().catch(()=>null)
-      if (d?.paid) {
-        setWMsg(`Paid instantly to ${d?.method?.brand || 'card'} •••• ${d?.method?.last4 || '----'}.`)
-      } else {
-        setWMsg('Withdrawal requested. Admin will review shortly.')
-      }
-      setWAmount('')
-      await loadWallet()
-    } catch {
-      setWMsg('Network error')
-    }
-  }
-
-  // Component render starts here
   return (
-    <div className="card">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-brand-700 flex items-center gap-2"><User className="w-6 h-6 text-brand-400" /> Settings</h2>
-        {isAdmin && (
-          <div className="flex items-center gap-2">
-            <button className={`btn ${subTab==='settings' ? 'bg-brand-600' : ''}`} onClick={()=>setSubTab('settings')}>Settings</button>
-            <button className={`btn ${subTab==='admin' ? 'bg-brand-600' : ''}`} onClick={()=>setSubTab('admin')}>Admin</button>
+    <div className="space-y-6">
+      {/* Account Actions - Moved to top */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-red-500/40 bg-red-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2 text-red-700">
+            <User className="w-5 h-5" /> Account
           </div>
-        )}
+          <div className="flex justify-center">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('ndn:logout'))}
+              className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
       </div>
-      {subTab === 'admin' && isAdmin ? (
-        <div className="mt-2">
-          <AdminDashboard user={user} />
-        </div>
-      ) : (
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label className="block font-semibold mb-1 flex items-center gap-2"><Image className="w-5 h-5 text-brand-400" /> Profile avatar:</label>
-          <input className="input w-full mb-2" type="file" accept="image/*" onChange={handleAvatarChange} />
-          {avatar && (
-            <div className="flex items-center gap-3 mb-2">
-              <img src={avatar} alt="Avatar" className="rounded-full w-16 h-16" />
+
+      {/* Profile Bio Section */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
+          <div className="flex items-center justify-between mb-4">
+            <div className="font-semibold flex items-center gap-2">
+              <User className="w-5 h-5 text-brand-400" /> Profile Bio
+            </div>
+            {!isEditing ? (
               <button
-                type="button"
-                className="btn bg-rose-600 hover:bg-rose-700"
-                onClick={() => {
-                  setAvatar('')
-                  try { localStorage.removeItem('ndn:avatar') } catch {}
-                  try { window.dispatchEvent(new CustomEvent('ndn:avatar-updated' as any, { detail: '' } as any)) } catch {}
-                }}
-                title="Remove custom avatar"
-              >Remove</button>
-            </div>
-          )}
-
-          <label className="block font-semibold mb-1 flex items-center gap-2"><User className="w-5 h-5 text-brand-400" /> Change display name:</label>
-          <input className="input w-full mb-2" type="text" value={displayName} onChange={handleDisplayNameChange} placeholder="New display name" />
-          <button className="btn bg-brand-600 text-white mb-2" onClick={handleSaveDisplayName}>
-            {nameChangeCount < 2 ? `Change Name (${2 - nameChangeCount} free left)` : 'Pay to Change Name'}
-          </button>
-          {error && <div className="text-red-500 font-bold mb-2">{error}</div>}
-          {showStripe && (
-            <div className="mb-2">
-              {STRIPE_CHECKOUT_URL && STRIPE_CHECKOUT_URL.length > 0 ? (
-                <a href={STRIPE_CHECKOUT_URL} target="_blank" rel="noopener noreferrer" className="btn bg-pink-600 text-white w-full font-bold">Pay via Stripe</a>
-              ) : (
-                <button
-                  type="button"
-                  className="btn bg-pink-600 text-white w-full font-bold"
-                  onClick={async () => {
-                    try {
-                      const url = await createUsernameChangeSession(user?.email)
-                      // Redirect in current tab for best mobile behavior
-                      window.location.href = url
-                    } catch (e) {
-                      setError('Payment init failed. Please try again or contact support.')
-                    }
-                  }}
-                >Pay via Stripe</button>
-              )}
-              <div className="text-xs text-gray-300 mt-1">After payment, you can change your name again.</div>
-            </div>
-          )}
-
-          <label className="block font-semibold mb-1 flex items-center gap-2"><Globe className="w-5 h-5 text-brand-400" /> Language:</label>
-          <select className="input w-full mb-2" value={language} onChange={e => setLanguage(e.target.value)}>
-            <option>English</option>
-            <option>Spanish</option>
-            <option>French</option>
-            <option>German</option>
-            <option>Chinese</option>
-          </select>
-          <label className="block font-semibold mb-1">Theme:</label>
-          <select className="input w-full mb-4" value={theme} onChange={e => setTheme(e.target.value)}>
-            <option value="default">Default</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-          <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
-            <div className="font-semibold mb-2 flex items-center gap-2"><Volume2 className="w-4 h-4"/> Caller & Checkout</div>
-            <div className="space-y-2 text-sm">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" className="accent-indigo-600" checked={callerEnabled} onChange={e => setCallerEnabled(e.target.checked)} />
-                Enable score caller
-              </label>
-              <div className="grid grid-cols-3 gap-2 items-center">
-                <div className="text-slate-600 col-span-1">Caller volume</div>
-                <input className="col-span-2" type="range" min={0} max={1} step={0.05} value={callerVolume} onChange={e=>setCallerVolume(parseFloat(e.target.value))} />
-              </div>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" className="accent-indigo-600" checked={speakCheckoutOnly} onChange={e => setSpeakCheckoutOnly(e.target.checked)} />
-                Speak checkout reminders only
-              </label>
-              <div>
-                <div className="text-slate-600 mb-1">Average mode (header)</div>
-                <select className="input w-full" value={avgMode} onChange={e => setAvgMode(e.target.value as any)}>
-                  <option value="all-time">All-time (cumulative)</option>
-                  <option value="24h">Last 24 hours (rolling)</option>
-                </select>
-              </div>
-              <div>
-                <div className="text-slate-600 mb-1">Favorite double for checkouts</div>
-                <select className="input w-full" value={favoriteDouble} onChange={e => setFavoriteDouble(e.target.value)}>
-                  {['D1','D2','D3','D4','D5','D6','D7','D8','D9','D10','D11','D12','D13','D14','D15','D16','D17','D18','D19','D20','DB'].map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <div className="text-slate-600 mb-1">Caller voice (optional)</div>
-                <select className="input w-full" value={callerVoice} onChange={e => setCallerVoice(e.target.value)}>
-                  <option value="">System Default</option>
-                  {voices.map(v => (
-                    <option key={`${v.name}-${v.lang}`} value={v.name}>{v.name} ({v.lang})</option>
-                  ))}
-                </select>
-                <div className="text-xs text-slate-400 mt-1">Uses your browser's built-in speech synthesis voices.</div>
-              </div>
-            </div>
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-2 px-3 py-1 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg text-blue-400 text-sm transition-colors"
+              >
+                <Edit3 className="w-4 h-4" /> Edit
+              </button>
+            ) : (
+              <button
+                onClick={saveBio}
+                className="flex items-center gap-2 px-3 py-1 bg-green-500/20 hover:bg-green-500/30 rounded-lg text-green-400 text-sm transition-colors"
+              >
+                <Save className="w-4 h-4" /> Save
+              </button>
+            )}
           </div>
-          <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 mt-4">
-            <div className="font-semibold mb-2">Online & Privacy</div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" className="accent-indigo-600" checked={allowSpectate} onChange={e=>setAllowSpectate(e.target.checked)} />
-              Allow friends to spectate my online matches
-            </label>
-            <div className="text-xs opacity-70 mt-1">When off, friends won’t be able to spectate your live games from the Friends tab.</div>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block mb-1 text-sm font-medium">Favourite Player:</label>
+              {isEditing ? (
+                <input
+                  className="input w-full"
+                  type="text"
+                  value={favPlayer}
+                  onChange={e => setFavPlayer(e.target.value)}
+                  placeholder="e.g. Michael van Gerwen"
+                />
+              ) : (
+                <div className="px-3 py-2 bg-slate-800/50 rounded-lg text-slate-300 min-h-[2.5rem] flex items-center">
+                  {favPlayer || 'Not set'}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block mb-1 text-sm font-medium">Favourite Football Team:</label>
+              {isEditing ? (
+                <input
+                  className="input w-full"
+                  type="text"
+                  value={favTeam}
+                  onChange={e => setFavTeam(e.target.value)}
+                  placeholder="e.g. Manchester United"
+                />
+              ) : (
+                <div className="px-3 py-2 bg-slate-800/50 rounded-lg text-slate-300 min-h-[2.5rem] flex items-center">
+                  {favTeam || 'Not set'}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block mb-1 text-sm font-medium">Favourite Darts:</label>
+              {isEditing ? (
+                <input
+                  className="input w-full"
+                  type="text"
+                  value={favDarts}
+                  onChange={e => setFavDarts(e.target.value)}
+                  placeholder="e.g. Unicorn Phase 5, 24g"
+                />
+              ) : (
+                <div className="px-3 py-2 bg-slate-800/50 rounded-lg text-slate-300 min-h-[2.5rem] flex items-center">
+                  {favDarts || 'Not set'}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block mb-1 text-sm font-medium">Short Bio / Quote:</label>
+              {isEditing ? (
+                <textarea
+                  className="input w-full"
+                  value={bio}
+                  onChange={e => setBio(e.target.value)}
+                  placeholder="Write something about yourself..."
+                  rows={3}
+                />
+              ) : (
+                <div className="px-3 py-2 bg-slate-800/50 rounded-lg text-slate-300 min-h-[4rem] flex items-start">
+                  {bio || 'No bio set'}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <div>
-          <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 mb-4">
-            <div className="font-semibold mb-2">Offline match defaults</div>
-            <label className="flex items-center gap-2 text-sm mb-1">
-              <input type="checkbox" className="accent-indigo-600" checked={autoStartOffline} onChange={e=>setAutoStartOffline(e.target.checked)} />
-              Auto-start last offline match when I pick Offline
-            </label>
-            <label className="flex items-center gap-2 text-sm mb-3">
-              <input type="checkbox" className="accent-indigo-600" checked={rememberLastOffline} onChange={e=>setRememberLastOffline(e.target.checked)} />
-              Remember last offline setup
-            </label>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <div className="text-slate-600 mb-1">Mode</div>
-                <select className="input w-full" value={lastOffline.mode} onChange={e=>setLastOffline({ mode: e.target.value })}>
-                  {['X01','Double Practice','Around the Clock','Cricket','Halve It','Shanghai','High-Low','Killer'].map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-              <div>
-                <div className="text-slate-600 mb-1">X01 start</div>
-                <input className="input w-full" type="number" value={lastOffline.x01Start} onChange={e=>setLastOffline({ x01Start: parseInt(e.target.value||'501') })} />
-              </div>
-              <div>
-                <div className="text-slate-600 mb-1">First to</div>
-                <input className="input w-full" type="number" value={lastOffline.firstTo} onChange={e=>setLastOffline({ firstTo: parseInt(e.target.value||'1') })} />
-              </div>
-              <div>
-                <div className="text-slate-600 mb-1">AI Level</div>
-                <select className="input w-full" value={lastOffline.aiLevel} onChange={e=>setLastOffline({ aiLevel: e.target.value })}>
-                  {['None','Easy','Medium','Hardened'].map(l => <option key={l} value={l}>{l}</option>)}
-                </select>
-              </div>
-            </div>
+      </div>
+
+      {/* Game Preferences */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-green-500/40 bg-green-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2">
+            <Gamepad2 className="w-5 h-5 text-green-400" /> Game Preferences
           </div>
 
-          {/* All-time stats quick view (4x2 pills) */}
-          <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 mb-4">
-            <div className="font-semibold mb-2">All-time stats</div>
-            {(() => {
-              const name = user?.username || 'Player 1'
-              const all = getAllTime(name)
-              const items = [
-                { key: 'best3', label: 'Best 3-dart', value: formatAvg(all.best3||0) },
-                { key: 'worst3', label: 'Worst 3-dart', value: formatAvg(all.worst3||0) },
-                { key: 'avg3', label: '3-dart average', value: formatAvg(getAllTimeAvg(name)) },
-                { key: 'avg9', label: '9-dart average', value: formatAvg(getAllTimeFirstNineAvg(name)) },
-                { key: 'bestleg', label: 'Best leg (darts)', value: String(all.bestLegDarts || 0) },
-                { key: 'checkout', label: 'Best checkout', value: String(all.bestCheckout || 0) },
-                { key: 'mon3', label: 'Monthly 3-dart', value: formatAvg(getMonthlyAvg3(name)) },
-                { key: 'mon9', label: 'Monthly 9-dart', value: formatAvg(getMonthlyFirstNineAvg(name)) },
-              ] as any
-              return <StatPills items={items} />
-            })()}
-            <div className="mt-3">
-              <button className="btn bg-rose-600 hover:bg-rose-700" onClick={() => setShowResetConfirm(true)}>Reset stats to 0</button>
-            </div>
-          </div>
-
-          <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 mb-4">
-            <div className="font-semibold mb-2 flex items-center gap-2"><WalletIcon className="w-4 h-4"/> Wallet</div>
-            <div className="text-sm mb-2">Tournament cash prizes accrue here. You can request a withdrawal when you have sufficient balance.</div>
-            <div className="text-sm mb-2">
-              <div className="font-semibold">Payout method</div>
-              {payout ? (
-                <div className="flex items-center justify-between">
-                  <div>{payout.brand} •••• {payout.last4}</div>
-                  <button className="btn px-2 py-1 text-sm" onClick={()=>setPayout(null)}>Change</button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2 items-end">
-                  <select className="input" value={pBrand} onChange={e=>setPBrand(e.target.value)}>
-                    {['Visa','Mastercard','Amex','Maestro','Discover'].map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                  <input className="input" placeholder="Last 4" value={pLast4} onChange={e=>setPLast4(e.target.value)} />
-                  <button className="btn" onClick={savePayout}>Save</button>
-                </div>
-              )}
-            </div>
-            <div className="text-sm mb-2">
-              <div className="font-semibold">Balances</div>
-              {wallet && Object.keys(wallet.balances||{}).length > 0 ? (
-                <ul className="mt-1 space-y-0.5">
-                  {Object.entries(wallet.balances).map(([cur, cents]) => (
-                    <li key={cur}>{cur} {(cents/100).toFixed(2)}</li>
-                  ))}
-                </ul>
-              ) : (
-                <div className="opacity-70">No funds yet.</div>
-              )}
-            </div>
-            <div className="grid grid-cols-3 gap-2 items-center">
-              <select className="input" value={wCurrency} onChange={e=>setWCurrency(e.target.value)}>
-                <option value="GBP">GBP</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="CAD">CAD</option>
-                <option value="AUD">AUD</option>
+          <div className="space-y-4">
+            <div>
+              <label className="block mb-2 text-sm font-medium">Favourite Double:</label>
+              <select
+                className="input w-full"
+                value={favoriteDouble}
+                onChange={e => setFavoriteDouble(e.target.value)}
+              >
+                <option value="any">Any Double</option>
+                <option value="D20">Double 20</option>
+                <option value="D18">Double 18</option>
+                <option value="D16">Double 16</option>
+                <option value="D14">Double 14</option>
+                <option value="D12">Double 12</option>
+                <option value="D10">Double 10</option>
+                <option value="D8">Double 8</option>
+                <option value="D6">Double 6</option>
+                <option value="D4">Double 4</option>
+                <option value="D2">Double 2</option>
+                <option value="D1">Double 1</option>
               </select>
-              <input className="input" placeholder="Amount" value={wAmount} onChange={e=>setWAmount(e.target.value)} />
-              <button className="btn flex items-center gap-1" onClick={requestWithdraw} title={!payout ? 'Link a payout method for instant payment' : ''}><DollarSign className="w-4 h-4"/> Withdraw</button>
             </div>
-            {wMsg && <div className="text-xs mt-2">{wMsg}</div>}
-          </div>
-          <label className="block font-semibold mb-1 flex items-center gap-2"><Bell className="w-5 h-5 text-brand-400" /> Notification preferences:</label>
-          <div className="flex gap-2 mb-2">
-            <button className={`btn ${notifications ? 'bg-brand-600' : 'bg-slate-400'}`} onClick={() => setNotifications(true)}>On</button>
-            <button className={`btn ${!notifications ? 'bg-brand-600' : 'bg-slate-400'}`} onClick={() => setNotifications(false)}>Off</button>
-          </div>
 
-          <label className="block font-semibold mb-1 flex items-center gap-2"><HelpCircle className="w-5 h-5 text-brand-400" /> Help & Support:</label>
-          <div className="flex gap-2 mb-2">
-            <a href="#" className="btn">FAQ</a>
-            <a href="#" className="btn">Contact Us</a>
-          </div>
+            <div>
+              <label className="block mb-2 text-sm font-medium">Average Display Mode:</label>
+              <select
+                className="input w-full"
+                value={avgMode}
+                onChange={e => setAvgMode(e.target.value as 'all-time' | '24h')}
+              >
+                <option value="all-time">All Time Average</option>
+                <option value="24h">24 Hour Average</option>
+              </select>
+            </div>
 
-          <label className="block font-semibold mb-1 flex items-center gap-2"><User className="w-5 h-5 text-brand-400" /> Account management:</label>
-          <div className="flex gap-2 mb-2">
-            <button className="btn">Change Password</button>
-            <button className="btn bg-red-500">Delete Account</button>
-          </div>
-          <label className="block font-semibold mb-1 flex items-center gap-2"><Shield className="w-5 h-5 text-brand-400" /> Layout:</label>
-          <div className="flex gap-2 mb-2">
-            <button className="btn" onClick={resetLayout}>Revert modal sizes to default</button>
-          </div>
-          <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
-            <div className="font-semibold mb-2">Accessibility & Layout</div>
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" className="accent-indigo-600" checked={reducedMotion} onChange={e=>setReducedMotion(e.target.checked)} />
-              Reduce motion & animations
-            </label>
-            <label className="flex items-center gap-2 text-sm mt-1">
-              <input type="checkbox" className="accent-indigo-600" checked={compactHeader} onChange={e=>setCompactHeader(e.target.checked)} />
-              Compact header height
-            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="autoStartOffline"
+                checked={autoStartOffline}
+                onChange={e => setAutoStartOffline(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="autoStartOffline" className="text-sm">Auto-start offline games</label>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="rememberLastOffline"
+                checked={rememberLastOffline}
+                onChange={e => setRememberLastOffline(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="rememberLastOffline" className="text-sm">Remember last offline game settings</label>
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm font-medium">Offline Game Layout:</label>
+              <select
+                className="input w-full"
+                value={offlineLayout || 'classic'}
+                onChange={e => setOfflineLayout(e.target.value as 'classic' | 'modern')}
+              >
+                <option value="classic">Classic Layout</option>
+                <option value="modern">Modern Layout</option>
+              </select>
+            </div>
           </div>
         </div>
       </div>
-      )}
-  <label className="block font-semibold mb-1 flex items-center gap-2"><Lightbulb className="w-5 h-5 text-cyan-300" /> Darts Tips:</label>
-      <button className="btn mb-4" onClick={() => setShowTips(true)}>Show Tips to Improve Your Game</button>
-      <button className="btn w-full">Save Settings</button>
-      {showTips && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="card max-w-md w-full relative text-left bg-[#2d2250] text-white p-6 rounded-xl shadow-xl">
-            <button className="absolute top-2 right-2 btn px-2 py-1 bg-purple-500 text-white font-bold" onClick={() => setShowTips(false)}>Close</button>
-            <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-white"><Lightbulb className="w-6 h-6 text-cyan-300" /> Darts Tips</h3>
-            <div className="mb-4 text-lg font-semibold text-indigo-200">{tips[tipIdx]}</div>
-            <div className="flex gap-2">
-              <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={() => setTipIdx((tipIdx - 1 + tips.length) % tips.length)}>Previous</button>
-              <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={() => setTipIdx((tipIdx + 1) % tips.length)}>Next</button>
+
+      {/* Audio & Voice Settings */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-purple-500/40 bg-purple-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2">
+            <Volume2 className="w-5 h-5 text-purple-400" /> Audio & Voice
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="callerEnabled"
+                checked={callerEnabled}
+                onChange={e => setCallerEnabled(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="callerEnabled" className="text-sm font-medium">Enable Voice Caller</label>
+            </div>
+
+            {callerEnabled && (
+              <>
+                <div>
+                  <label className="block mb-2 text-sm font-medium">Voice:</label>
+                  <select
+                    className="input w-full"
+                    value={callerVoice}
+                    onChange={e => setCallerVoice(e.target.value)}
+                  >
+                    {availableVoices.map(voice => (
+                      <option key={voice.name} value={voice.name}>
+                        {voice.name} ({voice.lang})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block mb-2 text-sm font-medium">Volume: {Math.round(callerVolume * 100)}%</label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={callerVolume}
+                    onChange={e => setCallerVolume(parseFloat(e.target.value))}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="speakCheckoutOnly"
+                    checked={speakCheckoutOnly}
+                    onChange={e => setSpeakCheckoutOnly(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <label htmlFor="speakCheckoutOnly" className="text-sm">Only announce checkouts</label>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Camera & Vision Settings */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-blue-500/40 bg-blue-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2">
+            <Camera className="w-5 h-5 text-blue-400" /> Camera & Vision
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block mb-2 text-sm font-medium">Camera Scale: {cameraScale.toFixed(2)}x</label>
+              <input
+                type="range"
+                min="0.5"
+                max="1.25"
+                step="0.05"
+                value={cameraScale}
+                onChange={e => setCameraScale(parseFloat(e.target.value))}
+                className="w-full"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm font-medium">Camera Aspect Ratio:</label>
+              <select
+                className="input w-full"
+                value={cameraAspect || 'wide'}
+                onChange={e => setCameraAspect(e.target.value as 'wide' | 'square')}
+              >
+                <option value="wide">Wide (16:9)</option>
+                <option value="square">Square (1:1)</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="calibrationGuide"
+                checked={calibrationGuide}
+                onChange={e => setCalibrationGuide(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="calibrationGuide" className="text-sm">Show calibration guide</label>
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm font-medium">Autoscore Provider:</label>
+              <select
+                className="input w-full"
+                value={autoscoreProvider || 'built-in'}
+                onChange={e => setAutoscoreProvider(e.target.value as 'built-in' | 'external-ws')}
+              >
+                <option value="built-in">Built-in Vision</option>
+                <option value="external-ws">External WebSocket</option>
+              </select>
+            </div>
+
+            {autoscoreProvider === 'external-ws' && (
+              <div>
+                <label className="block mb-2 text-sm font-medium">External WebSocket URL:</label>
+                <input
+                  className="input w-full"
+                  type="url"
+                  value={autoscoreWsUrl || ''}
+                  onChange={e => setAutoscoreWsUrl(e.target.value)}
+                  placeholder="ws://localhost:8080"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* UI & Accessibility */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-orange-500/40 bg-orange-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2">
+            <Eye className="w-5 h-5 text-orange-400" /> UI & Accessibility
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="reducedMotion"
+                checked={reducedMotion}
+                onChange={e => setReducedMotion(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="reducedMotion" className="text-sm">Reduce motion/animations</label>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="compactHeader"
+                checked={compactHeader}
+                onChange={e => setCompactHeader(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="compactHeader" className="text-sm">Compact header layout</label>
             </div>
           </div>
         </div>
-      )}
-      {showResetConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <div className="card max-w-md w-full relative text-left">
-            <button className="absolute top-2 right-2 btn px-2 py-1" onClick={() => setShowResetConfirm(false)}>Close</button>
-            <h3 className="text-xl font-bold mb-2">Confirm Reset</h3>
-            <p className="mb-3">Are you sure you want to clear all stats?</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                className="btn bg-emerald-600 hover:bg-emerald-700"
-                onClick={() => {
-                  const name = user?.username || 'Player 1'
-                  clearAllStats(name)
-                  setShowResetConfirm(false)
-                }}
-              >ACCEPT</button>
-              <button
-                className="btn bg-rose-600 hover:bg-rose-700"
-                onClick={() => setShowResetConfirm(false)}
-              >DECLINE</button>
+      </div>
+
+      {/* Online & Social */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-pink-500/40 bg-pink-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2">
+            <Mic className="w-5 h-5 text-pink-400" /> Online & Social
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="allowSpectate"
+                checked={allowSpectate}
+                onChange={e => setAllowSpectate(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="allowSpectate" className="text-sm">Allow others to spectate my games</label>
             </div>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Achievements & Badges Section */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-yellow-500/40 bg-yellow-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2 text-yellow-700">
+            <Settings className="w-5 h-5" /> Achievements & Badges
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {achievements.map(a => (
+              <div key={a.key} className={`flex flex-col items-center p-3 rounded-xl border ${a.unlocked ? 'border-emerald-400 bg-emerald-500/10' : 'border-slate-400 bg-slate-700/10'}`}>
+                <div className="text-3xl mb-2">{a.icon}</div>
+                <div className={`font-bold mb-1 text-center ${a.unlocked ? 'text-emerald-400' : 'text-slate-400'}`}>{a.label}</div>
+                <div className="text-xs text-slate-300 text-center mb-2">{a.desc}</div>
+                {!a.unlocked && <div className="text-xs text-amber-400 font-medium">🔒 Locked</div>}
+                {a.unlocked && <div className="text-xs text-emerald-400 font-medium">✅ Unlocked!</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

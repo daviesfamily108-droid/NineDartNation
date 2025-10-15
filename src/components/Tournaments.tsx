@@ -296,7 +296,7 @@ export default function Tournaments({ user }: { user: any }) {
                 {/* Close button when you are the creator (owner-created official) and it hasn't started */}
                 {(t.status==='scheduled' && email && t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) && (
                   <button
-                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
+                    className="absolute top-2 left-2 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
                     title="Delete this tournament"
                     onClick={()=>deleteTournament(t)}
                     aria-label="Delete tournament"
@@ -354,7 +354,7 @@ export default function Tournaments({ user }: { user: any }) {
                 {/* Close button for creator to delete their own scheduled tournament */}
                 {(t.status==='scheduled' && email && t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) && (
                   <button
-                    className="absolute top-2 right-2 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
+                    className="absolute top-2 left-2 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
                     title="Delete this tournament"
                     onClick={()=>deleteTournament(t)}
                     aria-label="Delete tournament"

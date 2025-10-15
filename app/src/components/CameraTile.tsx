@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
+import { useUserSettings } from '../store/userSettings'
 
-export default function CameraTile({ label, autoStart = false }: { label?: string; autoStart?: boolean }) {
+export default function CameraTile({ label, autoStart = false, scale: scaleOverride }: { label?: string; autoStart?: boolean; scale?: number }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [streaming, setStreaming] = useState(false)
   const [ws, setWs] = useState<WebSocket | null>(null)
@@ -28,8 +29,21 @@ export default function CameraTile({ label, autoStart = false }: { label?: strin
     }).catch(()=>{})
   }, [])
   const mobileUrl = useMemo(() => {
-    const host = (lanHost || window.location.hostname)
     const code = pairCode || '____'
+    // If a hosted WS URL is configured (e.g., Render), derive the server origin from it
+    const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined
+    if (envUrl && envUrl.length > 0) {
+      try {
+        // Convert ws(s)://host[/ws] -> http(s)://host (strip trailing /ws)
+        const u = new URL(envUrl)
+        const isSecure = u.protocol === 'wss:'
+        const origin = `${isSecure ? 'https' : 'http'}://${u.host}${u.pathname.endsWith('/ws') ? '' : u.pathname}`
+        const base = origin.replace(/\/?ws$/i, '')
+        return `${base}/mobile-cam.html?code=${code}`
+      } catch {}
+    }
+    // Fallback to local development: prefer LAN host if detected
+    const host = (lanHost || window.location.hostname)
     const useHttps = !!httpsInfo?.https
     const port = useHttps ? (httpsInfo?.port || 8788) : 8787
     const proto = useHttps ? 'https' : 'http'
@@ -65,12 +79,36 @@ export default function CameraTile({ label, autoStart = false }: { label?: strin
 
   async function start() {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      // Prefer saved camera if available
+      const { preferredCameraId, setPreferredCamera } = useUserSettings.getState()
+      const constraints: MediaStreamConstraints = preferredCameraId ? { video: { deviceId: { exact: preferredCameraId } }, audio: false } : { video: true, audio: false }
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints)
+      } catch (err: any) {
+        const name = (err && (err.name || err.code)) || ''
+        if (preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError')) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        } else {
+          throw err
+        }
+      }
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         await videoRef.current.play()
         setStreaming(true)
       }
+      // Update selected label after start
+      try {
+        const list = await navigator.mediaDevices.enumerateDevices()
+        const vidTrack = (stream.getVideoTracks?.()||[])[0]
+        const settings = vidTrack?.getSettings?.()
+        const id = settings?.deviceId as string | undefined
+        if (id) {
+          const label = list.find(d=>d.deviceId===id)?.label
+          setPreferredCamera(id, label||'')
+        }
+      } catch {}
     } catch {}
   }
   function stop() {
@@ -153,8 +191,24 @@ export default function CameraTile({ label, autoStart = false }: { label?: strin
     }
   }
 
+  function stopAll() {
+    stop()
+    setPairCode(null)
+    setPaired(false)
+    setExpiresAt(null)
+    if (pc) { try { pc.close() } catch {}; setPc(null) }
+  }
   return (
-    <div className="rounded-2xl overflow-hidden bg-black border border-slate-700 w-full" style={{ aspectRatio: '3 / 2' }}>
+    <CameraFrame label={label} autoStart={autoStart} start={start} stopAll={stopAll} startPhonePairing={startPhonePairing} videoRef={videoRef} streaming={streaming} mode={mode} setMode={setMode} pairCode={pairCode} mobileUrl={mobileUrl} ttl={ttl} qrDataUrl={qrDataUrl} regenerateCode={regenerateCode} httpsInfo={httpsInfo} showTips={showTips} setShowTips={setShowTips} scaleOverride={scaleOverride} />
+  )
+}
+
+function CameraFrame(props: any) {
+  const { cameraScale } = useUserSettings()
+  const scale = Math.max(0.5, Math.min(1.25, Number(props.scaleOverride ?? cameraScale ?? 1)))
+  const { label, start, stopAll, startPhonePairing, videoRef, streaming, mode, setMode, pairCode, mobileUrl, ttl, qrDataUrl, regenerateCode, httpsInfo, showTips, setShowTips } = props
+  return (
+    <div className="rounded-2xl overflow-hidden bg-black w-full mx-auto" style={{ aspectRatio: '16 / 9', transform: `scale(${scale})`, transformOrigin: 'center' }}>
       <video ref={videoRef} className="w-full h-full object-contain object-center bg-black" />
       <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
         <span className="truncate">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : 'LIVE') : 'Camera')}</span>
@@ -166,12 +220,12 @@ export default function CameraTile({ label, autoStart = false }: { label?: strin
             </>
           )}
           {streaming ? (
-            <button className="px-1 py-0.5 rounded bg-rose-600" onClick={() => { stop(); setPairCode(null); setPaired(false); setExpiresAt(null); if (pc) { pc.close(); setPc(null) } }}>Stop</button>
+            <button className="px-1 py-0.5 rounded bg-rose-600" onClick={stopAll}>Stop</button>
           ) : null}
         </div>
       </div>
       {mode==='phone' && pairCode && !streaming && (
-        <div className="p-2 text-white text-[10px] bg-black/50 border-t border-slate-700">
+        <div className="p-2 text-white text-[10px] bg-black/50">
           <div>Open on your phone:</div>
           <div className="font-mono">{mobileUrl}</div>
           <div>Code: <span className="font-mono">{pairCode}</span></div>

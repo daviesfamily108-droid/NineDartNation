@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 type WSMessage = any
 
@@ -12,7 +12,7 @@ type WSContextType = {
 
 const WSContext = createContext<WSContextType | null>(null)
 
-export function WSProvider({ children }: { children: React.ReactNode }) {
+export function WSProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false)
   const [status, setStatus] = useState<WSStatus>('connecting')
   const wsRef = useRef<WebSocket | null>(null)
@@ -30,16 +30,20 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
     if (endpointsRef.current) return endpointsRef.current
     const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined
     if (envUrl && envUrl.length > 0) {
-      endpointsRef.current = [envUrl]
+      const normalized = envUrl.endsWith('/ws') ? envUrl : envUrl.replace(/\/$/, '') + '/ws'
+      endpointsRef.current = [normalized]
       return endpointsRef.current
     }
     const proto = (window.location.protocol === 'https:' ? 'wss' : 'ws')
     const host = window.location.hostname
-    // Candidate endpoints (primary port + common alternate + same origin path if proxying)
+    const sameOrigin = `${proto}://${window.location.host}` // includes port if present
+    // Candidate endpoints: prefer same-origin first (works when server serves SPA),
+    // then common local ports for dev fallbacks.
     const bases = [
-      `${proto}://${host}:8787`,
-      `${proto}://${host}:3000`,
-      `${proto}://${host}${window.location.port ? '' : ':8787'}`,
+      sameOrigin + '/ws',
+      `${proto}://${host}/ws`,
+      `${proto}://${host}:8787/ws`,
+      `${proto}://${host}:3000/ws`,
     ]
     // Deduplicate
     endpointsRef.current = Array.from(new Set(bases))
@@ -134,7 +138,7 @@ export function WSProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('online', connect)
       window.removeEventListener('beforeunload', beforeUnload)
     }
-  }, [connect, connected])
+  }, [connect])
 
   const send = useCallback((msg: WSMessage) => {
     try {

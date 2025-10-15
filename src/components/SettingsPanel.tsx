@@ -76,6 +76,23 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
   return (
     <div className="space-y-6">
+      {/* Account Actions - Moved to top */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-red-500/40 bg-red-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2 text-red-700">
+            <User className="w-5 h-5" /> Account
+          </div>
+          <div className="flex justify-center">
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent('ndn:logout'))}
+              className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Profile Bio Section */}
       <div className="card">
         <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
