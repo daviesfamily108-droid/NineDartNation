@@ -11,6 +11,11 @@ CREATE TABLE IF NOT EXISTS public.users (
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for the users table
+-- Allow anyone to check for existing users during signup (for username/email validation)
+DROP POLICY IF EXISTS "Allow signup checks" ON public.users;
+CREATE POLICY "Allow signup checks" ON public.users
+    FOR SELECT USING (true);
+
 -- Allow users to read their own data
 DROP POLICY IF EXISTS "Users can view own data" ON public.users;
 CREATE POLICY "Users can view own data" ON public.users
