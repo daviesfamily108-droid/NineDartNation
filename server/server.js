@@ -200,7 +200,8 @@ app.post('/api/auth/login', async (req, res) => {
           email: data.email,
           username: data.username,
           password: data.password,
-          admin: data.admin || false
+          admin: data.admin || false,
+          subscription: data.subscription || { fullAccess: false }
         };
         // Cache in memory for current session
         users.set(data.email, user);
