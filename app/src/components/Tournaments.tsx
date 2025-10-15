@@ -293,15 +293,6 @@ export default function Tournaments({ user }: { user: any }) {
           <ul className="space-y-2">
             {official.map(t => (
               <li key={t.id} className="p-3 rounded bg-black/10 flex items-center justify-between relative">
-                {/* Close button when you are the creator (owner-created official) and it hasn't started */}
-                {(t.status==='scheduled' && email && t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) && (
-                  <button
-                    className="absolute top-2 left-2 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
-                    title="Delete this tournament"
-                    onClick={()=>deleteTournament(t)}
-                    aria-label="Delete tournament"
-                  >×</button>
-                )}
                 <div className="space-y-0.5">
                   <div className="font-semibold">{t.title} {t.prize && (
                     <span className="inline-flex items-center gap-1 ml-2 align-middle">
@@ -328,7 +319,7 @@ export default function Tournaments({ user }: { user: any }) {
                     <div className="text-xs text-rose-300">Cooldown active until {fmt(cooldownUntil)}.</div>
                   )}
                 </div>
-                <div>
+                <div className="flex items-center gap-2">
                   <button
                     className={`btn ${hasJoined(t) ? 'bg-emerald-600 hover:bg-emerald-600' : ''}`}
                     title={hasJoined(t)
@@ -339,6 +330,15 @@ export default function Tournaments({ user }: { user: any }) {
                     onDoubleClick={()=> { if (!isTouch && hasJoined(t)) setLeaveAsk({ open: true, t }) }}
                     aria-label={hasJoined(t) ? 'Already Joined' : 'Join Now'}
                   >{hasJoined(t) ? 'Already Joined!' : 'Join Now'}</button>
+                  {/* Delete button when you are the creator (owner-created official) and it hasn't started */}
+                  {(t.status==='scheduled' && email && t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) && (
+                    <button
+                      className="w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
+                      title="Delete this tournament"
+                      onClick={()=>deleteTournament(t)}
+                      aria-label="Delete tournament"
+                    >×</button>
+                  )}
                 </div>
               </li>
             ))}
@@ -351,22 +351,13 @@ export default function Tournaments({ user }: { user: any }) {
           <ul className="space-y-2">
             {community.map(t => (
               <li key={t.id} className="p-3 rounded bg-black/10 flex items-center justify-between relative">
-                {/* Close button for creator to delete their own scheduled tournament */}
-                {(t.status==='scheduled' && email && t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) && (
-                  <button
-                    className="absolute top-2 left-2 w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
-                    title="Delete this tournament"
-                    onClick={()=>deleteTournament(t)}
-                    aria-label="Delete tournament"
-                  >×</button>
-                )}
                 <div className="space-y-0.5">
                   <div className="font-semibold">{t.title}</div>
                   <div className="text-sm opacity-80">{t.game}{t.game==='X01' && t.startingScore?`/${t.startingScore}`:''} · {t.mode==='firstto'?'First to':'Best of'} {t.value} · {fmt(t.startAt)} · Cap {t.capacity} · Joined {t.participants.length}</div>
                   {t.description && <div className="text-xs opacity-80">{t.description}</div>}
                   {hasJoined(t) && <div className="text-xs text-emerald-400 font-semibold">Already Joined</div>}
                 </div>
-                <div>
+                <div className="flex items-center gap-2">
                   <button
                     className="btn"
                     title={hasJoined(t) ? 'Double-click to leave this tournament' : ''}
@@ -374,6 +365,15 @@ export default function Tournaments({ user }: { user: any }) {
                     onClick={()=> { if (!hasJoined(t)) { join(t) } else if (isTouch) { setLeaveAsk({ open: true, t }) } }}
                     onDoubleClick={()=> { if (!isTouch && hasJoined(t)) setLeaveAsk({ open: true, t }) }}
                   >{hasJoined(t) ? 'Already Joined' : 'Join Now'}</button>
+                  {/* Delete button for creator to delete their own scheduled tournament */}
+                  {(t.status==='scheduled' && email && t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) && (
+                    <button
+                      className="w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
+                      title="Delete this tournament"
+                      onClick={()=>deleteTournament(t)}
+                      aria-label="Delete tournament"
+                    >×</button>
+                  )}
                 </div>
               </li>
             ))}
