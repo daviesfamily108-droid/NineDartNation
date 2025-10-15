@@ -8,7 +8,7 @@
   NODE_VERSION = "18"
   VITE_API_URL = "https://ninedartnation.onrender.com"
   VITE_WS_URL = "wss://ninedartnation.onrender.com"
-  # Force redeploy trigger
+  # Force redeploy trigger v2
 
 # Security and caching headers
 [[headers]]
