@@ -139,8 +139,7 @@ app.post('/api/auth/signup', async (req, res) => {
           username: user.username,
           password: user.password, // Note: In production, hash passwords!
           admin: user.admin,
-          subscription: user.subscription,
-          created_at: new Date().toISOString()
+          subscription: user.subscription
         }]);
 
       if (error) {

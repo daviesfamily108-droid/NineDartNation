@@ -4,7 +4,8 @@ CREATE TABLE IF NOT EXISTS public.users (
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     admin BOOLEAN DEFAULT FALSE,
-    subscription JSONB DEFAULT '{"fullAccess": false}'
+    subscription JSONB DEFAULT '{"fullAccess": false}',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Disable Row Level Security for users table
