@@ -1,4 +1,4 @@
-﻿const jwt = require('jsonwebtoken');
+﻿NEXT_PUBLIC_SUPABASE_URLNEXT_PUBLIC_SUPABASE_URLconst jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
 const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
@@ -463,6 +463,8 @@ app.get('/api/admins', (req, res) => {
   res.json({ admins: Array.from(adminEmails) })
 })
 
+// Admin check endpoint - ONLY checks explicitly granted admin emails
+// Premium users do NOT automatically get admin access
 app.get('/api/admins/check', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   res.json({ isAdmin: adminEmails.has(email) })

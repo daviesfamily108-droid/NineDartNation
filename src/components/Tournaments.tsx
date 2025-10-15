@@ -36,6 +36,7 @@ export default function Tournaments({ user }: { user: any }) {
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [leaveAsk, setLeaveAsk] = useState<{ open: boolean; t: Tournament | null }>({ open: false, t: null })
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; t: Tournament | null }>({ open: false, t: null })
   const [form, setForm] = useState({
     title: 'Community X01 Tournament',
     game: 'X01',
@@ -102,7 +103,13 @@ export default function Tournaments({ user }: { user: any }) {
   // Helper to delete a tournament with proper error handling and owner fallback
   async function deleteTournament(t: Tournament) {
     if (!email) return
-    if (!confirm('Delete this tournament?')) return
+    setDeleteConfirm({ open: true, t })
+  }
+
+  async function confirmDeleteTournament() {
+    const t = deleteConfirm.t
+    if (!t || !email) return
+    setDeleteConfirm({ open: false, t: null })
     setLoading(true)
     try {
       // First try creator/owner shared endpoint
@@ -463,6 +470,36 @@ export default function Tournaments({ user }: { user: any }) {
                 className="btn bg-emerald-600 hover:bg-emerald-700"
                 onClick={async ()=>{ const t = leaveAsk.t!; setLeaveAsk({ open: false, t: null }); await leave(t) }}
               >Accept</button>
+            </div>
+        </div>
+      </div>
+      )}
+
+      {/* Delete Tournament Confirmation Modal */}
+      {deleteConfirm.open && deleteConfirm.t && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 border border-slate-600 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <div className="text-center">
+              <div className="text-xl font-semibold mb-4 text-white">Delete Tournament</div>
+              <div className="text-slate-300 mb-6">
+                Are you sure you want to delete <span className="font-semibold text-white">"{deleteConfirm.t.title}"</span>?
+                <br />
+                <span className="text-sm text-slate-400">This action cannot be undone.</span>
+              </div>
+              <div className="flex gap-3 justify-center">
+                <button
+                  className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+                  onClick={() => setDeleteConfirm({ open: false, t: null })}
+                >
+                  Decline
+                </button>
+                <button
+                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
+                  onClick={confirmDeleteTournament}
+                >
+                  Continue
+                </button>
+              </div>
             </div>
           </div>
         </div>

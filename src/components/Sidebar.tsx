@@ -38,7 +38,9 @@ export function Sidebar({
 }) {
   const tabs = getTabs(user);
   const isAdmin = useIsAdmin(user?.email)
-  // Ensure Admin tab is shown only for admins: insert it before Settings for better grouping
+  // IMPORTANT: Admin tab is ONLY shown for explicitly granted admin users
+  // Premium status does NOT automatically grant admin access
+  // Admin access must be granted via /api/admins/grant endpoint by the owner
   if (isAdmin && !tabs.some(t => t.key === 'admin')) {
     const idx = tabs.findIndex(t => t.key === 'settings')
     const adminTab = { key: 'admin', label: 'Admin', icon: Settings } as const

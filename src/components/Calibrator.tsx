@@ -140,11 +140,26 @@ export default function Calibrator() {
 		} else {
 			socket.onopen = () => socket.send(JSON.stringify({ type: 'cam-create' }))
 		}
-		socket.onerror = () => {
-			// leave minimal, UI shows status below
+		socket.onerror = (error) => {
+			console.error('WebSocket connection error:', error)
+			alert('Failed to connect to camera pairing service. Please check your internet connection and try again.')
+			setPaired(false)
+			setStreaming(false)
+			setPhase('camera')
 		}
-		socket.onclose = () => {
-			// show that it closed; user can retry
+		socket.onclose = (event) => {
+			console.log('WebSocket closed:', event.code, event.reason)
+			setPaired(false)
+			setStreaming(false)
+			setPhase('camera')
+			if (pc) {
+				pc.close()
+				setPc(null)
+			}
+			// Only show alert if it wasn't a clean close
+			if (event.code !== 1000) {
+				alert('Camera pairing connection lost. Please try pairing again.')
+			}
 		}
 		socket.onmessage = async (ev) => {
 			const data = JSON.parse(ev.data)
@@ -153,31 +168,75 @@ export default function Calibrator() {
 				if (data.expiresAt) setExpiresAt(data.expiresAt)
 			} else if (data.type === 'cam-peer-joined') {
 				setPaired(true)
-				const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+				const peer = new RTCPeerConnection({ 
+					iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+					iceCandidatePoolSize: 10
+				})
 				setPc(peer)
+				
+				// Add connection state monitoring
+				peer.onconnectionstatechange = () => {
+					console.log('WebRTC connection state:', peer.connectionState)
+					if (peer.connectionState === 'failed' || peer.connectionState === 'disconnected') {
+						console.error('WebRTC connection failed')
+						alert('Camera connection lost. Please try pairing again.')
+						stopCamera()
+					} else if (peer.connectionState === 'connected') {
+						console.log('WebRTC connection established')
+					}
+				}
+				
 				peer.onicecandidate = (e) => {
 					if (e.candidate && pairCode) socket.send(JSON.stringify({ type: 'cam-ice', code: pairCode, payload: e.candidate }))
 				}
+				
 				peer.ontrack = (ev) => {
 					if (videoRef.current) {
 						const inbound = ev.streams?.[0]
 						if (inbound) {
 							videoRef.current.srcObject = inbound
-							videoRef.current.play().catch(()=>{})
+							videoRef.current.play().catch((err) => {
+								console.error('Video play failed:', err)
+								alert('Failed to start video playback. Please check your browser settings.')
+							})
 							setStreaming(true)
 							setPhase('capture')
 						}
 					}
 				}
-				const offer = await peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: true })
-				await peer.setLocalDescription(offer)
-				if (pairCode) socket.send(JSON.stringify({ type: 'cam-offer', code: pairCode, payload: offer }))
+				
+				try {
+					const offer = await peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: true })
+					await peer.setLocalDescription(offer)
+					if (pairCode) socket.send(JSON.stringify({ type: 'cam-offer', code: pairCode, payload: offer }))
+				} catch (err) {
+					console.error('Failed to create WebRTC offer:', err)
+					alert('Failed to establish camera connection. Please try again.')
+					stopCamera()
+				}
 			} else if (data.type === 'cam-answer') {
-				if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.payload))
+				if (pc) {
+					try {
+						await pc.setRemoteDescription(new RTCSessionDescription(data.payload))
+					} catch (err) {
+						console.error('Failed to set remote description:', err)
+						alert('Camera pairing failed. Please try again.')
+						stopCamera()
+					}
+				}
 			} else if (data.type === 'cam-ice') {
-				if (pc) try { await pc.addIceCandidate(data.payload) } catch {}
+				if (pc) {
+					try {
+						await pc.addIceCandidate(data.payload)
+					} catch (err) {
+						console.error('Failed to add ICE candidate:', err)
+						// Don't alert for ICE candidate errors as they're often non-critical
+					}
+				}
 			} else if (data.type === 'cam-error') {
-				alert(data.code === 'EXPIRED' ? 'Code expired. Generate a new code.' : 'Invalid code')
+				console.error('Camera pairing error:', data.code)
+				alert(data.code === 'EXPIRED' ? 'Code expired. Generate a new code.' : `Camera error: ${data.code || 'Unknown error'}`)
+				stopCamera()
 			}
 		}
 	}
@@ -193,7 +252,8 @@ export default function Calibrator() {
 			setStreaming(true)
 			setPhase('capture')
 		} catch (e) {
-			alert('Camera permission denied or not available.')
+			console.error('Camera access failed:', e)
+			alert(`Camera access failed: ${e instanceof Error ? e.message : 'Unknown error'}. Try refreshing the page or check camera permissions.`)
 		}
 	}
 
@@ -608,9 +668,28 @@ export default function Calibrator() {
 								<div className="flex items-center gap-2 mb-2">
 									<span className="text-xs opacity-70">Video Source:</span>
 									<div className="flex items-center gap-1 text-xs">
-										<button className={`btn px-2 py-1 ${mode==='local'?'bg-emerald-600':''}`} onClick={() => setMode('local')}>Local</button>
-										<button className={`btn px-2 py-1 ${mode==='phone'?'bg-emerald-600':''}`} onClick={() => setMode('phone')}>Phone</button>
+										<button 
+											className={`btn px-2 py-1 ${mode==='local'?'bg-emerald-600':'bg-gray-600'} ${streaming ? 'opacity-50 cursor-not-allowed' : ''}`} 
+											onClick={() => !streaming && setMode('local')}
+											disabled={streaming}
+											title={streaming ? 'Stop camera first to change mode' : 'Use local device camera'}
+										>
+											Local
+										</button>
+										<button 
+											className={`btn px-2 py-1 ${mode==='phone'?'bg-emerald-600':'bg-gray-600'} ${streaming ? 'opacity-50 cursor-not-allowed' : ''}`} 
+											onClick={() => !streaming && setMode('phone')}
+											disabled={streaming}
+											title={streaming ? 'Stop camera first to change mode' : 'Pair with phone camera'}
+										>
+											Phone
+										</button>
 									</div>
+									{streaming && (
+										<span className="text-xs opacity-60 ml-2">
+											({mode === 'local' ? 'Local Camera Active' : 'Phone Camera Paired'})
+										</span>
+									)}
 								</div>
 												<div className="flex items-center gap-2 text-[11px]">
 													<span className="opacity-70">View Zoom</span>

@@ -41,21 +41,21 @@ export default function Home({ user }: { user?: any }) {
       </div>
 
       {/* Foreground content */}
-  <div className="relative z-10 w-full max-w-3xl mx-auto bg-white/10 backdrop-blur-lg rounded-3xl shadow-2xl p-6 sm:p-8 md:p-10 flex flex-col items-center">
-  <h2 className="text-3xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-400 to-blue-400 mb-3 md:mb-4 drop-shadow-xl text-center">Welcome to Nine Dart Nation</h2>
-  <p className="text-lg md:text-2xl text-white/80 mb-2 font-semibold text-center">Your home for competitive darts, stats, and online play.</p>
-  <p className="text-sm md:text-lg text-white/60 mb-4 italic text-center">"Where every dart counts and every player matters."</p>
+  <div className="relative z-10 w-full max-w-6xl mx-auto bg-white/10 backdrop-blur-lg rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 md:p-8 lg:p-10 flex flex-col items-center">
+  <h2 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-400 to-blue-400 mb-2 sm:mb-3 md:mb-4 drop-shadow-xl text-center leading-tight">Welcome to Nine Dart Nation</h2>
+  <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-white/80 mb-2 font-semibold text-center px-2">Your home for competitive darts, stats, and online play.</p>
+  <p className="text-xs sm:text-sm md:text-base lg:text-lg text-white/60 mb-3 sm:mb-4 italic text-center px-2">"Where every dart counts and every player matters."</p>
 
         {/* Did You Know - moved up for full visibility and randomized each mount */}
         {fact && (
-          <div className="w-full mb-6">
-            <div className="mx-auto max-w-xl rounded-full px-5 py-2 text-center text-indigo-100 bg-gradient-to-r from-indigo-600/80 to-fuchsia-600/80 shadow-md">
-              <span className="font-semibold">Did you know?</span> <span className="opacity-90">{fact}</span>
+          <div className="w-full mb-4 sm:mb-6 px-2 sm:px-0">
+            <div className="mx-auto max-w-xs sm:max-w-xl rounded-full px-3 sm:px-5 py-2 text-center text-indigo-100 bg-gradient-to-r from-indigo-600/80 to-fuchsia-600/80 shadow-md">
+              <span className="font-semibold text-sm sm:text-base">Did you know?</span> <span className="opacity-90 text-sm sm:text-base">{fact}</span>
             </div>
           </div>
         )}
 
-  <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-6 justify-center mb-6 md:mb-8 w-full">
+  <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-6 justify-center mb-6 md:mb-8 w-full max-w-4xl mx-auto">
           <button
             onClick={()=>{
               // Switch to Offline and auto-start using the last saved offline settings
@@ -79,13 +79,28 @@ export default function Home({ user }: { user?: any }) {
                 }, 50)
               } catch {}
             }}
-            className="px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 transition-transform flex items-center gap-2 text-lg md:text-xl"
+            className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
           >
             <span aria-hidden>🎯</span> Start New Match
           </button>
-          <button onClick={()=>goTab('stats')} className="px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold shadow-xl hover:scale-105 transition-transform flex items-center gap-2 text-lg md:text-xl"><span aria-hidden>📊</span> View Stats</button>
-          <button onClick={()=>goTab('online')} className="px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-green-500 to-blue-400 text-white font-bold shadow-xl hover:scale-105 transition-transform flex items-center gap-2 text-lg md:text-xl"><span aria-hidden>🏆</span> Join Online League</button>
-          <button onClick={()=>{ goTab('offline'); try { window.dispatchEvent(new CustomEvent('ndn:auto-start', { detail: { mode: 'Double Practice' } })) } catch {} }} className="px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-pink-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 transition-transform flex items-center gap-2 text-lg md:text-xl"><span aria-hidden>💡</span> Practice Doubles</button>
+          <button 
+            onClick={()=>goTab('stats')} 
+            className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
+          >
+            <span aria-hidden>📊</span> View Stats
+          </button>
+          <button 
+            onClick={()=>goTab('online')} 
+            className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-green-500 to-blue-400 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
+          >
+            <span aria-hidden>🏆</span> Join Online League
+          </button>
+          <button 
+            onClick={()=>{ goTab('offline'); try { window.dispatchEvent(new CustomEvent('ndn:auto-start', { detail: { mode: 'Double Practice' } })) } catch {} }} 
+            className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-pink-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
+          >
+            <span aria-hidden>💡</span> Practice Doubles
+          </button>
         </div>
 
         {/* Removed older stat pill grid; now using BEST/WORST grid below */}
@@ -95,7 +110,7 @@ export default function Home({ user }: { user?: any }) {
           const name = user?.username || 'Player 1'
           const all = getAllTime(name)
           const isPremium = !!user?.fullAccess
-          const GRID = 'grid grid-cols-[160px,1fr,1fr]';
+          const GRID = 'grid grid-cols-[120px,1fr,1fr] sm:grid-cols-[160px,1fr,1fr]';
           const Row = ({ label, left, right, lock }: { label: string; left: string; right: string; lock?: boolean }) => (
             <div className={`relative ${GRID} gap-2 items-center p-2 rounded-lg ${lock ? 'bg-white/5 border border-white/10 overflow-hidden' : 'bg-indigo-500/10 border border-indigo-500/40'} mb-2`}>
               <div className="text-[12px] opacity-80 pl-2 text-left">{label}</div>
@@ -129,8 +144,8 @@ export default function Home({ user }: { user?: any }) {
             </div>
           )
           return (
-            <div className="w-full mt-2 rounded-2xl p-3 bg-white/5 border border-white/10">
-              <div className={`${GRID} gap-2 mb-2 px-1 items-center`}>
+            <div className="w-full mt-2 rounded-2xl p-2 sm:p-3 bg-white/5 border border-white/10 overflow-x-auto">
+              <div className={`${GRID} gap-2 mb-2 px-1 items-center min-w-[280px] sm:min-w-0`}>
                 <div className="text-[12px] opacity-0 select-none">label</div>
                 <div className="text-[12px] font-semibold text-center">BEST</div>
                 <div className="text-[12px] font-semibold text-center">WORST</div>
@@ -143,7 +158,7 @@ export default function Home({ user }: { user?: any }) {
           )
         })()}
 
-  <button className="mt-8 md:mt-10 px-8 md:px-10 py-3 md:py-4 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-110 transition-transform text-lg md:text-xl" onClick={() => setShowHowTo(true)}>How to Play / Getting Started</button>
+  <button className="mt-6 sm:mt-8 md:mt-10 px-6 sm:px-8 md:px-10 py-3 md:py-4 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 text-base sm:text-lg md:text-xl touch-manipulation" onClick={() => setShowHowTo(true)}>How to Play / Getting Started</button>
       </div>
 
       {/* Footer */}
