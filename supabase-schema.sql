@@ -12,14 +12,17 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for the users table
 -- Allow users to read their own data
+DROP POLICY IF EXISTS "Users can view own data" ON public.users;
 CREATE POLICY "Users can view own data" ON public.users
     FOR SELECT USING (auth.uid()::text = email);
 
 -- Allow users to update their own data
+DROP POLICY IF EXISTS "Users can update own data" ON public.users;
 CREATE POLICY "Users can update own data" ON public.users
     FOR UPDATE USING (auth.uid()::text = email);
 
 -- Allow inserts for new user registration
+DROP POLICY IF EXISTS "Allow user registration" ON public.users;
 CREATE POLICY "Allow user registration" ON public.users
     FOR INSERT WITH CHECK (true);
 
