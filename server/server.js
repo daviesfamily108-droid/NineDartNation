@@ -132,20 +132,27 @@ app.post('/api/auth/signup', async (req, res) => {
 
     // Save to Supabase if available
     if (supabase) {
-      const { error } = await supabase
+      console.log('[DB] Attempting to save user to Supabase:', { email: user.email, username: user.username });
+      const { data, error } = await supabase
         .from('users')
         .insert([{
           email: user.email,
           username: user.username,
           password: user.password, // Note: In production, hash passwords!
           admin: user.admin,
-          subscription: user.subscription
-        }]);
+          subscription: user.subscription,
+          created_at: new Date().toISOString()
+        }])
+        .select();
 
       if (error) {
         console.error('[DB] Failed to save user to Supabase:', error);
         return res.status(500).json({ error: 'Failed to create account.' });
+      } else {
+        console.log('[DB] Successfully saved user to Supabase:', data);
       }
+    } else {
+      console.log('[DB] Supabase not configured, saving to memory only');
     }
 
     // Also store in memory for current session
