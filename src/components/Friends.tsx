@@ -28,7 +28,7 @@ export default function Friends({ user }: { user?: any }) {
   const [filter, setFilter] = useState<'all'|'online'|'offline'|'ingame'|'requests'>('all')
   const [loading, setLoading] = useState(false)
   const msgs = useMessages()
-  const [requests, setRequests] = useState<Array<{ email: string; username?: string }>>([])
+  const [requests, setRequests] = useState<Array<{ id: string; fromEmail: string; fromUsername: string; toEmail: string; toUsername: string; requestedAt: number }>>([])
 
   async function refresh() {
     if (!email) return
@@ -119,12 +119,12 @@ export default function Friends({ user }: { user?: any }) {
           {filter === 'requests' ? (
             <ul className="space-y-2">
               {requestsCount > 0 ? requests.map(r => (
-                <li key={r.email} className="p-2 rounded bg-black/20 flex items-center justify-between">
-                  <span className="font-semibold">{r.username || r.email}</span>
+                <li key={r.id} className="p-2 rounded bg-black/20 flex items-center justify-between">
+                  <span className="font-semibold">{r.fromUsername || r.fromEmail}</span>
                   <button className="btn bg-emerald-600 hover:bg-emerald-700" onClick={async()=>{
                     setLoading(true)
                     try {
-                      await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.email }) })
+                      await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.fromEmail }) })
                       await refresh()
                       toast('Friend request accepted', { type: 'success' })
                     } finally { setLoading(false) }
@@ -132,7 +132,7 @@ export default function Friends({ user }: { user?: any }) {
                   <button className="btn bg-rose-600 hover:bg-rose-700" onClick={async()=>{
                     setLoading(true)
                     try {
-                      await fetch('/api/friends/decline', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.email }) })
+                      await fetch('/api/friends/decline', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.fromEmail }) })
                       await refresh()
                       toast('Friend request declined', { type: 'info' })
                     } finally { setLoading(false) }

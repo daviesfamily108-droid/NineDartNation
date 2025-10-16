@@ -137,24 +137,31 @@ export default function Friends({ user }: { user?: any }) {
               {requestsCount > 0 ? (
                 <>
                   {/* Incoming requests */}
-                  {requests.length > 0 && requests.map(r => (
-                    <li key={`incoming-${r.id || r.fromEmail}`} className="p-3 rounded bg-black/20 flex flex-col gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-lg">{r.fromUsername || r.fromEmail || 'Unknown User'}</span>
-                        <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">Incoming</span>
-                      </div>
+                  {requests.length > 0 && requests.map(r => {
+                    console.log('Rendering request:', r)
+                    return (
+                      <li key={`incoming-${r.id || r.fromEmail}`} className="p-3 rounded bg-black/20 flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-lg">{r.fromUsername || r.fromEmail || 'Unknown User'}</span>
+                          <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">Incoming</span>
+                        </div>
                       <div className="flex gap-2">
                         <button className="btn bg-emerald-600 hover:bg-emerald-700" onClick={async()=>{
                           setLoading(true)
                           try {
+                            console.log('Accepting request from:', r.fromEmail)
                             const res = await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.fromEmail }) })
+                            console.log('Accept response:', res.status, await res.text())
                             if (res.ok) {
-                              await new Promise(resolve => setTimeout(resolve, 100))
+                              await new Promise(resolve => setTimeout(resolve, 200))
                               await refresh()
                               toast('Friend request accepted', { type: 'success' })
                             } else {
                               toast('Failed to accept request', { type: 'error' })
                             }
+                          } catch (error) {
+                            console.error('Accept error:', error)
+                            toast('Error accepting request', { type: 'error' })
                           } finally { setLoading(false) }
                         }}>Accept</button>
                         <button className="btn bg-rose-600 hover:bg-rose-700" onClick={async()=>{
