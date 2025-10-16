@@ -136,8 +136,16 @@ export default function Friends({ user }: { user?: any }) {
                           try {
                             const res = await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.fromEmail }) })
                             if (res.ok) {
-                              await refresh()
+                              // Remove from requests and add to friends immediately for better UX
+                              setRequests(prev => prev.filter(req => req.id !== r.id))
+                              // Add to friends list (we'll get the full data on next refresh, but show basic info now)
+                              const newFriend = { email: r.fromEmail, username: r.fromUsername, status: 'offline' as const }
+                              setFriends(prev => [...prev, newFriend])
+                              // Also remove from outgoing if it exists
+                              setOutgoingRequests(prev => prev.filter(req => req.toEmail !== r.fromEmail))
                               toast('Friend request accepted', { type: 'success' })
+                              // Refresh in background to get complete data
+                              setTimeout(() => refresh(), 100)
                             } else {
                               toast('Failed to accept request', { type: 'error' })
                             }
@@ -150,8 +158,13 @@ export default function Friends({ user }: { user?: any }) {
                           try {
                             const res = await fetch('/api/friends/decline', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.fromEmail }) })
                             if (res.ok) {
-                              await refresh()
+                              // Remove from requests immediately for better UX
+                              setRequests(prev => prev.filter(req => req.id !== r.id))
+                              // Also remove from outgoing if it exists
+                              setOutgoingRequests(prev => prev.filter(req => req.toEmail !== r.fromEmail))
                               toast('Friend request declined', { type: 'info' })
+                              // Refresh in background to ensure consistency
+                              setTimeout(() => refresh(), 100)
                             } else {
                               toast('Failed to decline request', { type: 'error' })
                             }
@@ -172,8 +185,11 @@ export default function Friends({ user }: { user?: any }) {
                         try {
                           const res = await fetch('/api/friends/cancel', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, friend: r.toEmail }) })
                           if (res.ok) {
-                            await refresh()
+                            // Remove from outgoing requests immediately for better UX
+                            setOutgoingRequests(prev => prev.filter(req => req.id !== r.id))
                             toast('Friend request cancelled', { type: 'info' })
+                            // Refresh in background to ensure consistency
+                            setTimeout(() => refresh(), 100)
                           } else {
                             toast('Failed to cancel request', { type: 'error' })
                           }

@@ -99,6 +99,8 @@ export default function AdminAccess({ user }: { user?: any }) {
               const data = await res.json();
               if (data.ok && data.url) {
                 window.open(data.url, '_blank');
+              } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
+                alert('Premium purchases are not available in this development environment. Please visit the production site to upgrade.');
               } else {
                 alert('Failed to create checkout session. Please try again.');
               }
