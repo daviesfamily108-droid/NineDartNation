@@ -26,14 +26,29 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-producti
 let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
 const app = express();
+// When running behind Render / Cloudflare the app receives X-Forwarded-* headers.
+// Enable trust proxy so Express and middleware (like express-rate-limit) treat
+// the forwarded client IPs correctly and avoid validation errors.
+app.set('trust proxy', true);
+console.log('[HTTP] express trust proxy enabled (trust proxy = true)');
 
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
-
 if (!supabase) {
   console.warn('[DB] Supabase not configured - using in-memory storage only');
+} else {
+  try {
+    // Minimal, safe logging - do not print secrets
+    const maskedKey = String(supabaseKey).slice(0,6) + '...';
+    console.log(`[DB] Supabase client configured for ${supabaseUrl} (key ${maskedKey})`);
+  } catch (e) {
+    console.log('[DB] Supabase client initialized');
+  }
+  // NOTE: Do not run schema or policy SQL automatically here. Any schema
+  // migrations should be run manually from supabase SQL editor to avoid
+  // accidentally re-enabling RLS policies that can cause recursion.
 }
 // Observability: metrics registry
 const register = new client.Registry()
@@ -421,6 +436,7 @@ try {
 app.post('/api/stripe/create-session', async (req, res) => {
   try {
     if (!stripe || !process.env.STRIPE_PRICE_ID_USERNAME_CHANGE) {
+      console.warn('[Stripe] create-session called but Stripe is not configured')
       return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
     }
     const { email, successUrl, cancelUrl } = req.body || {}
@@ -447,7 +463,18 @@ app.post('/api/stripe/create-session', async (req, res) => {
 
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
+    // Ensure Stripe is initialized (lazy init) in case env var came later
+    if (!stripe && process.env.STRIPE_SECRET_KEY) {
+      try {
+        stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
+        console.log('[Stripe] lazily initialized Stripe client')
+      } catch (initErr) {
+        console.error('[Stripe] lazy init failed:', initErr?.message || initErr)
+      }
+    }
+
     if (!stripe || !process.env.STRIPE_PRICE_ID_SUBSCRIPTION) {
+      console.warn('[Stripe] create-checkout-session called but Stripe is not configured')
       return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
     }
     const { email, successUrl, cancelUrl } = req.body || {}
@@ -470,7 +497,16 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     })
     return res.json({ ok: true, url: session.url })
   } catch (e) {
-    console.error('[Stripe] create-checkout-session failed:', e?.message || e)
+    // Log detailed error and environment context (but do NOT print secrets)
+    try {
+      console.error('[Stripe] create-checkout-session failed:', e?.message || e)
+      console.error('[Stripe] error stack:', e?.stack || '(no stack)')
+      console.error('[Stripe] stripe initialized:', Boolean(stripe))
+      console.error('[Stripe] STRIPE_PRICE_ID_SUBSCRIPTION present:', Boolean(process.env.STRIPE_PRICE_ID_SUBSCRIPTION))
+      console.error('[Stripe] STRIPE_SECRET_KEY present:', Boolean(process.env.STRIPE_SECRET_KEY))
+    } catch (logErr) {
+      console.error('[Stripe] failed to log detailed error:', logErr)
+    }
     return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
   }
 })
@@ -959,6 +995,70 @@ function saveFriendships() {
 }
 function loadFriendships() {
   try {
+    // Load from database first if available
+    if (supabase) {
+      try {
+        // Load friendships
+        const { data: friendshipsData } = supabase
+          .from('friendships')
+          .select('user_email, friend_email')
+
+        if (friendshipsData) {
+          for (const friendship of friendshipsData) {
+            const userFriends = friendships.get(friendship.user_email) || new Set()
+            userFriends.add(friendship.friend_email)
+            friendships.set(friendship.user_email, userFriends)
+          }
+        }
+
+        // Load friend requests
+        const { data: requestsData } = supabase
+          .from('friend_requests')
+          .select('*')
+
+        if (requestsData) {
+          for (const request of requestsData) {
+            const userRequests = friendRequests.get(request.to_email) || []
+            userRequests.push({
+              id: request.id,
+              fromEmail: request.from_email,
+              fromUsername: users.get(request.from_email)?.username || request.from_email,
+              toEmail: request.to_email,
+              toUsername: users.get(request.to_email)?.username || request.to_email,
+              requestedAt: new Date(request.created_at).getTime()
+            })
+            friendRequests.set(request.to_email, userRequests)
+          }
+        }
+
+        // Load outgoing requests
+        const { data: outgoingData } = supabase
+          .from('outgoing_requests')
+          .select('*')
+
+        if (outgoingData) {
+          for (const outgoing of outgoingData) {
+            const userOutgoing = outgoingRequests.get(outgoing.from_email) || []
+            userOutgoing.push({
+              id: outgoing.id,
+              fromEmail: outgoing.from_email,
+              fromUsername: users.get(outgoing.from_email)?.username || outgoing.from_email,
+              toEmail: outgoing.to_email,
+              toUsername: users.get(outgoing.to_email)?.username || outgoing.to_email,
+              requestedAt: new Date(outgoing.created_at).getTime()
+            })
+            outgoingRequests.set(outgoing.from_email, userOutgoing)
+          }
+        }
+
+        console.log('[FRIENDS] Loaded friendships from database')
+        return
+      } catch (dbError) {
+        console.error('[FRIENDS] Database load error, falling back to file:', dbError)
+      }
+    }
+
+    // Fallback to file loading
     if (!fs.existsSync(FRIENDS_FILE)) return
     const j = JSON.parse(fs.readFileSync(FRIENDS_FILE, 'utf8'))
     if (j && j.friendships) {
@@ -976,7 +1076,10 @@ function loadFriendships() {
         outgoingRequests.set(k, arr)
       }
     }
-  } catch {}
+    console.log('[FRIENDS] Loaded friendships from file')
+  } catch (error) {
+    console.error('[FRIENDS] Load error:', error)
+  }
 }
 loadFriendships()
 
@@ -1438,14 +1541,40 @@ wss.on('connection', (ws, req) => {
 });
 
 // Friends HTTP API (demo)
-app.get('/api/friends/list', (req, res) => {
+app.get('/api/friends/list', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
-  const set = friendships.get(email) || new Set()
-  const list = Array.from(set).map(e => {
-    const u = users.get(e) || { email: e, username: e, status: 'offline' }
-    return { email: e, username: u.username, status: u.status, lastSeen: u.lastSeen, roomId: u.currentRoomId || null, match: u.currentMatch || null }
-  })
-  res.json({ ok: true, friends: list })
+  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+
+  try {
+    let friendEmails = []
+
+    // Try to get friends from database first
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('friendships')
+        .select('friend_email')
+        .eq('user_email', email)
+
+      if (!error && data) {
+        friendEmails = data.map(row => row.friend_email)
+      }
+    }
+
+    // Fallback to in-memory storage if database fails
+    if (friendEmails.length === 0) {
+      const set = friendships.get(email) || new Set()
+      friendEmails = Array.from(set)
+    }
+
+    const list = friendEmails.map(e => {
+      const u = users.get(e) || { email: e, username: e, status: 'offline' }
+      return { email: e, username: u.username, status: u.status, lastSeen: u.lastSeen, roomId: u.currentRoomId || null, match: u.currentMatch || null }
+    })
+    res.json({ ok: true, friends: list })
+  } catch (error) {
+    console.error('[FRIENDS] List error:', error)
+    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
+  }
 })
 
 // Heartbeat sweep to terminate dead sockets
@@ -1485,194 +1614,484 @@ app.get('/api/friends/search', (req, res) => {
   res.json({ ok: true, results })
 })
 
-app.get('/api/friends/suggested', (req, res) => {
+app.get('/api/friends/suggested', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   const set = friendships.get(email) || new Set()
   const suggestions = []
-  for (const [e, u] of users.entries()) {
-    if (e !== email && !set.has(e)) suggestions.push({ email: e, username: u.username, status: u.status, lastSeen: u.lastSeen })
-    if (suggestions.length >= 10) break
+
+  try {
+    // Get existing friendships from database
+    let dbFriends = new Set()
+    if (supabase) {
+      const { data: friendshipsData } = await supabase
+        .from('friendships')
+        .select('friend_email')
+        .eq('user_email', email)
+
+      if (friendshipsData) {
+        dbFriends = new Set(friendshipsData.map(f => f.friend_email))
+      }
+    }
+
+    // Combine memory and database friendships
+    const allFriends = new Set([...set, ...dbFriends])
+
+    for (const [e, u] of users.entries()) {
+      if (e !== email && !allFriends.has(e)) suggestions.push({ email: e, username: u.username, status: u.status, lastSeen: u.lastSeen })
+      if (suggestions.length >= 10) break
+    }
+    res.json({ ok: true, suggestions })
+  } catch (error) {
+    console.error('[FRIENDS] Suggested error:', error)
+    // Fallback to memory-only check
+    for (const [e, u] of users.entries()) {
+      if (e !== email && !set.has(e)) suggestions.push({ email: e, username: u.username, status: u.status, lastSeen: u.lastSeen })
+      if (suggestions.length >= 10) break
+    }
+    res.json({ ok: true, suggestions })
   }
-  res.json({ ok: true, suggestions })
 })
 
-app.post('/api/friends/add', (req, res) => {
+app.post('/api/friends/add', async (req, res) => {
   const { email, friend } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(friend || '').toLowerCase()
   if (!me || !other || me === other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  
-  // Check if already friends
-  const myFriends = friendships.get(me) || new Set()
-  if (myFriends.has(other)) return res.status(400).json({ ok: false, error: 'ALREADY_FRIENDS' })
-  
-  // Check if request already exists
-  const existingRequests = friendRequests.get(other) || []
-  if (existingRequests.some(r => r.fromEmail === me)) return res.status(400).json({ ok: false, error: 'REQUEST_EXISTS' })
-  
-  // Create friend request
-  const request = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-    fromEmail: me,
-    fromUsername: users.get(me)?.username || me,
-    toEmail: other,
-    toUsername: users.get(other)?.username || other,
-    requestedAt: Date.now()
+
+  try {
+    // Check if already friends in database
+    if (supabase) {
+      const { data: existingFriendship } = await supabase
+        .from('friendships')
+        .select('id')
+        .or(`and(user_email.eq.${me},friend_email.eq.${other}),and(user_email.eq.${other},friend_email.eq.${me})`)
+        .single()
+
+      if (existingFriendship) return res.status(400).json({ ok: false, error: 'ALREADY_FRIENDS' })
+    }
+
+    // Check if already friends in memory
+    const myFriends = friendships.get(me) || new Set()
+    if (myFriends.has(other)) return res.status(400).json({ ok: false, error: 'ALREADY_FRIENDS' })
+
+    // Check if request already exists in database
+    if (supabase) {
+      const { data: existingRequest } = await supabase
+        .from('friend_requests')
+        .select('id')
+        .eq('from_email', me)
+        .eq('to_email', other)
+        .single()
+
+      if (existingRequest) return res.status(400).json({ ok: false, error: 'REQUEST_EXISTS' })
+    }
+
+    // Check if request already exists in memory
+    const existingRequests = friendRequests.get(other) || []
+    if (existingRequests.some(r => r.fromEmail === me)) return res.status(400).json({ ok: false, error: 'REQUEST_EXISTS' })
+
+    // Create friend request
+    const request = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+      fromEmail: me,
+      fromUsername: users.get(me)?.username || me,
+      toEmail: other,
+      toUsername: users.get(other)?.username || other,
+      requestedAt: Date.now()
+    }
+
+    // Store in database if available
+    if (supabase) {
+      try {
+        await supabase
+          .from('friend_requests')
+          .insert([{
+            id: request.id,
+            from_email: request.fromEmail,
+            from_username: request.fromUsername,
+            to_email: request.toEmail,
+            to_username: request.toUsername,
+            requested_at: new Date(request.requestedAt).toISOString()
+          }])
+
+        await supabase
+          .from('outgoing_requests')
+          .insert([{
+            id: request.id,
+            from_email: request.fromEmail,
+            from_username: request.fromUsername,
+            to_email: request.toEmail,
+            to_username: request.toUsername,
+            requested_at: new Date(request.requestedAt).toISOString()
+          }])
+      } catch (dbError) {
+        console.error('[FRIENDS] Database error:', dbError)
+        // Continue with in-memory storage
+      }
+    }
+
+    // Store in recipient's incoming requests (memory)
+    const requests = friendRequests.get(other) || []
+    requests.push(request)
+    friendRequests.set(other, requests)
+
+    // Store in sender's outgoing requests (memory)
+    const outgoing = outgoingRequests.get(me) || []
+    outgoing.push(request)
+    outgoingRequests.set(me, outgoing)
+
+    saveFriendships()
+
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('[FRIENDS] Add error:', error)
+    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
   }
-  
-  // Store in recipient's incoming requests
-  const requests = friendRequests.get(other) || []
-  requests.push(request)
-  friendRequests.set(other, requests)
-  
-  // Store in sender's outgoing requests
-  const outgoing = outgoingRequests.get(me) || []
-  outgoing.push(request)
-  outgoingRequests.set(me, outgoing)
-  
-  saveFriendships()
-  
-  res.json({ ok: true })
 })
 
-app.post('/api/friends/remove', (req, res) => {
+app.post('/api/friends/remove', async (req, res) => {
   const { email, friend } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(friend || '').toLowerCase()
-  const set = friendships.get(me)
-  if (set) set.delete(other)
-  saveFriendships()
-  res.json({ ok: true })
+  if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+
+  try {
+    // Remove from database if available
+    if (supabase) {
+      try {
+        await supabase
+          .from('friendships')
+          .delete()
+          .or(`and(user_email.eq.${me},friend_email.eq.${other}),and(user_email.eq.${other},friend_email.eq.${me})`)
+      } catch (dbError) {
+        console.error('[FRIENDS] Database remove error:', dbError)
+      }
+    }
+
+    // Remove from memory
+    const set = friendships.get(me)
+    if (set) set.delete(other)
+    const otherSet = friendships.get(other)
+    if (otherSet) otherSet.delete(me)
+
+    saveFriendships()
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('[FRIENDS] Remove error:', error)
+    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
+  }
 })
 
 // Get pending friend requests for a user
-app.get('/api/friends/requests', (req, res) => {
+app.get('/api/friends/requests', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   if (!email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  const requests = friendRequests.get(email) || []
-  res.json({ ok: true, requests })
+
+  try {
+    let requests = []
+
+    // Try to get requests from database first
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('friend_requests')
+        .select('*')
+        .eq('to_email', email)
+        .order('requested_at', { ascending: false })
+
+      if (!error && data) {
+        requests = data.map(row => ({
+          id: row.id,
+          fromEmail: row.from_email,
+          fromUsername: row.from_username,
+          toEmail: row.to_email,
+          toUsername: row.to_username,
+          requestedAt: new Date(row.requested_at).getTime()
+        }))
+      }
+    }
+
+    // Fallback to in-memory storage if database fails
+    if (requests.length === 0) {
+      requests = friendRequests.get(email) || []
+    }
+
+    res.json({ ok: true, requests })
+  } catch (error) {
+    console.error('[FRIENDS] Requests error:', error)
+    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
+  }
 })
 
 // Get outgoing friend requests for a user
-app.get('/api/friends/outgoing', (req, res) => {
+app.get('/api/friends/outgoing', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   if (!email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  const requests = outgoingRequests.get(email) || []
-  res.json({ ok: true, requests })
+
+  try {
+    let requests = []
+
+    // Try to get requests from database first
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('outgoing_requests')
+        .select('*')
+        .eq('from_email', email)
+        .order('requested_at', { ascending: false })
+
+      if (!error && data) {
+        requests = data.map(row => ({
+          id: row.id,
+          fromEmail: row.from_email,
+          fromUsername: row.from_username,
+          toEmail: row.to_email,
+          toUsername: row.to_username,
+          requestedAt: new Date(row.requested_at).getTime()
+        }))
+      }
+    }
+
+    // Fallback to in-memory storage if database fails
+    if (requests.length === 0) {
+      requests = outgoingRequests.get(email) || []
+    }
+
+    res.json({ ok: true, requests })
+  } catch (error) {
+    console.error('[FRIENDS] Outgoing error:', error)
+    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
+  }
 })
 
 // Cancel an outgoing friend request
-app.post('/api/friends/cancel', (req, res) => {
+app.post('/api/friends/cancel', async (req, res) => {
   const { email, friend } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(friend || '').toLowerCase()
   if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  
-  // Remove from sender's outgoing requests
-  const outgoing = outgoingRequests.get(me) || []
-  const outgoingIndex = outgoing.findIndex(r => r.toEmail === other)
-  if (outgoingIndex === -1) return res.status(400).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
-  
-  outgoing.splice(outgoingIndex, 1)
-  if (outgoing.length > 0) {
-    outgoingRequests.set(me, outgoing)
-  } else {
-    outgoingRequests.delete(me)
-  }
-  
-  // Also remove from recipient's incoming requests
-  const requests = friendRequests.get(other) || []
-  const requestIndex = requests.findIndex(r => r.fromEmail === me)
-  if (requestIndex !== -1) {
-    requests.splice(requestIndex, 1)
-    if (requests.length > 0) {
-      friendRequests.set(other, requests)
-    } else {
-      friendRequests.delete(other)
+
+  try {
+    // Remove from database if available
+    if (supabase) {
+      try {
+        await supabase
+          .from('friend_requests')
+          .delete()
+          .eq('from_email', me)
+          .eq('to_email', other)
+
+        await supabase
+          .from('outgoing_requests')
+          .delete()
+          .eq('from_email', me)
+          .eq('to_email', other)
+      } catch (dbError) {
+        console.error('[FRIENDS] Database cancel error:', dbError)
+      }
     }
+
+    // Remove from sender's outgoing requests (memory)
+    const outgoing = outgoingRequests.get(me) || []
+    const outgoingIndex = outgoing.findIndex(r => r.toEmail === other)
+    if (outgoingIndex === -1) return res.status(400).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+
+    outgoing.splice(outgoingIndex, 1)
+    if (outgoing.length > 0) {
+      outgoingRequests.set(me, outgoing)
+    } else {
+      outgoingRequests.delete(me)
+    }
+
+    // Also remove from recipient's incoming requests (memory)
+    const requests = friendRequests.get(other) || []
+    const requestIndex = requests.findIndex(r => r.fromEmail === me)
+    if (requestIndex !== -1) {
+      requests.splice(requestIndex, 1)
+      if (requests.length > 0) {
+        friendRequests.set(other, requests)
+      } else {
+        friendRequests.delete(other)
+      }
+    }
+
+    saveFriendships()
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('[FRIENDS] Cancel error:', error)
+    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
   }
-  
-  saveFriendships()
-  res.json({ ok: true })
 })
 
 // Accept a friend request
-app.post('/api/friends/accept', (req, res) => {
+app.post('/api/friends/accept', async (req, res) => {
   const { email, requester } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(requester || '').toLowerCase()
   if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  
-  const requests = friendRequests.get(me) || []
-  const requestIndex = requests.findIndex(r => r.fromEmail === other)
-  if (requestIndex === -1) return res.status(400).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
-  
-  // Remove the request
-  requests.splice(requestIndex, 1)
-  if (requests.length > 0) {
-    friendRequests.set(me, requests)
-  } else {
-    friendRequests.delete(me)
-  }
-  
-  // Also remove from sender's outgoing requests
-  const outgoing = outgoingRequests.get(other) || []
-  const outgoingIndex = outgoing.findIndex(r => r.toEmail === me)
-  if (outgoingIndex !== -1) {
-    outgoing.splice(outgoingIndex, 1)
-    if (outgoing.length > 0) {
-      outgoingRequests.set(other, outgoing)
-    } else {
-      outgoingRequests.delete(other)
+
+  try {
+    // Check if request exists in database
+    let requestExists = false
+    if (supabase) {
+      const { data: existingRequest } = await supabase
+        .from('friend_requests')
+        .select('id')
+        .eq('from_email', other)
+        .eq('to_email', me)
+        .single()
+
+      requestExists = !!existingRequest
     }
+
+    // Check if request exists in memory
+    const requests = friendRequests.get(me) || []
+    const requestIndex = requests.findIndex(r => r.fromEmail === other)
+    if (!requestExists && requestIndex === -1) return res.status(400).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+
+    // Remove the request from database
+    if (supabase && requestExists) {
+      try {
+        await supabase
+          .from('friend_requests')
+          .delete()
+          .eq('from_email', other)
+          .eq('to_email', me)
+
+        await supabase
+          .from('outgoing_requests')
+          .delete()
+          .eq('from_email', other)
+          .eq('to_email', me)
+      } catch (dbError) {
+        console.error('[FRIENDS] Database accept error:', dbError)
+      }
+    }
+
+    // Remove the request from memory
+    if (requestIndex !== -1) {
+      requests.splice(requestIndex, 1)
+      if (requests.length > 0) {
+        friendRequests.set(me, requests)
+      } else {
+        friendRequests.delete(me)
+      }
+    }
+
+    // Also remove from sender's outgoing requests (memory)
+    const outgoing = outgoingRequests.get(other) || []
+    const outgoingIndex = outgoing.findIndex(r => r.toEmail === me)
+    if (outgoingIndex !== -1) {
+      outgoing.splice(outgoingIndex, 1)
+      if (outgoing.length > 0) {
+        outgoingRequests.set(other, outgoing)
+      } else {
+        outgoingRequests.delete(other)
+      }
+    }
+
+    // Add mutual friendship to database
+    if (supabase) {
+      try {
+        await supabase
+          .from('friendships')
+          .insert([
+            { user_email: me, friend_email: other },
+            { user_email: other, friend_email: me }
+          ])
+      } catch (dbError) {
+        console.error('[FRIENDS] Database friendship error:', dbError)
+      }
+    }
+
+    // Add mutual friendship to memory
+    const myFriends = friendships.get(me) || new Set()
+    myFriends.add(other)
+    friendships.set(me, myFriends)
+
+    const otherFriends = friendships.get(other) || new Set()
+    otherFriends.add(me)
+    friendships.set(other, otherFriends)
+
+    saveFriendships()
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('[FRIENDS] Accept error:', error)
+    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
   }
-  
-  // Add mutual friendship
-  const myFriends = friendships.get(me) || new Set()
-  myFriends.add(other)
-  friendships.set(me, myFriends)
-  
-  const otherFriends = friendships.get(other) || new Set()
-  otherFriends.add(me)
-  friendships.set(other, otherFriends)
-  
-  saveFriendships()
-  res.json({ ok: true })
 })
 
 // Decline a friend request
-app.post('/api/friends/decline', (req, res) => {
+app.post('/api/friends/decline', async (req, res) => {
   const { email, requester } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(requester || '').toLowerCase()
   if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  
-  const requests = friendRequests.get(me) || []
-  const requestIndex = requests.findIndex(r => r.fromEmail === other)
-  if (requestIndex === -1) return res.status(400).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
-  
-  // Remove the request
-  requests.splice(requestIndex, 1)
-  if (requests.length > 0) {
-    friendRequests.set(me, requests)
-  } else {
-    friendRequests.delete(me)
-  }
-  
-  // Also remove from sender's outgoing requests
-  const outgoing = outgoingRequests.get(other) || []
-  const outgoingIndex = outgoing.findIndex(r => r.toEmail === me)
-  if (outgoingIndex !== -1) {
-    outgoing.splice(outgoingIndex, 1)
-    if (outgoing.length > 0) {
-      outgoingRequests.set(other, outgoing)
-    } else {
-      outgoingRequests.delete(other)
+
+  try {
+    // Check if request exists in database
+    let requestExists = false
+    if (supabase) {
+      const { data: existingRequest } = await supabase
+        .from('friend_requests')
+        .select('id')
+        .eq('from_email', other)
+        .eq('to_email', me)
+        .single()
+
+      requestExists = !!existingRequest
     }
+
+    // Check if request exists in memory
+    const requests = friendRequests.get(me) || []
+    const requestIndex = requests.findIndex(r => r.fromEmail === other)
+    if (!requestExists && requestIndex === -1) return res.status(400).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+
+    // Remove the request from database
+    if (supabase && requestExists) {
+      try {
+        await supabase
+          .from('friend_requests')
+          .delete()
+          .eq('from_email', other)
+          .eq('to_email', me)
+
+        await supabase
+          .from('outgoing_requests')
+          .delete()
+          .eq('from_email', other)
+          .eq('to_email', me)
+      } catch (dbError) {
+        console.error('[FRIENDS] Database decline error:', dbError)
+      }
+    }
+
+    // Remove the request from memory
+    if (requestIndex !== -1) {
+      requests.splice(requestIndex, 1)
+      if (requests.length > 0) {
+        friendRequests.set(me, requests)
+      } else {
+        friendRequests.delete(me)
+      }
+    }
+
+    // Also remove from sender's outgoing requests (memory)
+    const outgoing = outgoingRequests.get(other) || []
+    const outgoingIndex = outgoing.findIndex(r => r.toEmail === me)
+    if (outgoingIndex !== -1) {
+      outgoing.splice(outgoingIndex, 1)
+      if (outgoing.length > 0) {
+        outgoingRequests.set(other, outgoing)
+      } else {
+        outgoingRequests.delete(other)
+      }
+    }
+
+    saveFriendships()
+    res.json({ ok: true })
+  } catch (error) {
+    console.error('[FRIENDS] Decline error:', error)
+    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
   }
-  
-  saveFriendships()
-  res.json({ ok: true })
 })
 
 // Send a simple invite via WS if recipient is online

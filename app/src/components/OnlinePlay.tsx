@@ -1080,15 +1080,16 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 <label className="block text-xs opacity-70 mb-1">Opponent near my avg</label>
                 <div className="flex items-center gap-2">
                   <input id="nearavg" type="checkbox" className="accent-purple-500" checked={nearAvg} onChange={e=>setNearAvg(e.target.checked)} disabled={!myAvg} />
+                  <label htmlFor="nearavg" className="cursor-pointer text-sm">Near my average</label>
                   <input className="input w-24" type="number" min={5} max={40} step={1} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
                 </div>
               </div>
             </div>
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 max-w-sm">
-                <label className={`block text-xs opacity-70 mb-1 ${!nearAvg ? 'opacity-40' : ''}`}>Avg tolerance (┬▒)</label>
+                <label className={`block text-xs opacity-70 mb-1 ${!nearAvg ? 'opacity-40' : ''}`}>Avg tolerance (±)</label>
                 <input className="w-full" type="range" min={1} max={50} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
-                <div className="text-xs opacity-70 mt-1">┬▒ {avgTolerance}</div>
+                <div className="text-xs opacity-70 mt-1">± {avgTolerance}</div>
               </div>
               <button className="btn px-3 py-1 text-sm" onClick={()=>{ setFilterMode('all'); setFilterGame('all'); setFilterStart('all'); setNearAvg(false); setAvgTolerance(10) }}>Reset</button>
             </div>

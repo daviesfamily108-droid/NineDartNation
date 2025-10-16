@@ -30,6 +30,7 @@ export default function Friends({ user }: { user?: any }) {
   const msgs = useMessages()
   const [requests, setRequests] = useState<Array<{ id: string; fromEmail: string; fromUsername: string; toEmail: string; toUsername: string; requestedAt: number }>>([])
   const [outgoingRequests, setOutgoingRequests] = useState<Array<{ id: string; fromEmail: string; fromUsername: string; toEmail: string; toUsername: string; requestedAt: number }>>([])
+  const [messagePopup, setMessagePopup] = useState<{ show: boolean; toUser?: string; toEmail?: string; replyTo?: string }>({ show: false })
 
   async function refresh() {
     if (!email) return
@@ -227,15 +228,7 @@ export default function Friends({ user }: { user?: any }) {
                         else toast('Friend is offline; invite queued', { type: 'info' })
                       } finally { setLoading(false) }
                     }}>Invite</button>
-                    <button className="btn" disabled={loading} onClick={async()=>{
-                      const m = prompt('Message:')
-                      if (!m) return
-                      setLoading(true)
-                      try {
-                        await fetch('/api/friends/message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fromEmail: email, toEmail: f.email, message: m }) })
-                        toast('Message sent', { type: 'success' })
-                      } finally { setLoading(false) }
-                    }}>Message</button>
+                    <button className="btn" disabled={loading} onClick={()=>setMessagePopup({ show: true, toUser: f.username || f.email, toEmail: f.email })}>Message</button>
                     <button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={()=>removeFriend(f.email)}>Remove</button>
                   </div>
                 </li>
@@ -293,14 +286,7 @@ export default function Friends({ user }: { user?: any }) {
                 <div className="flex items-center justify-between">
                   <div><span className="font-semibold">{m.from}</span> <span className="opacity-70 text-xs">· {new Date(m.ts).toLocaleString()}</span></div>
                   <div className="flex gap-2">
-                    <button className="btn px-2 py-1 text-xs" onClick={async()=>{
-                      const reply = prompt(`Reply to ${m.from}:`)
-                      if (!reply) return
-                      try {
-                        await fetch('/api/friends/message', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ fromEmail: email, toEmail: m.from, message: reply }) })
-                        toast('Message sent', { type: 'success' })
-                      } catch {}
-                    }}>Reply</button>
+                    <button className="btn px-2 py-1 text-xs" onClick={()=>setMessagePopup({ show: true, toUser: m.from, toEmail: m.from, replyTo: m.from })}>Reply</button>
                     <button className="btn bg-slate-700 hover:bg-slate-800 px-2 py-1 text-xs" title="Delete this message" onClick={()=>msgs.remove(m.id)}>Delete</button>
                     <button className="btn bg-rose-600 hover:bg-rose-700 px-2 py-1 text-xs" onClick={async()=>{
                       const reason = prompt('Report reason (what happened)?')
@@ -318,6 +304,63 @@ export default function Friends({ user }: { user?: any }) {
           </ul>
         )}
       </div>
+
+      {/* Message Popup */}
+      {messagePopup.show && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 border border-slate-600 rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="text-center mb-4">
+              <h3 className="text-lg font-semibold text-white">
+                Type Message To {messagePopup.toUser}
+              </h3>
+            </div>
+            <textarea
+              className="w-full h-32 bg-slate-700 border border-slate-600 rounded p-3 text-white placeholder-slate-400 resize-none"
+              placeholder="Type your message here..."
+              id="message-input"
+              autoFocus
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                className="flex-1 btn bg-emerald-600 hover:bg-emerald-700"
+                onClick={async () => {
+                  const input = document.getElementById('message-input') as HTMLTextAreaElement
+                  const message = input?.value?.trim()
+                  if (!message) return
+
+                  setLoading(true)
+                  try {
+                    await fetch('/api/friends/message', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        fromEmail: email,
+                        toEmail: messagePopup.toEmail,
+                        message
+                      })
+                    })
+                    toast('Message sent', { type: 'success' })
+                    setMessagePopup({ show: false })
+                  } catch (error) {
+                    toast('Failed to send message', { type: 'error' })
+                  } finally {
+                    setLoading(false)
+                  }
+                }}
+                disabled={loading}
+              >
+                Send
+              </button>
+              <button
+                className="flex-1 btn bg-slate-600 hover:bg-slate-700"
+                onClick={() => setMessagePopup({ show: false })}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

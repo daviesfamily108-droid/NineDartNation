@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useToast } from '../store/toast';
 import { formatAvg } from '../utils/stats'
 import { getAllTime } from '../store/profileStats'
 import { STRIPE_CHECKOUT_URL } from '../utils/stripe'
@@ -130,12 +131,12 @@ export default function Home({ user }: { user?: any }) {
                       if (data.ok && data.url) {
                         window.open(data.url, '_blank');
                       } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
-                        alert('Premium purchases are not available in this development environment. Please visit the production site to upgrade.');
+                        useToast()("Premium purchases are not available in this development environment. Please visit the production site to upgrade.", { type: 'error', timeout: 4000 });
                       } else {
-                        alert('Failed to create checkout session. Please try again.');
+                        useToast()("Failed to create checkout session. Please try again.", { type: 'error', timeout: 4000 });
                       }
                     } catch (err) {
-                      alert('Error creating checkout. Please try again.');
+                      useToast()("Error creating checkout. Please try again.", { type: 'error', timeout: 4000 });
                     }
                   }}
                   title="Unlock with PREMIUM"

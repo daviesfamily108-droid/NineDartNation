@@ -10,11 +10,10 @@ CREATE TABLE IF NOT EXISTS users (
 -- Create an index on username for faster lookups
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
--- Enable Row Level Security (RLS)
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+-- Disable Row Level Security (RLS) for server-managed `users` table
+-- The application uses the service role key for server-side operations
+ALTER TABLE IF EXISTS public.users DISABLE ROW LEVEL SECURITY;
 
--- Create a policy that allows users to read their own data
--- (You'll need to adjust this based on your authentication setup)
--- For now, we'll allow all operations (adjust for production)
-CREATE POLICY "Allow all operations for users" ON users
-  FOR ALL USING (true);
+-- NOTE: Do NOT create permissive policies here. If you need RLS,
+-- create narrowly-scoped policies that do NOT reference the users table
+-- in a way that could recurse. For this project we keep RLS disabled.

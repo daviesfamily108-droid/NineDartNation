@@ -133,6 +133,12 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [startScore, setStartScore] = useState<number>(501)
   const [pendingInvite, setPendingInvite] = useState<any | null>(null)
   const [errorMsg, setErrorMsg] = useState<string>('')
+  // Stripe checkout error handler
+  function handleStripeError(msg: string) {
+    setErrorMsg(msg || 'Failed to create Stripe checkout session. Please try again later.')
+    setTimeout(() => setErrorMsg(''), 4000)
+    try { toast(msg || 'Stripe checkout failed', { type: 'error' }) } catch {}
+  }
   const [lastJoinIntent, setLastJoinIntent] = useState<any | null>(null)
   const [offerNewRoom, setOfferNewRoom] = useState<null | { game: string; mode: 'bestof'|'firstto'; value: number; startingScore?: number }>(null)
   const toast = useToast()
@@ -1004,7 +1010,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
         <div className="mt-2 p-2 rounded-lg bg-rose-700/30 border border-rose-600/40 text-rose-200 text-sm">You've used your 3 free online games this week. PREMIUM required to continue.</div>
       )}
       {errorMsg && (
-        <div className="mt-2 p-2 rounded-lg bg-amber-700/30 border border-amber-600/40 text-amber-200 text-sm">{errorMsg}</div>
+        <div className="mt-2 p-2 rounded-lg bg-rose-700/30 border border-rose-600/40 text-rose-200 text-sm font-semibold flex items-center gap-2">
+          <span className="material-icons text-rose-300">error_outline</span>
+          {errorMsg}
+        </div>
       )}
       {offerNewRoom && (
         <div className="mt-2 p-2 rounded-lg bg-indigo-700/30 border border-indigo-600/40 text-indigo-100 text-sm flex items-center justify-between gap-2">
@@ -1080,15 +1089,16 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 <label className="block text-xs opacity-70 mb-1">Opponent near my avg</label>
                 <div className="flex items-center gap-2">
                   <input id="nearavg" type="checkbox" className="accent-purple-500" checked={nearAvg} onChange={e=>setNearAvg(e.target.checked)} disabled={!myAvg} />
+                  <label htmlFor="nearavg" className="cursor-pointer text-sm">Near my average</label>
                   <input className="input w-24" type="number" min={5} max={40} step={1} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
                 </div>
               </div>
             </div>
             <div className="flex items-center justify-between gap-2">
               <div className="flex-1 max-w-sm">
-                <label className={`block text-xs opacity-70 mb-1 ${!nearAvg ? 'opacity-40' : ''}`}>Avg tolerance (┬▒)</label>
+                <label className={`block text-xs opacity-70 mb-1 ${!nearAvg ? 'opacity-40' : ''}`}>Avg tolerance (±)</label>
                 <input className="w-full" type="range" min={1} max={50} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
-                <div className="text-xs opacity-70 mt-1">┬▒ {avgTolerance}</div>
+                <div className="text-xs opacity-70 mt-1">± {avgTolerance}</div>
               </div>
               <button className="btn px-3 py-1 text-sm" onClick={()=>{ setFilterMode('all'); setFilterGame('all'); setFilterStart('all'); setNearAvg(false); setAvgTolerance(10) }}>Reset</button>
             </div>
@@ -1129,8 +1139,14 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       setLastJoinIntent({ game: m.game, mode: m.mode, value: m.value, startingScore: m.startingScore })
                       const calibrated = !!calibH
                       const boardPreview = await getBoardPreview()
-                      if (wsGlobal) wsGlobal.send({ type: 'join-match', matchId: m.id, calibrated, boardPreview })
-                      else wsRef.current?.send(JSON.stringify({ type: 'join-match', matchId: m.id, calibrated, boardPreview }))
+                      try {
+                        // Simulate Stripe checkout error for demo
+                        // throw new Error('Failed to create checkout session')
+                        if (wsGlobal) wsGlobal.send({ type: 'join-match', matchId: m.id, calibrated, boardPreview })
+                        else wsRef.current?.send(JSON.stringify({ type: 'join-match', matchId: m.id, calibrated, boardPreview }))
+                      } catch (err: any) {
+                        handleStripeError(err?.message || 'Failed to create Stripe checkout session. Please try again later.')
+                      }
                     }}>Join Now!</button>
                   </div>
                 </div>

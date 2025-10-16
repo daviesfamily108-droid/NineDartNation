@@ -102,7 +102,7 @@ export function Sidebar({
         <a
           href={DISCORD_INVITE_URL}
                 target="_blank"
-                rel="noopener noreferrer"
+                rel="noopener noreferrer nofollow"
                 className="btn bg-[#5865F2] text-white w-full font-bold text-lg"
               >
                 Join Discord
