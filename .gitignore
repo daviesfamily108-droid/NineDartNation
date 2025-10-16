@@ -8,6 +8,9 @@ server/node_modules/
 /build/
 # app/dist/
 # server/dist/
+
+# Data files
+server/friends.json
 .vite/
 
 # Logs
