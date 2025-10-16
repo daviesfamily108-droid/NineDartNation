@@ -28,8 +28,8 @@ export default function Friends({ user }: { user?: any }) {
   const [filter, setFilter] = useState<'all'|'online'|'offline'|'ingame'|'requests'>('all')
   const [loading, setLoading] = useState(false)
   const msgs = useMessages()
-  const [requests, setRequests] = useState<Array<{ email: string; username?: string }>>([])
-  const [outgoingRequests, setOutgoingRequests] = useState<Array<{ email: string; username?: string }>>([])
+  const [requests, setRequests] = useState<Array<{ id: string; fromEmail: string; fromUsername: string; toEmail: string; toUsername: string; requestedAt: number }>>([])
+  const [outgoingRequests, setOutgoingRequests] = useState<Array<{ id: string; fromEmail: string; fromUsername: string; toEmail: string; toUsername: string; requestedAt: number }>>([])
 
   async function refresh() {
     if (!email) return
@@ -125,26 +125,36 @@ export default function Friends({ user }: { user?: any }) {
                 <>
                   {/* Incoming requests */}
                   {requests.map(r => (
-                    <li key={`incoming-${r.email}`} className="p-2 rounded bg-black/20 flex items-center justify-between">
+                    <li key={`incoming-${r.fromEmail}`} className="p-2 rounded bg-black/20 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold">{r.username || r.email}</span>
+                        <span className="font-semibold">{r.fromUsername || r.fromEmail}</span>
                         <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">Incoming</span>
                       </div>
                       <div className="flex gap-2">
                         <button className="btn bg-emerald-600 hover:bg-emerald-700" onClick={async()=>{
                           setLoading(true)
                           try {
-                            await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.email }) })
-                            await refresh()
-                            toast('Friend request accepted', { type: 'success' })
+                            const res = await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.fromEmail }) })
+                            if (res.ok) {
+                              await new Promise(resolve => setTimeout(resolve, 100)) // Small delay to ensure server processing
+                              await refresh()
+                              toast('Friend request accepted', { type: 'success' })
+                            } else {
+                              toast('Failed to accept request', { type: 'error' })
+                            }
                           } finally { setLoading(false) }
                         }}>Accept</button>
                         <button className="btn bg-rose-600 hover:bg-rose-700" onClick={async()=>{
                           setLoading(true)
                           try {
-                            await fetch('/api/friends/decline', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.email }) })
-                            await refresh()
-                            toast('Friend request declined', { type: 'info' })
+                            const res = await fetch('/api/friends/decline', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.fromEmail }) })
+                            if (res.ok) {
+                              await new Promise(resolve => setTimeout(resolve, 100))
+                              await refresh()
+                              toast('Friend request declined', { type: 'info' })
+                            } else {
+                              toast('Failed to decline request', { type: 'error' })
+                            }
                           } finally { setLoading(false) }
                         }}>Decline</button>
                       </div>
@@ -152,17 +162,22 @@ export default function Friends({ user }: { user?: any }) {
                   ))}
                   {/* Outgoing requests */}
                   {outgoingRequests.map(r => (
-                    <li key={`outgoing-${r.email}`} className="p-2 rounded bg-black/20 flex items-center justify-between">
+                    <li key={`outgoing-${r.toEmail}`} className="p-2 rounded bg-black/20 flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold">{r.username || r.email}</span>
+                        <span className="font-semibold">{r.toUsername || r.toEmail}</span>
                         <span className="text-xs bg-amber-600/20 text-amber-400 px-2 py-1 rounded">Pending</span>
                       </div>
                       <button className="btn bg-slate-600 hover:bg-slate-700" onClick={async()=>{
                         setLoading(true)
                         try {
-                          await fetch('/api/friends/cancel', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, friend: r.email }) })
-                          await refresh()
-                          toast('Friend request cancelled', { type: 'info' })
+                          const res = await fetch('/api/friends/cancel', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, friend: r.toEmail }) })
+                          if (res.ok) {
+                            await new Promise(resolve => setTimeout(resolve, 100))
+                            await refresh()
+                            toast('Friend request cancelled', { type: 'info' })
+                          } else {
+                            toast('Failed to cancel request', { type: 'error' })
+                          }
                         } finally { setLoading(false) }
                       }}>Cancel</button>
                     </li>
