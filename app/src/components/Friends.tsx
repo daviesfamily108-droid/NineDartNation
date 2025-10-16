@@ -44,7 +44,10 @@ export default function Friends({ user }: { user?: any }) {
       setSuggested(sg.suggestions || [])
       setRequests(rq.requests || [])
       setOutgoingRequests(out.requests || [])
-    } catch {}
+      console.log('Friends refresh:', { email, requests: rq.requests, outgoing: out.requests })
+    } catch (error) {
+      console.error('Friends refresh error:', error)
+    }
   }
 
   useEffect(() => { refresh() }, [email])
@@ -121,7 +124,10 @@ export default function Friends({ user }: { user?: any }) {
           />
           {filter === 'requests' ? (
             <ul className="space-y-2">
-              {requestsCount > 0 ? (
+              {(() => {
+                console.log('Rendering requests:', { requestsCount, requests, outgoingRequests })
+                return requestsCount > 0
+              })() ? (
                 <>
                   {/* Incoming requests */}
                   {requests.map(r => (
