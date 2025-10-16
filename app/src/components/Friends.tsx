@@ -51,7 +51,7 @@ export default function Friends({ user }: { user?: any }) {
       setRequests(rq.requests || [])
       setOutgoingRequests(out.requests || [])
     } catch (error) {
-      console.error('Friends refresh error:', error)
+      // Handle refresh errors silently
     }
   }
 
@@ -137,10 +137,8 @@ export default function Friends({ user }: { user?: any }) {
               {requestsCount > 0 ? (
                 <>
                   {/* Incoming requests */}
-                  {requests.length > 0 && requests.map(r => {
-                    console.log('Rendering request:', r)
-                    return (
-                      <li key={`incoming-${r.id || r.fromEmail}`} className="p-3 rounded bg-black/20 flex flex-col gap-2">
+                  {requests.length > 0 && requests.map(r => (
+                    <li key={`incoming-${r.id || r.fromEmail}`} className="p-3 rounded bg-black/20 flex flex-col gap-2">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-lg">{r.fromUsername || r.fromEmail || 'Unknown User'}</span>
                           <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">Incoming</span>
@@ -149,9 +147,7 @@ export default function Friends({ user }: { user?: any }) {
                         <button className="btn bg-emerald-600 hover:bg-emerald-700" onClick={async()=>{
                           setLoading(true)
                           try {
-                            console.log('Accepting request from:', r.fromEmail)
                             const res = await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.fromEmail }) })
-                            console.log('Accept response:', res.status, await res.text())
                             if (res.ok) {
                               await new Promise(resolve => setTimeout(resolve, 200))
                               await refresh()
