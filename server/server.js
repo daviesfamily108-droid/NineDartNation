@@ -511,6 +511,32 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   }
 })
 
+// Helper: check Stripe runtime configuration (safe - does not leak secrets)
+app.get('/api/stripe/check', async (req, res) => {
+  try {
+    const secretPresent = Boolean(process.env.STRIPE_SECRET_KEY)
+    const pricePresent = Boolean(process.env.STRIPE_PRICE_ID_SUBSCRIPTION)
+    // Attempt to initialize Stripe client if secret present
+    let stripeLocal = stripe
+    if (!stripeLocal && process.env.STRIPE_SECRET_KEY) {
+      try { stripeLocal = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) } catch {}
+    }
+    let priceInfo = null
+    if (stripeLocal && pricePresent) {
+      try {
+        // safe read: attempt to retrieve the Price object (no secrets logged)
+        const p = await stripeLocal.prices.retrieve(process.env.STRIPE_PRICE_ID_SUBSCRIPTION)
+        priceInfo = { id: p.id, currency: p.currency, active: p.active, unit_amount: p.unit_amount }
+      } catch (e) {
+        priceInfo = { error: String(e?.message || e) }
+      }
+    }
+    return res.json({ ok: true, secretPresent, pricePresent, priceInfo })
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'CHECK_FAILED' })
+  }
+})
+
 // Admin management (demo; NOT secure ÔÇö no auth/signature verification)
 app.get('/api/admins', (req, res) => {
   res.json({ admins: Array.from(adminEmails) })
