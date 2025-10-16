@@ -125,9 +125,9 @@ export default function Friends({ user }: { user?: any }) {
                 <>
                   {/* Incoming requests */}
                   {requests.map(r => (
-                    <li key={`incoming-${r.fromEmail}`} className="p-2 rounded bg-black/20 flex items-center justify-between">
+                    <li key={`incoming-${r.fromEmail}`} className="p-3 rounded bg-black/20 flex flex-col gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold">{r.fromUsername || r.fromEmail}</span>
+                        <span className="font-semibold text-lg">{r.fromUsername || r.fromEmail}</span>
                         <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">Incoming</span>
                       </div>
                       <div className="flex gap-2">
@@ -162,12 +162,12 @@ export default function Friends({ user }: { user?: any }) {
                   ))}
                   {/* Outgoing requests */}
                   {outgoingRequests.map(r => (
-                    <li key={`outgoing-${r.toEmail}`} className="p-2 rounded bg-black/20 flex items-center justify-between">
+                    <li key={`outgoing-${r.toEmail}`} className="p-3 rounded bg-black/20 flex flex-col gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold">{r.toUsername || r.toEmail}</span>
+                        <span className="font-semibold text-lg">{r.toUsername || r.toEmail}</span>
                         <span className="text-xs bg-amber-600/20 text-amber-400 px-2 py-1 rounded">Pending</span>
                       </div>
-                      <button className="btn bg-slate-600 hover:bg-slate-700" onClick={async()=>{
+                      <button className="btn bg-slate-600 hover:bg-slate-700 self-start" onClick={async()=>{
                         setLoading(true)
                         try {
                           const res = await fetch('/api/friends/cancel', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, friend: r.toEmail }) })
