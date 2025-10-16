@@ -29,18 +29,21 @@ export default function Friends({ user }: { user?: any }) {
   const [loading, setLoading] = useState(false)
   const msgs = useMessages()
   const [requests, setRequests] = useState<Array<{ email: string; username?: string }>>([])
+  const [outgoingRequests, setOutgoingRequests] = useState<Array<{ email: string; username?: string }>>([])
 
   async function refresh() {
     if (!email) return
     try {
-      const [fl, sg, rq] = await Promise.all([
+      const [fl, sg, rq, out] = await Promise.all([
         fetch(`/api/friends/list?email=${encodeURIComponent(email)}`).then(r=>r.json()),
         fetch(`/api/friends/suggested?email=${encodeURIComponent(email)}`).then(r=>r.json()),
         fetch(`/api/friends/requests?email=${encodeURIComponent(email)}`).then(r=>r.json()),
+        fetch(`/api/friends/outgoing?email=${encodeURIComponent(email)}`).then(r=>r.json()),
       ])
       setFriends(fl.friends || [])
       setSuggested(sg.suggestions || [])
       setRequests(rq.requests || [])
+      setOutgoingRequests(out.requests || [])
     } catch {}
   }
 
@@ -92,7 +95,7 @@ export default function Friends({ user }: { user?: any }) {
   }
 
   // Friend Requests pill: use real requests data
-  const requestsCount = requests.length;
+  const requestsCount = requests.length + outgoingRequests.length;
   return (
     <div className="card">
       <h2 className="text-2xl font-bold text-brand-700 mb-2">Friends</h2>
@@ -118,27 +121,54 @@ export default function Friends({ user }: { user?: any }) {
           />
           {filter === 'requests' ? (
             <ul className="space-y-2">
-              {requestsCount > 0 ? requests.map(r => (
-                <li key={r.email} className="p-2 rounded bg-black/20 flex items-center justify-between">
-                  <span className="font-semibold">{r.username || r.email}</span>
-                  <button className="btn bg-emerald-600 hover:bg-emerald-700" onClick={async()=>{
-                    setLoading(true)
-                    try {
-                      await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.email }) })
-                      await refresh()
-                      toast('Friend request accepted', { type: 'success' })
-                    } finally { setLoading(false) }
-                  }}>Accept</button>
-                  <button className="btn bg-rose-600 hover:bg-rose-700" onClick={async()=>{
-                    setLoading(true)
-                    try {
-                      await fetch('/api/friends/decline', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.email }) })
-                      await refresh()
-                      toast('Friend request declined', { type: 'info' })
-                    } finally { setLoading(false) }
-                  }}>Decline</button>
-                </li>
-              )) : (
+              {requestsCount > 0 ? (
+                <>
+                  {/* Incoming requests */}
+                  {requests.map(r => (
+                    <li key={`incoming-${r.email}`} className="p-2 rounded bg-black/20 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{r.username || r.email}</span>
+                        <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">Incoming</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button className="btn bg-emerald-600 hover:bg-emerald-700" onClick={async()=>{
+                          setLoading(true)
+                          try {
+                            await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.email }) })
+                            await refresh()
+                            toast('Friend request accepted', { type: 'success' })
+                          } finally { setLoading(false) }
+                        }}>Accept</button>
+                        <button className="btn bg-rose-600 hover:bg-rose-700" onClick={async()=>{
+                          setLoading(true)
+                          try {
+                            await fetch('/api/friends/decline', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.email }) })
+                            await refresh()
+                            toast('Friend request declined', { type: 'info' })
+                          } finally { setLoading(false) }
+                        }}>Decline</button>
+                      </div>
+                    </li>
+                  ))}
+                  {/* Outgoing requests */}
+                  {outgoingRequests.map(r => (
+                    <li key={`outgoing-${r.email}`} className="p-2 rounded bg-black/20 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{r.username || r.email}</span>
+                        <span className="text-xs bg-amber-600/20 text-amber-400 px-2 py-1 rounded">Pending</span>
+                      </div>
+                      <button className="btn bg-slate-600 hover:bg-slate-700" onClick={async()=>{
+                        setLoading(true)
+                        try {
+                          await fetch('/api/friends/cancel', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, friend: r.email }) })
+                          await refresh()
+                          toast('Friend request cancelled', { type: 'info' })
+                        } finally { setLoading(false) }
+                      }}>Cancel</button>
+                    </li>
+                  ))}
+                </>
+              ) : (
                 <li className="text-sm opacity-70">No friend requests yet.</li>
               )}
             </ul>

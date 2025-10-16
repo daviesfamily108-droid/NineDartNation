@@ -1828,7 +1828,6 @@ export default function OnlinePlay({ user }: { user?: any }) {
             <ResizableModal storageKey="ndn:modal:create-match" className="w-full h-full rounded-none !border-0 !shadow-none relative" fullScreen>
               <div className="flex items-center justify-between mb-3 sticky top-0 bg-slate-900/80 backdrop-blur border-b border-slate-700 z-10 px-2 py-2">
                 <h3 className="text-xl font-bold">Create Match</h3>
-                <button className="btn px-2 py-1" onClick={()=>setShowCreate(false)}>Close</button>
               </div>
               <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 overflow-auto px-2" style={{ maxHeight: 'calc(100vh - 120px)' }}>
               <div className="col-span-1">
@@ -1850,8 +1849,25 @@ export default function OnlinePlay({ user }: { user?: any }) {
               </div>
               <div className="col-span-1">
                 <label className="block text-sm text-slate-300 mb-1">Value</label>
-                <input className="input w-full" type="number" min={1} value={modeValue} onChange={e=>setModeValue(parseInt(e.target.value||'1'))} />
-                <div className="text-xs opacity-70 mt-1">Example: Best Of 5 ÔåÆ first to 3</div>
+                {game === 'X01' ? (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1">
+                      {[101, 201, 301, 401, 501].map(val => (
+                        <button
+                          key={val}
+                          className={`btn px-2 py-1 text-xs ${modeValue === val ? 'bg-purple-600 hover:bg-purple-700' : ''}`}
+                          onClick={() => setModeValue(val)}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                    <input className="input w-full" type="number" min={1} value={modeValue} onChange={e=>setModeValue(parseInt(e.target.value||'1'))} placeholder="Or enter custom value" />
+                  </div>
+                ) : (
+                  <input className="input w-full" type="number" min={1} value={modeValue} onChange={e=>setModeValue(parseInt(e.target.value||'1'))} />
+                )}
+                <div className="text-xs opacity-70 mt-1">Example: Best Of 5 — first to 3</div>
               </div>
               <div className="col-span-1">
                 <label className="block text-sm text-slate-300 mb-1">Starting Score</label>
@@ -1873,7 +1889,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <div className="col-span-1">
                 <div className="p-3 rounded-lg bg-black/20 border border-slate-700/40">
                   <div className="text-xs text-slate-300 uppercase tracking-wide mb-1">Summary</div>
-                  <div className="text-sm font-semibold">{game} ÔÇó {mode==='bestof' ? `Best Of ${modeValue}` : `First To ${modeValue}`} {game==='X01' ? `ÔÇó ${startScore}` : ''}</div>
+                  <div className="text-sm font-semibold">{game} — {mode==='bestof' ? `Best Of ${modeValue}` : `First To ${modeValue}`} {game==='X01' ? `— ${startScore}` : ''}</div>
                   {!user?.fullAccess && (premiumGames as readonly string[]).includes(game) && (
                     <div className="text-xs text-rose-300 mt-1">PREMIUM required</div>
                   )}
@@ -1893,6 +1909,9 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     wsRef.current?.send(JSON.stringify({ type: 'list-matches' }))
                   }
                 }}>START GAME!</button>
+                <div className="flex justify-center mt-2">
+                  <button className="btn px-2 py-1" onClick={()=>setShowCreate(false)}>Close</button>
+                </div>
               </div>
             </ResizableModal>
           </div>
