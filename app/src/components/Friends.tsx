@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useToast } from '../store/toast'
-import { useMessages } from '../store/messages'
+impo      <div className="card">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-2xl font-bold text-brand-700">Friends</h2>
+          <button className="btn btn-sm" onClick={refresh} disabled={loading}>
+            {loading ? 'Loading...' : 'Refresh'}
+          </button>
+        </div> { useMessages } from '../store/messages'
 import { censorProfanity } from '../utils/profanity'
 import TabPills from './ui/TabPills'
 
@@ -44,7 +50,6 @@ export default function Friends({ user }: { user?: any }) {
       setSuggested(sg.suggestions || [])
       setRequests(rq.requests || [])
       setOutgoingRequests(out.requests || [])
-      console.log('Friends refresh:', { email, requests: rq.requests, outgoing: out.requests })
     } catch (error) {
       console.error('Friends refresh error:', error)
     }
@@ -101,7 +106,12 @@ export default function Friends({ user }: { user?: any }) {
   const requestsCount = requests.length + outgoingRequests.length;
   return (
     <div className="card">
-      <h2 className="text-2xl font-bold text-brand-700 mb-2">Friends</h2>
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="text-2xl font-bold text-brand-700">Friends</h2>
+        <button className="btn btn-sm" onClick={refresh} disabled={loading}>
+          {loading ? 'Loading...' : 'Refresh'}
+        </button>
+      </div>
       <p className="mb-2 text-brand-600">Manage your friends. See who’s online, in-game, or offline; find new teammates; and invite people to play.</p>
       <div className="text-xs opacity-70 mb-3">Online: {friends.filter(f=>f.status==='online').length} · In-game: {friends.filter(f=>f.status==='ingame').length} · Offline: {friends.filter(f=>!f.status || f.status==='offline').length}</div>
 
@@ -124,16 +134,13 @@ export default function Friends({ user }: { user?: any }) {
           />
           {filter === 'requests' ? (
             <ul className="space-y-2">
-              {(() => {
-                console.log('Rendering requests:', { requestsCount, requests, outgoingRequests })
-                return requestsCount > 0
-              })() ? (
+              {requestsCount > 0 ? (
                 <>
                   {/* Incoming requests */}
-                  {requests.map(r => (
-                    <li key={`incoming-${r.fromEmail}`} className="p-3 rounded bg-black/20 flex flex-col gap-2">
+                  {requests.length > 0 && requests.map(r => (
+                    <li key={`incoming-${r.id || r.fromEmail}`} className="p-3 rounded bg-black/20 flex flex-col gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-lg">{r.fromUsername || r.fromEmail}</span>
+                        <span className="font-semibold text-lg">{r.fromUsername || r.fromEmail || 'Unknown User'}</span>
                         <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">Incoming</span>
                       </div>
                       <div className="flex gap-2">
@@ -142,7 +149,7 @@ export default function Friends({ user }: { user?: any }) {
                           try {
                             const res = await fetch('/api/friends/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requester: r.fromEmail }) })
                             if (res.ok) {
-                              await new Promise(resolve => setTimeout(resolve, 100)) // Small delay to ensure server processing
+                              await new Promise(resolve => setTimeout(resolve, 100))
                               await refresh()
                               toast('Friend request accepted', { type: 'success' })
                             } else {
@@ -167,10 +174,10 @@ export default function Friends({ user }: { user?: any }) {
                     </li>
                   ))}
                   {/* Outgoing requests */}
-                  {outgoingRequests.map(r => (
-                    <li key={`outgoing-${r.toEmail}`} className="p-3 rounded bg-black/20 flex flex-col gap-2">
+                  {outgoingRequests.length > 0 && outgoingRequests.map(r => (
+                    <li key={`outgoing-${r.id || r.toEmail}`} className="p-3 rounded bg-black/20 flex flex-col gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-lg">{r.toUsername || r.toEmail}</span>
+                        <span className="font-semibold text-lg">{r.toUsername || r.toEmail || 'Unknown User'}</span>
                         <span className="text-xs bg-amber-600/20 text-amber-400 px-2 py-1 rounded">Pending</span>
                       </div>
                       <button className="btn bg-slate-600 hover:bg-slate-700 self-start" onClick={async()=>{
