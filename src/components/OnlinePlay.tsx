@@ -1164,9 +1164,28 @@ export default function OnlinePlay({ user }: { user?: any }) {
             <div className="text-3xl mb-2">­ƒöÆ</div>
             <div className="font-semibold">Online play locked</div>
             <div className="text-sm text-slate-200/80">YouÔÇÖve used your 3 free online games this week. Upgrade to PREMIUM to play all modes.</div>
-            <a href="https://buy.stripe.com/test_00g7vQ8Qw2gQ0wA5kk" target="_blank" rel="noopener noreferrer" className="btn mt-3 bg-gradient-to-r from-indigo-500 to-fuchsia-600 text-white font-bold">
+            <button 
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/stripe/create-checkout-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user?.email })
+                  })
+                  const data = await res.json()
+                  if (data.ok && data.url) {
+                    window.location.href = data.url
+                  } else {
+                    alert('Failed to create payment session: ' + (data.error || 'Unknown error'))
+                  }
+                } catch (e) {
+                  alert('Network error')
+                }
+              }}
+              className="btn mt-3 bg-gradient-to-r from-indigo-500 to-fuchsia-600 text-white font-bold"
+            >
               Upgrade to PREMIUM = {formatPriceInCurrency(getUserCurrency(), 5)}
-            </a>
+            </button>
           </div>
         </div>
       )}
