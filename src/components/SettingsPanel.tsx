@@ -63,6 +63,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
       localStorage.setItem(`ndn:bio:favDarts:${uname}`, favDarts);
       localStorage.setItem(`ndn:bio:bio:${uname}`, bio);
       localStorage.setItem(`ndn:bio:profilePhoto:${uname}`, profilePhoto);
+      // Dispatch event to notify avatar update
+      try { window.dispatchEvent(new CustomEvent('ndn:avatar-updated', { detail: { username: uname, avatar: profilePhoto } })) } catch {}
       localStorage.setItem(`ndn:settings:allowAnalytics:${uname}`, allowAnalytics.toString());
       setIsEditing(false);
     } catch {}

@@ -26,6 +26,7 @@ import AdminAccess from './components/AdminAccess'
 import Drawer from './components/ui/Drawer'
 import { getDominantColorFromImage, stringToColor } from './utils/color'
 import OpsDashboard from './components/OpsDashboard'
+import HelpAssistant from './components/HelpAssistant'
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -86,6 +87,36 @@ export default function App() {
     window.addEventListener('ndn:stats-updated', onUpdate as any)
     return () => window.removeEventListener('ndn:stats-updated', onUpdate as any)
   }, [user?.username, avgMode])
+
+  // Load avatar from localStorage when user changes
+  useEffect(() => {
+    if (!user?.username) {
+      setAvatar('');
+      return;
+    }
+    const storedAvatar = localStorage.getItem(`ndn:bio:profilePhoto:${user.username}`);
+    setAvatar(storedAvatar || '');
+  }, [user?.username])
+
+  // Listen for avatar updates from SettingsPanel
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key?.startsWith('ndn:bio:profilePhoto:') && user?.username && e.key.endsWith(user.username)) {
+        setAvatar(e.newValue || '');
+      }
+    };
+    const handleAvatarUpdate = (e: any) => {
+      if (e.detail?.username === user?.username) {
+        setAvatar(e.detail?.avatar || '');
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('ndn:avatar-updated' as any, handleAvatarUpdate as any);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('ndn:avatar-updated' as any, handleAvatarUpdate as any);
+    };
+  }, [user?.username]);
 
   // Detect mobile/tablet layout via comprehensive device detection
   useEffect(() => {
@@ -333,6 +364,11 @@ export default function App() {
             {tab === 'fullaccess' && (
               <ScrollFade>
                 <AdminAccess user={user} />
+              </ScrollFade>
+            )}
+            {tab === 'help' && (
+              <ScrollFade>
+                <HelpAssistant />
               </ScrollFade>
             )}
             </main>
