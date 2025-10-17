@@ -90,7 +90,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
       {/* Account Actions - Moved to top */}
       <div className="card">
         <div className="p-3 rounded-xl border border-red-500/40 bg-red-500/10">
-          <div className="font-semibold mb-4 flex items-center gap-2 text-red-700">
+          <div className="font-semibold mb-4 flex items-center gap-2 text-black">
             <User className="w-5 h-5" /> Account
           </div>
           <div className="space-y-3">
@@ -104,8 +104,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
             </div>
             {/* Username Change */}
             <div className="border-t border-red-500/20 pt-3">
-              <div className="font-medium mb-2 text-red-600">Change Username (One-time, Free)</div>
-              <div className="text-sm text-red-500 mb-2">Username becomes permanent after change.</div>
+              <div className="font-medium mb-2 text-black">Change Username (One-time, Free)</div>
+              <div className="text-sm text-black mb-2">Username becomes permanent after change.</div>
               {user?.usernameChanged ? (
                 <div className="text-green-400 text-sm">Username already changed. This option is no longer available.</div>
               ) : (
@@ -266,14 +266,30 @@ export default function SettingsPanel({ user }: { user?: any }) {
             <User className="w-5 h-5 text-cyan-400" /> Profile Photo
           </div>
           <div>
-            <label className="block mb-1 text-sm font-medium">Photo URL:</label>
+            {profilePhoto && (
+              <div className="mb-2">
+                <img src={profilePhoto} alt="Profile" className="w-16 h-16 rounded-full object-cover" />
+              </div>
+            )}
             <input
-              className="input w-full"
-              type="url"
-              placeholder="https://example.com/photo.jpg"
-              value={user?.photoUrl || ''}
-              onChange={e => setProfilePhoto(e.target.value)}
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    setProfilePhoto(event.target?.result as string);
+                  };
+                  reader.readAsDataURL(file);
+                }
+              }}
+              className="hidden"
+              id="profile-photo-upload"
             />
+            <label htmlFor="profile-photo-upload" className="btn bg-cyan-600 hover:bg-cyan-700 cursor-pointer">
+              {profilePhoto ? 'Change Photo' : 'Upload Photo'}
+            </label>
           </div>
         </div>
       </div>
@@ -391,6 +407,17 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       </option>
                     ))}
                   </select>
+                  <button
+                    onClick={() => {
+                      const utterance = new SpeechSynthesisUtterance('Test voice: 180 scored!');
+                      utterance.voice = availableVoices.find(v => v.name === callerVoice) || null;
+                      utterance.volume = callerVolume;
+                      speechSynthesis.speak(utterance);
+                    }}
+                    className="btn bg-blue-600 hover:bg-blue-700 mt-2"
+                  >
+                    Test Voice
+                  </button>
                 </div>
 
                 <div>
