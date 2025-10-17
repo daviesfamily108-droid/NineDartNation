@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { suggestCheckouts, sayScore } from '../utils/checkout';
 import { useUserSettings } from '../store/userSettings';
+import { useToast } from '../store/toast';
 import CameraTile from './CameraTile'
 import CameraView from './CameraView'
 import { getUserCurrency, formatPriceInCurrency } from '../utils/config';
@@ -1831,6 +1832,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                   const data = await res.json();
                   if (data.ok && data.url) {
                     window.open(data.url, '_blank');
+                    if (data.development) {
+                      useToast()("Opened Stripe test checkout (development mode)", { type: 'info', timeout: 3000 });
+                    }
                   } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
                     useToast()("Premium purchases are not available in this development environment. Please visit the production site to upgrade.", { type: 'error', timeout: 4000 });
                   } else {
