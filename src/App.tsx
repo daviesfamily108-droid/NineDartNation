@@ -375,6 +375,9 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Floating Help Assistant - Always visible */}
+      <HelpAssistant />
     </ThemeProvider>
   )
 }

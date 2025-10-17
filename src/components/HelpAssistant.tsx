@@ -5,7 +5,7 @@ interface HelpAssistantProps {}
 
 export default function HelpAssistant({}: HelpAssistantProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Array<{text: string, isUser: boolean}>>([
+  const [messages, setMessages] = useState<Array<{text: string | {text: string, links?: Array<{text: string, tab: string}>}, isUser: boolean}>>([
     { text: "Hi! I'm your Nine Dart Nation assistant. How can I help you today?", isUser: false }
   ]);
   const [input, setInput] = useState('');
@@ -22,21 +22,93 @@ export default function HelpAssistant({}: HelpAssistantProps) {
     'support': 'Contact support via email or check the FAQ in Settings > Support.',
   };
 
+  const navigateToTab = (tabKey: string) => {
+    try {
+      window.dispatchEvent(new CustomEvent('ndn:change-tab', { detail: { tab: tabKey } }));
+      setIsOpen(false); // Close the help modal after navigation
+    } catch (error) {
+      console.error('Navigation failed:', error);
+    }
+  };
+
+  const getResponseWithLinks = (userMessage: string): { text: string, links?: Array<{ text: string, tab: string }> } => {
+    const message = userMessage.toLowerCase();
+
+    if (message.includes('username') || message.includes('change name')) {
+      return {
+        text: 'You can change your username once for free.',
+        links: [{ text: 'Go to Settings > Account', tab: 'settings' }]
+      };
+    }
+    if (message.includes('premium') || message.includes('upgrade') || message.includes('subscription')) {
+      return {
+        text: 'Premium unlocks all game modes and features.',
+        links: [{ text: 'Go to Online Play', tab: 'online' }]
+      };
+    }
+    if (message.includes('calibrat') || message.includes('camera') || message.includes('vision')) {
+      return {
+        text: 'Set up your camera properly in Settings.',
+        links: [{ text: 'Go to Settings > Camera & Vision', tab: 'settings' }]
+      };
+    }
+    if (message.includes('voice') || message.includes('caller') || message.includes('audio')) {
+      return {
+        text: 'Enable voice calling in Settings.',
+        links: [{ text: 'Go to Settings > Audio & Voice', tab: 'settings' }]
+      };
+    }
+    if (message.includes('friend') || message.includes('play together')) {
+      return {
+        text: 'Add friends to play together.',
+        links: [{ text: 'Go to Friends', tab: 'friends' }]
+      };
+    }
+    if (message.includes('stat') || message.includes('score') || message.includes('performance')) {
+      return {
+        text: 'View your statistics and performance.',
+        links: [{ text: 'Go to Stats', tab: 'stats' }]
+      };
+    }
+    if (message.includes('setting') || message.includes('customiz') || message.includes('configur')) {
+      return {
+        text: 'Customize your experience.',
+        links: [{ text: 'Go to Settings', tab: 'settings' }]
+      };
+    }
+    if (message.includes('tournament') || message.includes('competition')) {
+      return {
+        text: 'Check out tournaments and competitions.',
+        links: [{ text: 'Go to Tournaments', tab: 'tournaments' }]
+      };
+    }
+    if (message.includes('help') || message.includes('support') || message.includes('faq')) {
+      return {
+        text: 'You\'re already in the help section! Check Settings for more resources.',
+        links: [{ text: 'Go to Settings > Support', tab: 'settings' }]
+      };
+    }
+    if (message.includes('how to play') || message.includes('game') || message.includes('start')) {
+      return {
+        text: 'To play darts, select a game mode from the menu. For online play, join a match. For offline, start a local game.',
+        links: [
+          { text: 'Play Online', tab: 'online' },
+          { text: 'Play Offline', tab: 'offline' }
+        ]
+      };
+    }
+
+    return { text: "I'm not sure about that. Try asking about playing, calibration, premium, username changes, voice settings, friends, stats, or settings." };
+  };
+
   const handleSend = () => {
     if (!input.trim()) return;
     const userMessage = input.toLowerCase();
     setMessages(prev => [...prev, { text: input, isUser: true }]);
     setInput('');
 
-    // Simple response logic
-    let response = "I'm not sure about that. Try asking about playing, calibration, premium, or settings.";
-
-    for (const [key, answer] of Object.entries(faq)) {
-      if (userMessage.includes(key)) {
-        response = answer;
-        break;
-      }
-    }
+    // Get response with smart link suggestions
+    const response = getResponseWithLinks(userMessage);
 
     setTimeout(() => {
       setMessages(prev => [...prev, { text: response, isUser: false }]);
@@ -82,7 +154,26 @@ export default function HelpAssistant({}: HelpAssistantProps) {
                       ? 'bg-blue-600 text-white' 
                       : 'bg-slate-700 text-slate-200'
                   }`}>
-                    {msg.text}
+                    {typeof msg.text === 'string' ? (
+                      msg.text
+                    ) : (
+                      <div className="space-y-2">
+                        <div>{msg.text.text}</div>
+                        {msg.text.links && (
+                          <div className="space-y-1">
+                            {msg.text.links.map((link, linkIndex) => (
+                              <button
+                                key={linkIndex}
+                                onClick={() => navigateToTab(link.tab)}
+                                className="block w-full text-left text-blue-300 hover:text-blue-200 underline text-sm"
+                              >
+                                {link.text}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
