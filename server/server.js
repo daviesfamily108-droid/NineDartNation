@@ -9,7 +9,7 @@ const os = require('os');
 const https = require('https');
 const path = require('path');
 const Filter = require('bad-words');
-const EmailTemplates = require('./emails/templates.js');
+const EmailTemplates = require('./server/emails/templates.js');
 const nodemailer = require('nodemailer');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -26,30 +26,14 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-producti
 let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
 const app = express();
-// When running behind Render / Cloudflare the app receives X-Forwarded-* headers.
-// Enable trust proxy so Express and middleware (like express-rate-limit) treat
-// the forwarded client IPs correctly and avoid validation errors.
-// Trust only the immediate proxy (1 hop)
-app.set('trust proxy', 1);
-console.log('[HTTP] express trust proxy enabled (trust proxy = true)');
 
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+
 if (!supabase) {
   console.warn('[DB] Supabase not configured - using in-memory storage only');
-} else {
-  try {
-    // Minimal, safe logging - do not print secrets
-    const maskedKey = String(supabaseKey).slice(0,6) + '...';
-    console.log(`[DB] Supabase client configured for ${supabaseUrl} (key ${maskedKey})`);
-  } catch (e) {
-    console.log('[DB] Supabase client initialized');
-  }
-  // NOTE: Do not run schema or policy SQL automatically here. Any schema
-  // migrations should be run manually from supabase SQL editor to avoid
-  // accidentally re-enabling RLS policies that can cause recursion.
 }
 // Observability: metrics registry
 const register = new client.Registry()
@@ -88,10 +72,10 @@ app.use((req, res, next) => {
 // Guard JSON body size to avoid excessive memory
 app.use(express.json({ limit: '100kb' }));
 // Serve static assets (mobile camera page)
-app.use(express.static('public'))
+app.use(express.static('./server/public'))
 // In production, also serve the built client app. Prefer root ../dist, fallback to ../app/dist.
-const rootDistPath = path.resolve(process.cwd(), '..', 'dist')
-const appDistPath = path.resolve(process.cwd(), '..', 'app', 'dist')
+const rootDistPath = path.resolve(process.cwd(), 'dist')
+const appDistPath = path.resolve(process.cwd(), 'app', 'dist')
 let staticBase = null
 if (fs.existsSync(rootDistPath)) {
   staticBase = rootDistPath
@@ -144,42 +128,25 @@ app.post('/api/auth/signup', async (req, res) => {
       }
     }
 
-    const user = { email, username, password, admin: false, subscription: { fullAccess: false }, usernameChanged: false }
+    const user = { email, username, password, admin: false, subscription: { fullAccess: false } }
 
     // Save to Supabase if available
     if (supabase) {
-      console.log('[DB] Attempting to save user to Supabase:', { email: user.email, username: user.username });
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .insert([{
-            email: user.email,
-            username: user.username,
-            password: user.password, // Note: In production, hash passwords!
-            admin: user.admin,
-            subscription: user.subscription,
-            username_changed: user.usernameChanged,
-            created_at: new Date().toISOString()
-          }])
-          .select();
+      const { error } = await supabase
+        .from('users')
+        .insert([{
+          email: user.email,
+          username: user.username,
+          password: user.password, // Note: In production, hash passwords!
+          admin: user.admin,
+          subscription: user.subscription,
+          created_at: new Date().toISOString()
+        }]);
 
-        if (error) {
-          console.error('[DB] Failed to save user to Supabase:', error);
-          // Check if it's an RLS policy error
-          if (error.code === '42P17' || error.message?.includes('infinite recursion')) {
-            console.error('[DB] RLS policy error detected. User saved to memory only.');
-          } else {
-            return res.status(500).json({ error: 'Failed to create account.' });
-          }
-        } else {
-          console.log('[DB] Successfully saved user to Supabase:', data);
-        }
-      } catch (err) {
-        console.error('[DB] Error saving user to Supabase:', err);
-        console.warn('[DB] Continuing with in-memory storage for user:', user.email);
+      if (error) {
+        console.error('[DB] Failed to save user to Supabase:', error);
+        return res.status(500).json({ error: 'Failed to create account.' });
       }
-    } else {
-      console.log('[DB] Supabase not configured, saving to memory only');
     }
 
     // Also store in memory for current session
@@ -227,8 +194,7 @@ app.post('/api/auth/login', async (req, res) => {
           email: data.email,
           username: data.username,
           password: data.password,
-          admin: data.admin || false,
-          subscription: data.subscription || { fullAccess: false }
+          admin: data.admin || false
         };
         // Cache in memory for current session
         users.set(data.email, user);
@@ -408,26 +374,6 @@ app.post('/webhook/stripe', async (req, res) => {
           console.error('[DB] Failed to update subscription:', err);
         }
       }
-    } else if (email && purpose === 'username-change') {
-      const newUsername = session?.metadata?.newUsername;
-      if (newUsername) {
-        // Update username and set changed flag
-        const user = users.get(email);
-        if (user) {
-          user.username = newUsername;
-          user.usernameChanged = true;
-        }
-        if (supabase) {
-          try {
-            await supabase
-              .from('users')
-              .update({ username: newUsername, username_changed: true })
-              .eq('email', email);
-          } catch (err) {
-            console.error('[DB] Failed to update username:', err);
-          }
-        }
-      }
     }
   }
   // Demo: toggle fullAccess true and credit owner's wallet with premium revenue if provided
@@ -448,7 +394,7 @@ app.post('/webhook/stripe', async (req, res) => {
 // Optional (if you later secure webhook verification): STRIPE_WEBHOOK_SECRET=whsec_...
 let stripe = null
 try {
-  if (process.env.STRIPE_SECRET_KEY) {
+  if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== 'YOUR_STRIPE_SECRET_KEY_HERE') {
     stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
   }
 } catch (e) {
@@ -458,43 +404,9 @@ try {
 app.post('/api/stripe/create-session', async (req, res) => {
   try {
     if (!stripe || !process.env.STRIPE_PRICE_ID_USERNAME_CHANGE) {
-      console.warn('[Stripe] create-session called but Stripe is not configured')
       return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
     }
-    const { email, newUsername, successUrl, cancelUrl } = req.body || {}
-    if (!newUsername || typeof newUsername !== 'string' || newUsername.length < 3 || newUsername.length > 20) {
-      return res.status(400).json({ ok: false, error: 'INVALID_USERNAME' })
-    }
-    // Check if user has already changed username
-    let user = null
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('users')
-        .select('username_changed')
-        .eq('email', email)
-        .single()
-      if (error && error.code !== 'PGRST116') {
-        console.error('[DB] Error checking username_changed:', error)
-      } else if (data) {
-        if (data.username_changed) {
-          return res.status(400).json({ ok: false, error: 'USERNAME_ALREADY_CHANGED' })
-        }
-      }
-    }
-    // Check if username is taken
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('users')
-        .select('email')
-        .eq('username', newUsername)
-        .neq('email', email) // Allow if it's the same user
-        .single()
-      if (error && error.code !== 'PGRST116') {
-        console.error('[DB] Error checking username availability:', error)
-      } else if (data) {
-        return res.status(400).json({ ok: false, error: 'USERNAME_TAKEN' })
-      }
-    }
+    const { email, successUrl, cancelUrl } = req.body || {}
     // Derive sensible defaults for success/cancel
     const host = req.headers['x-forwarded-host'] || req.headers.host
     const proto = (req.headers['x-forwarded-proto'] || 'https')
@@ -505,7 +417,7 @@ app.post('/api/stripe/create-session', async (req, res) => {
       mode: 'payment',
       line_items: [{ price: process.env.STRIPE_PRICE_ID_USERNAME_CHANGE, quantity: 1 }],
       customer_email: (typeof email === 'string' && email.includes('@')) ? email : undefined,
-      metadata: { purpose: 'username-change', email: String(email||''), newUsername },
+      metadata: { purpose: 'username-change', email: String(email||'') },
       success_url: sUrl,
       cancel_url: cUrl,
     })
@@ -518,16 +430,6 @@ app.post('/api/stripe/create-session', async (req, res) => {
 
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
-    // Ensure Stripe is initialized (lazy init) in case env var came later
-    if (!stripe && process.env.STRIPE_SECRET_KEY) {
-      try {
-        stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
-        console.log('[Stripe] lazily initialized Stripe client')
-      } catch (initErr) {
-        console.error('[Stripe] lazy init failed:', initErr?.message || initErr)
-      }
-    }
-
     if (!stripe || !process.env.STRIPE_PRICE_ID_SUBSCRIPTION) {
       console.warn('[Stripe] create-checkout-session called but Stripe is not configured')
       // In development, return a working test checkout URL
@@ -552,7 +454,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     const sUrl = (typeof successUrl === 'string' && successUrl.startsWith('http')) ? successUrl : `${base}/?subscription=success`
     const cUrl = (typeof cancelUrl === 'string' && cancelUrl.startsWith('http')) ? cancelUrl : `${base}/?subscription=cancel`
     const session = await stripe.checkout.sessions.create({
-      mode: 'subscription',
+      mode: 'payment',
       line_items: [{ price: process.env.STRIPE_PRICE_ID_SUBSCRIPTION, quantity: 1 }],
       customer_email: email,
       metadata: { purpose: 'subscription', email: email },
@@ -561,144 +463,8 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     })
     return res.json({ ok: true, url: session.url })
   } catch (e) {
-    // Log detailed error and environment context (but do NOT print secrets)
-    try {
-      console.error('[Stripe] create-checkout-session failed:', e?.message || e)
-      console.error('[Stripe] error stack:', e?.stack || '(no stack)')
-      console.error('[Stripe] stripe initialized:', Boolean(stripe))
-      console.error('[Stripe] STRIPE_PRICE_ID_SUBSCRIPTION present:', Boolean(process.env.STRIPE_PRICE_ID_SUBSCRIPTION))
-      console.error('[Stripe] STRIPE_SECRET_KEY present:', Boolean(process.env.STRIPE_SECRET_KEY))
-    } catch (logErr) {
-      console.error('[Stripe] failed to log detailed error:', logErr)
-    }
+    console.error('[Stripe] create-checkout-session failed:', e?.message || e)
     return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
-  }
-})
-
-// Helper: check Stripe runtime configuration (safe - does not leak secrets)
-app.get('/api/stripe/check', async (req, res) => {
-  try {
-    const secretPresent = Boolean(process.env.STRIPE_SECRET_KEY)
-    const pricePresent = Boolean(process.env.STRIPE_PRICE_ID_SUBSCRIPTION)
-    // Attempt to initialize Stripe client if secret present
-    let stripeLocal = stripe
-    if (!stripeLocal && process.env.STRIPE_SECRET_KEY) {
-      try { stripeLocal = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' }) } catch {}
-    }
-    let priceInfo = null
-    if (stripeLocal && pricePresent) {
-      try {
-        // safe read: attempt to retrieve the Price object (no secrets logged)
-        const p = await stripeLocal.prices.retrieve(process.env.STRIPE_PRICE_ID_SUBSCRIPTION)
-        priceInfo = { id: p.id, currency: p.currency, active: p.active, unit_amount: p.unit_amount }
-      } catch (e) {
-        priceInfo = { error: String(e?.message || e) }
-      }
-    }
-    return res.json({ ok: true, secretPresent, pricePresent, priceInfo })
-  } catch (e) {
-    return res.status(500).json({ ok: false, error: 'CHECK_FAILED' })
-  }
-})
-
-// Demo checkout (safe development fallback)
-// When Stripe is not configured, this endpoint lets you simulate a successful purchase
-// for a given email. It updates in-memory user state and Supabase if available.
-app.post('/api/stripe/demo-checkout', async (req, res) => {
-  try {
-    const { email, successUrl, cancelUrl } = req.body || {}
-    if (!email || !email.includes('@')) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
-    // mark in-memory
-    const now = new Date().toISOString()
-    const sub = { fullAccess: true, source: 'demo', purchasedAt: now }
-    const user = users.get(email.toLowerCase()) || null
-    if (user) {
-      user.subscription = sub
-      users.set(email.toLowerCase(), user)
-    }
-    // attempt to persist to Supabase if available
-    if (supabase) {
-      try {
-        await supabase.from('users').update({ subscription: sub }).eq('email', email)
-      } catch (e) {
-        console.error('[Stripe Demo] failed to persist subscription to Supabase:', e?.message || e)
-      }
-    }
-    const host = req.headers['x-forwarded-host'] || req.headers.host
-    const base = host ? `https://${host}` : 'https://ninedartnation-1.onrender.com'
-    const sUrl = (typeof successUrl === 'string' && successUrl.startsWith('http')) ? successUrl : `${base}/?subscription=success&demo=1`
-    return res.json({ ok: true, url: sUrl })
-  } catch (e) {
-    console.error('[Stripe Demo] error:', e)
-    return res.status(500).json({ ok: false, error: 'DEMO_FAILED' })
-  }
-})
-
-// Change username (free, one-time only)
-app.post('/api/change-username', async (req, res) => {
-  try {
-    const { email, newUsername } = req.body || {}
-    if (!email || !email.includes('@')) {
-      return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
-    }
-    if (!newUsername || typeof newUsername !== 'string' || newUsername.length < 3 || newUsername.length > 20) {
-      return res.status(400).json({ ok: false, error: 'INVALID_USERNAME' })
-    }
-    // Check if user has already changed username
-    let user = null
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('users')
-        .select('username, username_changed')
-        .eq('email', email)
-        .single()
-      if (error && error.code !== 'PGRST116') {
-        console.error('[DB] Error checking username_changed:', error)
-        return res.status(500).json({ ok: false, error: 'DB_ERROR' })
-      }
-      if (data && data.username_changed) {
-        return res.status(400).json({ ok: false, error: 'USERNAME_ALREADY_CHANGED' })
-      }
-      user = data
-    }
-    // Check if username is taken
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('users')
-        .select('email')
-        .eq('username', newUsername)
-        .neq('email', email) // Allow if it's the same user
-        .single()
-      if (error && error.code !== 'PGRST116') {
-        console.error('[DB] Error checking username availability:', error)
-        return res.status(500).json({ ok: false, error: 'DB_ERROR' })
-      }
-      if (data) {
-        return res.status(400).json({ ok: false, error: 'USERNAME_TAKEN' })
-      }
-    }
-    // Update username
-    if (supabase) {
-      const { error } = await supabase
-        .from('users')
-        .update({ username: newUsername, username_changed: true })
-        .eq('email', email)
-      if (error) {
-        console.error('[DB] Error updating username:', error)
-        return res.status(500).json({ ok: false, error: 'UPDATE_FAILED' })
-      }
-    }
-    // Update in-memory if exists
-    const memUser = users.get(email.toLowerCase())
-    if (memUser) {
-      memUser.username = newUsername
-      memUser.usernameChanged = true
-      users.set(email.toLowerCase(), memUser)
-    }
-    return res.json({ ok: true, newUsername })
-  } catch (e) {
-    console.error('[Change Username] error:', e)
-    return res.status(500).json({ ok: false, error: 'CHANGE_FAILED' })
   }
 })
 
@@ -707,8 +473,6 @@ app.get('/api/admins', (req, res) => {
   res.json({ admins: Array.from(adminEmails) })
 })
 
-// Admin check endpoint - ONLY checks explicitly granted admin emails
-// Premium users do NOT automatically get admin access
 app.get('/api/admins/check', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   res.json({ isAdmin: adminEmails.has(email) })
@@ -836,55 +600,51 @@ app.post('/api/admin/matches/delete', (req, res) => {
   res.json({ ok: true })
 })
 
-// Admin: search users
-app.get('/api/admin/search-users', async (req, res) => {
-  const { q, requesterEmail } = req.query
-  if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
-  if (!q || !supabase) return res.json({ users: [] })
-  try {
-    const { data, error } = await supabase
-      .from('users')
-      .select('email, username, created_at')
-      .or(`email.ilike.%${q}%,username.ilike.%${q}%`)
-      .limit(10)
-    if (error) throw error
-    res.json({ users: data || [] })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: 'SEARCH_FAILED' })
-  }
+// Health check for quick connectivity tests
+app.get('/health', (req, res) => res.json({ ok: true }))
+// Surface whether HTTPS was configured so clients can prefer secure links
+app.get('/api/https-info', (req, res) => {
+  res.json({ https: HTTPS_ACTIVE, port: HTTPS_PORT })
 })
 
-// Admin: ban user
-app.post('/api/admin/ban-user', async (req, res) => {
-  const { email, requesterEmail } = req.body || {}
-  if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
-  if (!email || !supabase) return res.status(400).json({ ok: false, error: 'INVALID' })
-  try {
-    await supabase.from('users').update({ banned: true }).eq('email', email)
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: 'BAN_FAILED' })
-  }
+// Email template previews (owner-only)
+app.get('/api/email/preview', (req, res) => {
+  const kind = String(req.query.kind || 'reset')
+  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
+  if (requesterEmail !== OWNER_EMAIL) return res.status(403).send('FORBIDDEN')
+  let out
+  if (kind === 'reset') out = EmailTemplates.passwordReset({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...emailCopy.reset })
+  else if (kind === 'reminder') out = EmailTemplates.passwordReminder({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...emailCopy.reminder })
+  else if (kind === 'username') out = EmailTemplates.usernameReminder({ username: 'Alex', actionUrl: 'https://example.com/app', ...emailCopy.username })
+  else if (kind === 'confirm-email') out = EmailTemplates.emailChangeConfirm({ username: 'Alex', newEmail: 'alex+new@example.com', actionUrl: 'https://example.com/confirm?token=demo', ...emailCopy.confirmEmail })
+  else if (kind === 'changed') out = EmailTemplates.passwordChangedNotice({ username: 'Alex', supportUrl: 'https://example.com/support', ...emailCopy.changed })
+  else return res.status(400).send('Unknown kind')
+  res.setHeader('Content-Type', 'text/html; charset=utf-8')
+  res.send(out.html)
 })
 
-// Admin: unban user
-app.post('/api/admin/unban-user', async (req, res) => {
-  const { email, requesterEmail } = req.body || {}
-  if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
+// Admin: get/update email copy
+app.get('/api/admin/email-copy', (req, res) => {
+  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
+  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  res.json({ ok: true, copy: emailCopy })
+})
+app.post('/api/admin/email-copy', (req, res) => {
+  const { requesterEmail, kind, title, intro, buttonLabel } = req.body || {}
+  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   }
-  if (!email || !supabase) return res.status(400).json({ ok: false, error: 'INVALID' })
-  try {
-    await supabase.from('users').update({ banned: false }).eq('email', email)
-    res.json({ ok: true })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: 'UNBAN_FAILED' })
+  const map = { 'reset':'reset', 'reminder':'reminder', 'username':'username', 'confirm-email':'confirmEmail', 'changed':'changed' }
+  const key = map[String(kind)]
+  if (!key) return res.status(400).json({ ok: false, error: 'BAD_KIND' })
+  emailCopy[key] = {
+    title: typeof title === 'string' ? title : (emailCopy[key]?.title||''),
+    intro: typeof intro === 'string' ? intro : (emailCopy[key]?.intro||''),
+    buttonLabel: typeof buttonLabel === 'string' ? buttonLabel : (emailCopy[key]?.buttonLabel||''),
   }
+  res.json({ ok: true, copy: emailCopy })
 })
+
 // --- Email sending (SMTP via environment) ---
 // Configure env vars in your host: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
 let mailer = null
@@ -1025,8 +785,8 @@ try {
   const ENABLE_HTTPS = String(process.env.NDN_HTTPS || '0') === '1'
   if (ENABLE_HTTPS) {
     // Resolve certificate/key paths
-    const keyPath = process.env.NDN_TLS_KEY || path.resolve(process.cwd(), 'certs', 'server.key')
-    const certPath = process.env.NDN_TLS_CERT || path.resolve(process.cwd(), 'certs', 'server.crt')
+    const keyPath = process.env.NDN_TLS_KEY || path.resolve(process.cwd(), 'server', 'certs', 'server.key')
+    const certPath = process.env.NDN_TLS_CERT || path.resolve(process.cwd(), 'server', 'certs', 'server.crt')
     if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
       const key = fs.readFileSync(keyPath)
       const cert = fs.readFileSync(certPath)
@@ -1100,11 +860,6 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
 
       if (error) {
         console.error('[DB] Failed to load users from Supabase:', error);
-        // Check if it's an RLS policy error
-        if (error.code === '42P17' || error.message?.includes('infinite recursion')) {
-          console.error('[DB] RLS policy error detected. Please run the fix_supabase_rls.sql script in your Supabase SQL editor.');
-          console.error('[DB] Falling back to in-memory storage for now.');
-        }
       } else if (data) {
         let loadedCount = 0;
         for (const user of data) {
@@ -1113,8 +868,7 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
             username: user.username,
             password: user.password,
             admin: user.admin || false,
-            subscription: user.subscription || { fullAccess: false },
-            usernameChanged: user.username_changed || false
+            subscription: user.subscription || { fullAccess: false }
           });
           loadedCount++;
         }
@@ -1124,8 +878,6 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
       }
     } catch (err) {
       console.error('[DB] Error loading users from Supabase:', err);
-      // Continue with in-memory storage if Supabase fails
-      console.warn('[DB] Continuing with in-memory storage due to Supabase error');
     }
   } else {
     console.warn('[DB] Supabase not configured - using in-memory storage only');
@@ -1142,10 +894,6 @@ if (!users.has('daviesfamily108@gmail.com')) {
 }
 // friends: email -> Set(friendEmail)
 const friendships = new Map();
-// friend requests: recipientEmail -> [{ id, fromEmail, fromUsername, requestedAt }]
-const friendRequests = new Map();
-// outgoing friend requests: senderEmail -> [{ id, toEmail, toUsername, requestedAt }]
-const outgoingRequests = new Map();
 // simple messages store: recipientEmail -> [{ id, from, message, ts }]
 const messages = new Map();
 // In-memory wallets: email -> { email, balances: { [currency]: cents } }
@@ -1182,79 +930,11 @@ function saveFriendships() {
   try {
     const obj = {}
     for (const [k, v] of friendships.entries()) obj[k] = Array.from(v)
-    const requestsObj = {}
-    for (const [k, arr] of friendRequests.entries()) requestsObj[k] = arr
-    const outgoingObj = {}
-    for (const [k, arr] of outgoingRequests.entries()) outgoingObj[k] = arr
-    fs.writeFileSync(FRIENDS_FILE, JSON.stringify({ friendships: obj, friendRequests: requestsObj, outgoingRequests: outgoingObj }, null, 2))
+    fs.writeFileSync(FRIENDS_FILE, JSON.stringify({ friendships: obj }, null, 2))
   } catch {}
 }
 function loadFriendships() {
   try {
-    // Load from database first if available
-    if (supabase) {
-      try {
-        // Load friendships
-        const { data: friendshipsData } = supabase
-          .from('friendships')
-          .select('user_email, friend_email')
-
-        if (friendshipsData) {
-          for (const friendship of friendshipsData) {
-            const userFriends = friendships.get(friendship.user_email) || new Set()
-            userFriends.add(friendship.friend_email)
-            friendships.set(friendship.user_email, userFriends)
-          }
-        }
-
-        // Load friend requests
-        const { data: requestsData } = supabase
-          .from('friend_requests')
-          .select('*')
-
-        if (requestsData) {
-          for (const request of requestsData) {
-            const userRequests = friendRequests.get(request.to_email) || []
-            userRequests.push({
-              id: request.id,
-              fromEmail: request.from_email,
-              fromUsername: users.get(request.from_email)?.username || request.from_email,
-              toEmail: request.to_email,
-              toUsername: users.get(request.to_email)?.username || request.to_email,
-              requestedAt: new Date(request.created_at).getTime()
-            })
-            friendRequests.set(request.to_email, userRequests)
-          }
-        }
-
-        // Load outgoing requests
-        const { data: outgoingData } = supabase
-          .from('outgoing_requests')
-          .select('*')
-
-        if (outgoingData) {
-          for (const outgoing of outgoingData) {
-            const userOutgoing = outgoingRequests.get(outgoing.from_email) || []
-            userOutgoing.push({
-              id: outgoing.id,
-              fromEmail: outgoing.from_email,
-              fromUsername: users.get(outgoing.from_email)?.username || outgoing.from_email,
-              toEmail: outgoing.to_email,
-              toUsername: users.get(outgoing.to_email)?.username || outgoing.to_email,
-              requestedAt: new Date(outgoing.created_at).getTime()
-            })
-            outgoingRequests.set(outgoing.from_email, userOutgoing)
-          }
-        }
-
-        console.log('[FRIENDS] Loaded friendships from database')
-        return
-      } catch (dbError) {
-        console.error('[FRIENDS] Database load error, falling back to file:', dbError)
-      }
-    }
-
-    // Fallback to file loading
     if (!fs.existsSync(FRIENDS_FILE)) return
     const j = JSON.parse(fs.readFileSync(FRIENDS_FILE, 'utf8'))
     if (j && j.friendships) {
@@ -1262,20 +942,7 @@ function loadFriendships() {
         friendships.set(k, new Set(arr))
       }
     }
-    if (j && j.friendRequests) {
-      for (const [k, arr] of Object.entries(j.friendRequests)) {
-        friendRequests.set(k, arr)
-      }
-    }
-    if (j && j.outgoingRequests) {
-      for (const [k, arr] of Object.entries(j.outgoingRequests)) {
-        outgoingRequests.set(k, arr)
-      }
-    }
-    console.log('[FRIENDS] Loaded friendships from file')
-  } catch (error) {
-    console.error('[FRIENDS] Load error:', error)
-  }
+  } catch {}
 }
 loadFriendships()
 
@@ -1737,40 +1404,14 @@ wss.on('connection', (ws, req) => {
 });
 
 // Friends HTTP API (demo)
-app.get('/api/friends/list', async (req, res) => {
+app.get('/api/friends/list', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
-  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
-
-  try {
-    let friendEmails = []
-
-    // Try to get friends from database first
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('friendships')
-        .select('friend_email')
-        .eq('user_email', email)
-
-      if (!error && data) {
-        friendEmails = data.map(row => row.friend_email)
-      }
-    }
-
-    // Fallback to in-memory storage if database fails
-    if (friendEmails.length === 0) {
-      const set = friendships.get(email) || new Set()
-      friendEmails = Array.from(set)
-    }
-
-    const list = friendEmails.map(e => {
-      const u = users.get(e) || { email: e, username: e, status: 'offline' }
-      return { email: e, username: u.username, status: u.status, lastSeen: u.lastSeen, roomId: u.currentRoomId || null, match: u.currentMatch || null }
-    })
-    res.json({ ok: true, friends: list })
-  } catch (error) {
-    console.error('[FRIENDS] List error:', error)
-    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
-  }
+  const set = friendships.get(email) || new Set()
+  const list = Array.from(set).map(e => {
+    const u = users.get(e) || { email: e, username: e, status: 'offline' }
+    return { email: e, username: u.username, status: u.status, lastSeen: u.lastSeen, roomId: u.currentRoomId || null, match: u.currentMatch || null }
+  })
+  res.json({ ok: true, friends: list })
 })
 
 // Heartbeat sweep to terminate dead sockets
@@ -1810,485 +1451,37 @@ app.get('/api/friends/search', (req, res) => {
   res.json({ ok: true, results })
 })
 
-app.get('/api/friends/suggested', async (req, res) => {
+app.get('/api/friends/suggested', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   const set = friendships.get(email) || new Set()
   const suggestions = []
-
-  try {
-    // Get existing friendships from database
-    let dbFriends = new Set()
-    if (supabase) {
-      const { data: friendshipsData } = await supabase
-        .from('friendships')
-        .select('friend_email')
-        .eq('user_email', email)
-
-      if (friendshipsData) {
-        dbFriends = new Set(friendshipsData.map(f => f.friend_email))
-      }
-    }
-
-    // Combine memory and database friendships
-    const allFriends = new Set([...set, ...dbFriends])
-
-    for (const [e, u] of users.entries()) {
-      if (e !== email && !allFriends.has(e)) suggestions.push({ email: e, username: u.username, status: u.status, lastSeen: u.lastSeen })
-      if (suggestions.length >= 10) break
-    }
-    res.json({ ok: true, suggestions })
-  } catch (error) {
-    console.error('[FRIENDS] Suggested error:', error)
-    // Fallback to memory-only check
-    for (const [e, u] of users.entries()) {
-      if (e !== email && !set.has(e)) suggestions.push({ email: e, username: u.username, status: u.status, lastSeen: u.lastSeen })
-      if (suggestions.length >= 10) break
-    }
-    res.json({ ok: true, suggestions })
+  for (const [e, u] of users.entries()) {
+    if (e !== email && !set.has(e)) suggestions.push({ email: e, username: u.username, status: u.status, lastSeen: u.lastSeen })
+    if (suggestions.length >= 10) break
   }
+  res.json({ ok: true, suggestions })
 })
 
-app.post('/api/friends/add', async (req, res) => {
+app.post('/api/friends/add', (req, res) => {
   const { email, friend } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(friend || '').toLowerCase()
   if (!me || !other || me === other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-
-  try {
-    // Check if already friends in database
-    if (supabase) {
-      const { data: existingFriendship } = await supabase
-        .from('friendships')
-        .select('id')
-        .or(`and(user_email.eq.${me},friend_email.eq.${other}),and(user_email.eq.${other},friend_email.eq.${me})`)
-        .single()
-
-      if (existingFriendship) return res.status(400).json({ ok: false, error: 'ALREADY_FRIENDS' })
-    }
-
-    // Check if already friends in memory
-    const myFriends = friendships.get(me) || new Set()
-    if (myFriends.has(other)) return res.status(400).json({ ok: false, error: 'ALREADY_FRIENDS' })
-
-    // Check if request already exists in database
-    if (supabase) {
-      const { data: existingRequest } = await supabase
-        .from('friend_requests')
-        .select('id')
-        .eq('from_email', me)
-        .eq('to_email', other)
-        .single()
-
-      if (existingRequest) return res.status(400).json({ ok: false, error: 'REQUEST_EXISTS' })
-    }
-
-    // Check if request already exists in memory
-    const existingRequests = friendRequests.get(other) || []
-    if (existingRequests.some(r => r.fromEmail === me)) return res.status(400).json({ ok: false, error: 'REQUEST_EXISTS' })
-
-    // Create friend request
-    const request = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-      fromEmail: me,
-      fromUsername: users.get(me)?.username || me,
-      toEmail: other,
-      toUsername: users.get(other)?.username || other,
-      requestedAt: Date.now()
-    }
-
-    // Store in database if available
-    if (supabase) {
-      try {
-        await supabase
-          .from('friend_requests')
-          .insert([{
-            id: request.id,
-            from_email: request.fromEmail,
-            from_username: request.fromUsername,
-            to_email: request.toEmail,
-            to_username: request.toUsername,
-            requested_at: new Date(request.requestedAt).toISOString()
-          }])
-
-        await supabase
-          .from('outgoing_requests')
-          .insert([{
-            id: request.id,
-            from_email: request.fromEmail,
-            from_username: request.fromUsername,
-            to_email: request.toEmail,
-            to_username: request.toUsername,
-            requested_at: new Date(request.requestedAt).toISOString()
-          }])
-      } catch (dbError) {
-        console.error('[FRIENDS] Database error:', dbError)
-        // Continue with in-memory storage
-      }
-    }
-
-    // Store in recipient's incoming requests (memory)
-    const requests = friendRequests.get(other) || []
-    requests.push(request)
-    friendRequests.set(other, requests)
-
-    // Store in sender's outgoing requests (memory)
-    const outgoing = outgoingRequests.get(me) || []
-    outgoing.push(request)
-    outgoingRequests.set(me, outgoing)
-
-    saveFriendships()
-
-    res.json({ ok: true })
-  } catch (error) {
-    console.error('[FRIENDS] Add error:', error)
-    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
-  }
+  const set = friendships.get(me) || new Set()
+  set.add(other)
+  friendships.set(me, set)
+  saveFriendships()
+  res.json({ ok: true })
 })
 
-app.post('/api/friends/remove', async (req, res) => {
+app.post('/api/friends/remove', (req, res) => {
   const { email, friend } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(friend || '').toLowerCase()
-  if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-
-  try {
-    // Remove from database if available
-    if (supabase) {
-      try {
-        await supabase
-          .from('friendships')
-          .delete()
-          .or(`and(user_email.eq.${me},friend_email.eq.${other}),and(user_email.eq.${other},friend_email.eq.${me})`)
-      } catch (dbError) {
-        console.error('[FRIENDS] Database remove error:', dbError)
-      }
-    }
-
-    // Remove from memory
-    const set = friendships.get(me)
-    if (set) set.delete(other)
-    const otherSet = friendships.get(other)
-    if (otherSet) otherSet.delete(me)
-
-    saveFriendships()
-    res.json({ ok: true })
-  } catch (error) {
-    console.error('[FRIENDS] Remove error:', error)
-    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
-  }
-})
-
-// Get pending friend requests for a user
-app.get('/api/friends/requests', async (req, res) => {
-  const email = String(req.query.email || '').toLowerCase()
-  if (!email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-
-  try {
-    let requests = []
-
-    // Try to get requests from database first
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('friend_requests')
-        .select('*')
-        .eq('to_email', email)
-        .order('requested_at', { ascending: false })
-
-      if (!error && data) {
-        requests = data.map(row => ({
-          id: row.id,
-          fromEmail: row.from_email,
-          fromUsername: row.from_username,
-          toEmail: row.to_email,
-          toUsername: row.to_username,
-          requestedAt: new Date(row.requested_at).getTime()
-        }))
-      }
-    }
-
-    // Fallback to in-memory storage if database fails
-    if (requests.length === 0) {
-      requests = friendRequests.get(email) || []
-    }
-
-    res.json({ ok: true, requests })
-  } catch (error) {
-    console.error('[FRIENDS] Requests error:', error)
-    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
-  }
-})
-
-// Get outgoing friend requests for a user
-app.get('/api/friends/outgoing', async (req, res) => {
-  const email = String(req.query.email || '').toLowerCase()
-  if (!email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-
-  try {
-    let requests = []
-
-    // Try to get requests from database first
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('outgoing_requests')
-        .select('*')
-        .eq('from_email', email)
-        .order('requested_at', { ascending: false })
-
-      if (!error && data) {
-        requests = data.map(row => ({
-          id: row.id,
-          fromEmail: row.from_email,
-          fromUsername: row.from_username,
-          toEmail: row.to_email,
-          toUsername: row.to_username,
-          requestedAt: new Date(row.requested_at).getTime()
-        }))
-      }
-    }
-
-    // Fallback to in-memory storage if database fails
-    if (requests.length === 0) {
-      requests = outgoingRequests.get(email) || []
-    }
-
-    res.json({ ok: true, requests })
-  } catch (error) {
-    console.error('[FRIENDS] Outgoing error:', error)
-    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
-  }
-})
-
-// Cancel an outgoing friend request
-app.post('/api/friends/cancel', async (req, res) => {
-  const { email, friend } = req.body || {}
-  const me = String(email || '').toLowerCase()
-  const other = String(friend || '').toLowerCase()
-  if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-
-  try {
-    // Remove from database if available
-    if (supabase) {
-      try {
-        await supabase
-          .from('friend_requests')
-          .delete()
-          .eq('from_email', me)
-          .eq('to_email', other)
-
-        await supabase
-          .from('outgoing_requests')
-          .delete()
-          .eq('from_email', me)
-          .eq('to_email', other)
-      } catch (dbError) {
-        console.error('[FRIENDS] Database cancel error:', dbError)
-      }
-    }
-
-    // Remove from sender's outgoing requests (memory)
-    const outgoing = outgoingRequests.get(me) || []
-    const outgoingIndex = outgoing.findIndex(r => r.toEmail === other)
-    if (outgoingIndex === -1) return res.status(400).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
-
-    outgoing.splice(outgoingIndex, 1)
-    if (outgoing.length > 0) {
-      outgoingRequests.set(me, outgoing)
-    } else {
-      outgoingRequests.delete(me)
-    }
-
-    // Also remove from recipient's incoming requests (memory)
-    const requests = friendRequests.get(other) || []
-    const requestIndex = requests.findIndex(r => r.fromEmail === me)
-    if (requestIndex !== -1) {
-      requests.splice(requestIndex, 1)
-      if (requests.length > 0) {
-        friendRequests.set(other, requests)
-      } else {
-        friendRequests.delete(other)
-      }
-    }
-
-    saveFriendships()
-    res.json({ ok: true })
-  } catch (error) {
-    console.error('[FRIENDS] Cancel error:', error)
-    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
-  }
-})
-
-// Accept a friend request
-app.post('/api/friends/accept', async (req, res) => {
-  const { email, requester } = req.body || {}
-  const me = String(email || '').toLowerCase()
-  const other = String(requester || '').toLowerCase()
-  if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-
-  try {
-    // Check if request exists in database
-    let requestExists = false
-    if (supabase) {
-      const { data: existingRequest } = await supabase
-        .from('friend_requests')
-        .select('id')
-        .eq('from_email', other)
-        .eq('to_email', me)
-        .single()
-
-      requestExists = !!existingRequest
-    }
-
-    // Check if request exists in memory
-    const requests = friendRequests.get(me) || []
-    const requestIndex = requests.findIndex(r => r.fromEmail === other)
-    if (!requestExists && requestIndex === -1) return res.status(400).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
-
-    // Remove the request from database
-    if (supabase && requestExists) {
-      try {
-        await supabase
-          .from('friend_requests')
-          .delete()
-          .eq('from_email', other)
-          .eq('to_email', me)
-
-        await supabase
-          .from('outgoing_requests')
-          .delete()
-          .eq('from_email', other)
-          .eq('to_email', me)
-      } catch (dbError) {
-        console.error('[FRIENDS] Database accept error:', dbError)
-        return res.status(500).json({ ok: false, error: 'DB_ERROR' })
-      }
-    }
-
-    // Remove the request from memory
-    if (requestIndex !== -1) {
-      requests.splice(requestIndex, 1)
-      if (requests.length > 0) {
-        friendRequests.set(me, requests)
-      } else {
-        friendRequests.delete(me)
-      }
-    }
-
-    // Also remove from sender's outgoing requests (memory)
-    const outgoing = outgoingRequests.get(other) || []
-    const outgoingIndex = outgoing.findIndex(r => r.toEmail === me)
-    if (outgoingIndex !== -1) {
-      outgoing.splice(outgoingIndex, 1)
-      if (outgoing.length > 0) {
-        outgoingRequests.set(other, outgoing)
-      } else {
-        outgoingRequests.delete(other)
-      }
-    }
-
-    // Add mutual friendship to database
-    if (supabase) {
-      try {
-        await supabase
-          .from('friendships')
-          .insert([
-            { user_email: me, friend_email: other },
-            { user_email: other, friend_email: me }
-          ])
-      } catch (dbError) {
-        console.error('[FRIENDS] Database friendship error:', dbError)
-      }
-    }
-
-    // Add mutual friendship to memory
-    const myFriends = friendships.get(me) || new Set()
-    myFriends.add(other)
-    friendships.set(me, myFriends)
-
-    const otherFriends = friendships.get(other) || new Set()
-    otherFriends.add(me)
-    friendships.set(other, otherFriends)
-
-    saveFriendships()
-    res.json({ ok: true })
-  } catch (error) {
-    console.error('[FRIENDS] Accept error:', error)
-    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
-  }
-})
-
-// Decline a friend request
-app.post('/api/friends/decline', async (req, res) => {
-  const { email, requester } = req.body || {}
-  const me = String(email || '').toLowerCase()
-  const other = String(requester || '').toLowerCase()
-  if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-
-  try {
-    // Check if request exists in database
-    let requestExists = false
-    if (supabase) {
-      const { data: existingRequest } = await supabase
-        .from('friend_requests')
-        .select('id')
-        .eq('from_email', other)
-        .eq('to_email', me)
-        .single()
-
-      requestExists = !!existingRequest
-    }
-
-    // Check if request exists in memory
-    const requests = friendRequests.get(me) || []
-    const requestIndex = requests.findIndex(r => r.fromEmail === other)
-    if (!requestExists && requestIndex === -1) return res.status(400).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
-
-    // Remove the request from database
-    if (supabase && requestExists) {
-      try {
-        await supabase
-          .from('friend_requests')
-          .delete()
-          .eq('from_email', other)
-          .eq('to_email', me)
-
-        await supabase
-          .from('outgoing_requests')
-          .delete()
-          .eq('from_email', other)
-          .eq('to_email', me)
-      } catch (dbError) {
-        console.error('[FRIENDS] Database decline error:', dbError)
-      }
-    }
-
-    // Remove the request from memory
-    if (requestIndex !== -1) {
-      requests.splice(requestIndex, 1)
-      if (requests.length > 0) {
-        friendRequests.set(me, requests)
-      } else {
-        friendRequests.delete(me)
-      }
-    }
-
-    // Also remove from sender's outgoing requests (memory)
-    const outgoing = outgoingRequests.get(other) || []
-    const outgoingIndex = outgoing.findIndex(r => r.toEmail === me)
-    if (outgoingIndex !== -1) {
-      outgoing.splice(outgoingIndex, 1)
-      if (outgoing.length > 0) {
-        outgoingRequests.set(other, outgoing)
-      } else {
-        outgoingRequests.delete(other)
-      }
-    }
-
-    saveFriendships()
-    res.json({ ok: true })
-  } catch (error) {
-    console.error('[FRIENDS] Decline error:', error)
-    res.status(500).json({ ok: false, error: 'INTERNAL_ERROR' })
-  }
+  const set = friendships.get(me)
+  if (set) set.delete(other)
+  saveFriendships()
+  res.json({ ok: true })
 })
 
 // Send a simple invite via WS if recipient is online
@@ -2409,23 +1602,23 @@ app.post('/api/wallet/link-card', (req, res) => {
 app.post('/api/wallet/withdraw', (req, res) => {
   const { email, currency, amount } = req.body || {}
   const addr = String(email || '').toLowerCase()
-  const cur = String(currency || 'USD').toUpperCase()
+  const curr = String(currency || 'USD').toUpperCase()
   const amt = Math.round(Number(amount) * 100)
-  if (!addr || !cur || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  if (!addr || !curr || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   const w = wallets.get(addr)
-  if (!w || (w.balances[cur]||0) < amt) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
+  if (!w || (w.balances[curr]||0) < amt) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
   const id = nanoid(10)
   const method = payoutMethods.get(addr)
   // If a payout method is linked, debit and mark as paid instantly
   if (method) {
-    const ok = debitWallet(addr, cur, amt)
+    const ok = debitWallet(addr, curr, amt)
     if (!ok) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-    const item = { id, email: addr, currency: cur, amountCents: amt, status: 'paid', requestedAt: Date.now(), decidedAt: Date.now(), notes: `Paid to ${method.brand} ÔÇóÔÇóÔÇóÔÇó ${method.last4}` }
+    const item = { id, email: addr, currency: curr, amountCents: amt, status: 'paid', requestedAt: Date.now(), decidedAt: Date.now(), notes: `Paid to ${method.brand} ÔÇóÔÇóÔÇóÔÇó ${method.last4}` }
     withdrawals.set(id, item)
     return res.json({ ok: true, request: item, paid: true, method })
   }
   // Otherwise, create a pending request for admin review
-  const item = { id, email: addr, currency: cur, amountCents: amt, status: 'pending', requestedAt: Date.now() }
+  const item = { id, email: addr, currency: curr, amountCents: amt, status: 'pending', requestedAt: Date.now() }
   withdrawals.set(id, item)
   res.json({ ok: true, request: item, paid: false })
 })
@@ -2474,6 +1667,8 @@ app.post('/api/admin/wallet/credit', (req, res) => {
   const w = wallets.get(addr) || { email: addr, balances: {} }
   res.json({ ok: true, wallet: w })
 })
+
+// WS heartbeat interval to drop dead peers (moved earlier; keep single definition)
 
 // Tournaments HTTP API (demo)
 app.get('/api/tournaments', (req, res) => {

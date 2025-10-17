@@ -9,11 +9,14 @@ function goTab(tab: string) {
   try { window.dispatchEvent(new CustomEvent('ndn:change-tab', { detail: { tab } })) } catch {}
 }
 
+const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+
 export default function Home({ user }: { user?: any }) {
   const [showLegal, setShowLegal] = useState(false);
   const [showHowTo, setShowHowTo] = useState(false);
   const [fact, setFact] = useState<string>('');
   const { lastOffline } = useUserSettings()
+  const toast = useToast();
 
   // Rotate a random "Did you know?" each time Home mounts
   useEffect(() => {
@@ -122,7 +125,7 @@ export default function Home({ user }: { user?: any }) {
                   className="absolute inset-0 flex items-center justify-center rounded-lg bg-slate-900/35 hover:bg-slate-900/45 transition"
                   onClick={async () => {
                     try {
-                      const res = await fetch('/api/stripe/create-checkout-session', {
+                      const res = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email: user.email })
@@ -131,12 +134,12 @@ export default function Home({ user }: { user?: any }) {
                       if (data.ok && data.url) {
                         window.open(data.url, '_blank');
                       } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
-                        useToast()("Premium purchases are not available in this development environment. Please visit the production site to upgrade.", { type: 'error', timeout: 4000 });
+                        toast("Premium purchases are not available in this development environment. Please visit the production site to upgrade.", { type: 'error', timeout: 4000 });
                       } else {
-                        useToast()("Failed to create checkout session. Please try again.", { type: 'error', timeout: 4000 });
+                        toast("Failed to create checkout session. Please try again.", { type: 'error', timeout: 4000 });
                       }
                     } catch (err) {
-                      useToast()("Error creating checkout. Please try again.", { type: 'error', timeout: 4000 });
+                      toast("Error creating checkout. Please try again.", { type: 'error', timeout: 4000 });
                     }
                   }}
                   title="Unlock with PREMIUM"

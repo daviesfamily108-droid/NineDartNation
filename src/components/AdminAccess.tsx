@@ -5,12 +5,14 @@ export default function AdminAccess({ user }: { user?: any }) {
   const [subscription, setSubscription] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+  const toast = useToast();
 
   useEffect(() => {
     const fetchSubscription = async () => {
       try {
         const q = user?.email ? `?email=${encodeURIComponent(user.email)}` : '';
-        const res = await fetch('/api/subscription' + q);
+        const res = await fetch(`${API_URL}/api/subscription` + q);
         if (!res.ok) throw new Error('Failed to fetch subscription');
         const data = await res.json();
         setSubscription(data);
@@ -55,7 +57,7 @@ export default function AdminAccess({ user }: { user?: any }) {
   return (
     <div className="card">
       <h2 className="text-2xl font-bold text-indigo-300 mb-2">
-        {hasAccess ? 'PREMIUM Active' : 'Admin PREMIUM'}
+        {hasAccess ? 'PREMIUM Active' : 'PREMIUM'}
       </h2>
       
       {hasAccess ? (
@@ -78,21 +80,21 @@ export default function AdminAccess({ user }: { user?: any }) {
           <h3 className="text-lg font-semibold mb-2 text-indigo-200">Your Benefits:</h3>
         </div>
       ) : (
-        <p className="mb-2 text-indigo-200">Unlock every game mode known to darts, advanced stats, and admin tools.</p>
+        <p className="mb-2 text-indigo-200">Unlock every game mode known to darts, advanced stats, and premium features.</p>
       )}
       
       <ul className="mb-4">
         <li>All game modes (including paid/advanced)</li>
         <li>Online play with all rules and variations</li>
         <li>Advanced analytics and leaderboards</li>
-        <li>Admin tools for managing matches and users</li>
+        <li>Premium camera modes and autoscoring</li>
       </ul>
 
       {!hasAccess && (
         <button
           onClick={async () => {
             try {
-              const res = await fetch('/api/stripe/create-checkout-session', {
+              const res = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: user.email })
@@ -101,15 +103,15 @@ export default function AdminAccess({ user }: { user?: any }) {
               if (data.ok && data.url) {
                 window.open(data.url, '_blank');
                 if (data.development) {
-                  useToast()("Opened Stripe test checkout (development mode)", { type: 'info', timeout: 3000 });
+                  toast("Opened Stripe test checkout (development mode)", { type: 'info', timeout: 3000 });
                 }
               } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
-                useToast()("Premium purchases are not available in this development environment. Please visit the production site to upgrade.", { type: 'error', timeout: 4000 });
+                toast("Premium purchases are not available in this development environment. Please visit the production site to upgrade.", { type: 'error', timeout: 4000 });
               } else {
-                useToast()("Failed to create checkout session. Please try again.", { type: 'error', timeout: 4000 });
+                toast("Failed to create checkout session. Please try again.", { type: 'error', timeout: 4000 });
               }
             } catch (err) {
-              useToast()("Error creating checkout. Please try again.", { type: 'error', timeout: 4000 });
+              toast("Error creating checkout. Please try again.", { type: 'error', timeout: 4000 });
             }
           }}
           className="btn bg-gradient-to-r from-indigo-500 to-fuchsia-600 text-white font-bold shadow-lg hover:scale-105 transition"

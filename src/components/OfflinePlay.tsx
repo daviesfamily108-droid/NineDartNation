@@ -85,6 +85,8 @@ function X01RulesPopup({ onClose }: { onClose: () => void }) {
   );
 }
 
+const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+
 export default function OfflinePlay({ user }: { user: any }) {
   const { offlineLayout } = useUserSettings()
   const [selectedMode, setSelectedMode] = useState('X01');
@@ -106,6 +108,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [legStats, setLegStats] = useState<{ winner: 'player'|'ai'; doubleDarts: number; checkoutDarts: number; doublesAtt?: number; doublesHit?: number }[]>([]);
   // New: pre-game adjustable AI delay (ms)
   const [aiDelayMs, setAiDelayMs] = useState<number>(2000)
+  const toast = useToast();
   // New: match popup state
   const [showMatchModal, setShowMatchModal] = useState(false)
   // Mirror Online layout defaults when in modern layout, otherwise keep classic feel
@@ -1824,7 +1827,7 @@ export default function OfflinePlay({ user }: { user: any }) {
             <button
               onClick={async () => {
                 try {
-                  const res = await fetch('/api/stripe/create-checkout-session', {
+                  const res = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: user?.email })
@@ -1833,15 +1836,15 @@ export default function OfflinePlay({ user }: { user: any }) {
                   if (data.ok && data.url) {
                     window.open(data.url, '_blank');
                     if (data.development) {
-                      useToast()("Opened Stripe test checkout (development mode)", { type: 'info', timeout: 3000 });
+                      toast("Opened Stripe test checkout (development mode)", { type: 'info', timeout: 3000 });
                     }
                   } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
-                    useToast()("Premium purchases are not available in this development environment. Please visit the production site to upgrade.", { type: 'error', timeout: 4000 });
+                    toast("Premium purchases are not available in this development environment. Please visit the production site to upgrade.", { type: 'error', timeout: 4000 });
                   } else {
-                    useToast()("Failed to create checkout session. Please try again.", { type: 'error', timeout: 4000 });
+                    toast("Failed to create checkout session. Please try again.", { type: 'error', timeout: 4000 });
                   }
                 } catch (err) {
-                  useToast()("Error creating checkout. Please try again.", { type: 'error', timeout: 4000 });
+                  toast("Error creating checkout. Please try again.", { type: 'error', timeout: 4000 });
                 }
               }}
               className="btn mt-3 bg-gradient-to-r from-indigo-500 to-fuchsia-600 text-white font-bold"

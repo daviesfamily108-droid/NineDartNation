@@ -31,6 +31,8 @@ import { createGolf, applyGolfDart, GOLF_TARGETS } from '../game/golf'
 import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
 
 export default function OnlinePlay({ user }: { user?: any }) {
+  const API_URL = (import.meta as any).env?.VITE_API_URL || ''
+  const toast = useToast();
   const wsGlobal = (() => { try { return useWS() } catch { return null } })()
   const blocklist = useBlocklist()
   const [roomId, setRoomId] = useState('room-1')
@@ -141,7 +143,6 @@ export default function OnlinePlay({ user }: { user?: any }) {
   }
   const [lastJoinIntent, setLastJoinIntent] = useState<any | null>(null)
   const [offerNewRoom, setOfferNewRoom] = useState<null | { game: string; mode: 'bestof'|'firstto'; value: number; startingScore?: number }>(null)
-  const toast = useToast()
   // Game selection
   const [game, setGame] = useState<GameKey>('X01')
   const [currentGame, setCurrentGame] = useState<GameKey>('X01')
@@ -1167,7 +1168,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
             <button 
               onClick={async () => {
                 try {
-                  const res = await fetch('/api/stripe/create-checkout-session', {
+                  const res = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email: user?.email })
