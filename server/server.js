@@ -827,51 +827,55 @@ app.post('/api/admin/matches/delete', (req, res) => {
   res.json({ ok: true })
 })
 
-// Health check for quick connectivity tests
-app.get('/health', (req, res) => res.json({ ok: true }))
-// Surface whether HTTPS was configured so clients can prefer secure links
-app.get('/api/https-info', (req, res) => {
-  res.json({ https: HTTPS_ACTIVE, port: HTTPS_PORT })
-})
-
-// Email template previews (owner-only)
-app.get('/api/email/preview', (req, res) => {
-  const kind = String(req.query.kind || 'reset')
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).send('FORBIDDEN')
-  let out
-  if (kind === 'reset') out = EmailTemplates.passwordReset({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...emailCopy.reset })
-  else if (kind === 'reminder') out = EmailTemplates.passwordReminder({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...emailCopy.reminder })
-  else if (kind === 'username') out = EmailTemplates.usernameReminder({ username: 'Alex', actionUrl: 'https://example.com/app', ...emailCopy.username })
-  else if (kind === 'confirm-email') out = EmailTemplates.emailChangeConfirm({ username: 'Alex', newEmail: 'alex+new@example.com', actionUrl: 'https://example.com/confirm?token=demo', ...emailCopy.confirmEmail })
-  else if (kind === 'changed') out = EmailTemplates.passwordChangedNotice({ username: 'Alex', supportUrl: 'https://example.com/support', ...emailCopy.changed })
-  else return res.status(400).send('Unknown kind')
-  res.setHeader('Content-Type', 'text/html; charset=utf-8')
-  res.send(out.html)
-})
-
-// Admin: get/update email copy
-app.get('/api/admin/email-copy', (req, res) => {
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  res.json({ ok: true, copy: emailCopy })
-})
-app.post('/api/admin/email-copy', (req, res) => {
-  const { requesterEmail, kind, title, intro, buttonLabel } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
+// Admin: search users
+app.get('/api/admin/search-users', async (req, res) => {
+  const { q, requesterEmail } = req.query
+  if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   }
-  const map = { 'reset':'reset', 'reminder':'reminder', 'username':'username', 'confirm-email':'confirmEmail', 'changed':'changed' }
-  const key = map[String(kind)]
-  if (!key) return res.status(400).json({ ok: false, error: 'BAD_KIND' })
-  emailCopy[key] = {
-    title: typeof title === 'string' ? title : (emailCopy[key]?.title||''),
-    intro: typeof intro === 'string' ? intro : (emailCopy[key]?.intro||''),
-    buttonLabel: typeof buttonLabel === 'string' ? buttonLabel : (emailCopy[key]?.buttonLabel||''),
+  if (!q || !supabase) return res.json({ users: [] })
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('email, username, created_at')
+      .or(`email.ilike.%${q}%,username.ilike.%${q}%`)
+      .limit(10)
+    if (error) throw error
+    res.json({ users: data || [] })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'SEARCH_FAILED' })
   }
-  res.json({ ok: true, copy: emailCopy })
 })
 
+// Admin: ban user
+app.post('/api/admin/ban-user', async (req, res) => {
+  const { email, requesterEmail } = req.body || {}
+  if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
+  if (!email || !supabase) return res.status(400).json({ ok: false, error: 'INVALID' })
+  try {
+    await supabase.from('users').update({ banned: true }).eq('email', email)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'BAN_FAILED' })
+  }
+})
+
+// Admin: unban user
+app.post('/api/admin/unban-user', async (req, res) => {
+  const { email, requesterEmail } = req.body || {}
+  if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
+  if (!email || !supabase) return res.status(400).json({ ok: false, error: 'INVALID' })
+  try {
+    await supabase.from('users').update({ banned: false }).eq('email', email)
+    res.json({ ok: true })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'UNBAN_FAILED' })
+  }
+})
 // --- Email sending (SMTP via environment) ---
 // Configure env vars in your host: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
 let mailer = null
@@ -2396,23 +2400,23 @@ app.post('/api/wallet/link-card', (req, res) => {
 app.post('/api/wallet/withdraw', (req, res) => {
   const { email, currency, amount } = req.body || {}
   const addr = String(email || '').toLowerCase()
-  const curr = String(currency || 'USD').toUpperCase()
+  const cur = String(currency || 'USD').toUpperCase()
   const amt = Math.round(Number(amount) * 100)
-  if (!addr || !curr || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  if (!addr || !cur || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   const w = wallets.get(addr)
-  if (!w || (w.balances[curr]||0) < amt) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
+  if (!w || (w.balances[cur]||0) < amt) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
   const id = nanoid(10)
   const method = payoutMethods.get(addr)
   // If a payout method is linked, debit and mark as paid instantly
   if (method) {
-    const ok = debitWallet(addr, curr, amt)
+    const ok = debitWallet(addr, cur, amt)
     if (!ok) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-    const item = { id, email: addr, currency: curr, amountCents: amt, status: 'paid', requestedAt: Date.now(), decidedAt: Date.now(), notes: `Paid to ${method.brand} ÔÇóÔÇóÔÇóÔÇó ${method.last4}` }
+    const item = { id, email: addr, currency: cur, amountCents: amt, status: 'paid', requestedAt: Date.now(), decidedAt: Date.now(), notes: `Paid to ${method.brand} ÔÇóÔÇóÔÇóÔÇó ${method.last4}` }
     withdrawals.set(id, item)
     return res.json({ ok: true, request: item, paid: true, method })
   }
   // Otherwise, create a pending request for admin review
-  const item = { id, email: addr, currency: curr, amountCents: amt, status: 'pending', requestedAt: Date.now() }
+  const item = { id, email: addr, currency: cur, amountCents: amt, status: 'pending', requestedAt: Date.now() }
   withdrawals.set(id, item)
   res.json({ ok: true, request: item, paid: false })
 })
@@ -2461,8 +2465,6 @@ app.post('/api/admin/wallet/credit', (req, res) => {
   const w = wallets.get(addr) || { email: addr, balances: {} }
   res.json({ ok: true, wallet: w })
 })
-
-// WS heartbeat interval to drop dead peers (moved earlier; keep single definition)
 
 // Tournaments HTTP API (demo)
 app.get('/api/tournaments', (req, res) => {

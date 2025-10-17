@@ -13,7 +13,9 @@ export default function AdminDashboard({ user }: { user: any }) {
 	const [loading, setLoading] = useState(false)
 	const [tournaments, setTournaments] = useState<any[]>([])
 		const [withdrawals, setWithdrawals] = useState<any[]>([])
-		const [createForm, setCreateForm] = useState<any>({
+	const [userSearch, setUserSearch] = useState('')
+	const [userResults, setUserResults] = useState<any[]>([])
+	const [createForm, setCreateForm] = useState<any>({
 		title: 'Official Tournament',
 		game: 'X01',
 		mode: 'bestof',
@@ -372,6 +374,33 @@ export default function AdminDashboard({ user }: { user: any }) {
 						<input className="input flex-1" placeholder="Announcement message" value={announcement} onChange={e=>setAnnouncement(e.target.value)} />
 						<button className="btn" disabled={loading || !announcement.trim()} onClick={sendAnnouncement}>Broadcast</button>
 					</div>
+				</div>
+			)}
+
+			{isOwner && (
+				<div className="card">
+					<h3 className="text-xl font-semibold mb-3">User Management</h3>
+					<div className="mb-4">
+						<input className="input w-full mb-2" placeholder="Search user by email or username" value={userSearch} onChange={e=>setUserSearch(e.target.value)} />
+						<button className="btn" onClick={searchUsers}>Search</button>
+					</div>
+					{userResults.length > 0 && (
+						<div className="space-y-2">
+							{userResults.map(u => (
+								<div key={u.email} className="flex items-center justify-between p-2 bg-slate-700 rounded">
+									<div>
+										<div className="font-medium">{u.username || 'No username'}</div>
+										<div className="text-sm text-slate-300">{u.email}</div>
+										<div className="text-xs text-slate-400">Joined: {new Date(u.created_at).toLocaleDateString()}</div>
+									</div>
+									<div className="flex gap-2">
+										<button className="btn bg-red-600 hover:bg-red-700 text-xs" onClick={()=>banUser(u.email)}>Ban</button>
+										<button className="btn bg-green-600 hover:bg-green-700 text-xs" onClick={()=>unbanUser(u.email)}>Unban</button>
+									</div>
+								</div>
+							))}
+						</div>
+					)}
 				</div>
 			)}
 

@@ -39,6 +39,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
   const [favDarts, setFavDarts] = useState('');
   const [bio, setBio] = useState('');
   const [profilePhoto, setProfilePhoto] = useState('');
+  const [allowAnalytics, setAllowAnalytics] = useState(true);
 
   useEffect(() => {
     const uname = user?.username || '';
@@ -49,6 +50,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
       setFavDarts(localStorage.getItem(`ndn:bio:favDarts:${uname}`) || '');
       setBio(localStorage.getItem(`ndn:bio:bio:${uname}`) || '');
       setProfilePhoto(localStorage.getItem(`ndn:bio:profilePhoto:${uname}`) || '');
+      setAllowAnalytics(localStorage.getItem(`ndn:settings:allowAnalytics:${uname}`) !== 'false');
     } catch {}
   }, [user?.username]);
 
@@ -61,6 +63,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
       localStorage.setItem(`ndn:bio:favDarts:${uname}`, favDarts);
       localStorage.setItem(`ndn:bio:bio:${uname}`, bio);
       localStorage.setItem(`ndn:bio:profilePhoto:${uname}`, profilePhoto);
+      localStorage.setItem(`ndn:settings:allowAnalytics:${uname}`, allowAnalytics.toString());
       setIsEditing(false);
     } catch {}
   };
@@ -565,6 +568,120 @@ export default function SettingsPanel({ user }: { user?: any }) {
           </div>
         </div>
       </div>
+
+      {/* Data & Privacy */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-gray-500/40 bg-gray-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2">
+            <Settings className="w-5 h-5 text-gray-400" /> Data & Privacy
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="allowAnalytics"
+                checked={allowAnalytics}
+                onChange={e => setAllowAnalytics(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="allowAnalytics" className="text-sm">Allow anonymous usage analytics</label>
+            </div>
+
+            <div>
+              <button
+                onClick={() => {
+                  // Export user data
+                  const data = {
+                    username: user?.username,
+                    email: user?.email,
+                    favPlayer,
+                    favTeam,
+                    favDarts,
+                    bio,
+                    profilePhoto,
+                    settings: {
+                      favoriteDouble,
+                      avgMode,
+                      autoStartOffline,
+                      rememberLastOffline,
+                      reducedMotion,
+                      compactHeader,
+                      allowSpectate,
+                      cameraScale,
+                      cameraAspect,
+                      autoscoreProvider,
+                      autoscoreWsUrl,
+                      calibrationGuide,
+                      callerEnabled,
+                      callerVoice,
+                      callerVolume,
+                      speakCheckoutOnly
+                    }
+                  };
+                  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = 'ninedartnation-data.json';
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="btn bg-blue-600 hover:bg-blue-700"
+              >
+                Export My Data
+              </button>
+            </div>
+
+            <div>
+              <button
+                onClick={() => {
+                  if (confirm('Are you sure you want to delete your account? This action cannot be undone.')) {
+                    // TODO: Implement account deletion
+                    alert('Account deletion not yet implemented. Please contact support.');
+                  }
+                }}
+                className="btn bg-red-600 hover:bg-red-700"
+              >
+                Delete Account
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Support */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-teal-500/40 bg-teal-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2">
+            <Settings className="w-5 h-5 text-teal-400" /> Support & Help
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-slate-300 mb-2">Need help? Contact us:</p>
+              <a href="mailto:support@ninedartnation.com" className="btn bg-teal-600 hover:bg-teal-700">
+                Email Support
+              </a>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-300 mb-2">Frequently Asked Questions:</p>
+              <a href="https://ninedartnation.com/faq" target="_blank" rel="noopener noreferrer" className="btn bg-teal-600 hover:bg-teal-700">
+                View FAQ
+              </a>
+            </div>
+
+            <div>
+              <p className="text-sm text-slate-300 mb-2">Report a bug or suggest a feature:</p>
+              <a href="https://github.com/daviesfamily108-droid/NineDartNation/issues" target="_blank" rel="noopener noreferrer" className="btn bg-teal-600 hover:bg-teal-700">
+                GitHub Issues
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }
