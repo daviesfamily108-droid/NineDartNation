@@ -625,6 +625,74 @@ app.post('/api/stripe/demo-checkout', async (req, res) => {
   }
 })
 
+// Change username (free, one-time only)
+app.post('/api/change-username', async (req, res) => {
+  try {
+    const { email, newUsername } = req.body || {}
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+    }
+    if (!newUsername || typeof newUsername !== 'string' || newUsername.length < 3 || newUsername.length > 20) {
+      return res.status(400).json({ ok: false, error: 'INVALID_USERNAME' })
+    }
+    // Check if user has already changed username
+    let user = null
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('username, username_changed')
+        .eq('email', email)
+        .single()
+      if (error && error.code !== 'PGRST116') {
+        console.error('[DB] Error checking username_changed:', error)
+        return res.status(500).json({ ok: false, error: 'DB_ERROR' })
+      }
+      if (data && data.username_changed) {
+        return res.status(400).json({ ok: false, error: 'USERNAME_ALREADY_CHANGED' })
+      }
+      user = data
+    }
+    // Check if username is taken
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('email')
+        .eq('username', newUsername)
+        .neq('email', email) // Allow if it's the same user
+        .single()
+      if (error && error.code !== 'PGRST116') {
+        console.error('[DB] Error checking username availability:', error)
+        return res.status(500).json({ ok: false, error: 'DB_ERROR' })
+      }
+      if (data) {
+        return res.status(400).json({ ok: false, error: 'USERNAME_TAKEN' })
+      }
+    }
+    // Update username
+    if (supabase) {
+      const { error } = await supabase
+        .from('users')
+        .update({ username: newUsername, username_changed: true })
+        .eq('email', email)
+      if (error) {
+        console.error('[DB] Error updating username:', error)
+        return res.status(500).json({ ok: false, error: 'UPDATE_FAILED' })
+      }
+    }
+    // Update in-memory if exists
+    const memUser = users.get(email.toLowerCase())
+    if (memUser) {
+      memUser.username = newUsername
+      memUser.usernameChanged = true
+      users.set(email.toLowerCase(), memUser)
+    }
+    return res.json({ ok: true, newUsername })
+  } catch (e) {
+    console.error('[Change Username] error:', e)
+    return res.status(500).json({ ok: false, error: 'CHANGE_FAILED' })
+  }
+})
+
 // Admin management (demo; NOT secure ÔÇö no auth/signature verification)
 app.get('/api/admins', (req, res) => {
   res.json({ admins: Array.from(adminEmails) })
@@ -2078,6 +2146,7 @@ app.post('/api/friends/accept', async (req, res) => {
           .eq('to_email', me)
       } catch (dbError) {
         console.error('[FRIENDS] Database accept error:', dbError)
+        return res.status(500).json({ ok: false, error: 'DB_ERROR' })
       }
     }
 

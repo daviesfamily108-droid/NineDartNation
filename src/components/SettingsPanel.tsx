@@ -38,6 +38,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
   const [favTeam, setFavTeam] = useState('');
   const [favDarts, setFavDarts] = useState('');
   const [bio, setBio] = useState('');
+  const [profilePhoto, setProfilePhoto] = useState('');
 
   useEffect(() => {
     const uname = user?.username || '';
@@ -47,6 +48,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
       setFavTeam(localStorage.getItem(`ndn:bio:favTeam:${uname}`) || '');
       setFavDarts(localStorage.getItem(`ndn:bio:favDarts:${uname}`) || '');
       setBio(localStorage.getItem(`ndn:bio:bio:${uname}`) || '');
+      setProfilePhoto(localStorage.getItem(`ndn:bio:profilePhoto:${uname}`) || '');
     } catch {}
   }, [user?.username]);
 
@@ -58,6 +60,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
       localStorage.setItem(`ndn:bio:favTeam:${uname}`, favTeam);
       localStorage.setItem(`ndn:bio:favDarts:${uname}`, favDarts);
       localStorage.setItem(`ndn:bio:bio:${uname}`, bio);
+      localStorage.setItem(`ndn:bio:profilePhoto:${uname}`, profilePhoto);
       setIsEditing(false);
     } catch {}
   };
@@ -98,8 +101,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
             </div>
             {/* Username Change */}
             <div className="border-t border-red-500/20 pt-3">
-              <div className="font-medium mb-2 text-red-600">Change Username (One-time)</div>
-              <div className="text-sm text-red-500 mb-2">Cost: $2.00 - Username becomes permanent after change.</div>
+              <div className="font-medium mb-2 text-red-600">Change Username (One-time, Free)</div>
+              <div className="text-sm text-red-500 mb-2">Username becomes permanent after change.</div>
               {user?.usernameChanged ? (
                 <div className="text-green-400 text-sm">Username already changed. This option is no longer available.</div>
               ) : (
@@ -126,16 +129,19 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       }
                       setChangingUsername(true)
                       try {
-                        const res = await fetch('/api/stripe/create-session', {
+                        const res = await fetch('/api/change-username', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({ email: user?.email, newUsername: newUsername.trim() })
                         })
                         const data = await res.json()
-                        if (data.ok && data.url) {
-                          window.location.href = data.url
+                        if (data.ok) {
+                          setUsernameError('')
+                          alert('Username changed successfully!')
+                          // Optionally reload or update user
+                          window.location.reload()
                         } else {
-                          setUsernameError(data.error || 'Failed to create payment session')
+                          setUsernameError(data.error || 'Failed to change username')
                         }
                       } catch (e) {
                         setUsernameError('Network error')
@@ -145,7 +151,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     disabled={changingUsername || !newUsername.trim()}
                     className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
                   >
-                    {changingUsername ? 'Processing...' : 'Change Username ($2.00)'}
+                    {changingUsername ? 'Changing...' : 'Change Username (Free)'}
                   </button>
                 </>
               )}
@@ -246,6 +252,25 @@ export default function SettingsPanel({ user }: { user?: any }) {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Profile Photo */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-cyan-500/40 bg-cyan-500/10">
+          <div className="font-semibold mb-2 flex items-center gap-2">
+            <User className="w-5 h-5 text-cyan-400" /> Profile Photo
+          </div>
+          <div>
+            <label className="block mb-1 text-sm font-medium">Photo URL:</label>
+            <input
+              className="input w-full"
+              type="url"
+              placeholder="https://example.com/photo.jpg"
+              value={user?.photoUrl || ''}
+              onChange={e => setProfilePhoto(e.target.value)}
+            />
           </div>
         </div>
       </div>
