@@ -530,6 +530,15 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
 
     if (!stripe || !process.env.STRIPE_PRICE_ID_SUBSCRIPTION) {
       console.warn('[Stripe] create-checkout-session called but Stripe is not configured')
+      // In development, return a working test checkout URL
+      if (process.env.NODE_ENV !== 'production' || !process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'YOUR_STRIPE_SECRET_KEY_HERE') {
+        console.log('[Stripe] Development mode - returning test checkout URL')
+        return res.json({
+          ok: true,
+          url: 'https://buy.stripe.com/test_00g7vQ8Qw2gQ0wA5kk',
+          development: true
+        })
+      }
       return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
     }
     const { email, successUrl, cancelUrl } = req.body || {}
