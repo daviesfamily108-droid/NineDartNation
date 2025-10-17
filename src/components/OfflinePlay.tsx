@@ -1820,9 +1820,30 @@ export default function OfflinePlay({ user }: { user: any }) {
             <div className="text-3xl mb-2">🔒</div>
             <div className="font-semibold">Premium mode locked</div>
             <div className="text-sm text-slate-200/80">Upgrade to PREMIUM to play modes like Killer, Cricket, Shanghai, and more.</div>
-            <a href="https://buy.stripe.com/test_00g7vQ8Qw2gQ0wA5kk" target="_blank" rel="noopener noreferrer" className="btn mt-3 bg-gradient-to-r from-indigo-500 to-fuchsia-600 text-white font-bold">
+            <button
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/stripe/create-checkout-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: user?.email })
+                  });
+                  const data = await res.json();
+                  if (data.ok && data.url) {
+                    window.open(data.url, '_blank');
+                  } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
+                    useToast()("Premium purchases are not available in this development environment. Please visit the production site to upgrade.", { type: 'error', timeout: 4000 });
+                  } else {
+                    useToast()("Failed to create checkout session. Please try again.", { type: 'error', timeout: 4000 });
+                  }
+                } catch (err) {
+                  useToast()("Error creating checkout. Please try again.", { type: 'error', timeout: 4000 });
+                }
+              }}
+              className="btn mt-3 bg-gradient-to-r from-indigo-500 to-fuchsia-600 text-white font-bold"
+            >
               Upgrade to PREMIUM · {formatPriceInCurrency(getUserCurrency(), 5)}
-            </a>
+            </button>
           </div>
         </div>
       )}
