@@ -62,8 +62,13 @@ export default function SettingsPanel({ user }: { user?: any }) {
     } catch {}
   };
 
+  // Username change state
+  const [newUsername, setNewUsername] = useState('')
+  const [changingUsername, setChangingUsername] = useState(false)
+  const [usernameError, setUsernameError] = useState('')
+
   // Available voices for caller
-  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([])
 
   useEffect(() => {
     const loadVoices = () => {
@@ -82,13 +87,69 @@ export default function SettingsPanel({ user }: { user?: any }) {
           <div className="font-semibold mb-4 flex items-center gap-2 text-red-700">
             <User className="w-5 h-5" /> Account
           </div>
-          <div className="flex justify-center">
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent('ndn:logout'))}
-              className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
-            >
-              Logout
-            </button>
+          <div className="space-y-3">
+            <div className="flex justify-center">
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('ndn:logout'))}
+                className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Logout
+              </button>
+            </div>
+            {/* Username Change */}
+            <div className="border-t border-red-500/20 pt-3">
+              <div className="font-medium mb-2 text-red-600">Change Username (One-time)</div>
+              <div className="text-sm text-red-500 mb-2">Cost: $2.00 - Username becomes permanent after change.</div>
+              {user?.usernameChanged ? (
+                <div className="text-green-400 text-sm">Username already changed. This option is no longer available.</div>
+              ) : (
+                <>
+                  <input
+                    className="input w-full mb-2"
+                    type="text"
+                    placeholder="New username"
+                    value={newUsername}
+                    onChange={e => setNewUsername(e.target.value)}
+                    disabled={changingUsername}
+                  />
+                  {usernameError && <div className="text-red-400 text-sm mb-2">{usernameError}</div>}
+                  <button
+                    onClick={async () => {
+                      setUsernameError('')
+                      if (!newUsername.trim()) {
+                        setUsernameError('Username required')
+                        return
+                      }
+                      if (newUsername.length < 3 || newUsername.length > 20) {
+                        setUsernameError('Username must be 3-20 characters')
+                        return
+                      }
+                      setChangingUsername(true)
+                      try {
+                        const res = await fetch('/api/stripe/create-session', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ email: user?.email, newUsername: newUsername.trim() })
+                        })
+                        const data = await res.json()
+                        if (data.ok && data.url) {
+                          window.location.href = data.url
+                        } else {
+                          setUsernameError(data.error || 'Failed to create payment session')
+                        }
+                      } catch (e) {
+                        setUsernameError('Network error')
+                      }
+                      setChangingUsername(false)
+                    }}
+                    disabled={changingUsername || !newUsername.trim()}
+                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+                  >
+                    {changingUsername ? 'Processing...' : 'Change Username ($2.00)'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

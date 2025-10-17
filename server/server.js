@@ -143,7 +143,7 @@ app.post('/api/auth/signup', async (req, res) => {
       }
     }
 
-    const user = { email, username, password, admin: false, subscription: { fullAccess: false } }
+    const user = { email, username, password, admin: false, subscription: { fullAccess: false }, usernameChanged: false }
 
     // Save to Supabase if available
     if (supabase) {
@@ -157,6 +157,7 @@ app.post('/api/auth/signup', async (req, res) => {
             password: user.password, // Note: In production, hash passwords!
             admin: user.admin,
             subscription: user.subscription,
+            username_changed: user.usernameChanged,
             created_at: new Date().toISOString()
           }])
           .select();
@@ -406,6 +407,26 @@ app.post('/webhook/stripe', async (req, res) => {
           console.error('[DB] Failed to update subscription:', err);
         }
       }
+    } else if (email && purpose === 'username-change') {
+      const newUsername = session?.metadata?.newUsername;
+      if (newUsername) {
+        // Update username and set changed flag
+        const user = users.get(email);
+        if (user) {
+          user.username = newUsername;
+          user.usernameChanged = true;
+        }
+        if (supabase) {
+          try {
+            await supabase
+              .from('users')
+              .update({ username: newUsername, username_changed: true })
+              .eq('email', email);
+          } catch (err) {
+            console.error('[DB] Failed to update username:', err);
+          }
+        }
+      }
     }
   }
   // Demo: toggle fullAccess true and credit owner's wallet with premium revenue if provided
@@ -439,7 +460,40 @@ app.post('/api/stripe/create-session', async (req, res) => {
       console.warn('[Stripe] create-session called but Stripe is not configured')
       return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
     }
-    const { email, successUrl, cancelUrl } = req.body || {}
+    const { email, newUsername, successUrl, cancelUrl } = req.body || {}
+    if (!newUsername || typeof newUsername !== 'string' || newUsername.length < 3 || newUsername.length > 20) {
+      return res.status(400).json({ ok: false, error: 'INVALID_USERNAME' })
+    }
+    // Check if user has already changed username
+    let user = null
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('username_changed')
+        .eq('email', email)
+        .single()
+      if (error && error.code !== 'PGRST116') {
+        console.error('[DB] Error checking username_changed:', error)
+      } else if (data) {
+        if (data.username_changed) {
+          return res.status(400).json({ ok: false, error: 'USERNAME_ALREADY_CHANGED' })
+        }
+      }
+    }
+    // Check if username is taken
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('email')
+        .eq('username', newUsername)
+        .neq('email', email) // Allow if it's the same user
+        .single()
+      if (error && error.code !== 'PGRST116') {
+        console.error('[DB] Error checking username availability:', error)
+      } else if (data) {
+        return res.status(400).json({ ok: false, error: 'USERNAME_TAKEN' })
+      }
+    }
     // Derive sensible defaults for success/cancel
     const host = req.headers['x-forwarded-host'] || req.headers.host
     const proto = (req.headers['x-forwarded-proto'] || 'https')
@@ -450,7 +504,7 @@ app.post('/api/stripe/create-session', async (req, res) => {
       mode: 'payment',
       line_items: [{ price: process.env.STRIPE_PRICE_ID_USERNAME_CHANGE, quantity: 1 }],
       customer_email: (typeof email === 'string' && email.includes('@')) ? email : undefined,
-      metadata: { purpose: 'username-change', email: String(email||'') },
+      metadata: { purpose: 'username-change', email: String(email||''), newUsername },
       success_url: sUrl,
       cancel_url: cUrl,
     })
@@ -534,6 +588,39 @@ app.get('/api/stripe/check', async (req, res) => {
     return res.json({ ok: true, secretPresent, pricePresent, priceInfo })
   } catch (e) {
     return res.status(500).json({ ok: false, error: 'CHECK_FAILED' })
+  }
+})
+
+// Demo checkout (safe development fallback)
+// When Stripe is not configured, this endpoint lets you simulate a successful purchase
+// for a given email. It updates in-memory user state and Supabase if available.
+app.post('/api/stripe/demo-checkout', async (req, res) => {
+  try {
+    const { email, successUrl, cancelUrl } = req.body || {}
+    if (!email || !email.includes('@')) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+    // mark in-memory
+    const now = new Date().toISOString()
+    const sub = { fullAccess: true, source: 'demo', purchasedAt: now }
+    const user = users.get(email.toLowerCase()) || null
+    if (user) {
+      user.subscription = sub
+      users.set(email.toLowerCase(), user)
+    }
+    // attempt to persist to Supabase if available
+    if (supabase) {
+      try {
+        await supabase.from('users').update({ subscription: sub }).eq('email', email)
+      } catch (e) {
+        console.error('[Stripe Demo] failed to persist subscription to Supabase:', e?.message || e)
+      }
+    }
+    const host = req.headers['x-forwarded-host'] || req.headers.host
+    const base = host ? `https://${host}` : 'https://ninedartnation-1.onrender.com'
+    const sUrl = (typeof successUrl === 'string' && successUrl.startsWith('http')) ? successUrl : `${base}/?subscription=success&demo=1`
+    return res.json({ ok: true, url: sUrl })
+  } catch (e) {
+    console.error('[Stripe Demo] error:', e)
+    return res.status(500).json({ ok: false, error: 'DEMO_FAILED' })
   }
 })
 
@@ -944,7 +1031,8 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
             username: user.username,
             password: user.password,
             admin: user.admin || false,
-            subscription: user.subscription || { fullAccess: false }
+            subscription: user.subscription || { fullAccess: false },
+            usernameChanged: user.username_changed || false
           });
           loadedCount++;
         }

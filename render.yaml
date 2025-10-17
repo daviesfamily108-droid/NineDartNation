@@ -37,5 +37,7 @@ services:
       #   sync: false
       # - key: STRIPE_PRICE_ID_USERNAME_CHANGE
       #   sync: false
+      # - key: STRIPE_PRICE_ID_SUBSCRIPTION
+      #   sync: false
       # - key: STRIPE_WEBHOOK_SECRET
       #   sync: false
