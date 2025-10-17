@@ -29,7 +29,8 @@ const app = express();
 // When running behind Render / Cloudflare the app receives X-Forwarded-* headers.
 // Enable trust proxy so Express and middleware (like express-rate-limit) treat
 // the forwarded client IPs correctly and avoid validation errors.
-app.set('trust proxy', true);
+// Trust only the immediate proxy (1 hop)
+app.set('trust proxy', 1);
 console.log('[HTTP] express trust proxy enabled (trust proxy = true)');
 
 // Initialize Supabase
