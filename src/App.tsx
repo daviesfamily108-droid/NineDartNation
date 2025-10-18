@@ -106,17 +106,44 @@ export default function App() {
       }
     };
     const handleAvatarUpdate = (e: any) => {
+      // Check if this update is for the current user
       if (e.detail?.username === user?.username) {
         setAvatar(e.detail?.avatar || '');
       }
+      // Also check localStorage as backup for any avatar update
+      if (user?.username) {
+        const storedAvatar = localStorage.getItem(`ndn:bio:profilePhoto:${user.username}`);
+        setAvatar(storedAvatar || '');
+      }
     };
+    // Also check localStorage when window becomes visible (user switches tabs)
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user?.username) {
+        const storedAvatar = localStorage.getItem(`ndn:bio:profilePhoto:${user.username}`);
+        setAvatar(storedAvatar || '');
+      }
+    };
+    
+    // Check localStorage every 2 seconds as a fallback
+    const checkAvatarInterval = setInterval(() => {
+      if (user?.username) {
+        const storedAvatar = localStorage.getItem(`ndn:bio:profilePhoto:${user.username}`);
+        if (storedAvatar && storedAvatar !== avatar) {
+          setAvatar(storedAvatar);
+        }
+      }
+    }, 2000);
+    
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('ndn:avatar-updated' as any, handleAvatarUpdate as any);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('ndn:avatar-updated' as any, handleAvatarUpdate as any);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(checkAvatarInterval);
     };
-  }, [user?.username]);
+  }, [user?.username, avatar]);
 
   // Handle payment success for username change
   useEffect(() => {
@@ -320,7 +347,7 @@ export default function App() {
               {/* Middle: Welcome band (full width on mobile) */}
               <div className="order-3 xs:order-3 sm:order-2 w-full sm:w-auto flex-1 flex flex-col items-center justify-center text-center sm:text-left !text-black">
                 <span className="text-sm xs:text-base sm:text-base md:text-lg font-semibold flex items-center gap-2 max-w-full truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>
-                  <span className="hidden xs:inline !text-black">Welcome,</span>
+                  <span className="hidden xs:inline !text-black">Welcome</span>
                   <img src={avatar || fallbackAvatar} alt="avatar" className="w-5 h-5 xs:w-6 xs:h-6 sm:w-6 sm:h-6 md:w-7 md:h-7 rounded-full ring-2 ring-white/20" />
                   <span className="truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{user.username}🎯</span>
                 </span>

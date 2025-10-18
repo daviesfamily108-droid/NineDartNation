@@ -216,7 +216,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   // Manual correction input for offline (matches CameraView UX)
   const [manualBox, setManualBox] = useState<string>('')
   // Settings: favourite double and caller
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect } = useUserSettings()
+  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect, cameraEnabled, textSize, boxSize } = useUserSettings()
   // Fit-all scaling measurement
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -1192,7 +1192,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                     )}
                   </div>
                   {/* Match Summary */}
-                  <div className="p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-white text-sm">
+                  <div className={`${boxSize === 'small' ? 'p-2' : boxSize === 'large' ? 'p-4' : 'p-3'} rounded-2xl bg-slate-900/40 border border-white/10 text-white ${textSize === 'small' ? 'text-xs' : textSize === 'large' ? 'text-base' : 'text-sm'}`}>
                     <div className="font-semibold mb-2">Match Summary</div>
                     {(() => {
                       const currentThrower = isPlayerTurn ? (user?.username || 'You') : (ai === 'None' ? '—' : `${ai} AI`)
@@ -1209,9 +1209,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                           <div className="opacity-80">Current score</div>
                           <div className="font-mono text-right">{matchScore}</div>
                           <div className="opacity-80">Current thrower</div>
-                          <div className="text-right font-semibold">{currentThrower}</div>
+                          <div className="text-right font-semibold text-lg">{currentThrower}</div>
                           <div className="opacity-80">Score remaining</div>
-                          <div className="text-right font-mono">{currentRemaining}</div>
+                          <div className="text-right font-mono font-bold text-xl">{currentRemaining}</div>
                           <div className="opacity-80">3-dart avg</div>
                           <div className="text-right font-mono">{avg3.toFixed(1)}</div>
                           <div className="opacity-80">Last score</div>
@@ -1253,11 +1253,11 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <div className="flex items-center gap-1.5 mt-1">
                     <div className="ml-auto flex items-center gap-1 text-[10px]">
                       <span className="opacity-70">Cam</span>
-                      <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
-                      <span className="w-7 text-center">{Math.round(cameraScale*100)}%</span>
-                      <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                      <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
+                      <span className="btn px-2 py-0.5 min-w-[2.5rem] text-center">{Math.round(cameraScale*100)}%</span>
+                      <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
                       <span className="opacity-50">|</span>
-                      <button className="btn px-1 py-0.5" title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
+                      <button className="btn px-2 py-0.5" title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
                     </div>
                   </div>
                   <div className="flex items-stretch justify-end min-w-0">
@@ -1314,7 +1314,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 </div>
               </div>
               {/* Match summary (offline) */}
-              <div className="mt-2 p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-white text-sm">
+              <div className={`mt-2 ${boxSize === 'small' ? 'p-2' : boxSize === 'large' ? 'p-4' : 'p-3'} rounded-2xl bg-slate-900/40 border border-white/10 text-white ${textSize === 'small' ? 'text-xs' : textSize === 'large' ? 'text-base' : 'text-sm'}`}>
                 <div className="font-semibold mb-2">Match Summary</div>
                 {(() => {
                   // In offline X01, player is vs AI or practice
@@ -1332,9 +1332,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                       <div className="opacity-80">Current score</div>
                       <div className="font-mono text-right">{matchScore}</div>
                       <div className="opacity-80">Current thrower</div>
-                      <div className="text-right font-semibold">{currentThrower}</div>
+                      <div className="text-right font-semibold text-lg">{currentThrower}</div>
                       <div className="opacity-80">Score remaining</div>
-                      <div className="text-right font-mono">{currentRemaining}</div>
+                      <div className="text-right font-mono font-bold text-xl">{currentRemaining}</div>
                       <div className="opacity-80">3-dart avg</div>
                       <div className="text-right font-mono">{avg3.toFixed(1)}</div>
                       <div className="opacity-80">Last score</div>
@@ -1378,14 +1378,14 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Double Practice' && (
                   <>
                     <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span></div>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} onAutoDart={(value, ring) => {
                         if (ring === 'DOUBLE' || ring === 'INNER_BULL') {
                           const hit = isDoubleHit(value, dpIndex)
                           if (hit) { const nh = dpHits + 1; const ni = dpIndex + 1; setDpHits(nh); setDpIndex(ni); if (nh >= DOUBLE_PRACTICE_ORDER.length) setTimeout(()=>{ setDpHits(0); setDpIndex(0) }, 250) }
                         }
                       }} immediateAutoCommit />
-                    </div>
+                    </div>}
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-2">
                         <input className="input w-24" type="number" min={0} max={60} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e => { if (e.key==='Enter') addDpNumeric() }} />
@@ -1402,9 +1402,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Around the Clock' && (
                   <>
                     <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{ATC_ORDER[atcIndex] === 25 ? '25 (Outer Bull)' : ATC_ORDER[atcIndex] === 50 ? '50 (Inner Bull)' : (ATC_ORDER[atcIndex] || '—')}</span></div>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addAtcValue(value, r as any, info?.sector ?? null) }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addAtcNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addAtcNumeric}>Add Dart</button>
@@ -1420,9 +1420,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Cricket' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addCricketAuto(value, r as any, info?.sector ?? null) }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addCricketNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addCricketNumeric}>Add Dart</button>
@@ -1432,9 +1432,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Shanghai' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addShanghaiAuto(value, r as any, info?.sector ?? null) }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addShanghaiNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addShanghaiNumeric}>Add Dart</button>
@@ -1444,9 +1444,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Halve It' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHalveAuto(value, r as any, info?.sector ?? null) }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addHalveNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addHalveNumeric}>Add Dart</button>
@@ -1456,9 +1456,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'High-Low' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHighLowAuto(value, r as any, info?.sector ?? null) }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addHighLowNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addHighLowNumeric}>Add Dart</button>
@@ -1468,9 +1468,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === "Bob's 27" && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addB27Auto(value, r as any, info?.sector ?? null) }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addB27Numeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addB27Numeric}>Add Dart</button>
@@ -1480,9 +1480,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Count-Up' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value) => addCountUpAuto(value)} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addCountUpAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
                       <button className="btn px-3 py-1 text-sm" onClick={()=>{ addCountUpAuto(playerDartPoints); setPlayerDartPoints(0) }}>Add Dart</button>
@@ -1493,9 +1493,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'High Score' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value) => addHighScoreAuto(value)} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addHighScoreAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
                       <button className="btn px-3 py-1 text-sm" onClick={()=>{ addHighScoreAuto(playerDartPoints); setPlayerDartPoints(0) }}>Add Dart</button>
@@ -1506,9 +1506,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Low Score' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value) => addLowScoreAuto(value)} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addLowScoreAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
                       <button className="btn px-3 py-1 text-sm" onClick={()=>{ addLowScoreAuto(playerDartPoints); setPlayerDartPoints(0) }}>Add Dart</button>
@@ -1519,9 +1519,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Checkout 170' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring) => addCo170Auto(value, ring === 'MISS' ? undefined : ring)} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="text" placeholder="Manual (D16, T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addCoManual(true) }} />
                       <button className="btn px-3 py-1 text-sm" onClick={()=>addCoManual(true)}>Add Dart</button>
@@ -1532,9 +1532,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Checkout 121' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring) => addCo121Auto(value, ring === 'MISS' ? undefined : ring)} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="text" placeholder="Manual (D16, T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addCoManual(false) }} />
                       <button className="btn px-3 py-1 text-sm" onClick={()=>addCoManual(false)}>Add Dart</button>
@@ -1552,9 +1552,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                       </select>
                       <button className="btn px-3 py-1 text-sm" onClick={resetTreble}>Reset</button>
                     </div>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addTrebleAuto(value, r as any, info?.sector ?? null) }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="text" placeholder="Manual (T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') { const v = parseManualDart(manualBox); if (v!=null) addTrebleAuto(v, undefined, undefined); setManualBox('') } }} />
                       <button className="btn px-3 py-1 text-sm" onClick={()=>{ const v = parseManualDart(manualBox); if (v!=null) addTrebleAuto(v, undefined, undefined); setManualBox('') }}>Add Dart</button>
@@ -1564,9 +1564,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Baseball' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addBaseballAuto(value, r as any, info?.sector ?? null) }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetBaseball}>Reset</button>
                     </div>
@@ -1574,9 +1574,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Golf' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addGolfAuto(value, r as any, info?.sector ?? null) }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetGolf}>Reset</button>
                     </div>
@@ -1599,12 +1599,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                         }}>{ttt.board[cell] || ''}</button>
                       ))}
                     </div>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => {
                         // Attempt to claim the currently tapped-looking cell not tracked; as a simple flow, map by round-robin preference or let user click a cell button above.
                         // No-op here; primary interaction is via buttons with prompt for now.
                       }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetTtt}>Reset</button>
                     </div>
@@ -1612,9 +1612,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'American Cricket' && (
                   <>
-                    <div className="rounded-2xl overflow-hidden bg-black">
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addAmCricketAuto(value, r as any, info?.sector ?? null) }} />
-                    </div>
+                    </div>}
                     <div className="flex items-center gap-2">
                       <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetAmCricket}>Reset</button>
                     </div>
@@ -1674,7 +1674,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                             )
                           })}
                         </div>
-                        <div className="rounded-2xl overflow-hidden bg-black">
+                        {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                           <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => {
                             if (killerWinnerId) return
                             const r = ring === 'MISS' ? undefined : ring
@@ -1712,7 +1712,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                               return nd
                             })
                           }} />
-                        </div>
+                        </div>}
                         <div className="flex items-center gap-2">
                           <input className="input w-40" placeholder="Manual (D16, T5)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') {
                             if (killerWinnerId) return

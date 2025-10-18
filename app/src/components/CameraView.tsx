@@ -143,17 +143,10 @@ export default function CameraView({
         await videoRef.current.play()
       }
       setStreaming(true)
-      // Capture device list for inline picker and remember selection
+      // Capture device list for inline picker - no automatic preference updates
       try {
         const list = await navigator.mediaDevices.enumerateDevices()
         setAvailableCameras(list.filter(d=>d.kind==='videoinput'))
-        const vidTrack = (stream.getVideoTracks?.()||[])[0]
-        const settings = vidTrack?.getSettings?.()
-        const id = settings?.deviceId as string | undefined
-        if (id) {
-          const label = list.find(d=>d.deviceId===id)?.label
-          setPreferredCamera(id, label||'')
-        }
       } catch {}
     } catch (e) {
       alert('Camera permission denied or not available.')

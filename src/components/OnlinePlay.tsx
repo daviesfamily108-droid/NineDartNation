@@ -52,7 +52,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const firstConnectDoneRef = useRef(false)
   const match = useMatch()
   const msgs = useMessages()
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale } = useUserSettings()
+  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale, cameraEnabled, textSize, boxSize } = useUserSettings()
   // Camera resize state
   const [cameraColSpan, setCameraColSpan] = useState(2)
   // Turn-by-turn modal
@@ -68,6 +68,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [atcIndex, setAtcIndex] = useState(0)
   const [atcHits, setAtcHits] = useState(0)
   const [atcManual, setAtcManual] = useState('')
+  // Tic Tac Toe manual input
+  const [tttManual, setTttManual] = useState('')
   // Per-player states for premium games
   const [cricketById, setCricketById] = useState<Record<string, ReturnType<typeof createCricketState>>>({})
   const [shanghaiById, setShanghaiById] = useState<Record<string, ReturnType<typeof createShanghaiState>>>({})
@@ -459,8 +461,29 @@ export default function OnlinePlay({ user }: { user?: any }) {
     }
     const best = match.bestLegThisMatch
     const bestText = best ? `${best.darts} darts${(() => { const p = players.find(x=>x.id===best.playerId); return p?` (${p.name})`:'' })()}` : '-'
+    
+    // Text size classes
+    const getTextSizeClasses = (size: string) => {
+      switch (size) {
+        case 'small': return 'text-xs'
+        case 'large': return 'text-base'
+        default: return 'text-sm'
+      }
+    }
+    const textSizeClass = getTextSizeClasses(textSize)
+    
+    // Box size classes
+    const getBoxSizeClasses = (size: string) => {
+      switch (size) {
+        case 'small': return 'p-2'
+        case 'large': return 'p-4'
+        default: return 'p-3'
+      }
+    }
+    const boxSizeClass = getBoxSizeClasses(boxSize)
+    
     return (
-      <div className="p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-white text-sm">
+      <div className={`${boxSizeClass} rounded-2xl bg-slate-900/40 border border-white/10 text-white ${textSizeClass}`}>
         <div className="font-semibold mb-2">Match Summary</div>
         <div className="grid grid-cols-2 gap-y-1">
           <div className="opacity-80">Current score</div>
@@ -468,7 +491,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
           <div className="opacity-80">Current thrower</div>
           <div className="text-right font-semibold">{cur?.name || 'ÔÇö'}</div>
           <div className="opacity-80">Score remaining</div>
-          <div className="text-right font-mono">{remaining}</div>
+          <div className="text-right font-mono font-bold text-lg">{remaining}</div>
           <div className="opacity-80">3-dart avg</div>
           <div className="text-right font-mono">{avg3.toFixed(1)}</div>
           <div className="opacity-80">Last score</div>
@@ -1352,13 +1375,13 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <div className="space-y-2">
                 {/* Top toolbar */}
                 <div className="flex items-center gap-2 mb-2">
-                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
-                  <button className="btn px-3 py-1 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
-                  <button className="btn px-3 py-1 text-sm" onClick={openManual}>Manual Correction</button>
+                  <button className="btn px-2 py-0.5 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
+                  <button className="btn px-2 py-0.5 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
+                  <button className="btn px-2 py-0.5 text-sm" onClick={openManual}>Manual Correction</button>
                   <div className="ml-auto flex items-center gap-1 text-[11px]">
                     <span className="opacity-70">Cam size</span>
-                    <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>-</button>
-                    <span className="w-8 text-center">{Math.round(cameraScale*100)}%</span>
+                    <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
+                    <span className="btn px-2 py-0.5 min-w-[2.5rem] text-center">{Math.round(cameraScale*100)}%</span>
                     <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
                   </div>
                 </div>
@@ -1366,15 +1389,15 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 items-start">
                   <div className="order-1"><RenderMatchSummary /></div>
                   <div className="order-2">
-                    {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
+                    {cameraEnabled && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                       <div className="min-w-[260px] relative z-10 overflow-hidden" style={{ maxHeight: 'min(50vh, 400px)' }}><CameraTile label="Your Board" autoStart={true} /></div>
                     ) : (
-                      <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
+                      <div className="text-xs opacity-60">{cameraEnabled ? "Opponent's camera will appear here when supported" : "Camera disabled in settings"}</div>
                     )}
                   </div>
                 </div>
                 <div className="font-semibold">Current: {match.players[match.currentPlayerIdx]?.name || 'ÔÇö'}</div>
-                {currentGame === 'X01' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
+                {currentGame === 'X01' && cameraEnabled && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                   <>
                     {/* Camera autoscore module; only render for current thrower */}
                     <CameraView hideInlinePanels showToolbar={false} onVisitCommitted={(score, darts, finished) => {
@@ -1568,6 +1591,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:(ring as any); applyAmCricketAuto(value, r, info?.sector ?? null) }} />
                     </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
+                      <button className="btn" onClick={() => { applyAmCricketAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                    </div>
                   </div>
                 ) : (currentGame === 'Baseball' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
                   <div className="p-3 rounded-xl bg-black/20">
@@ -1576,6 +1603,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     ) })()}
                     <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:(ring as any); applyBaseballAuto(value, r as any, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
+                      <button className="btn" onClick={() => { applyBaseballAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                     </div>
                   </div>
                 ) : (currentGame === 'Golf' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
@@ -1586,6 +1617,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:(ring as any); applyGolfAuto(value, r as any, info?.sector ?? null) }} />
                     </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
+                      <button className="btn" onClick={() => { applyGolfAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                    </div>
                   </div>
                 ) : (currentGame === 'Tic Tac Toe' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
                   <div className="p-3 rounded-xl bg-black/20">
@@ -1594,20 +1629,62 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       {Array.from({length:9},(_,i)=>i as 0|1|2|3|4|5|6|7|8).map(cell => (
                         <button key={cell} className={`h-12 rounded-xl border ${ttt.board[cell]?'bg-emerald-500/20 border-emerald-400/30':'bg-slate-800/50 border-slate-700/50'}`} onClick={()=>{
                           if (ttt.finished || ttt.board[cell]) return
-                          // ask user for which dart value to use for this claim (simple manual prompt)
+                          // Use the manual input value instead of prompt
                           const tgt = TTT_TARGETS[cell]
-                          const manual = prompt(`Enter dart for cell ${cell} (target ${tgt.type==='BULL'?'Bull':tgt.num}) e.g. 20/40/60 or 25/50`)
-                          const v = Number(manual||0)
+                          const v = Number(tttManual||0)
                           const ring = (v%3===0)?'TRIPLE': (v%2===0?'DOUBLE':'SINGLE')
                           const sector = tgt.type==='BULL'?null:(tgt.num||null)
                           applyTttAuto(cell, v, ring as any, sector as any)
+                          setTttManual('') // Clear input after use
                         }}>{ttt.board[cell] || ''}</button>
                       ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input className="input w-40 text-sm" placeholder="Enter dart score (e.g. 20, 40, 60, 25, 50)" value={tttManual} onChange={e=>setTttManual(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') {
+                        // Apply to first available cell
+                        const availableCell = Array.from({length:9},(_,i)=>i as 0|1|2|3|4|5|6|7|8).find(cell => !ttt.board[cell] && !ttt.finished)
+                        if (availableCell !== undefined) {
+                          const tgt = TTT_TARGETS[availableCell]
+                          const v = Number(tttManual||0)
+                          const ring = (v%3===0)?'TRIPLE': (v%2===0?'DOUBLE':'SINGLE')
+                          const sector = tgt.type==='BULL'?null:(tgt.num||null)
+                          applyTttAuto(availableCell, v, ring as any, sector as any)
+                          setTttManual('')
+                        }
+                      }}} />
+                      <button className="btn" onClick={() => {
+                        // Apply to first available cell
+                        const availableCell = Array.from({length:9},(_,i)=>i as 0|1|2|3|4|5|6|7|8).find(cell => !ttt.board[cell] && !ttt.finished)
+                        if (availableCell !== undefined) {
+                          const tgt = TTT_TARGETS[availableCell]
+                          const v = Number(tttManual||0)
+                          const ring = (v%3===0)?'TRIPLE': (v%2===0?'DOUBLE':'SINGLE')
+                          const sector = tgt.type==='BULL'?null:(tgt.num||null)
+                          applyTttAuto(availableCell, v, ring as any, sector as any)
+                          setTttManual('')
+                        }
+                      }}>Claim Cell</button>
                     </div>
                     <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => {
                         // passive; primary interaction via tapping a cell above
                       }} />
+                    </div>
+                  </div>
+                ) : (currentGame === 'Killer' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
+                  <div className="p-3 rounded-xl bg-black/20">
+                    <div className="text-xs mb-1.5">Killer ÔÇö Hit your own double to become Killer; then remove othersÔÇÖ lives by hitting their doubles/triples.</div>
+                    <div className="mb-1 text-sm flex items-center justify-between">
+                      <span>Your number</span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{(() => { const pid = currentPlayerId(); match.players.forEach(p=>ensureKiller(p.id)); return killerById[pid]?.number || 'ÔÇö' })()}</span>
+                    </div>
+                    <div className="text-sm">Lives: <span className="font-semibold">{(() => { const pid = currentPlayerId(); return killerById[pid]?.lives ?? 'ÔÇö' })()}</span> {(() => { const pid = currentPlayerId(); return killerById[pid]?.isKiller ? <span className="ml-2 text-emerald-300">KILLER</span> : null })()}</div>
+                    <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyKillerAuto(r, info?.sector ?? null) }} />
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} onKeyDown={e=>{ if(e.key==='Enter'){ applyKillerAuto(Math.max(0, visitScore|0)); setVisitScore(0) } }} />
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ applyKillerAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                     </div>
                   </div>
                 ) : (user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
@@ -1646,13 +1723,13 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
                     <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
                     <button className="btn px-2 py-0.5 text-xs" onClick={openManual}>Manual Correction</button>
-                    <div className="ml-auto flex items-center gap-1 text-[10px]">
-                      <span className="opacity-70">Cam</span>
-                      <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>ÔêÆ</button>
-                      <span className="w-7 text-center">{Math.round(cameraScale*100)}%</span>
-                      <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                    <div className="ml-auto flex items-center gap-1">
+                      <span className="text-xs opacity-70">Cam</span>
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
+                      <span className="btn px-2 py-0.5 text-xs bg-transparent border-slate-600 text-center min-w-[3rem]">{Math.round(cameraScale*100)}%</span>
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
                       <button 
-                        className="btn px-1 py-0.5 ml-1" 
+                        className="btn px-2 py-0.5 text-xs" 
                         onClick={() => setCameraColSpan(cameraColSpan === 2 ? 3 : 2)}
                         title={cameraColSpan === 2 ? "Expand camera" : "Shrink camera"}
                       >
@@ -1859,6 +1936,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       ) })()}
                       <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 my-2">
                         <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyKillerAuto(r, info?.sector ?? null) }} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
+                        <button className="btn" onClick={() => { applyKillerAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                       </div>
                       <div className="text-xs opacity-70">Tip: Only doubles/triples on the opponentsÔÇÖ numbers remove lives. To become Killer, hit your own double.</div>
                     </div>

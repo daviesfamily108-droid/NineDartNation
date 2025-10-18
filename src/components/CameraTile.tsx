@@ -107,17 +107,7 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
         await videoRef.current.play()
         setStreaming(true)
       }
-      // Update selected label after start ONLY if no preferred camera was set
-      try {
-        const list = await navigator.mediaDevices.enumerateDevices()
-        const vidTrack = (stream.getVideoTracks?.()||[])[0]
-        const settings = vidTrack?.getSettings?.()
-        const id = settings?.deviceId as string | undefined
-        if (id && !preferredCameraId) {
-          const label = list.find(d=>d.deviceId===id)?.label
-          setPreferredCamera(id, label||'')
-        }
-      } catch {}
+      // Camera started successfully - no automatic preference updates
     } catch {}
   }
   function stop() {

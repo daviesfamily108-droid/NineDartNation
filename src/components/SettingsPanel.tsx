@@ -7,11 +7,11 @@ export default function SettingsPanel({ user }: { user?: any }) {
     favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, avgMode,
     autoStartOffline, rememberLastOffline, reducedMotion, compactHeader, allowSpectate,
     cameraScale, cameraAspect, autoscoreProvider, autoscoreWsUrl, calibrationGuide,
-    preferredCameraId, preferredCameraLabel, offlineLayout,
+    preferredCameraId, preferredCameraLabel, cameraEnabled, offlineLayout, textSize, boxSize,
     setFavoriteDouble, setCallerEnabled, setCallerVoice, setCallerVolume, setSpeakCheckoutOnly,
     setAvgMode, setAutoStartOffline, setRememberLastOffline, setReducedMotion, setCompactHeader,
     setAllowSpectate, setCameraScale, setCameraAspect, setAutoscoreProvider, setAutoscoreWsUrl,
-    setCalibrationGuide, setPreferredCamera, setOfflineLayout
+    setCalibrationGuide, setPreferredCamera, setCameraEnabled, setOfflineLayout, setTextSize, setBoxSize
   } = useUserSettings();
 
   // Achievements state
@@ -278,7 +278,14 @@ export default function SettingsPanel({ user }: { user?: any }) {
                 if (file) {
                   const reader = new FileReader();
                   reader.onload = (event) => {
-                    setProfilePhoto(event.target?.result as string);
+                    const photoData = event.target?.result as string;
+                    setProfilePhoto(photoData);
+                    // Immediately save to localStorage and update avatar in header
+                    const uname = user?.username || '';
+                    if (uname) {
+                      localStorage.setItem(`ndn:bio:profilePhoto:${uname}`, photoData);
+                    }
+                    try { window.dispatchEvent(new CustomEvent('ndn:avatar-updated', { detail: { username: uname, avatar: photoData } })) } catch {}
                   };
                   reader.readAsDataURL(file);
                 }
@@ -320,6 +327,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                 <option value="D4">Double 4</option>
                 <option value="D2">Double 2</option>
                 <option value="D1">Double 1</option>
+                <option value="DB">Bullseye</option>
               </select>
             </div>
 
@@ -456,6 +464,17 @@ export default function SettingsPanel({ user }: { user?: any }) {
           </div>
 
           <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="cameraEnabled"
+                checked={cameraEnabled}
+                onChange={e => setCameraEnabled(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="cameraEnabled" className="text-sm">Enable camera for scoring</label>
+            </div>
+
             <div>
               <label className="block mb-2 text-sm font-medium">Camera Scale: {cameraScale.toFixed(2)}x</label>
               <input
@@ -478,6 +497,32 @@ export default function SettingsPanel({ user }: { user?: any }) {
               >
                 <option value="wide">Wide (16:9)</option>
                 <option value="square">Square (1:1)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm font-medium">Text Size:</label>
+              <select
+                className="input w-full"
+                value={textSize}
+                onChange={e => setTextSize(e.target.value as 'small' | 'medium' | 'large')}
+              >
+                <option value="small">Small</option>
+                <option value="medium">Medium</option>
+                <option value="large">Large</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm font-medium">Box Size:</label>
+              <select
+                className="input w-full"
+                value={boxSize}
+                onChange={e => setBoxSize(e.target.value as 'small' | 'medium' | 'large')}
+              >
+                <option value="small">Small</option>
+                <option value="medium">Medium</option>
+                <option value="large">Large</option>
               </select>
             </div>
 
@@ -642,7 +687,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       callerEnabled,
                       callerVoice,
                       callerVolume,
-                      speakCheckoutOnly
+                      speakCheckoutOnly,
+                      textSize
                     }
                   };
                   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

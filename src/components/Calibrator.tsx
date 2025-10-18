@@ -421,8 +421,11 @@ export default function Calibrator() {
 		if (Huse) {
 			const rings = [BoardRadii.bullInner, BoardRadii.bullOuter, BoardRadii.trebleInner, BoardRadii.trebleOuter, BoardRadii.doubleInner, BoardRadii.doubleOuter]
 			for (const r of rings) {
+				// Use green for all rings when calibration is locked/perfect
+				const ringColor = locked ? '#10b981' : (r === BoardRadii.doubleOuter ? '#22d3ee' : '#a78bfa')
+				const ringWidth = locked ? 3 : (r === BoardRadii.doubleOuter ? 3 : 2)
 				const poly = sampleRing(Huse, r, 360)
-				drawPolyline(ctx, poly, r === BoardRadii.doubleOuter ? '#22d3ee' : '#a78bfa', r === BoardRadii.doubleOuter ? 3 : 2)
+				drawPolyline(ctx, poly, ringColor, ringWidth)
 			}
 		}
 		// Otherwise, if we have detected circles, draw them as previews (circles in image space)
@@ -607,7 +610,7 @@ export default function Calibrator() {
 			doubleInner: BoardRadii.doubleInner / BoardRadii.doubleOuter,
 			doubleOuter: 1,
 		} as const
-		function refineAround(expectedR: number, pctWindow = 0.10) {
+		function refineAround(expectedR: number, pctWindow = 0.08) { // Reduced window for more precision
 			const lo = Math.max(1, Math.floor(expectedR * (1 - pctWindow)))
 			const hi = Math.max(lo+1, Math.floor(expectedR * (1 + pctWindow)))
 			let bestR = lo, bestS = -1
@@ -641,7 +644,16 @@ export default function Calibrator() {
 			const score = totalEdge(best.r) + totalEdge(tOuter) + totalEdge(tInner) + totalEdge(dInner) + totalEdge(bOuter) + totalEdge(bInner)
 			const norm = score / (maxMag * 6)
 			const conf = Math.max(0, Math.min(1, norm))
-			setConfidence(Math.round(conf * 100))
+			// Apply stricter confidence calculation for perfect calibration
+			const adjustedConf = Math.min(conf, Math.min(
+				totalEdge(best.r) / maxMag,    // Double outer
+				totalEdge(tOuter) / maxMag,    // Treble outer  
+				totalEdge(tInner) / maxMag,    // Treble inner
+				totalEdge(dInner) / maxMag,    // Double inner
+				totalEdge(bOuter) / maxMag,    // Bull outer
+				totalEdge(bInner) / maxMag     // Bull inner
+			))
+			setConfidence(Math.round(adjustedConf * 100))
 		// Seed the four calibration points and compute
 		const pts: Point[] = [
 			{ x: OCX,       y: OCY - dOuter },
@@ -653,7 +665,7 @@ export default function Calibrator() {
 		drawOverlay(pts)
 			try { compute() } catch {}
 			// Auto-lock if confidence high and error small
-			const autoLock = conf >= 0.85
+			const autoLock = adjustedConf >= 0.95 // Use adjusted confidence for near-perfect calibration
 			setCalibration({ locked: autoLock })
 	}
 
@@ -710,7 +722,7 @@ export default function Calibrator() {
 
 			const selectedDevice = devices.find(d => d.deviceId === preferredCameraId)
 			const selectedLabel = selectedDevice ? 
-				`${selectedDevice.label || 'Camera'} ${selectedDevice.label?.toLowerCase().includes('omni') ? '(OMNI)' : ''} ${selectedDevice.label?.toLowerCase().includes('vert') ? '(VERT)' : ''}` : 
+				`${selectedDevice.label || 'Camera'}` : 
 				'Auto (browser default)'
 
 			return (
@@ -740,7 +752,7 @@ export default function Calibrator() {
 										Auto (browser default)
 									</div>
 									{devices.map(d => {
-										const label = `${d.label || 'Camera'} ${d.label?.toLowerCase().includes('omni') ? '(OMNI)' : ''} ${d.label?.toLowerCase().includes('vert') ? '(VERT)' : ''}`
+										const label = `${d.label || 'Camera'}`
 										return (
 											<div 
 												key={d.deviceId} 
@@ -764,7 +776,7 @@ export default function Calibrator() {
 					{preferredCameraLabel && (
 						<div className="text-xs opacity-70 mt-1">Selected: {preferredCameraLabel}</div>
 					)}
-					<div className="text-xs opacity-70 mt-1">Tip: OMNI and VERT cameras are supported—select them here and then open Calibrator to align.</div>
+					<div className="text-xs opacity-70 mt-1">Tip: All camera technology is supported for autoscoring needs—select your camera here and then open Calibrator to align.</div>
 				</div>
 			)
 		}
@@ -941,7 +953,7 @@ export default function Calibrator() {
 						) : (
 							<div className="text-center">
 								<div className="mb-2">No wifi scoring devices found.</div>
-								<div className="mb-2 opacity-70">Make sure your OMNI, VERT, or other wifi cameras are powered on and connected to the same network.</div>
+								<div className="mb-2 opacity-70">Make sure your wifi cameras are powered on and connected to the same network.</div>
 								<button className="btn px-2 py-1 text-xs" onClick={startWifiConnection}>Scan Again</button>
 							</div>
 						)}
