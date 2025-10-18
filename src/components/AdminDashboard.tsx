@@ -120,6 +120,45 @@ export default function AdminDashboard({ user }: { user: any }) {
 		} finally { setLoading(false) }
 	}
 
+	async function searchUsers() {
+		if (!userSearch.trim()) return
+		try {
+			const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(userSearch)}&requesterEmail=${encodeURIComponent(user?.email || '')}`)
+			if (res.ok) {
+				const data = await res.json()
+				setUserResults(Array.isArray(data.users) ? data.users : [])
+			}
+		} catch (error) {
+			console.error('Search failed:', error)
+		}
+	}
+
+	async function banUser(email: string) {
+		try {
+			await fetch('/api/admin/users/ban', { 
+				method: 'POST', 
+				headers: { 'Content-Type': 'application/json' }, 
+				body: JSON.stringify({ email, requesterEmail: user?.email }) 
+			})
+			await searchUsers() // Refresh results
+		} catch (error) {
+			console.error('Ban failed:', error)
+		}
+	}
+
+	async function unbanUser(email: string) {
+		try {
+			await fetch('/api/admin/users/unban', { 
+				method: 'POST', 
+				headers: { 'Content-Type': 'application/json' }, 
+				body: JSON.stringify({ email, requesterEmail: user?.email }) 
+			})
+			await searchUsers() // Refresh results
+		} catch (error) {
+			console.error('Unban failed:', error)
+		}
+	}
+
 	async function flipPremium(next: boolean) {
 		setLoading(true)
 		try {

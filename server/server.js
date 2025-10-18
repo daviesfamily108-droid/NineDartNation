@@ -9,7 +9,7 @@ const os = require('os');
 const https = require('https');
 const path = require('path');
 const Filter = require('bad-words');
-const EmailTemplates = require('./server/emails/templates.js');
+const EmailTemplates = require('./emails/templates.js');
 const nodemailer = require('nodemailer');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -27,6 +27,17 @@ let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
 const app = express();
 
+// Global error handlers
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  // process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // process.exit(1);
+});
+
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -36,39 +47,39 @@ if (!supabase) {
   console.warn('[DB] Supabase not configured - using in-memory storage only');
 }
 // Observability: metrics registry
-const register = new client.Registry()
-client.collectDefaultMetrics({ register })
-const httpRequestsTotal = new client.Counter({ name: 'http_requests_total', help: 'Total HTTP requests', labelNames: ['method','route','status'] })
-const wsConnections = new client.Gauge({ name: 'ws_connections', help: 'Current WebSocket connections' })
-const wsRooms = new client.Gauge({ name: 'ws_rooms', help: 'Current active rooms' })
-const chatMessagesTotal = new client.Counter({ name: 'chat_messages_total', help: 'Total WS chat messages relayed' })
-const errorsTotal = new client.Counter({ name: 'server_errors_total', help: 'Total server errors', labelNames: ['scope'] })
-const celebrations180Total = new client.Counter({ name: 'celebrations_180_total', help: 'Total 180 celebrations broadcast' })
-register.registerMetric(httpRequestsTotal)
-register.registerMetric(wsConnections)
-register.registerMetric(wsRooms)
-register.registerMetric(chatMessagesTotal)
-register.registerMetric(errorsTotal)
-register.registerMetric(celebrations180Total)
+// const register = new client.Registry()
+// client.collectDefaultMetrics({ register })
+// const httpRequestsTotal = new client.Counter({ name: 'http_requests_total', help: 'Total HTTP requests', labelNames: ['method','route','status'] })
+// const wsConnections = new client.Gauge({ name: 'ws_connections', help: 'Current WebSocket connections' })
+// const wsRooms = new client.Gauge({ name: 'ws_rooms', help: 'Current active rooms' })
+// const chatMessagesTotal = new client.Counter({ name: 'chat_messages_total', help: 'Total WS chat messages relayed' })
+// const errorsTotal = new client.Counter({ name: 'server_errors_total', help: 'Total server errors', labelNames: ['scope'] })
+// const celebrations180Total = new client.Counter({ name: 'celebrations_180_total', help: 'Total 180 celebrations broadcast' })
+// register.registerMetric(httpRequestsTotal)
+// register.registerMetric(wsConnections)
+// register.registerMetric(wsRooms)
+// register.registerMetric(chatMessagesTotal)
+// register.registerMetric(errorsTotal)
+// register.registerMetric(celebrations180Total)
 
 // Security & performance
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
-app.use(cors())
+// app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
+// app.use(cors())
 app.use(compression())
-const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
-app.use(limiter)
+// const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
+// app.use(limiter)
 // Logging
-const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
-app.use(pinoHttp({ logger, genReqId: (req) => req.headers['x-request-id'] || nanoid(12) }))
+// const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
+// app.use(pinoHttp({ logger, genReqId: (req) => req.headers['x-request-id'] || nanoid(12) }))
 // HTTP metrics middleware (after logging so route is known)
-app.use((req, res, next) => {
-  const start = Date.now()
-  res.on('finish', () => {
-    const route = (req.route && req.route.path) || req.path || 'unknown'
-    try { httpRequestsTotal.inc({ method: req.method, route, status: String(res.statusCode) }) } catch {}
-  })
-  next()
-})
+// app.use((req, res, next) => {
+//   const start = Date.now()
+//   res.on('finish', () => {
+//     const route = (req.route && req.route.path) || req.path || 'unknown'
+//     try { httpRequestsTotal.inc({ method: req.method, route, status: String(res.statusCode) }) } catch {}
+//   })
+//   next()
+// })
 // Guard JSON body size to avoid excessive memory
 app.use(express.json({ limit: '100kb' }));
 // Serve static assets (mobile camera page)
@@ -430,38 +441,20 @@ app.post('/api/stripe/create-session', async (req, res) => {
 
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
-    if (!stripe || !process.env.STRIPE_PRICE_ID_SUBSCRIPTION) {
-      console.warn('[Stripe] create-checkout-session called but Stripe is not configured')
-      // In development, return a working test checkout URL
-      if (process.env.NODE_ENV !== 'production' || !process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'YOUR_STRIPE_SECRET_KEY_HERE') {
-        console.log('[Stripe] Development mode - returning test checkout URL')
-        return res.json({
-          ok: true,
-          url: 'https://buy.stripe.com/test_00g7vQ8Qw2gQ0wA5kk',
-          development: true
-        })
-      }
+    // Use payment link instead of API to avoid exposing keys
+    const premiumPaymentLink = process.env.STRIPE_PREMIUM_PAYMENT_LINK || 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE';
+    
+    if (premiumPaymentLink === 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE') {
       return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
     }
-    const { email, successUrl, cancelUrl } = req.body || {}
+    
+    const { email } = req.body || {}
     if (!email || !email.includes('@')) {
       return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
     }
-    // Derive sensible defaults for success/cancel
-    const host = req.headers['x-forwarded-host'] || req.headers.host
-    const proto = (req.headers['x-forwarded-proto'] || 'https')
-    const base = `https://${host}`
-    const sUrl = (typeof successUrl === 'string' && successUrl.startsWith('http')) ? successUrl : `${base}/?subscription=success`
-    const cUrl = (typeof cancelUrl === 'string' && cancelUrl.startsWith('http')) ? cancelUrl : `${base}/?subscription=cancel`
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [{ price: process.env.STRIPE_PRICE_ID_SUBSCRIPTION, quantity: 1 }],
-      customer_email: email,
-      metadata: { purpose: 'subscription', email: email },
-      success_url: sUrl,
-      cancel_url: cUrl,
-    })
-    return res.json({ ok: true, url: session.url })
+    
+    // Return the payment link directly
+    return res.json({ ok: true, url: premiumPaymentLink })
   } catch (e) {
     console.error('[Stripe] create-checkout-session failed:', e?.message || e)
     return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
@@ -594,8 +587,10 @@ app.post('/api/admin/matches/delete', (req, res) => {
   if (!matchId || !matches.has(matchId)) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
   matches.delete(matchId)
   // Broadcast updated lobby
-  for (const client of wss.clients) {
-    if (client.readyState === 1) client.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
+  if (wss) {
+    for (const client of wss.clients) {
+      if (client.readyState === 1) client.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
+    }
   }
   res.json({ ok: true })
 })
@@ -774,9 +769,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
 });
 // Constrain ws payload size for safety
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
-console.log(`[WS] WebSocket attached to same server at path /ws`);
-wsConnections.set(0)
+const wss = null; // new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
+console.log(`[WS] WebSocket disabled for debugging`);
+// wsConnections.set(0)
 
 // Optional HTTPS server for iOS camera (requires certs)
 let httpsServer = null
@@ -850,39 +845,39 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
   }
 }
 // Load users from Supabase on startup
-(async () => {
-  if (supabase) {
-    try {
-      console.log('[DB] Loading users from Supabase...');
-      const { data, error } = await supabase
-        .from('users')
-        .select('*');
+// (async () => {
+//   if (supabase) {
+//     try {
+//       console.log('[DB] Loading users from Supabase...');
+//       const { data, error } = await supabase
+//         .from('users')
+//         .select('*');
 
-      if (error) {
-        console.error('[DB] Failed to load users from Supabase:', error);
-      } else if (data) {
-        let loadedCount = 0;
-        for (const user of data) {
-          users.set(user.email, {
-            email: user.email,
-            username: user.username,
-            password: user.password,
-            admin: user.admin || false,
-            subscription: user.subscription || { fullAccess: false }
-          });
-          loadedCount++;
-        }
-        console.log(`[DB] Successfully loaded ${loadedCount} users from Supabase`);
-      } else {
-        console.log('[DB] No users found in Supabase');
-      }
-    } catch (err) {
-      console.error('[DB] Error loading users from Supabase:', err);
-    }
-  } else {
-    console.warn('[DB] Supabase not configured - using in-memory storage only');
-  }
-})();
+//       if (error) {
+//         console.error('[DB] Failed to load users from Supabase:', error);
+//       } else if (data) {
+//         let loadedCount = 0;
+//         for (const user of data) {
+//           users.set(user.email, {
+//             email: user.email,
+//             username: user.username,
+//             password: user.password,
+//             admin: user.admin || false,
+//             subscription: user.subscription || { fullAccess: false }
+//           });
+//           loadedCount++;
+//         }
+//         console.log(`[DB] Successfully loaded ${loadedCount} users from Supabase`);
+//       } else {
+//         console.log('[DB] No users found in Supabase');
+//       }
+//     } catch (err) {
+//       console.error('[DB] Error loading users from Supabase:', err);
+//     }
+//   } else {
+//     console.warn('[DB] Supabase not configured - using in-memory storage only');
+//   }
+// })();
 // Initialize demo admin user
 if (!users.has('daviesfamily108@gmail.com')) {
   users.set('daviesfamily108@gmail.com', {
@@ -947,6 +942,7 @@ function loadFriendships() {
 loadFriendships()
 
 function broadcastAll(data) {
+  if (!wss) return
   const payload = (typeof data === 'string') ? data : JSON.stringify(data)
   for (const client of wss.clients) {
     if (client.readyState === 1) client.send(payload)
@@ -999,28 +995,29 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
   }
 }
 
-wss.on('connection', (ws, req) => {
-  try { console.log(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
-  ws._id = nanoid(8);
-  clients.set(ws._id, ws)
-  wsConnections.inc()
-  // Heartbeat
-  ws.isAlive = true
-  ws.on('pong', () => { ws.isAlive = true })
-  // Log low-level socket errors
-  ws.on('error', (err) => {
-    try { console.warn(`[WS] error id=${ws._id} message=${err?.message||err}`) } catch {}
-  })
-  // Token-bucket rate limit: 10 msg/sec, burst 20
-  ws._bucket = { tokens: 20, last: Date.now(), rate: 10, capacity: 20 }
-  function allowMessage() {
-    const now = Date.now()
-    const delta = (now - ws._bucket.last) / 1000
-    ws._bucket.last = now
-    ws._bucket.tokens = Math.min(ws._bucket.capacity, ws._bucket.tokens + delta * ws._bucket.rate)
-    if (ws._bucket.tokens >= 1) { ws._bucket.tokens -= 1; return true }
-    return false
-  }
+if (wss) {
+  wss.on('connection', (ws, req) => {
+    try { console.log(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
+    ws._id = nanoid(8);
+    clients.set(ws._id, ws)
+    wsConnections.inc()
+    // Heartbeat
+    ws.isAlive = true
+    ws.on('pong', () => { ws.isAlive = true })
+    // Log low-level socket errors
+    ws.on('error', (err) => {
+      try { console.warn(`[WS] error id=${ws._id} message=${err?.message||err}`) } catch {}
+    })
+    // Token-bucket rate limit: 10 msg/sec, burst 20
+    ws._bucket = { tokens: 20, last: Date.now(), rate: 10, capacity: 20 }
+    function allowMessage() {
+      const now = Date.now()
+      const delta = (now - ws._bucket.last) / 1000
+      ws._bucket.last = now
+      ws._bucket.tokens = Math.min(ws._bucket.capacity, ws._bucket.tokens + delta * ws._bucket.rate)
+      if (ws._bucket.tokens >= 1) { ws._bucket.tokens -= 1; return true }
+      return false
+    }
   // Push last announcement on connect
   if (lastAnnouncement) {
     try { ws.send(JSON.stringify({ type: 'announcement', message: lastAnnouncement.message })) } catch {}
@@ -1402,6 +1399,7 @@ wss.on('connection', (ws, req) => {
     }
   });
 });
+}
 
 // Friends HTTP API (demo)
 app.get('/api/friends/list', (req, res) => {
@@ -1417,13 +1415,15 @@ app.get('/api/friends/list', (req, res) => {
 // Heartbeat sweep to terminate dead sockets
 const HEARTBEAT_INTERVAL = 30000
 const hbTimer = setInterval(() => {
-  for (const ws of wss.clients) {
-    if (!ws.isAlive) {
-      try { ws.terminate() } catch {}
-      continue
+  if (wss) {
+    for (const ws of wss.clients) {
+      if (!ws.isAlive) {
+        try { ws.terminate() } catch {}
+        continue
+      }
+      ws.isAlive = false
+      try { ws.ping() } catch {}
     }
-    ws.isAlive = false
-    try { ws.ping() } catch {}
   }
   // Clean up expired camera sessions
   const now = Date.now()
@@ -1435,7 +1435,7 @@ const hbTimer = setInterval(() => {
 function shutdown() {
   console.log('\n[Shutdown] closing servers...')
   try { clearInterval(hbTimer) } catch {}
-  try { wss.close() } catch {}
+  if (wss) try { wss.close() } catch {}
   try { server.close(() => process.exit(0)) } catch { process.exit(0) }
 }
 process.on('SIGINT', shutdown)

@@ -26,16 +26,16 @@ export const useCalibration = create<CalibrationState>()(persist((set, get) => (
   name: 'ndn-calibration-v1',
   storage: createJSONStorage(() => localStorage),
   // If we ever had alternate keys (legacy), gently import once after hydration
-  onRehydrateStorage: () => (state) => {
+  onRehydrateStorage: () => (state, error) => {
     // No-op on error; best-effort fallback
+    if (error) return
     try {
-      const cur = get()
-      if (!cur.H) {
+      if (state && !state.H) {
         const legacy = localStorage.getItem('ndn:calibration:v1')
         if (legacy) {
           const j = JSON.parse(legacy)
           if (j && (j.H || j.imageSize)) {
-            set({
+            state.setCalibration({
               H: j.H ?? null,
               createdAt: j.createdAt ?? null,
               errorPx: j.errorPx ?? null,

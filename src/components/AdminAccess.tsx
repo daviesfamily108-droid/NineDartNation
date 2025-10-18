@@ -102,13 +102,10 @@ export default function AdminAccess({ user }: { user?: any }) {
               const data = await res.json();
               if (data.ok && data.url) {
                 window.open(data.url, '_blank');
-                if (data.development) {
-                  toast("Opened Stripe test checkout (development mode)", { type: 'info', timeout: 3000 });
-                }
               } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
-                toast("Premium purchases are not available in this development environment. Please visit the production site to upgrade.", { type: 'error', timeout: 4000 });
+                toast("Premium purchases are not available. Payment link not configured.", { type: 'error', timeout: 4000 });
               } else {
-                toast("Failed to create checkout session. Please try again.", { type: 'error', timeout: 4000 });
+                toast("Failed to get payment link. Please try again.", { type: 'error', timeout: 4000 });
               }
             } catch (err) {
               toast("Error creating checkout. Please try again.", { type: 'error', timeout: 4000 });

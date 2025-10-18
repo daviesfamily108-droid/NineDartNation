@@ -106,7 +106,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
             </div>
             {/* Username Change */}
             <div className="border-t border-red-500/20 pt-3">
-              <div className="font-medium mb-2 text-black">Change Username (One-time, Free)</div>
+              <div className="font-medium mb-2 text-black">Change Username (One-time, $2)</div>
               <div className="text-sm text-black mb-2">Username becomes permanent after change.</div>
               {user?.usernameChanged ? (
                 <div className="text-green-400 text-sm">Username already changed. This option is no longer available.</div>
@@ -132,31 +132,15 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         setUsernameError('Username must be 3-20 characters')
                         return
                       }
-                      setChangingUsername(true)
-                      try {
-                        const res = await fetch('/api/change-username', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ email: user?.email, newUsername: newUsername.trim() })
-                        })
-                        const data = await res.json()
-                        if (data.ok) {
-                          setUsernameError('')
-                          alert('Username changed successfully!')
-                          // Optionally reload or update user
-                          window.location.reload()
-                        } else {
-                          setUsernameError(data.error || 'Failed to change username')
-                        }
-                      } catch (e) {
-                        setUsernameError('Network error')
-                      }
-                      setChangingUsername(false)
+                      // Store the new username for after payment
+                      localStorage.setItem('pendingUsernameChange', newUsername.trim())
+                      // Redirect to Stripe payment link
+                      window.location.href = 'https://buy.stripe.com/eVq4gB3XqeNS0iw6vAfnO02'
                     }}
                     disabled={changingUsername || !newUsername.trim()}
                     className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
                   >
-                    {changingUsername ? 'Changing...' : 'Change Username (Free)'}
+                    {changingUsername ? 'Processing...' : 'Change Username ($2)'}
                   </button>
                 </>
               )}

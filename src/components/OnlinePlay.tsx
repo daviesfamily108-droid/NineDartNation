@@ -53,6 +53,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const match = useMatch()
   const msgs = useMessages()
   const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale } = useUserSettings()
+  // Camera resize state
+  const [cameraColSpan, setCameraColSpan] = useState(2)
   // Turn-by-turn modal
   const [showMatchModal, setShowMatchModal] = useState(false)
   const [participants, setParticipants] = useState<string[]>([])
@@ -1638,7 +1640,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <RenderMatchSummary />
                 </div>
                 {/* Main area: toolbar + camera + controls */}
-                <div className="md:col-span-2 space-y-1.5">
+                <div className={`md:col-span-${cameraColSpan} space-y-1.5 relative`}>
                   {/* Toolbar row (separate) */}
                   <div className="flex items-center gap-1.5 mt-2">
                     <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
@@ -1649,14 +1651,50 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>ÔêÆ</button>
                       <span className="w-7 text-center">{Math.round(cameraScale*100)}%</span>
                       <button className="btn px-1 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                      <button 
+                        className="btn px-1 py-0.5 ml-1" 
+                        onClick={() => setCameraColSpan(cameraColSpan === 2 ? 3 : 2)}
+                        title={cameraColSpan === 2 ? "Expand camera" : "Shrink camera"}
+                      >
+                        {cameraColSpan === 2 ? '↔' : '↙'}
+                      </button>
                     </div>
                   </div>
                   {/* Camera row (under toolbar, left side) */}
-                  <div className="mt-2">
+                  <div className="mt-2 relative">
                     {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                       <div className="w-full max-w-full"><CameraTile label="Your Board" autoStart={false} /></div>
                     ) : (
                       <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
+                    )}
+                    {/* Resize handle */}
+                    {cameraColSpan < 3 && (
+                      <div 
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize bg-slate-600/20 hover:bg-slate-600/40 transition-colors flex items-center justify-center group"
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          const startX = e.clientX
+                          const startSpan = cameraColSpan
+                          
+                          const handleMouseMove = (moveEvent: MouseEvent) => {
+                            const deltaX = moveEvent.clientX - startX
+                            // If dragged more than 50px to the right, expand to 3 columns
+                            if (deltaX > 50 && startSpan === 2) {
+                              setCameraColSpan(3)
+                            }
+                          }
+                          
+                          const handleMouseUp = () => {
+                            document.removeEventListener('mousemove', handleMouseMove)
+                            document.removeEventListener('mouseup', handleMouseUp)
+                          }
+                          
+                          document.addEventListener('mousemove', handleMouseMove)
+                          document.addEventListener('mouseup', handleMouseUp)
+                        }}
+                      >
+                        <div className="w-0.5 h-8 bg-slate-400 group-hover:bg-slate-300 transition-colors"></div>
+                      </div>
                     )}
                   </div>
                   <div className="font-semibold text-sm md:text-base">Current: {match.players[match.currentPlayerIdx]?.name || 'ÔÇö'}</div>

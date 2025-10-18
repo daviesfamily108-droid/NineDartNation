@@ -5,9 +5,10 @@ import QRCode from 'qrcode'
 import { useCalibration } from '../store/calibration'
 import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, type Homography, type Point } from '../utils/vision'
 import { useUserSettings } from '../store/userSettings'
+import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice } from '../utils/networkDevices'
 
 type Phase = 'idle' | 'camera' | 'capture' | 'select' | 'computed'
-type CamMode = 'local' | 'phone'
+type CamMode = 'local' | 'phone' | 'wifi'
 
 export default function Calibrator() {
 	const videoRef = useRef<HTMLVideoElement>(null)
@@ -47,6 +48,8 @@ export default function Calibrator() {
 	const [lanHost, setLanHost] = useState<string | null>(null)
 	const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null)
 	const [showTips, setShowTips] = useState<boolean>(true)
+	const [wifiDevices, setWifiDevices] = useState<NetworkDevice[]>([])
+	const [discoveringWifi, setDiscoveringWifi] = useState<boolean>(false)
 	useEffect(() => {
 		const h = window.location.hostname
 		if (h === 'localhost' || h === '127.0.0.1') {
@@ -61,10 +64,12 @@ export default function Calibrator() {
 		}).catch(()=>{})
 	}, [])
 
-	// Auto-start pairing when user switches to Phone mode
+	// Auto-start pairing when user switches to Phone mode, or wifi discovery for wifi mode
 	useEffect(() => {
 		if (mode === 'phone' && !paired && !streaming) {
 			startPhonePairing()
+		} else if (mode === 'wifi' && !streaming) {
+			startWifiConnection()
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [mode])
@@ -241,8 +246,53 @@ export default function Calibrator() {
 		}
 	}
 
+	async function startWifiConnection() {
+		setDiscoveringWifi(true)
+		try {
+			const devices = await discoverNetworkDevices()
+			setWifiDevices(devices)
+			if (devices.length === 0) {
+				alert('No wifi scoring devices found on your network. Make sure devices are powered on and connected to the same network.')
+			}
+		} catch (error) {
+			console.error('Wifi device discovery failed:', error)
+			alert('Failed to discover wifi devices. Please check your network connection.')
+		} finally {
+			setDiscoveringWifi(false)
+		}
+		setPhase('camera')
+	}
+
+	async function connectToWifiDevice(device: NetworkDevice) {
+		try {
+			setWifiDevices(devices => devices.map(d => 
+				d.id === device.id ? { ...d, status: 'connecting' as const } : d
+			))
+
+			const stream = await connectToNetworkDevice(device)
+			if (stream && videoRef.current) {
+				videoRef.current.srcObject = stream
+				await videoRef.current.play()
+				setStreaming(true)
+				setPhase('capture')
+				setWifiDevices(devices => devices.map(d => 
+					d.id === device.id ? { ...d, status: 'online' as const } : d
+				))
+			} else {
+				throw new Error('Failed to get video stream')
+			}
+		} catch (error) {
+			console.error('Failed to connect to wifi device:', error)
+			alert(`Failed to connect to ${device.name}. Please check the device and try again.`)
+			setWifiDevices(devices => devices.map(d => 
+				d.id === device.id ? { ...d, status: 'offline' as const } : d
+			))
+		}
+	}
+
 	async function startCamera() {
 		if (mode === 'phone') return startPhonePairing()
+		if (mode === 'wifi') return startWifiConnection()
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
 			if (videoRef.current) {
@@ -609,6 +659,9 @@ export default function Calibrator() {
 			const { preferredCameraId, preferredCameraLabel, setPreferredCamera } = useUserSettings()
 			const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
 			const [err, setErr] = useState('')
+			const [dropdownOpen, setDropdownOpen] = useState(false)
+			const dropdownRef = useRef<HTMLDivElement>(null)
+
 			async function enumerate() {
 				setErr('')
 				try {
@@ -621,26 +674,68 @@ export default function Calibrator() {
 					setErr('Unable to list cameras. Grant camera permission in your browser.')
 				}
 			}
+
 			useEffect(() => { enumerate() }, [])
-			const sel = preferredCameraId || ''
+
+			// Close dropdown when clicking outside
+			useEffect(() => {
+				function handleClickOutside(event: MouseEvent) {
+					if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+						setDropdownOpen(false)
+					}
+				}
+				document.addEventListener('mousedown', handleClickOutside)
+				return () => document.removeEventListener('mousedown', handleClickOutside)
+			}, [])
+
+			const selectedDevice = devices.find(d => d.deviceId === preferredCameraId)
+			const selectedLabel = selectedDevice ? 
+				`${selectedDevice.label || 'Camera'} ${selectedDevice.label?.toLowerCase().includes('omni') ? '(OMNI)' : ''} ${selectedDevice.label?.toLowerCase().includes('vert') ? '(VERT)' : ''}` : 
+				'Auto (browser default)'
+
 			return (
 				<div className="mt-3 p-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5">
 					<div className="font-semibold mb-2">Select camera device</div>
 					{err && <div className="text-rose-400 text-sm mb-2">{err}</div>}
 					<div className="grid grid-cols-3 gap-2 items-center text-sm">
-						<div className="col-span-2">
-							<select className="input w-full" value={sel} onChange={(e)=>{
-								const id = e.target.value || undefined
-								const label = devices.find(d=>d.deviceId===id)?.label || ''
-								setPreferredCamera(id, label)
-							}}>
-								<option value="">Auto (browser default)</option>
-								{devices.map(d => (
-									<option key={d.deviceId} value={d.deviceId}>
-										{d.label || 'Camera'} {d.label?.toLowerCase().includes('omni') ? '(OMNI)' : ''} {d.label?.toLowerCase().includes('vert') ? '(VERT)' : ''}
-									</option>
-								))}
-							</select>
+						<div className="col-span-2 relative" ref={dropdownRef}>
+							<div 
+								className="input w-full cursor-pointer flex items-center justify-between"
+								onClick={() => setDropdownOpen(!dropdownOpen)}
+							>
+								<span className="truncate">{selectedLabel}</span>
+								<svg className={`w-4 h-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+								</svg>
+							</div>
+							{dropdownOpen && (
+								<div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+									<div 
+										className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm"
+										onClick={() => {
+											setPreferredCamera(undefined, '')
+											setDropdownOpen(false)
+										}}
+									>
+										Auto (browser default)
+									</div>
+									{devices.map(d => {
+										const label = `${d.label || 'Camera'} ${d.label?.toLowerCase().includes('omni') ? '(OMNI)' : ''} ${d.label?.toLowerCase().includes('vert') ? '(VERT)' : ''}`
+										return (
+											<div 
+												key={d.deviceId} 
+												className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm"
+												onClick={() => {
+													setPreferredCamera(d.deviceId, d.label || '')
+													setDropdownOpen(false)
+												}}
+											>
+												{label}
+											</div>
+										)
+									})}
+								</div>
+							)}
 						</div>
 						<div className="text-right">
 							<button className="btn px-2 py-1" onClick={enumerate}>Refresh</button>
@@ -684,10 +779,18 @@ export default function Calibrator() {
 										>
 											Phone
 										</button>
+										<button 
+											className={`btn px-2 py-1 ${mode==='wifi'?'bg-emerald-600':'bg-gray-600'} ${streaming ? 'opacity-50 cursor-not-allowed' : ''}`} 
+											onClick={() => !streaming && setMode('wifi')}
+											disabled={streaming}
+											title={streaming ? 'Stop camera first to change mode' : 'Connect to wifi scoring device'}
+										>
+											Wifi
+										</button>
 									</div>
 									{streaming && (
 										<span className="text-xs opacity-60 ml-2">
-											({mode === 'local' ? 'Local Camera Active' : 'Phone Camera Paired'})
+											({mode === 'local' ? 'Local Camera Active' : mode === 'phone' ? 'Phone Camera Paired' : 'Wifi Device Connected'})
 										</span>
 									)}
 								</div>
@@ -782,7 +885,48 @@ export default function Calibrator() {
 						)}
 					</div>
 				)}
-				{/* action buttons moved to left column; removed bottom row */}
+				{mode==='wifi' && !streaming && (
+					<div className="mt-2 p-2 rounded-lg bg-black/40 border border-white/10 text-white text-xs">
+						<div className="font-semibold mb-2">Wifi Scoring Devices</div>
+						{discoveringWifi ? (
+							<div className="flex items-center gap-2">
+								<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+								<span>Scanning network for devices...</span>
+							</div>
+						) : wifiDevices.length > 0 ? (
+							<div className="space-y-2">
+								{wifiDevices.map(device => (
+									<div key={device.id} className="flex items-center justify-between p-2 rounded bg-slate-900/60 border border-slate-700/50">
+										<div>
+											<div className="font-medium">{device.name}</div>
+											<div className="opacity-70">{device.ip}:{device.port} · {device.type.toUpperCase()}</div>
+											<div className="opacity-70 text-xs">Capabilities: {device.capabilities.join(', ')}</div>
+										</div>
+										<button 
+											className={`btn px-2 py-1 text-xs ${
+												device.status === 'connecting' ? 'bg-yellow-600' :
+												device.status === 'online' ? 'bg-green-600' : 'bg-blue-600'
+											}`}
+											onClick={() => connectToWifiDevice(device)}
+											disabled={device.status === 'connecting'}
+										>
+											{device.status === 'connecting' ? 'Connecting...' : 'Connect'}
+										</button>
+									</div>
+								))}
+								<div className="text-center">
+									<button className="btn px-2 py-1 text-xs" onClick={startWifiConnection}>Rescan Network</button>
+								</div>
+							</div>
+						) : (
+							<div className="text-center">
+								<div className="mb-2">No wifi scoring devices found.</div>
+								<div className="mb-2 opacity-70">Make sure your OMNI, VERT, or other wifi cameras are powered on and connected to the same network.</div>
+								<button className="btn px-2 py-1 text-xs" onClick={startWifiConnection}>Scan Again</button>
+							</div>
+						)}
+					</div>
+				)}
 				<div className="mt-2 text-sm opacity-80">
 					<div>Phase: {phase}</div>
 					<div>Clicked: {dstPoints.length} / 4</div>

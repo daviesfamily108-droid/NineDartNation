@@ -118,6 +118,65 @@ export default function App() {
     };
   }, [user?.username]);
 
+  // Handle payment success for username change
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const paid = urlParams.get('paid');
+    if (paid === '1' || paid === 'username-change') {
+      const pendingUsername = localStorage.getItem('pendingUsernameChange');
+      if (pendingUsername && user?.email) {
+        // Call the change username API
+        const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+        fetch(`${API_URL}/api/change-username`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user.email, newUsername: pendingUsername })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.ok) {
+            alert('Username changed successfully!');
+            localStorage.removeItem('pendingUsernameChange');
+            // Clean up URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+            // Reload to update user
+            window.location.reload();
+          } else {
+            alert('Failed to change username: ' + (data.error || 'Unknown error'));
+          }
+        })
+        .catch(() => {
+          alert('Network error while changing username');
+        });
+      }
+    }
+  }, [user?.email]);
+
+  // Handle payment success for premium subscription
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const subscription = urlParams.get('subscription');
+    if (subscription === 'success' && user?.email) {
+      // Refresh user data to get updated subscription status
+      const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+      fetch(`${API_URL}/api/auth/me`, {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data?.user) {
+          setUser(data.user);
+          alert('Premium subscription activated successfully!');
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      })
+      .catch(() => {
+        alert('Subscription activated, but failed to refresh user data. Please refresh the page.');
+      });
+    }
+  }, [user?.email]);
+
   // Detect mobile/tablet layout via comprehensive device detection
   useEffect(() => {
     const update = () => {

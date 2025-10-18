@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { useUserSettings } from '../store/userSettings'
+import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice } from '../utils/networkDevices'
 
 export default function CameraTile({ label, autoStart = false, scale: scaleOverride }: { label?: string; autoStart?: boolean; scale?: number }) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -8,13 +9,15 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
   const [ws, setWs] = useState<WebSocket | null>(null)
   const [pairCode, setPairCode] = useState<string | null>(null)
   const [pc, setPc] = useState<RTCPeerConnection | null>(null)
-  const [mode, setMode] = useState<'local'|'phone'>(() => (localStorage.getItem('ndn:camera:mode') as any) || 'local')
+  const [mode, setMode] = useState<'local'|'phone'|'wifi'>(() => (localStorage.getItem('ndn:camera:mode') as any) || 'local')
   const [expiresAt, setExpiresAt] = useState<number | null>(null)
   const [now, setNow] = useState<number>(Date.now())
   const [paired, setPaired] = useState<boolean>(false)
   const [lanHost, setLanHost] = useState<string | null>(null)
   const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null)
   const [showTips, setShowTips] = useState<boolean>(true)
+  const [wifiDevices, setWifiDevices] = useState<NetworkDevice[]>([])
+  const [discoveringWifi, setDiscoveringWifi] = useState<boolean>(false)
   useEffect(() => {
     const h = window.location.hostname
     if (h === 'localhost' || h === '127.0.0.1') {
@@ -78,6 +81,10 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
   }, [autoStart])
 
   async function start() {
+    if (mode === 'wifi') {
+      return startWifiConnection()
+    }
+
     try {
       // Prefer saved camera if available
       const { preferredCameraId, setPreferredCamera } = useUserSettings.getState()
@@ -117,6 +124,48 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
       tracks.forEach(t => t.stop())
       videoRef.current.srcObject = null
       setStreaming(false)
+    }
+  }
+
+  async function startWifiConnection() {
+    setDiscoveringWifi(true)
+    try {
+      const devices = await discoverNetworkDevices()
+      setWifiDevices(devices)
+      if (devices.length === 0) {
+        alert('No wifi scoring devices found on your network. Make sure devices are powered on and connected to the same network.')
+      }
+    } catch (error) {
+      console.error('Wifi device discovery failed:', error)
+      alert('Failed to discover wifi devices. Please check your network connection.')
+    } finally {
+      setDiscoveringWifi(false)
+    }
+  }
+
+  async function connectToWifiDevice(device: NetworkDevice) {
+    try {
+      setWifiDevices(devices => devices.map(d => 
+        d.id === device.id ? { ...d, status: 'connecting' as const } : d
+      ))
+
+      const stream = await connectToNetworkDevice(device)
+      if (stream && videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+        setStreaming(true)
+        setWifiDevices(devices => devices.map(d => 
+          d.id === device.id ? { ...d, status: 'online' as const } : d
+        ))
+      } else {
+        throw new Error('Failed to get video stream')
+      }
+    } catch (error) {
+      console.error('Failed to connect to wifi device:', error)
+      alert(`Failed to connect to ${device.name}. Please check the device and try again.`)
+      setWifiDevices(devices => devices.map(d => 
+        d.id === device.id ? { ...d, status: 'offline' as const } : d
+      ))
     }
   }
 
@@ -199,24 +248,48 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
     if (pc) { try { pc.close() } catch {}; setPc(null) }
   }
   return (
-    <CameraFrame label={label} autoStart={autoStart} start={start} stopAll={stopAll} startPhonePairing={startPhonePairing} videoRef={videoRef} streaming={streaming} mode={mode} setMode={setMode} pairCode={pairCode} mobileUrl={mobileUrl} ttl={ttl} qrDataUrl={qrDataUrl} regenerateCode={regenerateCode} httpsInfo={httpsInfo} showTips={showTips} setShowTips={setShowTips} scaleOverride={scaleOverride} />
+    <CameraFrame 
+      label={label} 
+      autoStart={autoStart} 
+      start={start} 
+      stopAll={stopAll} 
+      startPhonePairing={startPhonePairing} 
+      startWifiConnection={startWifiConnection}
+      connectToWifiDevice={connectToWifiDevice}
+      videoRef={videoRef} 
+      streaming={streaming} 
+      mode={mode} 
+      setMode={setMode} 
+      pairCode={pairCode} 
+      mobileUrl={mobileUrl} 
+      ttl={ttl} 
+      qrDataUrl={qrDataUrl} 
+      regenerateCode={regenerateCode} 
+      httpsInfo={httpsInfo} 
+      showTips={showTips} 
+      setShowTips={setShowTips} 
+      wifiDevices={wifiDevices}
+      discoveringWifi={discoveringWifi}
+      scaleOverride={scaleOverride} 
+    />
   )
 }
 
 function CameraFrame(props: any) {
   const { cameraScale } = useUserSettings()
   const scale = Math.max(0.5, Math.min(1.25, Number(props.scaleOverride ?? cameraScale ?? 1)))
-  const { label, start, stopAll, startPhonePairing, videoRef, streaming, mode, setMode, pairCode, mobileUrl, ttl, qrDataUrl, regenerateCode, httpsInfo, showTips, setShowTips } = props
+  const { label, start, stopAll, startPhonePairing, startWifiConnection, connectToWifiDevice, videoRef, streaming, mode, setMode, pairCode, mobileUrl, ttl, qrDataUrl, regenerateCode, httpsInfo, showTips, setShowTips, wifiDevices, discoveringWifi } = props
   return (
     <div className="rounded-2xl overflow-hidden bg-black w-full mx-auto" style={{ aspectRatio: '16 / 9', transform: `scale(${scale})`, transformOrigin: 'center' }}>
       <video ref={videoRef} className="w-full h-full object-contain object-center bg-black" />
       <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
-        <span className="truncate">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : 'LIVE') : 'Camera')}</span>
+        <span className="truncate">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : mode==='wifi' ? 'WIFI LIVE' : 'LIVE') : 'Camera')}</span>
         <div className="flex items-center gap-1">
           {!streaming && (
             <>
               <button className={`px-1 py-0.5 rounded ${mode==='local'?'bg-emerald-600':'bg-slate-700'}`} onClick={() => { setMode('local'); start() }}>Local</button>
               <button className={`px-1 py-0.5 rounded ${mode==='phone'?'bg-emerald-600':'bg-slate-700'}`} onClick={startPhonePairing}>Phone</button>
+              <button className={`px-1 py-0.5 rounded ${mode==='wifi'?'bg-emerald-600':'bg-slate-700'}`} onClick={() => { setMode('wifi'); startWifiConnection() }}>Wifi</button>
             </>
           )}
           {streaming ? (
@@ -243,6 +316,46 @@ function CameraFrame(props: any) {
                 <li>On iPhone, use HTTPS links (QR will prefer https when enabled).</li>
               </ul>
               <div className="mt-2 text-right"><button className="btn btn--ghost px-2 py-1 text-xs" onClick={()=>setShowTips(false)}>Hide tips</button></div>
+            </div>
+          )}
+        </div>
+      )}
+      {mode==='wifi' && !streaming && (
+        <div className="p-2 text-white text-[10px] bg-black/50">
+          <div className="font-semibold mb-2">Wifi Scoring Devices</div>
+          {discoveringWifi ? (
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+              <span>Scanning network...</span>
+            </div>
+          ) : wifiDevices.length > 0 ? (
+            <div className="space-y-1">
+              {wifiDevices.map((device: NetworkDevice) => (
+                <div key={device.id} className="flex items-center justify-between p-1 rounded bg-slate-900/60">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{device.name}</div>
+                    <div className="opacity-70 text-[9px]">{device.ip}:{device.port}</div>
+                  </div>
+                  <button 
+                    className={`px-1 py-0.5 rounded text-[9px] ${
+                      device.status === 'connecting' ? 'bg-yellow-600' :
+                      device.status === 'online' ? 'bg-green-600' : 'bg-blue-600'
+                    }`}
+                    onClick={() => connectToWifiDevice(device)}
+                    disabled={device.status === 'connecting'}
+                  >
+                    {device.status === 'connecting' ? '...' : 'Connect'}
+                  </button>
+                </div>
+              ))}
+              <div className="text-center mt-2">
+                <button className="px-1 py-0.5 rounded bg-slate-700 text-[9px]" onClick={startWifiConnection}>Rescan</button>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center">
+              <div className="mb-1 opacity-70">No devices found</div>
+              <button className="px-1 py-0.5 rounded bg-slate-700 text-[9px]" onClick={startWifiConnection}>Scan Network</button>
             </div>
           )}
         </div>
