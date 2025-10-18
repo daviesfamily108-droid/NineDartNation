@@ -874,20 +874,6 @@ export default function SettingsPanel({ user }: { user?: any }) {
                 Email Support
               </a>
             </div>
-
-            <div>
-              <p className="text-sm text-slate-300 mb-2">Frequently Asked Questions:</p>
-              <a href="https://ninedartnation.com/faq" target="_blank" rel="noopener noreferrer" className="btn bg-teal-600 hover:bg-teal-700">
-                View FAQ
-              </a>
-            </div>
-
-            <div>
-              <p className="text-sm text-slate-300 mb-2">Report a bug or suggest a feature:</p>
-              <a href="https://github.com/daviesfamily108-droid/NineDartNation/issues" target="_blank" rel="noopener noreferrer" className="btn bg-teal-600 hover:bg-teal-700">
-                GitHub Issues
-              </a>
-            </div>
           </div>
         </div>
       </div>
