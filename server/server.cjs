@@ -9,7 +9,7 @@ const os = require('os');
 const https = require('https');
 const path = require('path');
 const Filter = require('bad-words');
-const EmailTemplates = require('./server/emails/templates.js');
+const EmailTemplates = require('./emails/templates.js');
 const nodemailer = require('nodemailer');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -72,7 +72,7 @@ app.use((req, res, next) => {
 // Guard JSON body size to avoid excessive memory
 app.use(express.json({ limit: '100kb' }));
 // Serve static assets (mobile camera page)
-app.use(express.static('./server/public'))
+app.use(express.static('./public'))
 // In production, also serve the built client app. Prefer root ../dist, fallback to ../app/dist.
 const rootDistPath = path.resolve(process.cwd(), 'dist')
 const appDistPath = path.resolve(process.cwd(), 'app', 'dist')
