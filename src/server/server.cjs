@@ -44,7 +44,7 @@ if (!supabase) {
 }
 
 // Initialize Redis for cross-server session management
-const { Redis } = require('@upstash/redis');
+const redis = require('redis');
 
 // DEBUG: Check if REDIS_URL is set
 console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
@@ -54,7 +54,7 @@ if (process.env.REDIS_URL) {
 
 const redisClient = process.env.REDIS_URL ? (() => {
   try {
-    return new Redis({ url: process.env.REDIS_URL });
+    return redis.createClient({ url: process.env.REDIS_URL });
   } catch (err) {
     console.error('[REDIS] Failed to create client:', err.message);
     return null;
@@ -62,7 +62,9 @@ const redisClient = process.env.REDIS_URL ? (() => {
 })() : null;
 
 if (redisClient) {
-  console.log('[REDIS] Upstash Redis client initialized');
+  redisClient.on('error', (err) => console.error('[REDIS] Error:', err));
+  redisClient.on('connect', () => console.log('[REDIS] Connected'));
+  redisClient.connect().catch(err => console.warn('[REDIS] Failed to connect:', err));
 } else {
   console.warn('[REDIS] Not configured - using in-memory storage for sessions');
 }
@@ -87,7 +89,7 @@ const redisHelpers = {
   // User sessions (shared across servers)
   async setUserSession(email, sessionData) {
     if (!redisClient) return;
-    await redisClient.set(`user:${email}`, JSON.stringify(sessionData), { ex: 3600 }); // 1 hour expiry
+    await redisClient.set(`user:${email}`, JSON.stringify(sessionData), { EX: 3600 }); // 1 hour expiry
   },
 
   async getUserSession(email) {
@@ -104,22 +106,22 @@ const redisHelpers = {
   // Room memberships (shared across servers)
   async addUserToRoom(roomId, userEmail, userData) {
     if (!redisClient) return;
-    await redisClient.sadd(`room:${roomId}:members`, userEmail);
-    await redisClient.hset(`room:${roomId}:memberData`, userEmail, JSON.stringify(userData));
+    await redisClient.sAdd(`room:${roomId}:members`, userEmail);
+    await redisClient.hSet(`room:${roomId}:memberData`, userEmail, JSON.stringify(userData));
   },
 
   async removeUserFromRoom(roomId, userEmail) {
     if (!redisClient) return;
-    await redisClient.srem(`room:${roomId}:members`, userEmail);
-    await redisClient.hdel(`room:${roomId}:memberData`, userEmail);
+    await redisClient.sRem(`room:${roomId}:members`, userEmail);
+    await redisClient.hDel(`room:${roomId}:memberData`, userEmail);
   },
 
   async getRoomMembers(roomId) {
     if (!redisClient) return [];
-    const members = await redisClient.smembers(`room:${roomId}:members`);
+    const members = await redisClient.sMembers(`room:${roomId}:members`);
     const memberData = [];
     for (const email of members) {
-      const data = await redisClient.hget(`room:${roomId}:memberData`, email);
+      const data = await redisClient.hGet(`room:${roomId}:memberData`, email);
       if (data) memberData.push(JSON.parse(data));
     }
     return memberData;
