@@ -37,6 +37,7 @@ export default function CameraView({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const [streaming, setStreaming] = useState(false)
+  const [cameraStarting, setCameraStarting] = useState(false)
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null)
   const { H, imageSize, reset: resetCalibration } = useCalibration()
   const [lastAutoScore, setLastAutoScore] = useState<string>('')
@@ -102,7 +103,8 @@ export default function CameraView({
         // Set backing size to match display for crisp rendering
         if (c.width !== cw) c.width = cw
         if (c.height !== ch) c.height = ch
-        const ctx = c.getContext('2d')!
+        const ctx = c.getContext('2d')
+        if (!ctx) return
         ctx.imageSmoothingEnabled = true
         // Letterbox fit
         const scale = Math.min(cw / vw, ch / vh)
@@ -113,7 +115,10 @@ export default function CameraView({
         ctx.fillStyle = '#000'
         ctx.fillRect(0, 0, cw, ch)
         ctx.drawImage(v, dx, dy, dw, dh)
-      } catch {}
+      } catch (e) {
+        // Silently ignore preview update errors
+        console.warn('Manual preview update error:', e)
+      }
     }, 120)
     return () => clearInterval(id)
   }, [showManualModal])
@@ -123,6 +128,8 @@ export default function CameraView({
   }, [])
 
   async function startCamera() {
+    if (cameraStarting || streaming) return
+    setCameraStarting(true)
     try {
       // If a preferred camera is set, request it; otherwise default
       const constraints: MediaStreamConstraints = preferredCameraId ? { video: { deviceId: { exact: preferredCameraId } }, audio: false } : { video: true, audio: false }
@@ -150,6 +157,8 @@ export default function CameraView({
       } catch {}
     } catch (e) {
       alert('Camera permission denied or not available.')
+    } finally {
+      setCameraStarting(false)
     }
   }
 
@@ -159,19 +168,25 @@ export default function CameraView({
       tracks.forEach(t => t.stop())
       videoRef.current.srcObject = null
       setStreaming(false)
+      setCameraStarting(false)
     }
   }
 
   function capture() {
-    if (!videoRef.current || !canvasRef.current) return
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    const ctx = canvas.getContext('2d')!
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-    const url = canvas.toDataURL('image/png')
-    setSnapshotUrl(url)
+    try {
+      if (!videoRef.current || !canvasRef.current) return
+      const video = videoRef.current
+      const canvas = canvasRef.current
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      const url = canvas.toDataURL('image/png')
+      setSnapshotUrl(url)
+    } catch (e) {
+      console.warn('Capture error:', e)
+    }
   }
 
   // Inline light-weight device switcher (optional)
@@ -184,6 +199,7 @@ export default function CameraView({
           className="bg-black/20 rounded px-1 py-0.5"
           value={preferredCameraId || ''}
           onChange={async (e)=>{
+            if (cameraStarting) return
             const id = e.target.value || undefined
             const label = availableCameras.find(d=>d.deviceId===id)?.label
             setPreferredCamera(id, label||'')
@@ -217,23 +233,29 @@ export default function CameraView({
   }
 
   function drawOverlay() {
-    if (!overlayRef.current || !videoRef.current || !H || !imageSize) return
-    const o = overlayRef.current
-    const v = videoRef.current
-    const w = v.clientWidth
-    const h = v.clientHeight
-    o.width = w; o.height = h
-    const ctx = o.getContext('2d')!
-    ctx.clearRect(0,0,w,h)
+    try {
+      if (!overlayRef.current || !videoRef.current || !H || !imageSize) return
+      const o = overlayRef.current
+      const v = videoRef.current
+      const w = v.clientWidth
+      const h = v.clientHeight
+      o.width = w; o.height = h
+      const ctx = o.getContext('2d')
+      if (!ctx) return
+      ctx.clearRect(0,0,w,h)
 
-    // scale homography from calibration image size to current rendered size
-    const sx = w / imageSize.w
-    const sy = h / imageSize.h
-    const Hs = scaleHomography(H, sx, sy)
-    const rings = [BoardRadii.bullInner, BoardRadii.bullOuter, BoardRadii.trebleInner, BoardRadii.trebleOuter, BoardRadii.doubleInner, BoardRadii.doubleOuter]
-    for (const r of rings) {
-      const poly = sampleRing(Hs, r, 360)
-      drawPolyline(ctx, poly, r === BoardRadii.doubleOuter ? '#22d3ee' : '#a78bfa', r === BoardRadii.doubleOuter ? 3 : 2)
+      // scale homography from calibration image size to current rendered size
+      const sx = w / imageSize.w
+      const sy = h / imageSize.h
+      const Hs = scaleHomography(H, sx, sy)
+      const rings = [BoardRadii.bullInner, BoardRadii.bullOuter, BoardRadii.trebleInner, BoardRadii.trebleOuter, BoardRadii.doubleInner, BoardRadii.doubleOuter]
+      for (const r of rings) {
+        const poly = sampleRing(Hs, r, 360)
+        drawPolyline(ctx, poly, r === BoardRadii.doubleOuter ? '#22d3ee' : '#a78bfa', r === BoardRadii.doubleOuter ? 3 : 2)
+      }
+    } catch (e) {
+      // Silently ignore drawing errors to prevent re-render loops
+      console.warn('Overlay drawing error:', e)
     }
   }
 
@@ -553,7 +575,9 @@ export default function CameraView({
         </ResizablePanel>
         <div className="flex gap-2 mt-3">
           {!streaming ? (
-            <button className="btn" onClick={startCamera}>Start Camera</button>
+            <button className="btn" onClick={startCamera} disabled={cameraStarting}>
+              {cameraStarting ? 'Starting Camera...' : 'Start Camera'}
+            </button>
           ) : (
             <button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
           )}
