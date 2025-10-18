@@ -46,6 +46,298 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 if (!supabase) {
   console.warn('[DB] Supabase not configured - using in-memory storage only');
 }
+
+// Initialize Redis for cross-server session management
+const redis = require('redis');
+
+// DEBUG: Check if REDIS_URL is set
+console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
+if (process.env.REDIS_URL) {
+  console.log('🔍 DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
+}
+
+const redisClient = process.env.REDIS_URL ? redis.createClient({ url: process.env.REDIS_URL }) : null;
+
+if (redisClient) {
+  redisClient.on('error', (err) => console.error('[REDIS] Error:', err));
+  redisClient.on('connect', () => console.log('[REDIS] Connected'));
+  redisClient.connect().catch(err => console.warn('[REDIS] Failed to connect:', err));
+} else {
+  console.warn('[REDIS] Not configured - using in-memory storage for sessions');
+}
+
+// Database helper functions
+const db = {
+  // Rooms
+  async createRoom(roomId) {
+    if (!supabase) return;
+    await supabase.from('rooms').insert([{ id: roomId }]);
+  },
+
+  async getRoomMembers(roomId) {
+    if (!supabase) return [];
+    const { data } = await supabase
+      .from('room_members')
+      .select('*')
+      .eq('room_id', roomId);
+    return data || [];
+  },
+
+  async addRoomMember(roomId, clientId, username, email) {
+    if (!supabase) return;
+    await supabase.from('room_members').insert([{
+      room_id: roomId,
+      client_id: clientId,
+      username,
+      email
+    }]);
+  },
+
+  async removeRoomMember(roomId, clientId) {
+    if (!supabase) return;
+    await supabase
+      .from('room_members')
+      .delete()
+      .eq('room_id', roomId)
+      .eq('client_id', clientId);
+  },
+
+  async deleteRoom(roomId) {
+    if (!supabase) return;
+    await supabase.from('rooms').delete().eq('id', roomId);
+  },
+
+  // Matches
+  async createMatch(match) {
+    if (!supabase) return;
+    await supabase.from('matches').insert([match]);
+  },
+
+  async getMatches() {
+    if (!supabase) return [];
+    const { data } = await supabase.from('matches').select('*');
+    return data || [];
+  },
+
+  async updateMatch(matchId, updates) {
+    if (!supabase) return;
+    await supabase
+      .from('matches')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', matchId);
+  },
+
+  async deleteMatch(matchId) {
+    if (!supabase) return;
+    await supabase.from('matches').delete().eq('id', matchId);
+  },
+
+  // Tournaments
+  async createTournament(tournament) {
+    if (!supabase) return;
+    await supabase.from('tournaments').insert([tournament]);
+  },
+
+  async getTournaments() {
+    if (!supabase) return [];
+    const { data } = await supabase.from('tournaments').select('*');
+    return data || [];
+  },
+
+  async updateTournament(tournamentId, updates) {
+    if (!supabase) return;
+    await supabase
+      .from('tournaments')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', tournamentId);
+  },
+
+  async getTournamentParticipants(tournamentId) {
+    if (!supabase) return [];
+    const { data } = await supabase
+      .from('tournament_participants')
+      .select('*')
+      .eq('tournament_id', tournamentId);
+    return data || [];
+  },
+
+  async addTournamentParticipant(tournamentId, email, username) {
+    if (!supabase) return;
+    await supabase.from('tournament_participants').insert([{
+      tournament_id: tournamentId,
+      email,
+      username
+    }]);
+  },
+
+  async removeTournamentParticipant(tournamentId, email) {
+    if (!supabase) return;
+    await supabase
+      .from('tournament_participants')
+      .delete()
+      .eq('tournament_id', tournamentId)
+      .eq('email', email);
+  },
+
+  // Friendships
+  async getFriendships(userEmail) {
+    if (!supabase) return [];
+    const { data } = await supabase
+      .from('friendships')
+      .select('*')
+      .or(`user_email.eq.${userEmail},friend_email.eq.${userEmail}`);
+    return data || [];
+  },
+
+  async addFriendship(userEmail, friendEmail) {
+    if (!supabase) return;
+    // Ensure consistent ordering to prevent duplicates
+    const [email1, email2] = [userEmail, friendEmail].sort();
+    await supabase.from('friendships').insert([{
+      user_email: email1,
+      friend_email: email2
+    }]);
+  },
+
+  async removeFriendship(userEmail, friendEmail) {
+    if (!supabase) return;
+    const [email1, email2] = [userEmail, friendEmail].sort();
+    await supabase
+      .from('friendships')
+      .delete()
+      .eq('user_email', email1)
+      .eq('friend_email', email2);
+  },
+
+  // Wallets
+  async getWallet(email) {
+    if (!supabase) return { balances: {} };
+    const { data } = await supabase
+      .from('wallets')
+      .select('*')
+      .eq('email', email)
+      .single();
+    return data || { balances: {} };
+  },
+
+  async updateWallet(email, balances) {
+    if (!supabase) return;
+    await supabase.from('wallets').upsert([{
+      email,
+      balances,
+      updated_at: new Date().toISOString()
+    }]);
+  },
+
+  // Camera sessions
+  async createCameraSession(code, desktopClientId, expiresAt) {
+    if (!supabase) return;
+    await supabase.from('camera_sessions').insert([{
+      code,
+      desktop_client_id: desktopClientId,
+      expires_at: expiresAt.toISOString()
+    }]);
+  },
+
+  async getCameraSession(code) {
+    if (!supabase) return null;
+    const { data } = await supabase
+      .from('camera_sessions')
+      .select('*')
+      .eq('code', code)
+      .gt('expires_at', new Date().toISOString())
+      .single();
+    return data;
+  },
+
+  async updateCameraSession(code, updates) {
+    if (!supabase) return;
+    await supabase
+      .from('camera_sessions')
+      .update(updates)
+      .eq('code', code);
+  },
+
+  async deleteExpiredCameraSessions() {
+    if (!supabase) return;
+    await supabase
+      .from('camera_sessions')
+      .delete()
+      .lt('expires_at', new Date().toISOString());
+  }
+};
+
+// Redis helper functions for cross-server session management
+const redisHelpers = {
+  // User sessions (shared across servers)
+  async setUserSession(email, sessionData) {
+    if (!redisClient) return;
+    await redisClient.set(`user:${email}`, JSON.stringify(sessionData), { EX: 3600 }); // 1 hour expiry
+  },
+
+  async getUserSession(email) {
+    if (!redisClient) return null;
+    const data = await redisClient.get(`user:${email}`);
+    return data ? JSON.parse(data) : null;
+  },
+
+  async deleteUserSession(email) {
+    if (!redisClient) return;
+    await redisClient.del(`user:${email}`);
+  },
+
+  // Room memberships (shared across servers)
+  async addUserToRoom(roomId, userEmail, userData) {
+    if (!redisClient) return;
+    await redisClient.sAdd(`room:${roomId}:members`, userEmail);
+    await redisClient.hSet(`room:${roomId}:memberData`, userEmail, JSON.stringify(userData));
+  },
+
+  async removeUserFromRoom(roomId, userEmail) {
+    if (!redisClient) return;
+    await redisClient.sRem(`room:${roomId}:members`, userEmail);
+    await redisClient.hDel(`room:${roomId}:memberData`, userEmail);
+  },
+
+  async getRoomMembers(roomId) {
+    if (!redisClient) return [];
+    const members = await redisClient.sMembers(`room:${roomId}:members`);
+    const memberData = [];
+    for (const email of members) {
+      const data = await redisClient.hGet(`room:${roomId}:memberData`, email);
+      if (data) memberData.push(JSON.parse(data));
+    }
+    return memberData;
+  },
+
+  async getRoomMemberCount(roomId) {
+    if (!redisClient) return 0;
+    return await redisClient.sCard(`room:${roomId}:members`);
+  },
+
+  async deleteRoom(roomId) {
+    if (!redisClient) return;
+    await redisClient.del(`room:${roomId}:members`);
+    await redisClient.del(`room:${roomId}:memberData`);
+  },
+
+  // Active rooms tracking
+  async addActiveRoom(roomId) {
+    if (!redisClient) return;
+    await redisClient.sAdd('active_rooms', roomId);
+  },
+
+  async removeActiveRoom(roomId) {
+    if (!redisClient) return;
+    await redisClient.sRem('active_rooms', roomId);
+  },
+
+  async getActiveRooms() {
+    if (!redisClient) return [];
+    return await redisClient.sMembers('active_rooms');
+  }
+};
+
 // Observability: metrics registry
 // const register = new client.Registry()
 // client.collectDefaultMetrics({ register })
@@ -160,7 +452,14 @@ app.post('/api/auth/signup', async (req, res) => {
       }
     }
 
-    // Also store in memory for current session
+    // Store in Redis for cross-server session sharing
+    await redisHelpers.setUserSession(email, {
+      ...user,
+      status: 'online',
+      lastSeen: Date.now()
+    });
+
+    // Also store in memory for current session (fallback)
     users.set(email, user)
 
     // Create JWT token
@@ -207,7 +506,13 @@ app.post('/api/auth/login', async (req, res) => {
           password: data.password,
           admin: data.admin || false
         };
-        // Cache in memory for current session
+        // Store in Redis for cross-server session sharing
+        await redisHelpers.setUserSession(data.email, {
+          ...user,
+          status: 'online',
+          lastSeen: Date.now()
+        });
+        // Cache in memory for current session (fallback)
         users.set(data.email, user);
       }
     }
@@ -495,20 +800,21 @@ app.post('/api/admins/revoke', (req, res) => {
 })
 
 // Admin ops (owner-only; demo ÔÇö not secure)
-app.get('/api/admin/status', (req, res) => {
+app.get('/api/admin/status', async (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const allMatches = await db.getMatches()
   res.json({
     ok: true,
     server: {
       clients: clients.size,
       rooms: rooms.size,
-      matches: matches.size,
+      matches: allMatches.length,
       premium: !!subscription.fullAccess,
       maintenance: !!maintenanceMode,
       lastAnnouncement,
     },
-    matches: Array.from(matches.values()),
+    matches: allMatches,
   })
 })
 
@@ -579,17 +885,19 @@ app.get('/api/admin/matches', (req, res) => {
   res.json({ ok: true, matches: Array.from(matches.values()) })
 })
 
-app.post('/api/admin/matches/delete', (req, res) => {
+app.post('/api/admin/matches/delete', async (req, res) => {
   const { matchId, requesterEmail } = req.body || {}
   if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   }
-  if (!matchId || !matches.has(matchId)) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
-  matches.delete(matchId)
+  const match = await db.getMatch(matchId)
+  if (!match) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  await db.deleteMatch(matchId)
   // Broadcast updated lobby
   if (wss) {
+    const allMatches = await db.getMatches()
     for (const client of wss.clients) {
-      if (client.readyState === 1) client.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
+      if (client.readyState === 1) client.send(JSON.stringify({ type: 'matches', matches: allMatches }))
     }
   }
   res.json({ ok: true })
@@ -812,12 +1120,41 @@ try {
   console.warn('[HTTPS] Failed to initialize HTTPS server:', e?.message || e)
 }
 
-// Simple in-memory rooms
+// Load persistent data from database on startup
+async function loadPersistentData() {
+  if (!supabase) return;
+
+  try {
+    // Load tournaments
+    const tournamentsData = await db.getTournaments();
+    for (const t of tournamentsData) {
+      tournaments.set(t.id, t);
+    }
+    console.log(`[DB] Loaded ${tournaments.size} tournaments`);
+
+    // Load matches
+    // Note: matches are loaded on-demand, not preloaded to avoid memory usage with 1.5k concurrent users
+
+    // Load wallets
+    // Note: wallets are loaded on-demand, not preloaded
+
+    // Load wallets
+    // Note: wallets are loaded on-demand, not preloaded
+
+    // Clean up expired camera sessions
+    await db.deleteExpiredCameraSessions();
+
+  } catch (error) {
+    console.error('[DB] Failed to load persistent data:', error);
+  }
+}
+
+// Simple in-memory rooms (WebSocket connections - not persisted)
 const rooms = new Map(); // roomId -> Set(ws)
-// Simple in-memory match lobby
-const matches = new Map(); // matchId -> { id, creatorId, creatorName, mode, value, startingScore, game, creatorAvg, createdAt }
-const clients = new Map(); // wsId -> ws
-// WebRTC camera pairing sessions (code -> { code, desktopId, phoneId, ts })
+// Simple in-memory match lobby (loaded from DB)
+const matches = new Map(); // matchId -> match data
+const clients = new Map(); // wsId -> ws (not persisted)
+// WebRTC camera pairing sessions (stored in DB)
 const camSessions = new Map();
 const CAM_TTL_MS = 2 * 60 * 1000 // 2 minutes
 function genCamCode() {
@@ -827,26 +1164,14 @@ function genCamCode() {
   if (camSessions.has(code)) return genCamCode()
   return code
 }
-// (removed duplicate camSessions/genCamCode)
-// Simple in-memory tournaments
-// { id, title, game, mode, value, description, startAt, checkinMinutes, capacity, participants: [{email, username}], official, prize, status: 'scheduled'|'running'|'completed', winnerEmail,
-//   prizeType: 'premium'|'cash'|'none', prizeAmount?: number, currency?: string, payoutStatus?: 'none'|'pending'|'paid', prizeNotes?: string, createdAt?: number, paidAt?: number }
+// Simple in-memory tournaments (loaded from DB)
 const tournaments = new Map();
 // Simple in-memory users and friendships (demo)
 // users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
 const users = new Map();
-// Migration: If any old users exist in global object, migrate them to Map
-if (global.oldUsers && typeof global.oldUsers === 'object') {
-  for (const key of Object.keys(global.oldUsers)) {
-    const u = global.oldUsers[key];
-    if (u && u.email && u.username && u.password) {
-      users.set(u.email, u);
-    }
-  }
-}
-// Load users from Supabase on startup
-// (async () => {
-//   if (supabase) {
+
+// Load persistent data on startup
+loadPersistentData();
 //     try {
 //       console.log('[DB] Loading users from Supabase...');
 //       const { data, error } = await supabase
@@ -949,24 +1274,35 @@ function broadcastAll(data) {
   }
 }
 
-function broadcastTournaments() {
-  const list = Array.from(tournaments.values())
+async function broadcastTournaments() {
+  const list = await db.getTournaments()
   broadcastAll({ type: 'tournaments', tournaments: list })
 }
 
-function joinRoom(ws, roomId) {
+async function joinRoom(ws, roomId) {
   if (!rooms.has(roomId)) rooms.set(roomId, new Set());
   rooms.get(roomId).add(ws);
   ws._roomId = roomId;
-  if (ws._email && users.has(ws._email)) {
-    const u = users.get(ws._email)
-    u.status = 'ingame'
-    u.lastSeen = Date.now()
-    users.set(ws._email, u)
+  if (ws._email) {
+    // Update user status in Redis for cross-server sharing
+    const userSession = await redisHelpers.getUserSession(ws._email);
+    if (userSession) {
+      userSession.status = 'ingame';
+      userSession.lastSeen = Date.now();
+      userSession.currentRoomId = roomId;
+      await redisHelpers.setUserSession(ws._email, userSession);
+    }
+    // Also update local cache
+    if (users.has(ws._email)) {
+      const u = users.get(ws._email)
+      u.status = 'ingame'
+      u.lastSeen = Date.now()
+      users.set(ws._email, u)
+    }
   }
 }
 
-function leaveRoom(ws) {
+async function leaveRoom(ws) {
   const roomId = ws._roomId;
   if (!roomId) return;
   const set = rooms.get(roomId);
@@ -975,12 +1311,23 @@ function leaveRoom(ws) {
     if (set.size === 0) rooms.delete(roomId);
   }
   ws._roomId = null;
-  if (ws._email && users.has(ws._email)) {
-    const u = users.get(ws._email)
-    // If still connected, revert to online; otherwise close handler will set offline
-    u.status = 'online'
-    u.lastSeen = Date.now()
-    users.set(ws._email, u)
+  if (ws._email) {
+    // Update user status in Redis for cross-server sharing
+    const userSession = await redisHelpers.getUserSession(ws._email);
+    if (userSession) {
+      userSession.status = 'online';
+      userSession.lastSeen = Date.now();
+      userSession.currentRoomId = null;
+      await redisHelpers.setUserSession(ws._email, userSession);
+    }
+    // Also update local cache
+    if (users.has(ws._email)) {
+      const u = users.get(ws._email)
+      // If still connected, revert to online; otherwise close handler will set offline
+      u.status = 'online'
+      u.lastSeen = Date.now()
+      users.set(ws._email, u)
+    }
   }
 }
 
@@ -996,7 +1343,7 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
 }
 
 if (wss) {
-  wss.on('connection', (ws, req) => {
+  wss.on('connection', async (ws, req) => {
     try { console.log(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
     ws._id = nanoid(8);
     clients.set(ws._id, ws)
@@ -1023,17 +1370,25 @@ if (wss) {
     try { ws.send(JSON.stringify({ type: 'announcement', message: lastAnnouncement.message })) } catch {}
   }
   // Push tournaments snapshot on connect
-  try { ws.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) })) } catch {}
+  try {
+    const tournaments = await db.getTournaments()
+    ws.send(JSON.stringify({ type: 'tournaments', tournaments }))
+  } catch {}
+  // Push matches snapshot on connect
+  try {
+    const matches = await db.getMatches()
+    ws.send(JSON.stringify({ type: 'matches', matches }))
+  } catch {}
   // Track presence if client later identifies
 
-  ws.on('message', (msg) => {
+  ws.on('message', async (msg) => {
     if (typeof msg?.length === 'number' && msg.length > 128 * 1024) return
     if (!allowMessage()) return
     try {
       const data = JSON.parse(msg.toString());
       if (data.type === 'join') {
-        leaveRoom(ws);
-        joinRoom(ws, data.roomId);
+        await leaveRoom(ws);
+        await joinRoom(ws, data.roomId);
         ws.send(JSON.stringify({ type: 'joined', roomId: data.roomId, id: ws._id }));
         // Optionally notify others that someone joined (presence will carry details)
         if (ws._roomId) {
@@ -1074,6 +1429,20 @@ if (wss) {
         ws._username = data.username || `user-${ws._id}`
         ws._email = (data.email || '').toLowerCase()
         if (ws._email) {
+          // Update user session in Redis for cross-server sharing
+          const userSession = await redisHelpers.getUserSession(ws._email) || {
+            email: ws._email,
+            username: ws._username,
+            status: 'online',
+            allowSpectate: true
+          };
+          userSession.username = ws._username;
+          userSession.status = 'online';
+          userSession.lastSeen = Date.now();
+          if (typeof data.allowSpectate === 'boolean') userSession.allowSpectate = !!data.allowSpectate;
+          await redisHelpers.setUserSession(ws._email, userSession);
+
+          // Also update local cache
           const u = users.get(ws._email) || { email: ws._email, username: ws._username, status: 'online', allowSpectate: true }
           u.username = ws._username
           u.status = 'online'
@@ -1146,8 +1515,8 @@ if (wss) {
           } catch {}
         }
         if (!allowed) { try { ws.send(JSON.stringify({ type: 'error', code: 'SPECTATE_NOT_ALLOWED', message: 'Spectating is disabled by the player.' })) } catch {}; return }
-        leaveRoom(ws)
-        joinRoom(ws, roomId)
+        await leaveRoom(ws)
+        await joinRoom(ws, roomId)
         ws._spectator = true
         try { ws.send(JSON.stringify({ type: 'joined', roomId, id: ws._id, spectator: true })) } catch {}
         if (ws._roomId) {
@@ -1181,18 +1550,21 @@ if (wss) {
           requireCalibration: !!data.requireCalibration,
           createdAt: Date.now(),
         }
-        matches.set(id, m)
+        await db.createMatch(m)
         // Broadcast lobby list to all (pre-stringified)
-        const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+        const allMatches = await db.getMatches()
+        const lobbyPayload = JSON.stringify({ type: 'matches', matches: allMatches })
         for (const client of wss.clients) {
           if (client.readyState === 1) client.send(lobbyPayload)
         }
       } else if (data.type === 'list-matches') {
-        ws.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
+        const matches = await db.getMatches()
+        ws.send(JSON.stringify({ type: 'matches', matches }))
       } else if (data.type === 'list-tournaments') {
-        ws.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) }))
+        const tournaments = await db.getTournaments()
+        ws.send(JSON.stringify({ type: 'tournaments', tournaments }))
       } else if (data.type === 'join-match') {
-        const m = matches.get(data.matchId)
+        const m = await db.getMatch(data.matchId)
         if (!m) {
           try { ws.send(JSON.stringify({ type: 'error', code: 'NOT_FOUND', message: 'Match not available.' })) } catch {}
           return
@@ -1224,7 +1596,7 @@ if (wss) {
         }
       } else if (data.type === 'invite-response') {
         const { matchId, accept, toId } = data
-        const m = matches.get(matchId)
+        const m = await db.getMatch(matchId)
         if (!m) return
         const requester = clients.get(toId)
         if (accept) {
@@ -1235,18 +1607,38 @@ if (wss) {
           const payload = { type: 'match-start', roomId, match: m }
           if (creator && creator.readyState === 1) creator.send(JSON.stringify(payload))
           if (requester && requester.readyState === 1) requester.send(JSON.stringify(payload))
-          matches.delete(matchId)
+          await db.deleteMatch(matchId)
           // Mark both players as in-game and store match metadata for friends list
           try {
             const creatorEmail = creator?._email || ''
             const requesterEmail = requester?._email || ''
             if (creatorEmail) {
+              // Update Redis session
+              const creatorSession = await redisHelpers.getUserSession(creatorEmail);
+              if (creatorSession) {
+                creatorSession.status = 'ingame';
+                creatorSession.lastSeen = Date.now();
+                creatorSession.currentRoomId = roomId;
+                creatorSession.currentMatch = { game: m.game, mode: m.mode, value: m.value, startingScore: m.startingScore };
+                await redisHelpers.setUserSession(creatorEmail, creatorSession);
+              }
+              // Update local cache
               const u = users.get(creatorEmail) || { email: creatorEmail, username: creator?._username || creatorEmail, status: 'online' }
               u.status = 'ingame'; u.lastSeen = Date.now();
               u.currentRoomId = roomId; u.currentMatch = { game: m.game, mode: m.mode, value: m.value, startingScore: m.startingScore }
               users.set(creatorEmail, u)
             }
             if (requesterEmail) {
+              // Update Redis session
+              const requesterSession = await redisHelpers.getUserSession(requesterEmail);
+              if (requesterSession) {
+                requesterSession.status = 'ingame';
+                requesterSession.lastSeen = Date.now();
+                requesterSession.currentRoomId = roomId;
+                requesterSession.currentMatch = { game: m.game, mode: m.mode, value: m.value, startingScore: m.startingScore };
+                await redisHelpers.setUserSession(requesterEmail, requesterSession);
+              }
+              // Update local cache
               const u2 = users.get(requesterEmail) || { email: requesterEmail, username: requester?._username || requesterEmail, status: 'online' }
               u2.status = 'ingame'; u2.lastSeen = Date.now();
               u2.currentRoomId = roomId; u2.currentMatch = { game: m.game, mode: m.mode, value: m.value, startingScore: m.startingScore }
@@ -1255,24 +1647,26 @@ if (wss) {
           } catch {}
         } else {
           if (requester && requester.readyState === 1) requester.send(JSON.stringify({ type: 'declined', matchId }))
-          matches.delete(matchId)
+          await db.deleteMatch(matchId)
         }
         // Broadcast updated lobby
-        const lobbyPayload2 = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+        const allMatches2 = await db.getMatches()
+        const lobbyPayload2 = JSON.stringify({ type: 'matches', matches: allMatches2 })
         for (const client of wss.clients) {
           if (client.readyState === 1) client.send(lobbyPayload2)
         }
       } else if (data.type === 'cancel-match') {
         const id = String(data.matchId || '')
-        const m = matches.get(id)
+        const m = await db.getMatch(id)
         if (!m) return
         // Only the creator may cancel
         if (m.creatorId !== ws._id) {
           try { ws.send(JSON.stringify({ type: 'error', code: 'FORBIDDEN', message: 'Only the creator can cancel this match.' })) } catch {}
           return
         }
-        matches.delete(id)
-        const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+        await db.deleteMatch(id)
+        const allMatches = await db.getMatches()
+        const lobbyPayload = JSON.stringify({ type: 'matches', matches: allMatches })
         for (const client of wss.clients) {
           if (client.readyState === 1) client.send(lobbyPayload)
         }
@@ -1345,12 +1739,32 @@ if (wss) {
           const meEmail = ws._email || ''
           const toEmailReal = toEmail || ''
           if (meEmail) {
+            // Update Redis session
+            const meSession = await redisHelpers.getUserSession(meEmail);
+            if (meSession) {
+              meSession.status = 'ingame';
+              meSession.lastSeen = Date.now();
+              meSession.currentRoomId = roomId;
+              meSession.currentMatch = { game, mode, value, startingScore };
+              await redisHelpers.setUserSession(meEmail, meSession);
+            }
+            // Update local cache
             const u = users.get(meEmail) || { email: meEmail, username: ws._username || meEmail, status: 'online' }
             u.status = 'ingame'; u.lastSeen = Date.now();
             u.currentRoomId = roomId; u.currentMatch = { game, mode, value, startingScore }
             users.set(meEmail, u)
           }
           if (toEmailReal) {
+            // Update Redis session
+            const toSession = await redisHelpers.getUserSession(toEmailReal);
+            if (toSession) {
+              toSession.status = 'ingame';
+              toSession.lastSeen = Date.now();
+              toSession.currentRoomId = roomId;
+              toSession.currentMatch = { game, mode, value, startingScore };
+              await redisHelpers.setUserSession(toEmailReal, toSession);
+            }
+            // Update local cache
             const u2 = users.get(toEmailReal) || { email: toEmailReal, username: users.get(toEmailReal)?.username || toEmailReal, status: 'online' }
             u2.status = 'ingame'; u2.lastSeen = Date.now();
             u2.currentRoomId = roomId; u2.currentMatch = { game, mode, value, startingScore }
@@ -1364,15 +1778,16 @@ if (wss) {
     }
   });
 
-  ws.on('close', (code, reasonBuf) => {
+  ws.on('close', async (code, reasonBuf) => {
     const reason = (() => { try { return reasonBuf ? reasonBuf.toString() : '' } catch { return '' } })()
     try { console.log(`[WS] close id=${ws._id} code=${code} reason=${reason}`) } catch {}
     // Clean up room
-    leaveRoom(ws);
+    await leaveRoom(ws);
     try { wsConnections.dec() } catch {}
     // Remove any matches created by this client
-    for (const [id, m] of Array.from(matches.entries())) {
-      if (m.creatorId === ws._id) matches.delete(id)
+    const allMatches = await db.getMatches()
+    for (const m of allMatches) {
+      if (m.creatorId === ws._id) await db.deleteMatch(m.id)
     }
     clients.delete(ws._id)
     // Cleanup camera sessions involving this client
@@ -1382,6 +1797,16 @@ if (wss) {
     if (ws._email && users.has(ws._email)) {
       const u = users.get(ws._email)
       if (u && u.wsId === ws._id) {
+        // Update user status in Redis for cross-server sharing
+        const userSession = await redisHelpers.getUserSession(ws._email);
+        if (userSession) {
+          userSession.status = 'offline';
+          userSession.lastSeen = Date.now();
+          userSession.wsId = undefined;
+          userSession.currentRoomId = null;
+          await redisHelpers.setUserSession(ws._email, userSession);
+        }
+        // Also update local cache
         u.status = 'offline'
         u.lastSeen = Date.now()
         u.wsId = undefined
@@ -1389,7 +1814,8 @@ if (wss) {
       }
     }
     // Broadcast updated lobby
-    const lobbyPayload3 = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+    const matchesList = await db.getMatches()
+    const lobbyPayload3 = JSON.stringify({ type: 'matches', matches: matchesList })
     for (const client of wss.clients) {
       if (client.readyState === 1) client.send(lobbyPayload3)
     }
@@ -1671,11 +2097,12 @@ app.post('/api/admin/wallet/credit', (req, res) => {
 // WS heartbeat interval to drop dead peers (moved earlier; keep single definition)
 
 // Tournaments HTTP API (demo)
-app.get('/api/tournaments', (req, res) => {
-  res.json({ ok: true, tournaments: Array.from(tournaments.values()) })
+app.get('/api/tournaments', async (req, res) => {
+  const tournaments = await db.getTournaments()
+  res.json({ ok: true, tournaments })
 })
 
-app.post('/api/tournaments/create', (req, res) => {
+app.post('/api/tournaments/create', async (req, res) => {
   const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeAmount, currency, prizeNotes, requesterEmail } = req.body || {}
   const id = nanoid(10)
   // Only the owner can create "official" tournaments or set prize metadata
@@ -1711,14 +2138,14 @@ app.post('/api/tournaments/create', (req, res) => {
     createdAt: Date.now(),
     startingScore: (typeof startingScore === 'number' && startingScore>0) ? Math.floor(startingScore) : (String(game)==='X01' ? 501 : undefined),
   }
-  tournaments.set(id, t)
-  broadcastTournaments()
+  await db.createTournament(t)
+  await broadcastTournaments()
   res.json({ ok: true, tournament: t })
 })
 
-app.post('/api/tournaments/join', (req, res) => {
+app.post('/api/tournaments/join', async (req, res) => {
   const { tournamentId, email, username } = req.body || {}
-  const t = tournaments.get(String(tournamentId || ''))
+  const t = await db.getTournament(String(tournamentId || ''))
   if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
   if (t.status !== 'scheduled') return res.status(400).json({ ok: false, error: 'ALREADY_STARTED' })
   const addr = String(email || '').toLowerCase()
@@ -1734,14 +2161,15 @@ app.post('/api/tournaments/join', (req, res) => {
   if (already) return res.json({ ok: true, joined: false, already: true, tournament: t })
   if (t.participants.length >= t.capacity) return res.status(400).json({ ok: false, error: 'FULL' })
   t.participants.push({ email: addr, username: String(username || addr) })
-  broadcastTournaments()
+  await db.updateTournament(t.id, t)
+  await broadcastTournaments()
   res.json({ ok: true, joined: true, tournament: t })
 })
 
 // Leave a tournament (only allowed before it starts)
-app.post('/api/tournaments/leave', (req, res) => {
+app.post('/api/tournaments/leave', async (req, res) => {
   const { tournamentId, email } = req.body || {}
-  const t = tournaments.get(String(tournamentId || ''))
+  const t = await db.getTournament(String(tournamentId || ''))
   if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
   if (t.status !== 'scheduled') return res.status(400).json({ ok: false, error: 'ALREADY_STARTED' })
   const addr = String(email || '').toLowerCase()
@@ -1749,17 +2177,20 @@ app.post('/api/tournaments/leave', (req, res) => {
   const before = t.participants.length
   t.participants = t.participants.filter(p => p.email !== addr)
   const left = t.participants.length < before
-  if (left) broadcastTournaments()
+  if (left) {
+    await db.updateTournament(t.id, t)
+    await broadcastTournaments()
+  }
   res.json({ ok: true, left, tournament: t })
 })
 
 // Owner-only: set winner and grant prize (official ones only grant prize)
-app.post('/api/admin/tournaments/winner', (req, res) => {
+app.post('/api/admin/tournaments/winner', async (req, res) => {
   const { tournamentId, winnerEmail, requesterEmail } = req.body || {}
   if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   }
-  const t = tournaments.get(String(tournamentId || ''))
+  const t = await db.getTournament(String(tournamentId || ''))
   if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
   t.status = 'completed'
   t.winnerEmail = String(winnerEmail || '').toLowerCase()
@@ -1778,24 +2209,26 @@ app.post('/api/admin/tournaments/winner', (req, res) => {
       t.payoutStatus = 'none'
     }
   }
-  broadcastTournaments()
+  await db.updateTournament(t.id, t)
+  await broadcastTournaments()
   res.json({ ok: true, tournament: t })
 })
 
 // Admin: list tournaments (owner only)
-app.get('/api/admin/tournaments', (req, res) => {
+app.get('/api/admin/tournaments', async (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  res.json({ ok: true, tournaments: Array.from(tournaments.values()) })
+  const tournaments = await db.getTournaments()
+  res.json({ ok: true, tournaments })
 })
 
 // Admin: update tournament fields (owner only)
-app.post('/api/admin/tournaments/update', (req, res) => {
+app.post('/api/admin/tournaments/update', async (req, res) => {
   const { tournamentId, patch, requesterEmail } = req.body || {}
   if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   }
-  const t = tournaments.get(String(tournamentId || ''))
+  const t = await db.getTournament(String(tournamentId || ''))
   if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
   const allowed = ['title','game','mode','value','description','startAt','checkinMinutes','capacity','status','prizeType','prizeAmount','currency','prizeNotes','startingScore']
   for (const k of allowed) {
@@ -1803,33 +2236,33 @@ app.post('/api/admin/tournaments/update', (req, res) => {
       t[k] = patch[k]
     }
   }
-  tournaments.set(t.id, t)
-  broadcastTournaments()
+  await db.updateTournament(t.id, t)
+  await broadcastTournaments()
   res.json({ ok: true, tournament: t })
 })
 
 // Admin: delete tournament
-app.post('/api/admin/tournaments/delete', (req, res) => {
+app.post('/api/admin/tournaments/delete', async (req, res) => {
   const { tournamentId, requesterEmail } = req.body || {}
   if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   }
   const id = String(tournamentId || '')
-  const t = tournaments.get(id)
+  const t = await db.getTournament(id)
   if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
   // Mark suppression window if official
   if (t.official) lastOfficialDeleteAt = Date.now()
-  tournaments.delete(id)
-  broadcastTournaments()
+  await db.deleteTournament(id)
+  await broadcastTournaments()
   res.json({ ok: true })
 })
 
 // User: delete own tournament (only if scheduled and creator)
-app.post('/api/tournaments/delete', (req, res) => {
+app.post('/api/tournaments/delete', async (req, res) => {
   const { tournamentId, requesterEmail } = req.body || {}
   const id = String(tournamentId || '')
   const reqEmail = String(requesterEmail || '').toLowerCase()
-  const t = tournaments.get(id)
+  const t = await db.getTournament(id)
   if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
   // Only allowed if tournament is not started yet
   if (t.status !== 'scheduled') return res.status(400).json({ ok: false, error: 'ALREADY_STARTED' })
@@ -1838,34 +2271,34 @@ app.post('/api/tournaments/delete', (req, res) => {
   const isCreator = reqEmail && t.creatorEmail && reqEmail === String(t.creatorEmail).toLowerCase()
   if (!isOwner && !isCreator) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   if (t.official) lastOfficialDeleteAt = Date.now()
-  tournaments.delete(id)
-  broadcastTournaments()
+  await db.deleteTournament(id)
+  await broadcastTournaments()
   res.json({ ok: true })
 })
 
 // Admin: mark prize paid (for cash prize)
-app.post('/api/admin/tournaments/mark-paid', (req, res) => {
+app.post('/api/admin/tournaments/mark-paid', async (req, res) => {
   const { tournamentId, requesterEmail } = req.body || {}
   if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   }
-  const t = tournaments.get(String(tournamentId || ''))
+  const t = await db.getTournament(String(tournamentId || ''))
   if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
   if (t.prizeType !== 'cash') return res.status(400).json({ ok: false, error: 'NOT_CASH_PRIZE' })
   t.payoutStatus = 'paid'
   t.paidAt = Date.now()
-  tournaments.set(t.id, t)
-  broadcastTournaments()
+  await db.updateTournament(t.id, t)
+  await broadcastTournaments()
   res.json({ ok: true, tournament: t })
 })
 
 // Admin: reseed weekly official tournament
-app.post('/api/admin/tournaments/reseed-weekly', (req, res) => {
+app.post('/api/admin/tournaments/reseed-weekly', async (req, res) => {
   const { requesterEmail } = req.body || {}
   if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   }
-  ensureOfficialWeekly()
+  await ensureOfficialWeekly()
   res.json({ ok: true })
 })
 
@@ -1887,10 +2320,11 @@ function getNextFridayAt1945(nowMs) {
   return thisFriday.getTime()
 }
 
-function ensureOfficialWeekly() {
+async function ensureOfficialWeekly() {
   const now = Date.now()
   // We want at least one scheduled official tournament in the future (for early enrollment)
-  const upcoming = Array.from(tournaments.values()).filter(t => t.official && t.status === 'scheduled')
+  const allTournaments = await db.getTournaments()
+  const upcoming = allTournaments.filter(t => t.official && t.status === 'scheduled')
   if (upcoming.length === 0) {
     // Schedule the next Friday at 19:45
     const id = nanoid(10)
@@ -1914,8 +2348,8 @@ function ensureOfficialWeekly() {
       createdAt: Date.now(),
       startingScore: 501,
     }
-    tournaments.set(id, t)
-    broadcastTournaments()
+    await db.createTournament(t)
+    await broadcastTournaments()
   } else {
     // If there is a scheduled official tournament but it's sooner than the coming Friday (edge), ensure there's also one for the following Friday for early enrollment window
     const nextStart = getNextFridayAt1945(now)
@@ -1942,31 +2376,36 @@ function ensureOfficialWeekly() {
         createdAt: Date.now(),
         startingScore: 501,
       }
-      tournaments.set(id2, t2)
-      broadcastTournaments()
+      await db.createTournament(t2)
+      await broadcastTournaments()
     }
   }
 }
 
-ensureOfficialWeekly()
+(async () => {
+  await ensureOfficialWeekly()
+})();
 
 // Simple scheduler for reminders and start triggers
 let lastOfficialDeleteAt = 0
 const OFFICIAL_RESEED_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes after a manual delete, do not reseed
-setInterval(() => {
+setInterval(async () => {
   const now = Date.now()
-  for (const t of tournaments.values()) {
+  const allTournaments = await db.getTournaments()
+  for (const t of allTournaments) {
     if (t.status === 'scheduled') {
       // Reminder window
       const remindAt = t.startAt - (t.checkinMinutes * 60 * 1000)
       if (!t._reminded && now >= remindAt && now < t.startAt) {
         t._reminded = true
+        await db.updateTournament(t.id, t)
         broadcastAll({ type: 'tournament-reminder', tournamentId: t.id, title: t.title, startAt: t.startAt, message: `Only ${t.checkinMinutes} minutes to go until the ${t.title} is live ÔÇö check in ready or lose your spot at 19:45!` })
       }
       // Start condition at start time with min participants 8 (for official) or 2 otherwise
       const minPlayers = t.official ? 8 : 2
       if (now >= t.startAt && t.participants.length >= minPlayers) {
         t.status = 'running'
+        await db.updateTournament(t.id, t)
         broadcastAll({ type: 'tournament-start', tournamentId: t.id, title: t.title })
       }
       // If startAt passed and not enough players, leave scheduled; owner can adjust later
@@ -1974,6 +2413,6 @@ setInterval(() => {
   }
   // Continuously ensure next week's official tournament remains seeded for early enrollment
   if ((now - lastOfficialDeleteAt) > OFFICIAL_RESEED_COOLDOWN_MS) {
-    ensureOfficialWeekly()
+    await ensureOfficialWeekly()
   }
 }, 30 * 1000)
