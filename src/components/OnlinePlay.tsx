@@ -53,6 +53,16 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const match = useMatch()
   const msgs = useMessages()
   const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale, cameraEnabled, textSize, boxSize } = useUserSettings()
+
+  // Button size classes for toolbar buttons
+  const getButtonSizeClasses = (size: string) => {
+    switch (size) {
+      case 'small': return 'px-1.5 py-0.5 text-xs'
+      case 'large': return 'px-3 py-1 text-sm'
+      default: return 'px-2 py-0.5 text-sm'
+    }
+  }
+  const buttonSizeClass = getButtonSizeClasses(textSize)
   // Camera resize state
   const [cameraColSpan, setCameraColSpan] = useState(2)
   // Turn-by-turn modal
@@ -1375,14 +1385,14 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <div className="space-y-2">
                 {/* Top toolbar */}
                 <div className="flex items-center gap-2 mb-2">
-                  <button className="btn px-2 py-0.5 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
-                  <button className="btn px-2 py-0.5 text-sm" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
-                  <button className="btn px-2 py-0.5 text-sm" onClick={openManual}>Manual Correction</button>
+                  <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
+                  <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
+                  <button className={`btn ${buttonSizeClass}`} onClick={openManual}>Manual Correction</button>
                   <div className="ml-auto flex items-center gap-1 text-[11px]">
                     <span className="opacity-70">Cam size</span>
-                    <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
-                    <span className="btn px-2 py-0.5 min-w-[2.5rem] text-center">{Math.round(cameraScale*100)}%</span>
-                    <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                    <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
+                    <span className={`btn ${buttonSizeClass} min-w-[2.5rem] text-center`}>{Math.round(cameraScale*100)}%</span>
+                    <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
                   </div>
                 </div>
                 {/* Summary (left) + Camera (right) */}
@@ -1720,16 +1730,16 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 <div className={`md:col-span-${cameraColSpan} space-y-1.5 relative`}>
                   {/* Toolbar row (separate) */}
                   <div className="flex items-center gap-1.5 mt-2">
-                    <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
-                    <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
-                    <button className="btn px-2 py-0.5 text-xs" onClick={openManual}>Manual Correction</button>
+                    <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
+                    <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
+                    <button className={`btn ${buttonSizeClass}`} onClick={openManual}>Manual Correction</button>
                     <div className="ml-auto flex items-center gap-1">
                       <span className="text-xs opacity-70">Cam</span>
-                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
-                      <span className="btn px-2 py-0.5 text-xs bg-transparent border-slate-600 text-center min-w-[3rem]">{Math.round(cameraScale*100)}%</span>
-                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                      <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
+                      <span className={`btn ${buttonSizeClass} bg-transparent border-slate-600 text-center min-w-[3rem]`}>{Math.round(cameraScale*100)}%</span>
+                      <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
                       <button 
-                        className="btn px-2 py-0.5 text-xs" 
+                        className={`btn ${buttonSizeClass}`} 
                         onClick={() => setCameraColSpan(cameraColSpan === 2 ? 3 : 2)}
                         title={cameraColSpan === 2 ? "Expand camera" : "Shrink camera"}
                       >

@@ -217,6 +217,16 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [manualBox, setManualBox] = useState<string>('')
   // Settings: favourite double and caller
   const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect, cameraEnabled, textSize, boxSize } = useUserSettings()
+
+  // Button size classes for toolbar buttons
+  const getButtonSizeClasses = (size: string) => {
+    switch (size) {
+      case 'small': return 'px-1.5 py-0.5 text-xs'
+      case 'large': return 'px-3 py-1 text-sm'
+      default: return 'px-2 py-0.5 text-sm'
+    }
+  }
+  const buttonSizeClass = getButtonSizeClasses(textSize)
   // Fit-all scaling measurement
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
@@ -1253,11 +1263,11 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <div className="flex items-center gap-1.5 mt-1">
                     <div className="ml-auto flex items-center gap-1 text-[10px]">
                       <span className="opacity-70">Cam</span>
-                      <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
-                      <span className="btn px-2 py-0.5 min-w-[2.5rem] text-center">{Math.round(cameraScale*100)}%</span>
-                      <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                      <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
+                      <span className={`btn ${buttonSizeClass} min-w-[2.5rem] text-center`}>{Math.round(cameraScale*100)}%</span>
+                      <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
                       <span className="opacity-50">|</span>
-                      <button className="btn px-2 py-0.5" title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
+                      <button className={`btn ${buttonSizeClass}`} title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
                     </div>
                   </div>
                   <div className="flex items-stretch justify-end min-w-0">
