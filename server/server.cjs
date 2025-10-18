@@ -30,7 +30,14 @@ const app = express();
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+const supabase = supabaseUrl && supabaseKey ? (() => {
+  try {
+    return createClient(supabaseUrl, supabaseKey);
+  } catch (err) {
+    console.error('[DB] Failed to create Supabase client:', err.message);
+    return null;
+  }
+})() : null;
 
 if (!supabase) {
   console.warn('[DB] Supabase not configured - using in-memory storage only');
@@ -45,7 +52,14 @@ if (process.env.REDIS_URL) {
   console.log('🔍 DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
 }
 
-const redisClient = process.env.REDIS_URL ? redis.createClient({ url: process.env.REDIS_URL }) : null;
+const redisClient = process.env.REDIS_URL ? (() => {
+  try {
+    return redis.createClient({ url: process.env.REDIS_URL });
+  } catch (err) {
+    console.error('[REDIS] Failed to create client:', err.message);
+    return null;
+  }
+})() : null;
 
 if (redisClient) {
   redisClient.on('error', (err) => console.error('[REDIS] Error:', err));
