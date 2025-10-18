@@ -35,6 +35,25 @@ const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabase
 if (!supabase) {
   console.warn('[DB] Supabase not configured - using in-memory storage only');
 }
+
+// Initialize Redis for cross-server session management
+const redis = require('redis');
+
+// DEBUG: Check if REDIS_URL is set
+console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
+if (process.env.REDIS_URL) {
+  console.log('🔍 DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
+}
+
+const redisClient = process.env.REDIS_URL ? redis.createClient({ url: process.env.REDIS_URL }) : null;
+
+if (redisClient) {
+  redisClient.on('error', (err) => console.error('[REDIS] Error:', err));
+  redisClient.on('connect', () => console.log('[REDIS] Connected'));
+  redisClient.connect().catch(err => console.warn('[REDIS] Failed to connect:', err));
+} else {
+  console.warn('[REDIS] Not configured - using in-memory storage for sessions');
+}
 // Observability: metrics registry
 const register = new client.Registry()
 client.collectDefaultMetrics({ register })
@@ -50,6 +69,50 @@ register.registerMetric(wsRooms)
 register.registerMetric(chatMessagesTotal)
 register.registerMetric(errorsTotal)
 register.registerMetric(celebrations180Total)
+
+// Redis helper functions for cross-server session management
+const redisHelpers = {
+  // User sessions (shared across servers)
+  async setUserSession(email, sessionData) {
+    if (!redisClient) return;
+    await redisClient.set(`user:${email}`, JSON.stringify(sessionData), { EX: 3600 }); // 1 hour expiry
+  },
+
+  async getUserSession(email) {
+    if (!redisClient) return null;
+    const data = await redisClient.get(`user:${email}`);
+    return data ? JSON.parse(data) : null;
+  },
+
+  async deleteUserSession(email) {
+    if (!redisClient) return;
+    await redisClient.del(`user:${email}`);
+  },
+
+  // Room memberships (shared across servers)
+  async addUserToRoom(roomId, userEmail, userData) {
+    if (!redisClient) return;
+    await redisClient.sAdd(`room:${roomId}:members`, userEmail);
+    await redisClient.hSet(`room:${roomId}:memberData`, userEmail, JSON.stringify(userData));
+  },
+
+  async removeUserFromRoom(roomId, userEmail) {
+    if (!redisClient) return;
+    await redisClient.sRem(`room:${roomId}:members`, userEmail);
+    await redisClient.hDel(`room:${roomId}:memberData`, userEmail);
+  },
+
+  async getRoomMembers(roomId) {
+    if (!redisClient) return [];
+    const members = await redisClient.sMembers(`room:${roomId}:members`);
+    const memberData = [];
+    for (const email of members) {
+      const data = await redisClient.hGet(`room:${roomId}:memberData`, email);
+      if (data) memberData.push(JSON.parse(data));
+    }
+    return memberData;
+  }
+};
 
 // Security & performance
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
@@ -940,19 +1003,30 @@ function broadcastTournaments() {
   broadcastAll({ type: 'tournaments', tournaments: list })
 }
 
-function joinRoom(ws, roomId) {
+async function joinRoom(ws, roomId) {
   if (!rooms.has(roomId)) rooms.set(roomId, new Set());
   rooms.get(roomId).add(ws);
   ws._roomId = roomId;
-  if (ws._email && users.has(ws._email)) {
-    const u = users.get(ws._email)
-    u.status = 'ingame'
-    u.lastSeen = Date.now()
-    users.set(ws._email, u)
+  if (ws._email) {
+    // Update user status in Redis for cross-server sharing
+    const userSession = await redisHelpers.getUserSession(ws._email);
+    if (userSession) {
+      userSession.status = 'ingame';
+      userSession.lastSeen = Date.now();
+      userSession.currentRoomId = roomId;
+      await redisHelpers.setUserSession(ws._email, userSession);
+    }
+    // Also update local cache
+    if (users.has(ws._email)) {
+      const u = users.get(ws._email)
+      u.status = 'ingame'
+      u.lastSeen = Date.now()
+      users.set(ws._email, u)
+    }
   }
 }
 
-function leaveRoom(ws) {
+async function leaveRoom(ws) {
   const roomId = ws._roomId;
   if (!roomId) return;
   const set = rooms.get(roomId);
@@ -961,12 +1035,23 @@ function leaveRoom(ws) {
     if (set.size === 0) rooms.delete(roomId);
   }
   ws._roomId = null;
-  if (ws._email && users.has(ws._email)) {
-    const u = users.get(ws._email)
-    // If still connected, revert to online; otherwise close handler will set offline
-    u.status = 'online'
-    u.lastSeen = Date.now()
-    users.set(ws._email, u)
+  if (ws._email) {
+    // Update user status in Redis for cross-server sharing
+    const userSession = await redisHelpers.getUserSession(ws._email);
+    if (userSession) {
+      userSession.status = 'online';
+      userSession.lastSeen = Date.now();
+      userSession.currentRoomId = null;
+      await redisHelpers.setUserSession(ws._email, userSession);
+    }
+    // Also update local cache
+    if (users.has(ws._email)) {
+      const u = users.get(ws._email)
+      // If still connected, revert to online; otherwise close handler will set offline
+      u.status = 'online'
+      u.lastSeen = Date.now()
+      users.set(ws._email, u)
+    }
   }
 }
 
@@ -1011,14 +1096,14 @@ wss.on('connection', (ws, req) => {
   try { ws.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) })) } catch {}
   // Track presence if client later identifies
 
-  ws.on('message', (msg) => {
+  ws.on('message', async (msg) => {
     if (typeof msg?.length === 'number' && msg.length > 128 * 1024) return
     if (!allowMessage()) return
     try {
       const data = JSON.parse(msg.toString());
       if (data.type === 'join') {
-        leaveRoom(ws);
-        joinRoom(ws, data.roomId);
+        await leaveRoom(ws);
+        await joinRoom(ws, data.roomId);
         ws.send(JSON.stringify({ type: 'joined', roomId: data.roomId, id: ws._id }));
         // Optionally notify others that someone joined (presence will carry details)
         if (ws._roomId) {
@@ -1059,6 +1144,21 @@ wss.on('connection', (ws, req) => {
         ws._username = data.username || `user-${ws._id}`
         ws._email = (data.email || '').toLowerCase()
         if (ws._email) {
+          // Update user session in Redis for cross-server sharing
+          const userSession = await redisHelpers.getUserSession(ws._email) || {
+            email: ws._email,
+            username: ws._username,
+            status: 'online',
+            allowSpectate: true
+          };
+          userSession.username = ws._username;
+          userSession.status = 'online';
+          userSession.lastSeen = Date.now();
+          userSession.wsId = ws._id;
+          if (typeof data.allowSpectate === 'boolean') userSession.allowSpectate = !!data.allowSpectate;
+          await redisHelpers.setUserSession(ws._email, userSession);
+
+          // Also update local cache
           const u = users.get(ws._email) || { email: ws._email, username: ws._username, status: 'online', allowSpectate: true }
           u.username = ws._username
           u.status = 'online'
@@ -1131,8 +1231,8 @@ wss.on('connection', (ws, req) => {
           } catch {}
         }
         if (!allowed) { try { ws.send(JSON.stringify({ type: 'error', code: 'SPECTATE_NOT_ALLOWED', message: 'Spectating is disabled by the player.' })) } catch {}; return }
-        leaveRoom(ws)
-        joinRoom(ws, roomId)
+        await leaveRoom(ws)
+        await joinRoom(ws, roomId)
         ws._spectator = true
         try { ws.send(JSON.stringify({ type: 'joined', roomId, id: ws._id, spectator: true })) } catch {}
         if (ws._roomId) {
@@ -1349,11 +1449,11 @@ wss.on('connection', (ws, req) => {
     }
   });
 
-  ws.on('close', (code, reasonBuf) => {
+  ws.on('close', async (code, reasonBuf) => {
     const reason = (() => { try { return reasonBuf ? reasonBuf.toString() : '' } catch { return '' } })()
     try { console.log(`[WS] close id=${ws._id} code=${code} reason=${reason}`) } catch {}
     // Clean up room
-    leaveRoom(ws);
+    await leaveRoom(ws);
     try { wsConnections.dec() } catch {}
     // Remove any matches created by this client
     for (const [id, m] of Array.from(matches.entries())) {
@@ -1367,6 +1467,16 @@ wss.on('connection', (ws, req) => {
     if (ws._email && users.has(ws._email)) {
       const u = users.get(ws._email)
       if (u && u.wsId === ws._id) {
+        // Update user status in Redis for cross-server sharing
+        const userSession = await redisHelpers.getUserSession(ws._email);
+        if (userSession) {
+          userSession.status = 'offline';
+          userSession.lastSeen = Date.now();
+          userSession.wsId = undefined;
+          userSession.currentRoomId = null;
+          await redisHelpers.setUserSession(ws._email, userSession);
+        }
+        // Also update local cache
         u.status = 'offline'
         u.lastSeen = Date.now()
         u.wsId = undefined
