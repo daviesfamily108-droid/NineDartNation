@@ -122,7 +122,8 @@ export default function App() {
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const paid = urlParams.get('paid');
-    if (paid === '1' || paid === 'username-change') {
+    const usernameChange = urlParams.get('username-change');
+    if (paid === '1' || paid === 'username-change' || usernameChange === 'free') {
       const pendingUsername = localStorage.getItem('pendingUsernameChange');
       if (pendingUsername && user?.email) {
         // Call the change username API
@@ -137,10 +138,15 @@ export default function App() {
           if (data.ok) {
             alert('Username changed successfully!');
             localStorage.removeItem('pendingUsernameChange');
+            // Update user data and token
+            if (data.token) {
+              localStorage.setItem('authToken', data.token);
+            }
+            if (data.user) {
+              setUser(data.user);
+            }
             // Clean up URL
             window.history.replaceState({}, document.title, window.location.pathname);
-            // Reload to update user
-            window.location.reload();
           } else {
             alert('Failed to change username: ' + (data.error || 'Unknown error'));
           }

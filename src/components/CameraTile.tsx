@@ -280,8 +280,8 @@ function CameraFrame(props: any) {
   const scale = Math.max(0.5, Math.min(1.25, Number(props.scaleOverride ?? cameraScale ?? 1)))
   const { label, start, stopAll, startPhonePairing, startWifiConnection, connectToWifiDevice, videoRef, streaming, mode, setMode, pairCode, mobileUrl, ttl, qrDataUrl, regenerateCode, httpsInfo, showTips, setShowTips, wifiDevices, discoveringWifi } = props
   return (
-    <div className="rounded-2xl overflow-hidden bg-black w-full mx-auto" style={{ aspectRatio: '16 / 9', transform: `scale(${scale})`, transformOrigin: 'center' }}>
-      <video ref={videoRef} className="w-full h-full object-contain object-center bg-black" />
+    <div className="rounded-2xl overflow-hidden bg-black w-full mx-auto" style={{ aspectRatio: '4 / 3' }}>
+      <video ref={videoRef} className="w-full h-full object-contain object-center bg-black" style={{ transform: `scale(${scale})`, transformOrigin: 'center' }} />
       <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
         <span className="truncate">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : mode==='wifi' ? 'WIFI LIVE' : 'LIVE') : 'Camera')}</span>
         <div className="flex items-center gap-1">

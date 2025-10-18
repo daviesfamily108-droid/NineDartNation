@@ -101,7 +101,7 @@ export default function AdminAccess({ user }: { user?: any }) {
               });
               const data = await res.json();
               if (data.ok && data.url) {
-                window.open(data.url, '_blank');
+                window.location.href = data.url;
               } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
                 toast("Premium purchases are not available. Payment link not configured.", { type: 'error', timeout: 4000 });
               } else {

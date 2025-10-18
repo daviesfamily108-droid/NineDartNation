@@ -1834,7 +1834,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   });
                   const data = await res.json();
                   if (data.ok && data.url) {
-                    window.open(data.url, '_blank');
+                    window.location.href = data.url;
                     if (data.development) {
                       toast("Opened Stripe test checkout (development mode)", { type: 'info', timeout: 3000 });
                     }

@@ -9,7 +9,7 @@ const os = require('os');
 const https = require('https');
 const path = require('path');
 const Filter = require('bad-words');
-const EmailTemplates = require('./server/emails/templates.js');
+const EmailTemplates = require('./emails/templates.js');
 const nodemailer = require('nodemailer');
 const helmet = require('helmet');
 const compression = require('compression');
@@ -30,10 +30,43 @@ const app = express();
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
+const supabase = supabaseUrl && supabaseKey ? (() => {
+  try {
+    return createClient(supabaseUrl, supabaseKey);
+  } catch (err) {
+    console.error('[DB] Failed to create Supabase client:', err.message);
+    return null;
+  }
+})() : null;
 
 if (!supabase) {
   console.warn('[DB] Supabase not configured - using in-memory storage only');
+}
+
+// Initialize Redis for cross-server session management
+const redis = require('redis');
+
+// DEBUG: Check if REDIS_URL is set
+console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
+if (process.env.REDIS_URL) {
+  console.log('🔍 DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
+}
+
+const redisClient = process.env.REDIS_URL ? (() => {
+  try {
+    return redis.createClient({ url: process.env.REDIS_URL });
+  } catch (err) {
+    console.error('[REDIS] Failed to create client:', err.message);
+    return null;
+  }
+})() : null;
+
+if (redisClient) {
+  redisClient.on('error', (err) => console.error('[REDIS] Error:', err));
+  redisClient.on('connect', () => console.log('[REDIS] Connected'));
+  redisClient.connect().catch(err => console.warn('[REDIS] Failed to connect:', err));
+} else {
+  console.warn('[REDIS] Not configured - using in-memory storage for sessions');
 }
 // Observability: metrics registry
 const register = new client.Registry()
@@ -50,6 +83,50 @@ register.registerMetric(wsRooms)
 register.registerMetric(chatMessagesTotal)
 register.registerMetric(errorsTotal)
 register.registerMetric(celebrations180Total)
+
+// Redis helper functions for cross-server session management
+const redisHelpers = {
+  // User sessions (shared across servers)
+  async setUserSession(email, sessionData) {
+    if (!redisClient) return;
+    await redisClient.set(`user:${email}`, JSON.stringify(sessionData), { EX: 3600 }); // 1 hour expiry
+  },
+
+  async getUserSession(email) {
+    if (!redisClient) return null;
+    const data = await redisClient.get(`user:${email}`);
+    return data ? JSON.parse(data) : null;
+  },
+
+  async deleteUserSession(email) {
+    if (!redisClient) return;
+    await redisClient.del(`user:${email}`);
+  },
+
+  // Room memberships (shared across servers)
+  async addUserToRoom(roomId, userEmail, userData) {
+    if (!redisClient) return;
+    await redisClient.sAdd(`room:${roomId}:members`, userEmail);
+    await redisClient.hSet(`room:${roomId}:memberData`, userEmail, JSON.stringify(userData));
+  },
+
+  async removeUserFromRoom(roomId, userEmail) {
+    if (!redisClient) return;
+    await redisClient.sRem(`room:${roomId}:members`, userEmail);
+    await redisClient.hDel(`room:${roomId}:memberData`, userEmail);
+  },
+
+  async getRoomMembers(roomId) {
+    if (!redisClient) return [];
+    const members = await redisClient.sMembers(`room:${roomId}:members`);
+    const memberData = [];
+    for (const email of members) {
+      const data = await redisClient.hGet(`room:${roomId}:memberData`, email);
+      if (data) memberData.push(JSON.parse(data));
+    }
+    return memberData;
+  }
+};
 
 // Security & performance
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
@@ -72,7 +149,7 @@ app.use((req, res, next) => {
 // Guard JSON body size to avoid excessive memory
 app.use(express.json({ limit: '100kb' }));
 // Serve static assets (mobile camera page)
-app.use(express.static('./server/public'))
+app.use(express.static('./public'))
 // In production, also serve the built client app. Prefer root ../dist, fallback to ../app/dist.
 const rootDistPath = path.resolve(process.cwd(), 'dist')
 const appDistPath = path.resolve(process.cwd(), 'app', 'dist')
@@ -300,108 +377,6 @@ app.get('/api/subscription', async (req, res) => {
   res.json({ fullAccess: false });
 });
 
-// Username change endpoint
-app.post('/api/change-username', async (req, res) => {
-  const { email, newUsername } = req.body || {}
-  if (!email || !newUsername) {
-    return res.status(400).json({ error: 'Email and new username required.' })
-  }
-
-  try {
-    // Check if new username is already taken
-    for (const u of users.values()) {
-      if (u.username === newUsername) {
-        return res.status(409).json({ error: 'Username already exists.' })
-      }
-    }
-
-    // Check Supabase too
-    if (supabase) {
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('username')
-        .eq('username', newUsername)
-        .single();
-
-      if (existingUser) {
-        return res.status(409).json({ error: 'Username already exists.' })
-      }
-    }
-
-    // Find and update the user
-    let user = null
-    for (const u of users.values()) {
-      if (u.email === email) {
-        user = u
-        break
-      }
-    }
-
-    if (!user) {
-      // Check Supabase
-      if (supabase) {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('email', email)
-          .single();
-
-        if (error && error.code !== 'PGRST116') {
-          console.error('[DB] Supabase error:', error);
-          return res.status(500).json({ error: 'Database error.' });
-        }
-
-        if (data) {
-          user = data
-        }
-      }
-    }
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found.' })
-    }
-
-    // Check username change count
-    const currentCount = user.usernameChangeCount || 0
-    const isFree = currentCount < 2
-
-    // For paid changes, we should verify payment here, but for now we'll trust the client
-    // In production, you'd verify the Stripe payment was successful
-
-    // Update username
-    const oldUsername = user.username
-    user.username = newUsername
-    user.usernameChangeCount = currentCount + 1
-
-    // Update in memory
-    users.set(email, user)
-
-    // Update in Supabase
-    if (supabase) {
-      const { error } = await supabase
-        .from('users')
-        .update({
-          username: newUsername,
-          usernameChangeCount: user.usernameChangeCount
-        })
-        .eq('email', email);
-
-      if (error) {
-        console.error('[DB] Failed to update username in Supabase:', error);
-        return res.status(500).json({ error: 'Failed to update username.' });
-      }
-    }
-
-    // Create new JWT token with updated username
-    const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
-
-    res.json({ ok: true, user, token })
-  } catch (error) {
-    console.error('[CHANGE_USERNAME] Error:', error);
-    return res.status(500).json({ error: 'Internal server error.' });
-  }
-});
-
 // Debug endpoint to check Supabase status
 app.get('/api/debug/supabase', (req, res) => {
   res.json({
@@ -496,7 +471,7 @@ app.post('/webhook/stripe', async (req, res) => {
 // Optional (if you later secure webhook verification): STRIPE_WEBHOOK_SECRET=whsec_...
 let stripe = null
 try {
-  if (process.env.STRIPE_SECRET_KEY) {
+  if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== 'YOUR_STRIPE_SECRET_KEY_HERE') {
     stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
   }
 } catch (e) {
@@ -532,28 +507,20 @@ app.post('/api/stripe/create-session', async (req, res) => {
 
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
-    if (!stripe || !process.env.STRIPE_PRICE_ID_SUBSCRIPTION) {
+    // Use payment link instead of API to avoid exposing keys
+    const premiumPaymentLink = process.env.STRIPE_PREMIUM_PAYMENT_LINK || 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE';
+    
+    if (premiumPaymentLink === 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE') {
       return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
     }
-    const { email, successUrl, cancelUrl } = req.body || {}
+    
+    const { email } = req.body || {}
     if (!email || !email.includes('@')) {
       return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
     }
-    // Derive sensible defaults for success/cancel
-    const host = req.headers['x-forwarded-host'] || req.headers.host
-    const proto = (req.headers['x-forwarded-proto'] || 'https')
-    const base = `https://${host}`
-    const sUrl = (typeof successUrl === 'string' && successUrl.startsWith('http')) ? successUrl : `${base}/?subscription=success`
-    const cUrl = (typeof cancelUrl === 'string' && cancelUrl.startsWith('http')) ? cancelUrl : `${base}/?subscription=cancel`
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [{ price: process.env.STRIPE_PRICE_ID_SUBSCRIPTION, quantity: 1 }],
-      customer_email: email,
-      metadata: { purpose: 'subscription', email: email },
-      success_url: sUrl,
-      cancel_url: cUrl,
-    })
-    return res.json({ ok: true, url: session.url })
+    
+    // Return the payment link directly
+    return res.json({ ok: true, url: premiumPaymentLink })
   } catch (e) {
     console.error('[Stripe] create-checkout-session failed:', e?.message || e)
     return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
@@ -1050,19 +1017,30 @@ function broadcastTournaments() {
   broadcastAll({ type: 'tournaments', tournaments: list })
 }
 
-function joinRoom(ws, roomId) {
+async function joinRoom(ws, roomId) {
   if (!rooms.has(roomId)) rooms.set(roomId, new Set());
   rooms.get(roomId).add(ws);
   ws._roomId = roomId;
-  if (ws._email && users.has(ws._email)) {
-    const u = users.get(ws._email)
-    u.status = 'ingame'
-    u.lastSeen = Date.now()
-    users.set(ws._email, u)
+  if (ws._email) {
+    // Update user status in Redis for cross-server sharing
+    const userSession = await redisHelpers.getUserSession(ws._email);
+    if (userSession) {
+      userSession.status = 'ingame';
+      userSession.lastSeen = Date.now();
+      userSession.currentRoomId = roomId;
+      await redisHelpers.setUserSession(ws._email, userSession);
+    }
+    // Also update local cache
+    if (users.has(ws._email)) {
+      const u = users.get(ws._email)
+      u.status = 'ingame'
+      u.lastSeen = Date.now()
+      users.set(ws._email, u)
+    }
   }
 }
 
-function leaveRoom(ws) {
+async function leaveRoom(ws) {
   const roomId = ws._roomId;
   if (!roomId) return;
   const set = rooms.get(roomId);
@@ -1071,12 +1049,23 @@ function leaveRoom(ws) {
     if (set.size === 0) rooms.delete(roomId);
   }
   ws._roomId = null;
-  if (ws._email && users.has(ws._email)) {
-    const u = users.get(ws._email)
-    // If still connected, revert to online; otherwise close handler will set offline
-    u.status = 'online'
-    u.lastSeen = Date.now()
-    users.set(ws._email, u)
+  if (ws._email) {
+    // Update user status in Redis for cross-server sharing
+    const userSession = await redisHelpers.getUserSession(ws._email);
+    if (userSession) {
+      userSession.status = 'online';
+      userSession.lastSeen = Date.now();
+      userSession.currentRoomId = null;
+      await redisHelpers.setUserSession(ws._email, userSession);
+    }
+    // Also update local cache
+    if (users.has(ws._email)) {
+      const u = users.get(ws._email)
+      // If still connected, revert to online; otherwise close handler will set offline
+      u.status = 'online'
+      u.lastSeen = Date.now()
+      users.set(ws._email, u)
+    }
   }
 }
 
@@ -1121,14 +1110,14 @@ wss.on('connection', (ws, req) => {
   try { ws.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) })) } catch {}
   // Track presence if client later identifies
 
-  ws.on('message', (msg) => {
+  ws.on('message', async (msg) => {
     if (typeof msg?.length === 'number' && msg.length > 128 * 1024) return
     if (!allowMessage()) return
     try {
       const data = JSON.parse(msg.toString());
       if (data.type === 'join') {
-        leaveRoom(ws);
-        joinRoom(ws, data.roomId);
+        await leaveRoom(ws);
+        await joinRoom(ws, data.roomId);
         ws.send(JSON.stringify({ type: 'joined', roomId: data.roomId, id: ws._id }));
         // Optionally notify others that someone joined (presence will carry details)
         if (ws._roomId) {
@@ -1169,6 +1158,21 @@ wss.on('connection', (ws, req) => {
         ws._username = data.username || `user-${ws._id}`
         ws._email = (data.email || '').toLowerCase()
         if (ws._email) {
+          // Update user session in Redis for cross-server sharing
+          const userSession = await redisHelpers.getUserSession(ws._email) || {
+            email: ws._email,
+            username: ws._username,
+            status: 'online',
+            allowSpectate: true
+          };
+          userSession.username = ws._username;
+          userSession.status = 'online';
+          userSession.lastSeen = Date.now();
+          userSession.wsId = ws._id;
+          if (typeof data.allowSpectate === 'boolean') userSession.allowSpectate = !!data.allowSpectate;
+          await redisHelpers.setUserSession(ws._email, userSession);
+
+          // Also update local cache
           const u = users.get(ws._email) || { email: ws._email, username: ws._username, status: 'online', allowSpectate: true }
           u.username = ws._username
           u.status = 'online'
@@ -1241,8 +1245,8 @@ wss.on('connection', (ws, req) => {
           } catch {}
         }
         if (!allowed) { try { ws.send(JSON.stringify({ type: 'error', code: 'SPECTATE_NOT_ALLOWED', message: 'Spectating is disabled by the player.' })) } catch {}; return }
-        leaveRoom(ws)
-        joinRoom(ws, roomId)
+        await leaveRoom(ws)
+        await joinRoom(ws, roomId)
         ws._spectator = true
         try { ws.send(JSON.stringify({ type: 'joined', roomId, id: ws._id, spectator: true })) } catch {}
         if (ws._roomId) {
@@ -1459,11 +1463,11 @@ wss.on('connection', (ws, req) => {
     }
   });
 
-  ws.on('close', (code, reasonBuf) => {
+  ws.on('close', async (code, reasonBuf) => {
     const reason = (() => { try { return reasonBuf ? reasonBuf.toString() : '' } catch { return '' } })()
     try { console.log(`[WS] close id=${ws._id} code=${code} reason=${reason}`) } catch {}
     // Clean up room
-    leaveRoom(ws);
+    await leaveRoom(ws);
     try { wsConnections.dec() } catch {}
     // Remove any matches created by this client
     for (const [id, m] of Array.from(matches.entries())) {
@@ -1477,6 +1481,16 @@ wss.on('connection', (ws, req) => {
     if (ws._email && users.has(ws._email)) {
       const u = users.get(ws._email)
       if (u && u.wsId === ws._id) {
+        // Update user status in Redis for cross-server sharing
+        const userSession = await redisHelpers.getUserSession(ws._email);
+        if (userSession) {
+          userSession.status = 'offline';
+          userSession.lastSeen = Date.now();
+          userSession.wsId = undefined;
+          userSession.currentRoomId = null;
+          await redisHelpers.setUserSession(ws._email, userSession);
+        }
+        // Also update local cache
         u.status = 'offline'
         u.lastSeen = Date.now()
         u.wsId = undefined

@@ -3,14 +3,12 @@ services:
     name: nine-dart-nation-api
     env: node
     buildCommand: |
-      # Install server deps
-      cd server && npm ci
-      # Build frontend bundle(s). We try root first, then app/ if present.
-      npm ci && npm run build || true
-      if [ -d app ]; then
-        cd app && npm ci && npm run build || true
-        cd ..
-      fi
+      # Install all dependencies
+      npm ci
+      # Install server-specific dependencies
+      cd server && npm ci && cd ..
+      # Build frontend
+      npm run build
     startCommand: cd server && npm start
     healthCheckPath: /readyz
     autoDeploy: true

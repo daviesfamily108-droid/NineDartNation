@@ -41,5 +41,5 @@ export function getUserCurrency(): string {
 	}
 }
 
-// Centralized Discord invite; override via VITE_DISCORD_INVITE_URL in Netlify
-export const DISCORD_INVITE_URL: string = (import.meta as any).env?.VITE_DISCORD_INVITE_URL || 'https://discord.gg/bx4KEF8U'
+// Centralized Discord invite; override via VITE_DISCORD_INVITE_URL in Render/Netlify
+export const DISCORD_INVITE_URL: string = (import.meta as any).env?.VITE_DISCORD_INVITE_URL || 'https://discord.gg/nCfT4hJz'

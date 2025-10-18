@@ -1,0 +1,12 @@
+{
+  "friendships": {
+    "friend@example.com": [
+      "test@example.com"
+    ],
+    "test@example.com": [
+      "friend@example.com"
+    ]
+  },
+  "friendRequests": {},
+  "outgoingRequests": {}
+}

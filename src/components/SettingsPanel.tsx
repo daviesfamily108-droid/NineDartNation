@@ -106,44 +106,57 @@ export default function SettingsPanel({ user }: { user?: any }) {
             </div>
             {/* Username Change */}
             <div className="border-t border-red-500/20 pt-3">
-              <div className="font-medium mb-2 text-black">Change Username (One-time, $2)</div>
-              <div className="text-sm text-black mb-2">Username becomes permanent after change.</div>
-              {user?.usernameChanged ? (
-                <div className="text-green-400 text-sm">Username already changed. This option is no longer available.</div>
-              ) : (
-                <>
-                  <input
-                    className="input w-full mb-2"
-                    type="text"
-                    placeholder="New username"
-                    value={newUsername}
-                    onChange={e => setNewUsername(e.target.value)}
-                    disabled={changingUsername}
-                  />
-                  {usernameError && <div className="text-red-400 text-sm mb-2">{usernameError}</div>}
-                  <button
-                    onClick={async () => {
-                      setUsernameError('')
-                      if (!newUsername.trim()) {
-                        setUsernameError('Username required')
-                        return
-                      }
-                      if (newUsername.length < 3 || newUsername.length > 20) {
-                        setUsernameError('Username must be 3-20 characters')
-                        return
-                      }
-                      // Store the new username for after payment
-                      localStorage.setItem('pendingUsernameChange', newUsername.trim())
-                      // Redirect to Stripe payment link
-                      window.location.href = 'https://buy.stripe.com/eVq4gB3XqeNS0iw6vAfnO02'
-                    }}
-                    disabled={changingUsername || !newUsername.trim()}
-                    className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
-                  >
-                    {changingUsername ? 'Processing...' : 'Change Username ($2)'}
-                  </button>
-                </>
-              )}
+              <div className="font-medium mb-2 text-black">Change Username ({(() => {
+                const count = user?.usernameChangeCount || 0;
+                if (count < 2) return `${2 - count} free changes remaining`;
+                return '£2 per change';
+              })()})</div>
+              <div className="text-sm text-black mb-2">You can change your username up to 2 times for free. Additional changes cost £2 each.</div>
+              {user?.usernameChangeCount >= 2 && !newUsername.trim() ? (
+                <div className="text-amber-400 text-sm mb-2">⚠️ Additional username changes cost £2</div>
+              ) : null}
+              <input
+                className="input w-full mb-2"
+                type="text"
+                placeholder="New username"
+                value={newUsername}
+                onChange={e => setNewUsername(e.target.value)}
+                disabled={changingUsername}
+              />
+              {usernameError && <div className="text-red-400 text-sm mb-2">{usernameError}</div>}
+              <button
+                onClick={async () => {
+                  setUsernameError('')
+                  if (!newUsername.trim()) {
+                    setUsernameError('Username required')
+                    return
+                  }
+                  if (newUsername.length < 3 || newUsername.length > 20) {
+                    setUsernameError('Username must be 3-20 characters')
+                    return
+                  }
+                  const currentCount = user?.usernameChangeCount || 0;
+                  const isFree = currentCount < 2;
+                  
+                  if (!isFree) {
+                    // Charge £2 for additional changes
+                    window.location.href = 'https://buy.stripe.com/eVq4gB3XqeNS0iw6vAfnO02'
+                  } else {
+                    // Free change - store the new username for after processing
+                    localStorage.setItem('pendingUsernameChange', newUsername.trim())
+                    // For free changes, we might need to handle this differently
+                    // For now, redirect to a free processing endpoint or handle locally
+                    window.location.href = '/?username-change=free'
+                  }
+                }}
+                disabled={changingUsername || !newUsername.trim()}
+                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+              >
+                {changingUsername ? 'Processing...' : (() => {
+                  const count = user?.usernameChangeCount || 0;
+                  return count < 2 ? 'Change Username (FREE)' : 'Change Username (£2)';
+                })()}
+              </button>
             </div>
           </div>
         </div>

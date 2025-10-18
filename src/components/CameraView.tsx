@@ -194,7 +194,24 @@ export default function CameraView({
             const id = e.target.value || undefined
             const label = availableCameras.find(d=>d.deviceId===id)?.label
             setPreferredCamera(id, label||'')
-            stopCamera(); await startCamera()
+            // Stop current camera and wait for cleanup
+            stopCamera()
+            // Small delay to ensure camera device is fully released
+            await new Promise(resolve => setTimeout(resolve, 100))
+            try {
+              await startCamera()
+            } catch (err) {
+              console.warn('Failed to start camera after device switch:', err)
+              // Try one more time after a longer delay
+              setTimeout(async () => {
+                try {
+                  await startCamera()
+                } catch (retryErr) {
+                  console.error('Camera switch failed after retry:', retryErr)
+                  alert('Failed to switch camera. Please try again or refresh the page.')
+                }
+              }, 500)
+            }
           }}
         >
           <option value="">Auto</option>
@@ -536,7 +553,7 @@ export default function CameraView({
   {!hideInlinePanels ? (
   <div className="card">
         <h2 className="text-xl font-semibold mb-3">Camera</h2>
-        <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={720} defaultHeight={405} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
+        <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={640} defaultHeight={480} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
           <CameraSelector />
           <video ref={videoRef} className="w-full h-full object-cover" />
           <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
@@ -746,7 +763,7 @@ export default function CameraView({
               {/* Camera section */}
               <div className="bg-black/30 rounded-2xl p-4">
                 <h2 className="text-lg font-semibold mb-3">Camera</h2>
-                <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={720} defaultHeight={405} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
+                <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={640} defaultHeight={480} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
                   <CameraSelector />
                   <video ref={videoRef} className="w-full h-full object-cover" />
                   <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />

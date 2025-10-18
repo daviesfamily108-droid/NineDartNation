@@ -1367,7 +1367,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <div className="order-1"><RenderMatchSummary /></div>
                   <div className="order-2">
                     {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
-                      <div className="min-w-[260px] relative z-10"><CameraTile label="Your Board" autoStart={false} /></div>
+                      <div className="min-w-[260px] relative z-10 overflow-hidden" style={{ maxHeight: 'min(50vh, 400px)' }}><CameraTile label="Your Board" autoStart={false} /></div>
                     ) : (
                       <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
                     )}

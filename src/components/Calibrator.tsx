@@ -196,17 +196,32 @@ export default function Calibrator() {
 				}
 				
 				peer.ontrack = (ev) => {
+					console.log('WebRTC ontrack received:', ev.streams?.[0])
 					if (videoRef.current) {
 						const inbound = ev.streams?.[0]
 						if (inbound) {
-							videoRef.current.srcObject = inbound
-							videoRef.current.play().catch((err) => {
-								console.error('Video play failed:', err)
-								alert('Failed to start video playback. Please check your browser settings.')
-							})
-							setStreaming(true)
-							setPhase('capture')
+							console.log('Assigning video stream to video element')
+							// Ensure video element is visible
+							setSnapshotSet(false)
+							// Use setTimeout to ensure DOM updates before assigning stream
+							setTimeout(() => {
+								if (videoRef.current) {
+									videoRef.current.srcObject = inbound
+									videoRef.current.play().then(() => {
+										console.log('Video playback started successfully')
+										setStreaming(true)
+										setPhase('capture')
+									}).catch((err) => {
+										console.error('Video play failed:', err)
+										alert('Failed to start video playback. Please check your browser settings.')
+									})
+								}
+							}, 100)
+						} else {
+							console.error('No inbound stream received')
 						}
+					} else {
+						console.error('Video element not available')
 					}
 				}
 				
@@ -294,7 +309,12 @@ export default function Calibrator() {
 		if (mode === 'phone') return startPhonePairing()
 		if (mode === 'wifi') return startWifiConnection()
 		try {
-			const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+			const { preferredCameraId } = useUserSettings()
+			const constraints: MediaStreamConstraints = {
+				video: preferredCameraId ? { deviceId: { exact: preferredCameraId } } : { facingMode: 'environment' },
+				audio: false
+			}
+			const stream = await navigator.mediaDevices.getUserMedia(constraints)
 			if (videoRef.current) {
 				videoRef.current.srcObject = stream
 				await videoRef.current.play()
@@ -852,10 +872,10 @@ export default function Calibrator() {
 													if (v.videoWidth && v.videoHeight) setFrameSize({ w: v.videoWidth, h: v.videoHeight })
 												} catch {}
 											}}
-											className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-0 -z-10' : 'opacity-100'}`}
+											className={`absolute inset-0 w-full h-full object-cover ${snapshotSet ? 'opacity-0 -z-10' : 'opacity-100 z-10'}`}
 										/>
-										<canvas ref={canvasRef} className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-100' : 'opacity-0 -z-10'}`} />
-										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 w-full h-full" />
+										<canvas ref={canvasRef} className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`} />
+										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 w-full h-full z-30" />
 									</div>
 								</div>
 
