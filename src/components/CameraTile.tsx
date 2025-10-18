@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import QRCode from 'qrcode'
 import { useUserSettings } from '../store/userSettings'
-import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice } from '../utils/networkDevices'
+import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice, discoverUSBDevices, requestUSBDevice, connectToUSBDevice, type USBDevice } from '../utils/networkDevices'
 
 export default function CameraTile({ label, autoStart = false, scale: scaleOverride }: { label?: string; autoStart?: boolean; scale?: number }) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -18,6 +18,8 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
   const [showTips, setShowTips] = useState<boolean>(true)
   const [wifiDevices, setWifiDevices] = useState<NetworkDevice[]>([])
   const [discoveringWifi, setDiscoveringWifi] = useState<boolean>(false)
+  const [usbDevices, setUsbDevices] = useState<USBDevice[]>([])
+  const [discoveringUsb, setDiscoveringUsb] = useState<boolean>(false)
   useEffect(() => {
     const h = window.location.hostname
     if (h === 'localhost' || h === '127.0.0.1') {
@@ -105,13 +107,13 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
         await videoRef.current.play()
         setStreaming(true)
       }
-      // Update selected label after start
+      // Update selected label after start ONLY if no preferred camera was set
       try {
         const list = await navigator.mediaDevices.enumerateDevices()
         const vidTrack = (stream.getVideoTracks?.()||[])[0]
         const settings = vidTrack?.getSettings?.()
         const id = settings?.deviceId as string | undefined
-        if (id) {
+        if (id && !preferredCameraId) {
           const label = list.find(d=>d.deviceId===id)?.label
           setPreferredCamera(id, label||'')
         }
@@ -164,6 +166,56 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
       console.error('Failed to connect to wifi device:', error)
       alert(`Failed to connect to ${device.name}. Please check the device and try again.`)
       setWifiDevices(devices => devices.map(d => 
+        d.id === device.id ? { ...d, status: 'offline' as const } : d
+      ))
+    }
+  }
+
+  async function startUsbConnection() {
+    setDiscoveringUsb(true)
+    try {
+      // First try to get already paired devices
+      const devices = await discoverUSBDevices()
+      setUsbDevices(devices)
+
+      // Then request user to select a new device
+      const newDevice = await requestUSBDevice()
+      if (newDevice) {
+        setUsbDevices(prev => [...prev, newDevice])
+      }
+
+      if (devices.length === 0 && !newDevice) {
+        alert('No USB scoring devices found. Please connect a device and try again.')
+      }
+    } catch (error) {
+      console.error('USB device discovery failed:', error)
+      alert('Failed to discover USB devices. Please check device connections.')
+    } finally {
+      setDiscoveringUsb(false)
+    }
+  }
+
+  async function connectToUsbDevice(device: USBDevice) {
+    try {
+      setUsbDevices(devices => devices.map(d => 
+        d.id === device.id ? { ...d, status: 'connecting' as const } : d
+      ))
+      const stream = await connectToUSBDevice(device)
+      if (stream && videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+        setStreaming(true)
+        setMode('wifi') // Using wifi mode for USB devices too
+        setUsbDevices(devices => devices.map(d => 
+          d.id === device.id ? { ...d, status: 'online' as const } : d
+        ))
+      } else {
+        throw new Error('Failed to get video stream')
+      }
+    } catch (error) {
+      console.error('Failed to connect to USB device:', error)
+      alert(`Failed to connect to ${device.name}. Please check the device and try again.`)
+      setUsbDevices(devices => devices.map(d => 
         d.id === device.id ? { ...d, status: 'offline' as const } : d
       ))
     }
@@ -255,7 +307,9 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
       stopAll={stopAll} 
       startPhonePairing={startPhonePairing} 
       startWifiConnection={startWifiConnection}
+      startUsbConnection={startUsbConnection}
       connectToWifiDevice={connectToWifiDevice}
+      connectToUsbDevice={connectToUsbDevice}
       videoRef={videoRef} 
       streaming={streaming} 
       mode={mode} 
@@ -269,7 +323,9 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
       showTips={showTips} 
       setShowTips={setShowTips} 
       wifiDevices={wifiDevices}
+      usbDevices={usbDevices}
       discoveringWifi={discoveringWifi}
+      discoveringUsb={discoveringUsb}
       scaleOverride={scaleOverride} 
     />
   )
@@ -278,7 +334,7 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
 function CameraFrame(props: any) {
   const { cameraScale } = useUserSettings()
   const scale = Math.max(0.5, Math.min(1.25, Number(props.scaleOverride ?? cameraScale ?? 1)))
-  const { label, start, stopAll, startPhonePairing, startWifiConnection, connectToWifiDevice, videoRef, streaming, mode, setMode, pairCode, mobileUrl, ttl, qrDataUrl, regenerateCode, httpsInfo, showTips, setShowTips, wifiDevices, discoveringWifi } = props
+  const { label, start, stopAll, startPhonePairing, startWifiConnection, startUsbConnection, connectToWifiDevice, connectToUsbDevice, videoRef, streaming, mode, setMode, pairCode, mobileUrl, ttl, qrDataUrl, regenerateCode, httpsInfo, showTips, setShowTips, wifiDevices, usbDevices, discoveringWifi, discoveringUsb } = props
   return (
     <div className="rounded-2xl overflow-hidden bg-black w-full mx-auto" style={{ aspectRatio: '4 / 3' }}>
       <video ref={videoRef} className="w-full h-full object-contain object-center bg-black" style={{ transform: `scale(${scale})`, transformOrigin: 'center' }} />
@@ -290,6 +346,7 @@ function CameraFrame(props: any) {
               <button className={`px-1 py-0.5 rounded ${mode==='local'?'bg-emerald-600':'bg-slate-700'}`} onClick={() => { setMode('local'); start() }}>Local</button>
               <button className={`px-1 py-0.5 rounded ${mode==='phone'?'bg-emerald-600':'bg-slate-700'}`} onClick={startPhonePairing}>Phone</button>
               <button className={`px-1 py-0.5 rounded ${mode==='wifi'?'bg-emerald-600':'bg-slate-700'}`} onClick={() => { setMode('wifi'); startWifiConnection() }}>Wifi</button>
+              <button className={`px-1 py-0.5 rounded ${mode==='wifi'?'bg-emerald-600':'bg-slate-700'}`} onClick={() => { setMode('wifi'); startUsbConnection() }}>USB</button>
             </>
           )}
           {streaming ? (
@@ -322,42 +379,87 @@ function CameraFrame(props: any) {
       )}
       {mode==='wifi' && !streaming && (
         <div className="p-2 text-white text-[10px] bg-black/50">
-          <div className="font-semibold mb-2">Wifi Scoring Devices</div>
-          {discoveringWifi ? (
-            <div className="flex items-center gap-2">
-              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-              <span>Scanning network...</span>
-            </div>
-          ) : wifiDevices.length > 0 ? (
-            <div className="space-y-1">
-              {wifiDevices.map((device: NetworkDevice) => (
-                <div key={device.id} className="flex items-center justify-between p-1 rounded bg-slate-900/60">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{device.name}</div>
-                    <div className="opacity-70 text-[9px]">{device.ip}:{device.port}</div>
-                  </div>
-                  <button 
-                    className={`px-1 py-0.5 rounded text-[9px] ${
-                      device.status === 'connecting' ? 'bg-yellow-600' :
-                      device.status === 'online' ? 'bg-green-600' : 'bg-blue-600'
-                    }`}
-                    onClick={() => connectToWifiDevice(device)}
-                    disabled={device.status === 'connecting'}
-                  >
-                    {device.status === 'connecting' ? '...' : 'Connect'}
-                  </button>
-                </div>
-              ))}
-              <div className="text-center mt-2">
-                <button className="px-1 py-0.5 rounded bg-slate-700 text-[9px]" onClick={startWifiConnection}>Rescan</button>
+          <div className="font-semibold mb-2">Scoring Devices</div>
+          
+          {/* WiFi Devices */}
+          <div className="mb-3">
+            <div className="font-medium mb-1">WiFi Devices</div>
+            {discoveringWifi ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                <span>Scanning network...</span>
               </div>
-            </div>
-          ) : (
-            <div className="text-center">
-              <div className="mb-1 opacity-70">No devices found</div>
-              <button className="px-1 py-0.5 rounded bg-slate-700 text-[9px]" onClick={startWifiConnection}>Scan Network</button>
-            </div>
-          )}
+            ) : wifiDevices.length > 0 ? (
+              <div className="space-y-1">
+                {wifiDevices.map((device: NetworkDevice) => (
+                  <div key={device.id} className="flex items-center justify-between p-1 rounded bg-slate-900/60">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{device.name}</div>
+                      <div className="opacity-70 text-[9px]">{device.ip}:{device.port}</div>
+                    </div>
+                    <button 
+                      className={`px-1 py-0.5 rounded text-[9px] ${
+                        device.status === 'connecting' ? 'bg-yellow-600' :
+                        device.status === 'online' ? 'bg-green-600' : 'bg-blue-600'
+                      }`}
+                      onClick={() => connectToWifiDevice(device)}
+                      disabled={device.status === 'connecting'}
+                    >
+                      {device.status === 'connecting' ? '...' : 'Connect'}
+                    </button>
+                  </div>
+                ))}
+                <div className="text-center mt-2">
+                  <button className="px-1 py-0.5 rounded bg-slate-700 text-[9px]" onClick={startWifiConnection}>Rescan WiFi</button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="mb-1 opacity-70">No WiFi devices found</div>
+                <button className="px-1 py-0.5 rounded bg-slate-700 text-[9px]" onClick={startWifiConnection}>Scan WiFi</button>
+              </div>
+            )}
+          </div>
+
+          {/* USB Devices */}
+          <div>
+            <div className="font-medium mb-1">USB Devices</div>
+            {discoveringUsb ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                <span>Scanning USB...</span>
+              </div>
+            ) : usbDevices.length > 0 ? (
+              <div className="space-y-1">
+                {usbDevices.map((device: USBDevice) => (
+                  <div key={device.id} className="flex items-center justify-between p-1 rounded bg-slate-900/60">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{device.name}</div>
+                      <div className="opacity-70 text-[9px]">{device.type.toUpperCase()}</div>
+                    </div>
+                    <button 
+                      className={`px-1 py-0.5 rounded text-[9px] ${
+                        device.status === 'connecting' ? 'bg-yellow-600' :
+                        device.status === 'online' ? 'bg-green-600' : 'bg-blue-600'
+                      }`}
+                      onClick={() => connectToUsbDevice(device)}
+                      disabled={device.status === 'connecting'}
+                    >
+                      {device.status === 'connecting' ? '...' : 'Connect'}
+                    </button>
+                  </div>
+                ))}
+                <div className="text-center mt-2">
+                  <button className="px-1 py-0.5 rounded bg-slate-700 text-[9px]" onClick={startUsbConnection}>Rescan USB</button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <div className="mb-1 opacity-70">No USB devices found</div>
+                <button className="px-1 py-0.5 rounded bg-slate-700 text-[9px]" onClick={startUsbConnection}>Scan USB</button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -2,6 +2,31 @@
  * Network device discovery utilities for wifi scoring devices
  */
 
+// Web Serial API types
+declare global {
+  interface Navigator {
+    serial: Serial;
+  }
+  interface Serial extends EventTarget {
+    getPorts(): Promise<SerialPort[]>;
+    requestPort(options?: SerialOptions): Promise<SerialPort>;
+  }
+  interface SerialPort {
+    open(options: SerialOptions): Promise<void>;
+    close(): Promise<void>;
+    readable: ReadableStream<Uint8Array> | null;
+    writable: WritableStream<Uint8Array> | null;
+  }
+  interface SerialOptions {
+    baudRate?: number;
+    dataBits?: number;
+    stopBits?: number;
+    parity?: 'none' | 'even' | 'odd';
+    bufferSize?: number;
+    flowControl?: 'none' | 'hardware';
+  }
+}
+
 export interface NetworkDevice {
   id: string;
   name: string;
@@ -10,6 +35,19 @@ export interface NetworkDevice {
   type: 'omni' | 'vert' | 'generic';
   capabilities: string[];
   status: 'online' | 'offline' | 'connecting';
+  connectionType: 'wifi' | 'usb';
+}
+
+/**
+ * USB device interface for serial-connected scoring devices
+ */
+export interface USBDevice {
+  id: string;
+  name: string;
+  type: 'omni' | 'vert' | 'generic';
+  capabilities: string[];
+  status: 'online' | 'offline' | 'connecting';
+  port: SerialPort | null;
 }
 
 /**
@@ -176,7 +214,8 @@ async function probeDevice(ip: string, port: number): Promise<NetworkDevice | nu
               port,
               type: 'omni',
               capabilities: ['video', 'calibration'],
-              status: 'online'
+              status: 'online',
+              connectionType: 'wifi'
             };
           }
 
@@ -189,7 +228,8 @@ async function probeDevice(ip: string, port: number): Promise<NetworkDevice | nu
               port,
               type: 'vert',
               capabilities: ['video', 'calibration'],
-              status: 'online'
+              status: 'online',
+              connectionType: 'wifi'
             };
           }
 
@@ -202,7 +242,8 @@ async function probeDevice(ip: string, port: number): Promise<NetworkDevice | nu
               port,
               type: 'generic',
               capabilities: ['video'],
-              status: 'online'
+              status: 'online',
+              connectionType: 'wifi'
             };
           }
         }
@@ -215,6 +256,128 @@ async function probeDevice(ip: string, port: number): Promise<NetworkDevice | nu
   }
 
   return null;
+}
+
+/**
+ * Discover USB scoring devices connected via serial
+ */
+export async function discoverUSBDevices(): Promise<USBDevice[]> {
+  const devices: USBDevice[] = [];
+
+  try {
+    // Check if Web Serial API is supported
+    if (!('serial' in navigator)) {
+      console.warn('Web Serial API not supported in this browser');
+      return devices;
+    }
+
+    // Get already paired ports
+    const ports = await navigator.serial.getPorts();
+
+    for (const port of ports) {
+      const device = await probeUSBDevice(port);
+      if (device) {
+        devices.push(device);
+      }
+    }
+
+    // Also try to request a new port (this will show user selection dialog)
+    // Note: This is optional and will be handled separately in the UI
+  } catch (error) {
+    console.error('USB device discovery failed:', error);
+  }
+
+  return devices;
+}
+
+/**
+ * Request user to select a USB device
+ */
+export async function requestUSBDevice(): Promise<USBDevice | null> {
+  try {
+    if (!('serial' in navigator)) {
+      alert('Web Serial API not supported in this browser. Please use a compatible browser like Chrome or Edge.');
+      return null;
+    }
+
+    const port = await navigator.serial.requestPort();
+    return await probeUSBDevice(port);
+  } catch (error) {
+    if ((error as any).name !== 'NotFoundError') {
+      console.error('USB device request failed:', error);
+    }
+    return null;
+  }
+}
+
+/**
+ * Probe a USB serial port to identify the device type
+ */
+async function probeUSBDevice(port: SerialPort): Promise<USBDevice | null> {
+  try {
+    // Open the port with common settings for dart scoring devices
+    await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' });
+
+    // Try to read some data to identify the device
+    const reader = port.readable?.getReader();
+    if (reader) {
+      try {
+        // Set a timeout for reading
+        const timeout = setTimeout(() => reader.cancel(), 2000);
+
+        const { value, done } = await reader.read();
+        clearTimeout(timeout);
+
+        if (!done && value) {
+          const text = new TextDecoder().decode(value);
+
+          // Check for OMNI device
+          if (text.includes('OMNI') || text.includes('omni')) {
+            reader.releaseLock();
+            return {
+              id: `usb-omni-${Date.now()}`,
+              name: 'OMNI Camera (USB)',
+              type: 'omni',
+              capabilities: ['video', 'calibration'],
+              status: 'online',
+              port
+            };
+          }
+
+          // Check for VERT device
+          if (text.includes('VERT') || text.includes('vert')) {
+            reader.releaseLock();
+            return {
+              id: `usb-vert-${Date.now()}`,
+              name: 'VERT Camera (USB)',
+              type: 'vert',
+              capabilities: ['video', 'calibration'],
+              status: 'online',
+              port
+            };
+          }
+        }
+      } catch {
+        // Continue
+      } finally {
+        try { reader.releaseLock(); } catch {}
+      }
+    }
+
+    // If we can't identify, assume it's a generic device
+    return {
+      id: `usb-generic-${Date.now()}`,
+      name: 'USB Scoring Device',
+      type: 'generic',
+      capabilities: ['video'],
+      status: 'online',
+      port
+    };
+
+  } catch (error) {
+    console.error('Failed to probe USB device:', error);
+    return null;
+  }
 }
 
 /**
@@ -257,6 +420,26 @@ export async function connectToNetworkDevice(device: NetworkDevice): Promise<Med
     });
   } catch (error) {
     console.error('Failed to connect to network device:', error);
+    return null;
+  }
+}
+
+/**
+ * Connect to a USB device and get video stream
+ */
+export async function connectToUSBDevice(device: USBDevice): Promise<MediaStream | null> {
+  try {
+    if (!device.port) {
+      throw new Error('No serial port available');
+    }
+
+    // For USB devices, we assume they provide video through a companion app or driver
+    // This is a placeholder - actual implementation would depend on the device protocol
+    console.log('USB device connection not fully implemented yet');
+    return null;
+
+  } catch (error) {
+    console.error('Failed to connect to USB device:', error);
     return null;
   }
 }

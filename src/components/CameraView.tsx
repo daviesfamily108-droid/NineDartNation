@@ -143,14 +143,14 @@ export default function CameraView({
         await videoRef.current.play()
       }
       setStreaming(true)
-      // Capture device list for inline picker and remember selection
+      // Capture device list for inline picker and remember selection ONLY if no preferred camera was set
       try {
         const list = await navigator.mediaDevices.enumerateDevices()
         setAvailableCameras(list.filter(d=>d.kind==='videoinput'))
         const vidTrack = (stream.getVideoTracks?.()||[])[0]
         const settings = vidTrack?.getSettings?.()
         const id = settings?.deviceId as string | undefined
-        if (id) {
+        if (id && !preferredCameraId) {
           const label = list.find(d=>d.deviceId===id)?.label
           setPreferredCamera(id, label||'')
         }
