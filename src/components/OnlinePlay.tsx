@@ -458,7 +458,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       matchScore = players.map(p => `${p.name}:${p.legsWon||0}`).join(' = ')
     }
     const best = match.bestLegThisMatch
-    const bestText = best ? `${best.darts} darts${(() => { const p = players.find(x=>x.id===best.playerId); return p?` (${p.name})`:'' })()}` : 'ÔÇö'
+    const bestText = best ? `${best.darts} darts${(() => { const p = players.find(x=>x.id===best.playerId); return p?` (${p.name})`:'' })()}` : '-'
     return (
       <div className="p-3 rounded-2xl bg-slate-900/40 border border-white/10 text-white text-sm">
         <div className="font-semibold mb-2">Match Summary</div>
@@ -1357,7 +1357,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <button className="btn px-3 py-1 text-sm" onClick={openManual}>Manual Correction</button>
                   <div className="ml-auto flex items-center gap-1 text-[11px]">
                     <span className="opacity-70">Cam size</span>
-                    <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>ÔêÆ</button>
+                    <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>-</button>
                     <span className="w-8 text-center">{Math.round(cameraScale*100)}%</span>
                     <button className="btn px-2 py-0.5" onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
                   </div>
