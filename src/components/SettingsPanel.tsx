@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { User, Settings, Volume2, Camera, Gamepad2, Eye, Mic, Save, Edit3 } from 'lucide-react';
+import { User, Settings, Volume2, Camera, Gamepad2, Eye, Mic, Save, Edit3, Shield, HelpCircle, MessageCircle, X, Send } from 'lucide-react';
 import { useUserSettings } from '../store/userSettings';
 
 export default function SettingsPanel({ user }: { user?: any }) {
@@ -41,6 +41,12 @@ export default function SettingsPanel({ user }: { user?: any }) {
   const [profilePhoto, setProfilePhoto] = useState('');
   const [allowAnalytics, setAllowAnalytics] = useState(true);
 
+  // Help Assistant state
+  const [helpMessages, setHelpMessages] = useState<Array<{text: string | {text: string, links?: Array<{text: string, tab: string}>}, isUser: boolean}>>([
+    { text: "Hi! I'm your Nine Dart Nation assistant. How can I help you today?", isUser: false }
+  ]);
+  const [helpInput, setHelpInput] = useState('');
+
   useEffect(() => {
     const uname = user?.username || '';
     if (!uname) return;
@@ -68,6 +74,111 @@ export default function SettingsPanel({ user }: { user?: any }) {
       localStorage.setItem(`ndn:settings:allowAnalytics:${uname}`, allowAnalytics.toString());
       setIsEditing(false);
     } catch {}
+  };
+
+  // Help Assistant functions
+  const faq = {
+    'how to play': 'To play darts, select a game mode from the menu. For online play, join a match. For offline, start a local game.',
+    'calibration': 'Go to Settings > Camera & Vision > Calibration Guide to set up your camera properly.',
+    'premium': 'Premium unlocks all game modes. Click the "Upgrade to PREMIUM" button in online play.',
+    'username': 'Change your username once for free in Settings > Account.',
+    'voice': 'Enable voice caller in Settings > Audio & Voice. Test the voice with the Test Voice button.',
+    'friends': 'Add friends in the Friends tab to play together.',
+    'stats': 'View your statistics in the Stats tab.',
+    'settings': 'Customize your experience in the Settings panel.',
+    'support': 'Contact support via email or check the FAQ in Settings > Support.',
+  };
+
+  const navigateToTab = (tabKey: string) => {
+    try {
+      window.dispatchEvent(new CustomEvent('ndn:change-tab', { detail: { tab: tabKey } }));
+    } catch (error) {
+      console.error('Navigation failed:', error);
+    }
+  };
+
+  const getResponseWithLinks = (userMessage: string): { text: string, links?: Array<{ text: string, tab: string }> } => {
+    const message = userMessage.toLowerCase();
+
+    if (message.includes('username') || message.includes('change name')) {
+      return {
+        text: 'You can change your username once for free.',
+        links: [{ text: 'Go to Settings > Account', tab: 'settings' }]
+      };
+    }
+    if (message.includes('premium') || message.includes('upgrade') || message.includes('subscription')) {
+      return {
+        text: 'Premium unlocks all game modes and features.',
+        links: [{ text: 'Go to Online Play', tab: 'online' }]
+      };
+    }
+    if (message.includes('calibrat') || message.includes('camera') || message.includes('vision')) {
+      return {
+        text: 'Set up your camera properly in Settings.',
+        links: [{ text: 'Go to Settings > Camera & Vision', tab: 'settings' }]
+      };
+    }
+    if (message.includes('voice') || message.includes('caller') || message.includes('audio')) {
+      return {
+        text: 'Enable voice calling in Settings.',
+        links: [{ text: 'Go to Settings > Audio & Voice', tab: 'settings' }]
+      };
+    }
+    if (message.includes('friend') || message.includes('play together')) {
+      return {
+        text: 'Add friends to play together.',
+        links: [{ text: 'Go to Friends', tab: 'friends' }]
+      };
+    }
+    if (message.includes('stat') || message.includes('score') || message.includes('performance')) {
+      return {
+        text: 'View your statistics and performance.',
+        links: [{ text: 'Go to Stats', tab: 'stats' }]
+      };
+    }
+    if (message.includes('setting') || message.includes('customiz') || message.includes('configur')) {
+      return {
+        text: 'Customize your experience.',
+        links: [{ text: 'Go to Settings', tab: 'settings' }]
+      };
+    }
+    if (message.includes('tournament') || message.includes('competition')) {
+      return {
+        text: 'Check out tournaments and competitions.',
+        links: [{ text: 'Go to Tournaments', tab: 'tournaments' }]
+      };
+    }
+    if (message.includes('help') || message.includes('support') || message.includes('faq')) {
+      return {
+        text: 'You\'re already in the help section! Check the Support section above for more resources.',
+        links: [{ text: 'Scroll to Support', tab: 'settings' }]
+      };
+    }
+    if (message.includes('how to play') || message.includes('game') || message.includes('start')) {
+      return {
+        text: 'To play darts, select a game mode from the menu. For online play, join a match. For offline, start a local game.',
+        links: [
+          { text: 'Play Online', tab: 'online' },
+          { text: 'Play Offline', tab: 'offline' }
+        ]
+      };
+    }
+
+    return { text: "I'm not sure about that. Try asking about playing, calibration, premium, username changes, voice settings, friends, stats, or settings." };
+  };
+
+  const handleHelpSend = () => {
+    if (!helpInput.trim()) return;
+    const userMessage = helpInput.toLowerCase();
+    setHelpMessages(prev => [...prev, { text: helpInput, isUser: true }]);
+    setHelpInput('');
+
+    // Get response with smart link suggestions
+    const response = getResponseWithLinks(userMessage);
+
+    setTimeout(() => {
+      setHelpMessages(prev => [...prev, { text: response, isUser: false }]);
+    }, 500);
   };
 
   // Username change state
@@ -722,6 +833,33 @@ export default function SettingsPanel({ user }: { user?: any }) {
         </div>
       </div>
 
+      {/* Privacy & Copyright Warning */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-red-500/40 bg-red-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2">
+            <Shield className="w-5 h-5 text-red-400" /> Privacy & Copyright Notice
+          </div>
+
+          <div className="space-y-3 text-sm text-slate-300">
+            <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3">
+              <p className="font-semibold text-red-300 mb-2">⚠️ IMPORTANT LEGAL NOTICE</p>
+              <p className="mb-2">
+                <strong>Copyright Protection:</strong> All code, assets, and intellectual property in Nine Dart Nation are protected by copyright law.
+                Unauthorized copying, modification, or distribution of this software is strictly prohibited.
+              </p>
+              <p className="mb-2">
+                <strong>Legal Consequences:</strong> Any attempt to edit, reverse-engineer, or redistribute this code will result in immediate legal action,
+                including but not limited to copyright infringement lawsuits and potential criminal charges.
+              </p>
+              <p>
+                <strong>Privacy:</strong> Your personal data and gameplay information are protected. Any unauthorized access or data collection
+                violates privacy laws and will be prosecuted to the full extent of the law.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Support */}
       <div className="card">
         <div className="p-3 rounded-xl border border-teal-500/40 bg-teal-500/10">
@@ -749,6 +887,69 @@ export default function SettingsPanel({ user }: { user?: any }) {
               <a href="https://github.com/daviesfamily108-droid/NineDartNation/issues" target="_blank" rel="noopener noreferrer" className="btn bg-teal-600 hover:bg-teal-700">
                 GitHub Issues
               </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Help Assistant */}
+      <div className="card">
+        <div className="p-3 rounded-xl border border-blue-500/40 bg-blue-500/10">
+          <div className="font-semibold mb-4 flex items-center gap-2">
+            <HelpCircle className="w-5 h-5 text-blue-400" /> Help Assistant
+          </div>
+
+          <div className="space-y-4">
+            {/* Chat Messages */}
+            <div className="bg-slate-800 rounded-lg p-4 max-h-96 overflow-y-auto space-y-3">
+              {helpMessages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.isUser ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-xs px-3 py-2 rounded-lg ${
+                    msg.isUser 
+                      ? 'bg-blue-600 text-white' 
+                      : 'bg-slate-700 text-slate-200'
+                  }`}>
+                    {typeof msg.text === 'string' ? (
+                      msg.text
+                    ) : (
+                      <div className="space-y-2">
+                        <div>{msg.text.text}</div>
+                        {msg.text.links && (
+                          <div className="space-y-1">
+                            {msg.text.links.map((link, linkIndex) => (
+                              <button
+                                key={linkIndex}
+                                onClick={() => navigateToTab(link.tab)}
+                                className="block w-full text-left text-blue-300 hover:text-blue-200 underline text-sm"
+                              >
+                                {link.text}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Input */}
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={helpInput}
+                onChange={(e) => setHelpInput(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleHelpSend()}
+                placeholder="Ask me anything..."
+                className="flex-1 input"
+              />
+              <button
+                onClick={handleHelpSend}
+                className="btn bg-blue-600 hover:bg-blue-700"
+              >
+                <Send className="w-4 h-4" />
+              </button>
             </div>
           </div>
         </div>

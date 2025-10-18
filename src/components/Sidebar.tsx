@@ -1,11 +1,11 @@
-import { LayoutDashboard, Camera, Users, Trophy, Settings, MessageCircle, Lock, PoundSterling, HelpCircle } from 'lucide-react';
+import { LayoutDashboard, Camera, Users, Trophy, Settings, MessageCircle, Lock, PoundSterling } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFreeRemaining } from '../utils/quota'
 import { useIsAdmin } from '../utils/admin'
 import { DISCORD_INVITE_URL } from '../utils/config'
 
-export type TabKey = 'score' | 'online' | 'offline' | 'friends' | 'stats' | 'calibrate' | 'settings' | 'admin' | 'tournaments' | 'fullaccess' | 'help';
+export type TabKey = 'score' | 'online' | 'offline' | 'friends' | 'stats' | 'calibrate' | 'settings' | 'admin' | 'tournaments' | 'fullaccess';
 
 export function getTabs(user: any) {
   const baseTabs = [
@@ -17,7 +17,6 @@ export function getTabs(user: any) {
     { key: 'stats', label: 'Stats', icon: Trophy },
     { key: 'calibrate', label: 'Calibrate', icon: Camera },
     { key: 'settings', label: 'Settings', icon: Settings },
-    { key: 'help', label: 'Help', icon: HelpCircle },
   ];
   // Admin tab visibility handled in Sidebar via hook (client-side fetch)
   if (!user?.fullAccess) {
