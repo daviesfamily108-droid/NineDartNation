@@ -430,38 +430,20 @@ app.post('/api/stripe/create-session', async (req, res) => {
 
 app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
-    if (!stripe || !process.env.STRIPE_PRICE_ID_SUBSCRIPTION) {
-      console.warn('[Stripe] create-checkout-session called but Stripe is not configured')
-      // In development, return a working test checkout URL
-      if (process.env.NODE_ENV !== 'production' || !process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'YOUR_STRIPE_SECRET_KEY_HERE') {
-        console.log('[Stripe] Development mode - returning test checkout URL')
-        return res.json({
-          ok: true,
-          url: 'https://buy.stripe.com/test_00g7vQ8Qw2gQ0wA5kk',
-          development: true
-        })
-      }
+    // Use payment link instead of API to avoid exposing keys
+    const premiumPaymentLink = process.env.STRIPE_PREMIUM_PAYMENT_LINK || 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE';
+    
+    if (premiumPaymentLink === 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE') {
       return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
     }
-    const { email, successUrl, cancelUrl } = req.body || {}
+    
+    const { email } = req.body || {}
     if (!email || !email.includes('@')) {
       return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
     }
-    // Derive sensible defaults for success/cancel
-    const host = req.headers['x-forwarded-host'] || req.headers.host
-    const proto = (req.headers['x-forwarded-proto'] || 'https')
-    const base = `https://${host}`
-    const sUrl = (typeof successUrl === 'string' && successUrl.startsWith('http')) ? successUrl : `${base}/?subscription=success`
-    const cUrl = (typeof cancelUrl === 'string' && cancelUrl.startsWith('http')) ? cancelUrl : `${base}/?subscription=cancel`
-    const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      line_items: [{ price: process.env.STRIPE_PRICE_ID_SUBSCRIPTION, quantity: 1 }],
-      customer_email: email,
-      metadata: { purpose: 'subscription', email: email },
-      success_url: sUrl,
-      cancel_url: cUrl,
-    })
-    return res.json({ ok: true, url: session.url })
+    
+    // Return the payment link directly
+    return res.json({ ok: true, url: premiumPaymentLink })
   } catch (e) {
     console.error('[Stripe] create-checkout-session failed:', e?.message || e)
     return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
