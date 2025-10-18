@@ -2,6 +2,7 @@
 const dotenv = require('dotenv'); dotenv.config();
 const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
+const cluster = require('cluster');
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -64,6 +65,8 @@ if (redisClient) {
   redisClient.connect().catch(err => console.warn('[REDIS] Failed to connect:', err));
 } else {
   console.warn('[REDIS] Not configured - using in-memory storage for sessions');
+  console.warn('[CLUSTER] WARNING: In-memory data structures (matches, rooms, clients) are NOT shared between workers!');
+  console.warn('[CLUSTER] For true horizontal scaling, move shared state to Redis database.');
 }
 
 // Database helper functions
@@ -1060,7 +1063,61 @@ if (staticBase) {
   })
 }
 
-const server = app.listen(PORT, '0.0.0.0', () => {
+// Clustering setup for horizontal scaling
+const numWorkers = parseInt(process.env.NODE_WORKERS) || Math.max(1, os.cpus().length - 1); // Leave 1 CPU for system
+
+if (cluster.isMaster || cluster.isPrimary) {
+  console.log(`[CLUSTER] Master process ${process.pid} starting ${numWorkers} workers...`);
+
+  // Fork workers
+  for (let i = 0; i < numWorkers; i++) {
+    cluster.fork();
+  }
+
+  // Handle worker exits
+  cluster.on('exit', (worker, code, signal) => {
+    console.log(`[CLUSTER] Worker ${worker.process.pid} died with code ${code} and signal ${signal}`);
+    console.log('[CLUSTER] Starting a new worker');
+    cluster.fork();
+  });
+
+  // Set up Redis pub/sub for cross-worker communication
+  if (redisClient) {
+    const subscriber = redisClient.duplicate();
+    const publisher = redisClient.duplicate();
+
+    subscriber.subscribe('broadcast', (message) => {
+      try {
+        const data = JSON.parse(message);
+        // Broadcast to all workers
+        for (const id in cluster.workers) {
+          cluster.workers[id].send(data);
+        }
+      } catch (err) {
+        console.error('[REDIS] Error parsing broadcast message:', err);
+      }
+    });
+
+    subscriber.on('error', (err) => console.error('[REDIS] Subscriber error:', err));
+    publisher.on('error', (err) => console.error('[REDIS] Publisher error:', err));
+
+    console.log('[CLUSTER] Redis pub/sub enabled for cross-worker communication');
+  } else {
+    console.warn('[CLUSTER] Redis not configured - workers will not communicate');
+  }
+
+} else {
+  // Worker process - start the server
+  console.log(`[CLUSTER] Worker ${process.pid} starting...`);
+
+  // Handle messages from master process (Redis broadcasts)
+  process.on('message', (data) => {
+    if (data && data.type) {
+      broadcastAll(data);
+    }
+  });
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
   const nets = os.networkInterfaces?.() || {}
   const hosts = []
   for (const name of Object.keys(nets)) {
@@ -1077,8 +1134,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
 });
 // Constrain ws payload size for safety
-const wss = null; // new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
-console.log(`[WS] WebSocket disabled for debugging`);
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
+console.log(`[WS] WebSocket server enabled on worker ${process.pid}`);
 // wsConnections.set(0)
 
 // Optional HTTPS server for iOS camera (requires certs)
@@ -1119,6 +1176,8 @@ try {
 } catch (e) {
   console.warn('[HTTPS] Failed to initialize HTTPS server:', e?.message || e)
 }
+
+} // End of worker block
 
 // Load persistent data from database on startup
 async function loadPersistentData() {
@@ -1268,9 +1327,22 @@ loadFriendships()
 
 function broadcastAll(data) {
   if (!wss) return
+
+  // Local broadcast to this worker's clients
   const payload = (typeof data === 'string') ? data : JSON.stringify(data)
   for (const client of wss.clients) {
     if (client.readyState === 1) client.send(payload)
+  }
+
+  // Cross-worker broadcast via Redis if available
+  if (redisClient && !cluster.isMaster && !cluster.isPrimary) {
+    try {
+      redisClient.publish('broadcast', payload).catch(err =>
+        console.warn('[REDIS] Failed to publish broadcast:', err.message)
+      )
+    } catch (err) {
+      console.warn('[REDIS] Error publishing broadcast:', err.message)
+    }
   }
 }
 

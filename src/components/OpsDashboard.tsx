@@ -79,7 +79,7 @@ export default function OpsDashboard({ user }: { user: any }) {
         </div>
       </div>
       {msg && <div className="text-xs mt-2">{msg}</div>}
-      <div className="text-xs opacity-70 mt-2">Note: For 1.5k+ concurrent users, deploy the server behind a reverse proxy (NGINX/Cloudflare), enable process clustering, and scale horizontally with sticky sessions for WebSockets.</div>
+      <div className="text-xs opacity-70 mt-2">✅ Clustering enabled! For 1.5k+ concurrent users, deploy behind a reverse proxy (NGINX/Cloudflare) with sticky sessions for WebSockets. Set NODE_WORKERS environment variable to control worker count.</div>
     </div>
   )
 }

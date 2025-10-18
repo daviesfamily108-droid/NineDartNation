@@ -7,6 +7,7 @@
   },
   "scripts": {
     "start": "node server.cjs",
+    "cluster": "NODE_WORKERS=2 node server.cjs",
     "https": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:NDN_HTTPS='1'; if (-not $env:HTTPS_PORT) { $env:HTTPS_PORT='8788' }; node server.cjs\""
   },
   "dependencies": {
