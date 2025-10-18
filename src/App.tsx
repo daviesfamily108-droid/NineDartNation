@@ -26,6 +26,7 @@ import AdminAccess from './components/AdminAccess'
 import Drawer from './components/ui/Drawer'
 import { getDominantColorFromImage, stringToColor } from './utils/color'
 import OpsDashboard from './components/OpsDashboard'
+import HelpAssistant from './components/HelpAssistant'
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -461,6 +462,9 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {/* Floating Help Assistant - Always visible */}
+      <HelpAssistant />
     </ThemeProvider>
   )
 }
