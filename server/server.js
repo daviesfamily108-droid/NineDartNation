@@ -60,8 +60,11 @@ if (process.env.REDIS_URL) {
 // Handle Redis URL - ensure it has proper protocol
 let redisUrl = process.env.REDIS_URL;
 if (redisUrl) {
-  // If URL doesn't start with redis:// or rediss://, add redis://
-  if (!redisUrl.startsWith('redis://') && !redisUrl.startsWith('rediss://')) {
+  // Convert https:// to rediss:// for TLS connections (Upstash, etc.)
+  if (redisUrl.startsWith('https://')) {
+    redisUrl = redisUrl.replace('https://', 'rediss://');
+    console.log('[REDIS] Converted https:// to rediss:// for TLS');
+  } else if (!redisUrl.startsWith('redis://') && !redisUrl.startsWith('rediss://')) {
     redisUrl = 'redis://' + redisUrl;
     console.log('[REDIS] Added redis:// protocol to URL');
   }
@@ -182,6 +185,11 @@ class RedisMap {
   // Get size
   get size() {
     return this.localCache.size;
+  }
+
+  // Iterator for entries
+  entries() {
+    return this.localCache.entries();
   }
 }
 
