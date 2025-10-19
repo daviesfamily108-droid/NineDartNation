@@ -77,9 +77,11 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
   }, [ttl, paired, streaming, mode])
 
   useEffect(() => {
-    if (!autoStart) return
-    start().catch(()=>{})
-    return () => stop()
+    if (autoStart) {
+      start().catch(()=>{})
+    } else {
+      stop()
+    }
   }, [autoStart])
 
   async function start() {

@@ -1399,10 +1399,15 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 items-start">
                   <div className="order-1"><RenderMatchSummary /></div>
                   <div className="order-2">
-                    {cameraEnabled && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
-                      <div className="min-w-[260px] relative z-10 overflow-hidden" style={{ maxHeight: 'min(50vh, 400px)' }}><CameraTile label="Your Board" autoStart={true} /></div>
+                    {cameraEnabled ? (
+                      <div className="min-w-[260px] relative z-10 overflow-hidden" style={{ maxHeight: 'min(50vh, 400px)' }}>
+                        <CameraTile 
+                          label="Your Board" 
+                          autoStart={user?.username && match.players[match.currentPlayerIdx]?.name === user.username} 
+                        />
+                      </div>
                     ) : (
-                      <div className="text-xs opacity-60">{cameraEnabled ? "Opponent's camera will appear here when supported" : "Camera disabled in settings"}</div>
+                      <div className="text-xs opacity-60">Camera disabled in settings</div>
                     )}
                   </div>
                 </div>
@@ -1749,11 +1754,12 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   </div>
                   {/* Camera row (under toolbar, left side) */}
                   <div className="mt-2 relative">
-                    {user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
-                      <div className="w-full max-w-full"><CameraTile label="Your Board" autoStart={true} /></div>
-                    ) : (
-                      <div className="text-xs opacity-60">Opponent's camera will appear here when supported</div>
-                    )}
+                    <div className="w-full max-w-full">
+                      <CameraTile 
+                        label="Your Board" 
+                        autoStart={user?.username && match.players[match.currentPlayerIdx]?.name === user.username} 
+                      />
+                    </div>
                     {/* Resize handle */}
                     {cameraColSpan < 3 && (
                       <div 
