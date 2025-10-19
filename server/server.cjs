@@ -48,13 +48,19 @@ const redis = require('redis');
 
 // DEBUG: Check if REDIS_URL is set
 console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
+let redisUrl = process.env.REDIS_URL;
 if (process.env.REDIS_URL) {
   console.log('🔍 DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
+  // Convert https:// URLs to rediss:// for TLS connections (Upstash Redis)
+  if (redisUrl.startsWith('https://')) {
+    redisUrl = redisUrl.replace('https://', 'rediss://');
+    console.log('🔍 DEBUG: Converted REDIS_URL to:', redisUrl.substring(0, 20) + '...');
+  }
 }
 
-const redisClient = process.env.REDIS_URL ? (() => {
+const redisClient = redisUrl ? (() => {
   try {
-    return redis.createClient({ url: process.env.REDIS_URL });
+    return redis.createClient({ url: redisUrl });
   } catch (err) {
     console.error('[REDIS] Failed to create client:', err.message);
     return null;
@@ -150,9 +156,10 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '100kb' }));
 // Serve static assets (mobile camera page)
 app.use(express.static('./public'))
-// In production, also serve the built client app. Prefer root ../dist, fallback to ../app/dist.
-const rootDistPath = path.resolve(process.cwd(), 'dist')
-const appDistPath = path.resolve(process.cwd(), 'app', 'dist')
+// In production, also serve the built client app. Prefer root ../dist, fallback to ../app/dist, then server/dist.
+const rootDistPath = path.resolve(process.cwd(), '..', 'dist')
+const appDistPath = path.resolve(process.cwd(), '..', 'app', 'dist')
+const serverDistPath = path.resolve(process.cwd(), 'dist')
 let staticBase = null
 if (fs.existsSync(rootDistPath)) {
   staticBase = rootDistPath
@@ -160,12 +167,15 @@ if (fs.existsSync(rootDistPath)) {
 } else if (fs.existsSync(appDistPath)) {
   staticBase = appDistPath
   app.use(express.static(appDistPath))
+} else if (fs.existsSync(serverDistPath)) {
+  staticBase = serverDistPath
+  app.use(express.static(serverDistPath))
 }
 // Log whether we found a built SPA to serve
 if (staticBase) {
   console.log(`[SPA] Serving static frontend from ${staticBase}`)
 } else {
-  console.warn('[SPA] No built frontend found at ../dist or ../app/dist; "/" will 404 (API+WS OK).')
+  console.warn('[SPA] No built frontend found at ../dist, ../app/dist, or ./dist; "/" will 404 (API+WS OK).')
 }
 
 
