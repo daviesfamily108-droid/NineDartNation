@@ -404,8 +404,8 @@ export default function AdminDashboard({ user }: { user: any }) {
 						<div className="text-sm opacity-80 mb-3">Grant or revoke Admin to trusted users. Only the owner can perform these actions.</div>
 						<div className="flex gap-2 mb-3">
 							<input className="input flex-1" placeholder="user@example.com" value={email} onChange={e=>setEmail(e.target.value)} />
-							<button className="btn" disabled={loading} onClick={grantAdmin}>Grant</button>
-							<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={revokeAdmin}>Revoke</button>
+							<button className="btn" disabled={loading} onClick={grant}>Grant</button>
+							<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={() => revoke(email)}>Revoke</button>
 						</div>
 						<div className="text-sm opacity-80 mb-2">Current Admins:</div>
 						<div className="flex flex-wrap gap-2">
