@@ -1,4 +1,4 @@
-const jwt = require('jsonwebtoken');
+﻿const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
 const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
@@ -51,196 +51,19 @@ if (!supabase) {
 const redis = require('redis');
 
 // DEBUG: Check if REDIS_URL is set
-console.log('?? DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
+console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
 if (process.env.REDIS_URL) {
-  console.log('?? DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
-  console.log('?? DEBUG: REDIS_URL length:', process.env.REDIS_URL.length);
+  console.log('🔍 DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
 }
 
-// Handle Redis URL - ensure it has proper protocol
-let redisUrl = process.env.REDIS_URL;
-if (redisUrl) {
-  // If URL doesn't start with redis:// or rediss://, add redis://
-  if (!redisUrl.startsWith('redis://') && !redisUrl.startsWith('rediss://')) {
-    redisUrl = 'redis://' + redisUrl;
-    console.log('[REDIS] Added redis:// protocol to URL');
-  }
-  console.log('[REDIS] Final Redis URL starts with:', redisUrl.substring(0, 20) + '...');
-}
-
-const redisClient = redisUrl ? redis.createClient({ url: redisUrl }) : null;
+const redisClient = process.env.REDIS_URL ? redis.createClient({ url: process.env.REDIS_URL }) : null;
 
 if (redisClient) {
-  redisClient.on('error', (err) => {
-    console.error('[REDIS] Connection error:', err.message);
-    if (err.message.includes('Invalid protocol')) {
-      console.error('[REDIS] Check that REDIS_URL starts with redis:// or rediss://');
-    }
-  });
-  redisClient.on('connect', () => console.log('[REDIS] Connected successfully'));
-  redisClient.connect().catch(err => {
-    console.warn('[REDIS] Failed to connect:', err.message);
-    console.warn('[REDIS] Falling back to in-memory storage for sessions');
-  });
+  redisClient.on('error', (err) => console.error('[REDIS] Error:', err));
+  redisClient.on('connect', () => console.log('[REDIS] Connected'));
+  redisClient.connect().catch(err => console.warn('[REDIS] Failed to connect:', err));
 } else {
   console.warn('[REDIS] Not configured - using in-memory storage for sessions');
-}
-
-// Redis-backed Map class for shared state synchronization
-class RedisMap {
-  constructor(redisClient, keyPrefix, ttlSeconds = 3600) {
-    this.redis = redisClient;
-    this.prefix = keyPrefix;
-    this.ttl = ttlSeconds;
-    this.localCache = new Map();
-  }
-
-  _key(k) { return `${this.prefix}:${k}`; }
-
-  async set(key, value) {
-    this.localCache.set(key, value);
-    if (this.redis) {
-      try {
-        await this.redis.setEx(this._key(key), this.ttl, JSON.stringify(value));
-      } catch (err) {
-        console.warn(`[REDIS] Failed to set ${this.prefix}:${key}:`, err.message);
-      }
-    }
-    return this;
-  }
-
-  async get(key) {
-    // Check local cache first
-    if (this.localCache.has(key)) {
-      return this.localCache.get(key);
-    }
-    // Try Redis
-    if (this.redis) {
-      try {
-        const data = await this.redis.get(this._key(key));
-        if (data) {
-          const value = JSON.parse(data);
-          this.localCache.set(key, value);
-          return value;
-        }
-      } catch (err) {
-        console.warn(`[REDIS] Failed to get ${this.prefix}:${key}:`, err.message);
-      }
-    }
-    return undefined;
-  }
-
-  async has(key) {
-    if (this.localCache.has(key)) return true;
-    if (this.redis) {
-      try {
-        const exists = await this.redis.exists(this._key(key));
-        return exists === 1;
-      } catch (err) {
-        console.warn(`[REDIS] Failed to check ${this.prefix}:${key}:`, err.message);
-      }
-    }
-    return false;
-  }
-
-  async delete(key) {
-    this.localCache.delete(key);
-    if (this.redis) {
-      try {
-        await this.redis.del(this._key(key));
-      } catch (err) {
-        console.warn(`[REDIS] Failed to delete ${this.prefix}:${key}:`, err.message);
-      }
-    }
-    return true;
-  }
-
-  async clear() {
-    this.localCache.clear();
-    if (this.redis) {
-      try {
-        const keys = await this.redis.keys(`${this.prefix}:*`);
-        if (keys.length > 0) {
-          await this.redis.del(keys);
-        }
-      } catch (err) {
-        console.warn(`[REDIS] Failed to clear ${this.prefix}:`, err.message);
-      }
-    }
-  }
-
-  // Get all keys (for iteration)
-  keys() {
-    return this.localCache.keys();
-  }
-
-  // Get all values (for iteration)
-  values() {
-    return this.localCache.values();
-  }
-
-  // Get size
-  get size() {
-    return this.localCache.size;
-  }
-}
-
-// Synchronization helpers for cross-worker communication
-const syncHelpers = {
-  // Sync match creation across workers
-  async syncMatchCreated(matchData) {
-    if (!redisClient) return;
-    try {
-      await redisClient.publish('sync', JSON.stringify({
-        type: 'match-created',
-        data: matchData
-      }));
-      console.log(`[SYNC] Published match creation: ${matchData.id}`);
-    } catch (err) {
-      console.warn('[SYNC] Failed to sync match creation:', err.message);
-    }
-  },
-
-  // Sync tournament updates across workers
-  async syncTournamentUpdated(tournamentData) {
-    if (!redisClient) return;
-    try {
-      await redisClient.publish('sync', JSON.stringify({
-        type: 'tournament-updated',
-        data: tournamentData
-      }));
-      console.log(`[SYNC] Published tournament update: ${tournamentData.id}`);
-    } catch (err) {
-      console.warn('[SYNC] Failed to sync tournament update:', err.message);
-    }
-  }
-};
-
-// Handle synchronization messages from Redis pub/sub
-function handleSyncMessage(syncData) {
-  try {
-    if (syncData.type === 'match-created') {
-      // Update local matches cache
-      if (syncData.data) {
-        matches.set(syncData.data.id, syncData.data);
-        console.log(`[SYNC] Match ${syncData.data.id} synchronized from Redis`);
-      }
-    } else if (syncData.type === 'tournament-updated') {
-      // Update local tournaments cache
-      if (syncData.data) {
-        tournaments.set(syncData.data.id, syncData.data);
-        console.log(`[SYNC] Tournament ${syncData.data.id} synchronized from Redis`);
-      }
-    } else if (syncData.type === 'match-updated') {
-      // Update local match data
-      if (syncData.data) {
-        matches.set(syncData.data.id, syncData.data);
-        console.log(`[SYNC] Match ${syncData.data.id} updated from Redis`);
-      }
-    }
-  } catch (err) {
-    console.error('[SYNC] Error handling sync message:', err);
-  }
 }
 
 // Database helper functions
@@ -880,7 +703,7 @@ app.post('/webhook/stripe', async (req, res) => {
   res.json({ ok: true })
 });
 
-// Stripe (optional): Create a Checkout Session for username change (-�2)
+// Stripe (optional): Create a Checkout Session for username change (┬ú2)
 // Configure on Render with:
 //  - STRIPE_SECRET_KEY=sk_live_...
 //  - STRIPE_PRICE_ID_USERNAME_CHANGE=price_...
@@ -943,7 +766,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   }
 })
 
-// Admin management (demo; NOT secure ��� no auth/signature verification)
+// Admin management (demo; NOT secure ÔÇö no auth/signature verification)
 app.get('/api/admins', (req, res) => {
   res.json({ admins: Array.from(adminEmails) })
 })
@@ -976,7 +799,7 @@ app.post('/api/admins/revoke', (req, res) => {
   res.json({ ok: true, admins: Array.from(adminEmails) })
 })
 
-// Admin ops (owner-only; demo ��� not secure)
+// Admin ops (owner-only; demo ÔÇö not secure)
 app.get('/api/admin/status', async (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
@@ -1224,95 +1047,6 @@ app.post('/api/auth/confirm-reset', async (req, res) => {
   }
 })
 
-// Admin: System maintenance and monitoring endpoints
-app.get('/api/admin/logs', (req, res) => {
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  
-  // For now, return basic system info. In production, you'd read from log files
-  const logs = [
-    { timestamp: new Date().toISOString(), level: 'info', message: 'System health check completed' },
-    { timestamp: new Date(Date.now() - 60000).toISOString(), level: 'info', message: 'Database connection verified' },
-    { timestamp: new Date(Date.now() - 120000).toISOString(), level: 'warn', message: 'High memory usage detected' }
-  ]
-  
-  res.json({ ok: true, logs })
-})
-
-app.get('/api/admin/system-health', (req, res) => {
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  
-  const memUsage = process.memoryUsage()
-  const health = {
-    uptime: process.uptime(),
-    memory: {
-      rss: Math.round(memUsage.rss / 1024 / 1024), // MB
-      heapUsed: Math.round(memUsage.heapUsed / 1024 / 1024), // MB
-      heapTotal: Math.round(memUsage.heapTotal / 1024 / 1024), // MB
-      external: Math.round(memUsage.external / 1024 / 1024) // MB
-    },
-    cpu: process.cpuUsage(),
-    nodeVersion: process.version,
-    platform: process.platform,
-    connections: clients.size,
-    rooms: rooms.size,
-    matches: matches.size,
-    timestamp: new Date().toISOString()
-  }
-  
-  res.json({ ok: true, health })
-})
-
-app.post('/api/admin/quick-fix', (req, res) => {
-  const { action, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
-  
-  try {
-    switch (action) {
-      case 'clear-cache':
-        // Clear any in-memory caches
-        // In a real app, you'd clear Redis cache, file cache, etc.
-        console.log('[ADMIN] Clearing application cache')
-        // Clear matches cache if needed
-        // matches.clear() // Uncomment if you want to clear all matches
-        break
-        
-      case 'gc':
-        // Force garbage collection (if --expose-gc flag is used)
-        if (global.gc) {
-          global.gc()
-          console.log('[ADMIN] Forced garbage collection')
-        } else {
-          return res.status(400).json({ ok: false, error: 'GC_NOT_AVAILABLE' })
-        }
-        break
-        
-      case 'cleanup-db':
-        // Clean up old/invalid data
-        console.log('[ADMIN] Running database cleanup')
-        // In a real app, you'd run cleanup queries
-        break
-        
-      case 'restart-services':
-        // Restart background services
-        console.log('[ADMIN] Restarting background services')
-        // In a real app, you'd restart workers, reconnect to services, etc.
-        break
-        
-      default:
-        return res.status(400).json({ ok: false, error: 'UNKNOWN_ACTION' })
-    }
-    
-    res.json({ ok: true, action, message: `${action} completed successfully` })
-  } catch (error) {
-    console.error('[ADMIN] Quick fix error:', error)
-    res.status(500).json({ ok: false, error: error.message })
-  }
-})
-
 // SPA fallback: serve index.html for any non-API, non-static route when a dist exists
 if (staticBase) {
   app.get('*', (req, res, next) => {
@@ -1326,105 +1060,7 @@ if (staticBase) {
   })
 }
 
-// Handle synchronization messages from master process
-function handleSyncMessage(syncData) {
-  try {
-    if (syncData.type === 'match-created') {
-      // Update local matches cache
-      if (syncData.match) {
-        matches.set(syncData.match.id, syncData.match);
-        console.log(`[SYNC] Match ${syncData.match.id} synchronized across workers`);
-      }
-    } else if (syncData.type === 'tournament-updated') {
-      // Update local tournaments cache
-      if (syncData.tournament) {
-        tournaments.set(syncData.tournament.id, syncData.tournament);
-        console.log(`[SYNC] Tournament ${syncData.tournament.id} synchronized across workers`);
-      }
-    } else if (syncData.type === 'cam-session-created') {
-      // Update local camSessions cache
-      if (syncData.session) {
-        camSessions.set(syncData.session.code, syncData.session);
-        console.log(`[SYNC] Camera session ${syncData.session.code} synchronized across workers`);
-      }
-    }
-  } catch (err) {
-    console.error('[SYNC] Error handling sync message:', err);
-  }
-}
-
-// Node.js clustering for horizontal scaling
-const cluster = require('cluster');
-const numCPUs = Math.min(os.cpus().length, 7); // Limit to 7 workers max
-
-if (cluster.isMaster || cluster.isPrimary) {
-  console.log(`[CLUSTER] Master process ${process.pid} starting ${numCPUs} workers...`);
-
-  // Set up Redis pub/sub for cross-worker communication
-  if (redisClient) {
-    const subscriber = redisClient.duplicate();
-    const publisher = redisClient.duplicate();
-
-    subscriber.subscribe('broadcast', (message) => {
-      try {
-        const data = JSON.parse(message);
-        // Broadcast to all workers
-        for (const id in cluster.workers) {
-          cluster.workers[id].send(data);
-        }
-      } catch (err) {
-        console.error('[REDIS] Error parsing broadcast message:', err);
-      }
-    });
-
-    subscriber.subscribe('sync', (message) => {
-      try {
-        const syncData = JSON.parse(message);
-        // Forward sync messages to all workers
-        for (const id in cluster.workers) {
-          cluster.workers[id].send({ type: 'sync', data: syncData });
-        }
-      } catch (err) {
-        console.error('[REDIS] Error parsing sync message:', err);
-      }
-    });
-
-    subscriber.on('error', (err) => console.error('[REDIS] Subscriber error:', err));
-    publisher.on('error', (err) => console.error('[REDIS] Publisher error:', err));
-
-    console.log('[CLUSTER] Redis pub/sub enabled for cross-worker communication and synchronization');
-  } else {
-    console.warn('[CLUSTER] Redis not configured - workers will not communicate');
-  }
-
-  // Fork workers
-  for (let i = 0; i < numCPUs; i++) {
-    cluster.fork();
-  }
-
-  cluster.on('exit', (worker, code, signal) => {
-    console.log(`[CLUSTER] Worker ${worker.process.pid} died with code ${code}, restarting...`);
-    cluster.fork();
-  });
-
-} else {
-  // Worker process - start the server
-  console.log(`[CLUSTER] Worker ${process.pid} starting...`);
-
-  // Handle messages from master process (Redis broadcasts and sync)
-  process.on('message', (data) => {
-    if (data && data.type) {
-      if (data.type === 'sync') {
-        // Handle synchronization messages
-        handleSyncMessage(data.data);
-      } else {
-        // Handle broadcast messages
-        broadcastAll(data);
-      }
-    }
-  });
-
-  const server = app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   const nets = os.networkInterfaces?.() || {}
   const hosts = []
   for (const name of Object.keys(nets)) {
@@ -1515,11 +1151,11 @@ async function loadPersistentData() {
 
 // Simple in-memory rooms (WebSocket connections - not persisted)
 const rooms = new Map(); // roomId -> Set(ws)
-// Simple in-memory match lobby (loaded from DB, synced via Redis)
-const matches = new RedisMap(redisClient, 'matches'); // matchId -> match data (local cache, synced via pub/sub)
+// Simple in-memory match lobby (loaded from DB)
+const matches = new Map(); // matchId -> match data
 const clients = new Map(); // wsId -> ws (not persisted)
 // WebRTC camera pairing sessions (stored in DB)
-const camSessions = new RedisMap(redisClient, 'camSessions', 120); // code -> session data, 2min TTL
+const camSessions = new Map();
 const CAM_TTL_MS = 2 * 60 * 1000 // 2 minutes
 function genCamCode() {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -1529,42 +1165,31 @@ function genCamCode() {
   return code
 }
 // Simple in-memory tournaments (loaded from DB)
-const tournaments = new RedisMap(redisClient, 'tournaments');
+const tournaments = new Map();
 // Simple in-memory users and friendships (demo)
 // users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
 const users = new Map();
 
 // Load persistent data on startup
 loadPersistentData();
+//     try {
+//       console.log('[DB] Loading users from Supabase...');
+//       const { data, error } = await supabase
+//         .from('users')
+//         .select('*');
 
-// Simple scheduler for reminders and start triggers
-let lastOfficialDeleteAt = 0
-const OFFICIAL_RESEED_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes after a manual delete, do not reseed
-setInterval(async () => {
-  const now = Date.now()
-  const allTournaments = await db.getTournaments()
-  for (const t of allTournaments) {
-    if (t.status === 'scheduled') {
-      // Reminder window
-      const remindAt = t.startAt - (t.checkinMinutes * 60 * 1000)
-      if (!t._reminded && now >= remindAt && now < t.startAt) {
-        t._reminded = true
-        await db.updateTournament(t.id, t)
-        broadcastAll({ type: 'tournament-reminder', tournamentId: t.id, title: t.title, startAt: t.startAt, message: `Only ${t.checkinMinutes} minutes to go until the ${t.title} is live ��� check in ready or lose your spot at 19:45!` })
-      }
-      // Start condition at start time with min participants 8 (for official) or 2 otherwise
-      const minPlayers = t.official ? 8 : 2
-      if (now >= t.startAt && t.participants.length >= minPlayers) {
-        t.status = 'running'
-        await db.updateTournament(t.id, t)
-        broadcastAll({ type: 'tournament-start', tournamentId: t.id, title: t.title })
-      }
-      // If startAt passed and not enough players, leave scheduled; owner can adjust later
-    }
-  }
-  // Removed ensureOfficialWeekly - only allow manually created tournaments
-}, 30 * 1000)
-
+//       if (error) {
+//         console.error('[DB] Failed to load users from Supabase:', error);
+//       } else if (data) {
+//         let loadedCount = 0;
+//         for (const user of data) {
+//           users.set(user.email, {
+//             email: user.email,
+//             username: user.username,
+//             password: user.password,
+//             admin: user.admin || false,
+//             subscription: user.subscription || { fullAccess: false }
+//           });
 //           loadedCount++;
 //         }
 //         console.log(`[DB] Successfully loaded ${loadedCount} users from Supabase`);
@@ -1926,8 +1551,6 @@ if (wss) {
           createdAt: Date.now(),
         }
         await db.createMatch(m)
-        // Sync match creation across workers
-        await syncHelpers.syncMatchCreated(m)
         // Broadcast lobby list to all (pre-stringified)
         const allMatches = await db.getMatches()
         const lobbyPayload = JSON.stringify({ type: 'matches', matches: allMatches })
@@ -2416,7 +2039,7 @@ app.post('/api/wallet/withdraw', (req, res) => {
   if (method) {
     const ok = debitWallet(addr, curr, amt)
     if (!ok) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-    const item = { id, email: addr, currency: curr, amountCents: amt, status: 'paid', requestedAt: Date.now(), decidedAt: Date.now(), notes: `Paid to ${method.brand} ������������ ${method.last4}` }
+    const item = { id, email: addr, currency: curr, amountCents: amt, status: 'paid', requestedAt: Date.now(), decidedAt: Date.now(), notes: `Paid to ${method.brand} ÔÇóÔÇóÔÇóÔÇó ${method.last4}` }
     withdrawals.set(id, item)
     return res.json({ ok: true, request: item, paid: true, method })
   }
@@ -2527,14 +2150,6 @@ app.post('/api/tournaments/join', async (req, res) => {
   if (t.status !== 'scheduled') return res.status(400).json({ ok: false, error: 'ALREADY_STARTED' })
   const addr = String(email || '').toLowerCase()
   if (!addr) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
-  // Check if user is already joined to any other tournament
-  const allTournaments = await db.getTournaments()
-  const alreadyInAnother = allTournaments.some(otherT => 
-    otherT.id !== t.id && otherT.participants?.some(p => p.email === addr)
-  )
-  if (alreadyInAnother) {
-    return res.status(400).json({ ok: false, error: 'ALREADY_IN_TOURNAMENT', message: 'You can only join one tournament at a time. Please leave your current tournament first.' })
-  }
   // Winners cooldown: if official tournament and user has an active premium grant, block until expiry
   if (t.official && premiumWinners.has(addr)) {
     const exp = premiumWinners.get(addr)
@@ -2547,7 +2162,6 @@ app.post('/api/tournaments/join', async (req, res) => {
   if (t.participants.length >= t.capacity) return res.status(400).json({ ok: false, error: 'FULL' })
   t.participants.push({ email: addr, username: String(username || addr) })
   await db.updateTournament(t.id, t)
-  await syncHelpers.syncTournamentUpdated(t)
   await broadcastTournaments()
   res.json({ ok: true, joined: true, tournament: t })
 })
@@ -2589,32 +2203,10 @@ app.post('/api/admin/tournaments/winner', async (req, res) => {
         creditWallet(t.winnerEmail, t.currency, Math.round(t.prizeAmount * 100))
       }
     } else {
-      // default premium prize - now 3 months
-      const THREE_MONTHS = 3 * 30 * 24 * 60 * 60 * 1000
-      const expiryDate = Date.now() + THREE_MONTHS
-      premiumWinners.set(t.winnerEmail, expiryDate)
+      // default premium prize
+      const ONE_MONTH = 30 * 24 * 60 * 60 * 1000
+      premiumWinners.set(t.winnerEmail, Date.now() + ONE_MONTH)
       t.payoutStatus = 'none'
-      
-      // Send congratulatory message to winner
-      const winnerExpiry = new Date(expiryDate)
-      const expiryStr = winnerExpiry.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      })
-      
-      // Try to send notification via WS if winner is online
-      const winnerUser = users.get(t.winnerEmail)
-      if (winnerUser && winnerUser.wsId) {
-        const target = clients.get(winnerUser.wsId)
-        if (target && target.readyState === 1) {
-          target.send(JSON.stringify({ 
-            type: 'tournament-win', 
-            tournamentId: t.id,
-            message: `Congratulations! You won the tournament "${t.title}" and have been awarded 3 months of PREMIUM! Your premium expires on ${expiryStr}.` 
-          }))
-        }
-      }
     }
   }
   await db.updateTournament(t.id, t)
@@ -2700,7 +2292,15 @@ app.post('/api/admin/tournaments/mark-paid', async (req, res) => {
   res.json({ ok: true, tournament: t })
 })
 
-// Removed admin endpoint for reseeding weekly tournaments - only allow manually created tournaments
+// Admin: reseed weekly official tournament
+app.post('/api/admin/tournaments/reseed-weekly', async (req, res) => {
+  const { requesterEmail } = req.body || {}
+  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
+  await ensureOfficialWeekly()
+  res.json({ ok: true })
+})
 
 // Seed/ensure an official weekly tournament
 function getNextFridayAt1945(nowMs) {
@@ -2720,7 +2320,99 @@ function getNextFridayAt1945(nowMs) {
   return thisFriday.getTime()
 }
 
-(async () => {
-  // Removed ensureOfficialWeekly - only allow manually created tournaments
-})();
+async function ensureOfficialWeekly() {
+  const now = Date.now()
+  // We want at least one scheduled official tournament in the future (for early enrollment)
+  const allTournaments = await db.getTournaments()
+  const upcoming = allTournaments.filter(t => t.official && t.status === 'scheduled')
+  if (upcoming.length === 0) {
+    // Schedule the next Friday at 19:45
+    const id = nanoid(10)
+    const t = {
+      id,
+      title: 'NDN Premium Winner Giveaway',
+      game: 'X01',
+      mode: 'bestof',
+      value: 3,
+      description: 'Official weekly tournament ÔÇö every Friday at 19:45. Max 32, starts with 8+. Winner earns 1 month PREMIUM.',
+      startAt: getNextFridayAt1945(now),
+      checkinMinutes: 30,
+      capacity: 32,
+      participants: [],
+      official: true,
+      prize: true,
+      prizeType: 'premium',
+      payoutStatus: 'none',
+      status: 'scheduled',
+      winnerEmail: null,
+      createdAt: Date.now(),
+      startingScore: 501,
+    }
+    await db.createTournament(t)
+    await broadcastTournaments()
+  } else {
+    // If there is a scheduled official tournament but it's sooner than the coming Friday (edge), ensure there's also one for the following Friday for early enrollment window
+    const nextStart = getNextFridayAt1945(now)
+    const hasNext = upcoming.some(t => t.startAt === nextStart)
+    if (!hasNext) {
+      const id2 = nanoid(10)
+      const t2 = {
+        id: id2,
+        title: 'NDN Premium Winner Giveaway',
+        game: 'X01',
+        mode: 'bestof',
+        value: 3,
+        description: 'Official weekly tournament ÔÇö every Friday at 19:45. Max 32, starts with 8+. Winner earns 1 month PREMIUM.',
+        startAt: nextStart,
+        checkinMinutes: 30,
+        capacity: 32,
+        participants: [],
+        official: true,
+        prize: true,
+        prizeType: 'premium',
+        payoutStatus: 'none',
+        status: 'scheduled',
+        winnerEmail: null,
+        createdAt: Date.now(),
+        startingScore: 501,
+      }
+      await db.createTournament(t2)
+      await broadcastTournaments()
+    }
+  }
 }
+
+(async () => {
+  await ensureOfficialWeekly()
+})();
+
+// Simple scheduler for reminders and start triggers
+let lastOfficialDeleteAt = 0
+const OFFICIAL_RESEED_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes after a manual delete, do not reseed
+setInterval(async () => {
+  const now = Date.now()
+  const allTournaments = await db.getTournaments()
+  for (const t of allTournaments) {
+    if (t.status === 'scheduled') {
+      // Reminder window
+      const remindAt = t.startAt - (t.checkinMinutes * 60 * 1000)
+      if (!t._reminded && now >= remindAt && now < t.startAt) {
+        t._reminded = true
+        await db.updateTournament(t.id, t)
+        broadcastAll({ type: 'tournament-reminder', tournamentId: t.id, title: t.title, startAt: t.startAt, message: `Only ${t.checkinMinutes} minutes to go until the ${t.title} is live ÔÇö check in ready or lose your spot at 19:45!` })
+      }
+      // Start condition at start time with min participants 8 (for official) or 2 otherwise
+      const minPlayers = t.official ? 8 : 2
+      if (now >= t.startAt && t.participants.length >= minPlayers) {
+        t.status = 'running'
+        await db.updateTournament(t.id, t)
+        broadcastAll({ type: 'tournament-start', tournamentId: t.id, title: t.title })
+      }
+      // If startAt passed and not enough players, leave scheduled; owner can adjust later
+    }
+  }
+  // Continuously ensure next week's official tournament remains seeded for early enrollment
+  if ((now - lastOfficialDeleteAt) > OFFICIAL_RESEED_COOLDOWN_MS) {
+    await ensureOfficialWeekly()
+  }
+}, 30 * 1000)

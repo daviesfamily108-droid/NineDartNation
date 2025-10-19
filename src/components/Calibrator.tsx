@@ -25,7 +25,7 @@ export default function Calibrator() {
 	// Zoom for pixel-perfect point picking (0.5x – 2.0x)
 	const [zoom, setZoom] = useState<number>(1)
 		const { H, setCalibration, reset, errorPx, locked } = useCalibration()
-  const { calibrationGuide, setCalibrationGuide } = useUserSettings()
+  const { calibrationGuide, setCalibrationGuide, preferredCameraId, cameraEnabled, setCameraEnabled } = useUserSettings()
 		// Detected ring data (from auto-detect) in image pixels
 	const [detected, setDetected] = useState<null | {
 		cx: number; cy: number;
@@ -119,6 +119,30 @@ export default function Calibrator() {
 	useEffect(() => {
 		return () => stopCamera()
 	}, [])
+
+	// Restart camera when preferred camera changes from one specific camera to another (not initial selection)
+	const prevPreferredCameraIdRef = useRef<string | undefined>(preferredCameraId)
+	useEffect(() => {
+		const prevId = prevPreferredCameraIdRef.current
+		prevPreferredCameraIdRef.current = preferredCameraId
+		
+		// Only restart if we were already streaming with a specific camera and now switching to a different available one
+		if (streaming && mode === 'local' && prevId && prevId !== preferredCameraId && preferredCameraId) {
+			// Check if the new camera is still available
+			navigator.mediaDevices.enumerateDevices().then(devices => {
+				const videoDevices = devices.filter(d => d.kind === 'videoinput')
+				const deviceExists = videoDevices.some(d => d.deviceId === preferredCameraId)
+				if (deviceExists) {
+					stopCamera()
+					setTimeout(() => startCamera(), 100) // Small delay to ensure cleanup
+				} else {
+					console.warn('Selected camera no longer available:', preferredCameraId)
+				}
+			}).catch(err => {
+				console.warn('Failed to check device availability:', err)
+			})
+		}
+	}, [preferredCameraId, streaming, mode])
 
 	function ensureWS() {
 		if (ws && ws.readyState === WebSocket.OPEN) return ws
@@ -309,12 +333,23 @@ export default function Calibrator() {
 		if (mode === 'phone') return startPhonePairing()
 		if (mode === 'wifi') return startWifiConnection()
 		try {
-			const { preferredCameraId } = useUserSettings()
 			const constraints: MediaStreamConstraints = {
 				video: preferredCameraId ? { deviceId: { exact: preferredCameraId } } : { facingMode: 'environment' },
 				audio: false
 			}
-			const stream = await navigator.mediaDevices.getUserMedia(constraints)
+			let stream: MediaStream
+			try {
+				stream = await navigator.mediaDevices.getUserMedia(constraints)
+			} catch (err: any) {
+				// Fallback if specific device isn't available
+				const name = (err && (err.name || err.code)) || ''
+				if (preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError' || name === 'NotAllowedError')) {
+					console.warn('Preferred camera not available, falling back to auto:', err)
+					stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+				} else {
+					throw err
+				}
+			}
 			if (videoRef.current) {
 				videoRef.current.srcObject = stream
 				await videoRef.current.play()
@@ -688,7 +723,7 @@ export default function Calibrator() {
 
 		// DevicePicker moved from SettingsPanel
 		function DevicePicker() {
-			const { preferredCameraId, preferredCameraLabel, setPreferredCamera } = useUserSettings()
+			const { preferredCameraId, preferredCameraLabel, setPreferredCamera, cameraEnabled, setCameraEnabled } = useUserSettings()
 			const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
 			const [err, setErr] = useState('')
 			const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -723,12 +758,36 @@ export default function Calibrator() {
 			const selectedDevice = devices.find(d => d.deviceId === preferredCameraId)
 			const selectedLabel = selectedDevice ? 
 				`${selectedDevice.label || 'Camera'}` : 
-				'Auto (browser default)'
+				(preferredCameraId ? 'Camera (unavailable)' : 'Auto (browser default)')
+
+			// If preferred camera is set but not found, show a warning
+			const preferredCameraUnavailable = preferredCameraId && !selectedDevice
 
 			return (
 				<div className="mt-3 p-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5">
 					<div className="font-semibold mb-2">Select camera device</div>
 					{err && <div className="text-rose-400 text-sm mb-2">{err}</div>}
+					{preferredCameraUnavailable && (
+						<div className="text-amber-400 text-sm mb-2">
+							Selected camera is no longer available. 
+							<button 
+								className="underline ml-1" 
+								onClick={() => setPreferredCamera(undefined, '')}
+							>
+								Use auto-selection
+							</button>
+						</div>
+					)}
+					<div className="flex items-center gap-3 mb-3">
+						<input
+							type="checkbox"
+							id="cameraEnabled-calibrator"
+							checked={cameraEnabled}
+							onChange={e => setCameraEnabled(e.target.checked)}
+							className="w-4 h-4"
+						/>
+						<label htmlFor="cameraEnabled-calibrator" className="text-sm">Enable camera for scoring</label>
+					</div>
 					<div className="grid grid-cols-3 gap-2 items-center text-sm">
 						<div className="col-span-2 relative" ref={dropdownRef}>
 							<div 

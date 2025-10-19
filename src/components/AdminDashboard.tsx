@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import BarChart from './BarChart'
+import TabPills from './ui/TabPills'
 import { getGameModeStats } from '../store/profileStats'
 import { allGames } from '../utils/games'
 
@@ -31,9 +32,12 @@ export default function AdminDashboard({ user }: { user: any }) {
 	})
 	const [emailCopy, setEmailCopy] = useState<any>({ reset:{}, reminder:{}, confirmEmail:{}, changed:{} })
 	const [preview, setPreview] = useState<{ open: boolean, kind?: string, html?: string }>({ open: false })
+	const [activeTab, setActiveTab] = useState<'general' | 'maintenance'>('general')
 	const isOwner = user?.email?.toLowerCase() === OWNER_EMAIL
   const [winners, setWinners] = useState<any[]>([])
 		const [reports, setReports] = useState<any[]>([])
+	const [logs, setLogs] = useState<any[]>([])
+	const [systemHealth, setSystemHealth] = useState<any>(null)
 
 	// --- Game usage (played/won per mode) ---
 	const [gmVersion, setGmVersion] = useState(0)
@@ -244,6 +248,53 @@ export default function AdminDashboard({ user }: { user: any }) {
 		} finally { setLoading(false) }
 	}
 
+	async function fetchLogs() {
+		try {
+			const res = await fetch(`/api/admin/logs?requesterEmail=${encodeURIComponent(user?.email || '')}`)
+			if (res.ok) {
+				const data = await res.json()
+				if (data?.ok) setLogs(data.logs || [])
+			}
+		} catch (error) {
+			console.error('Failed to fetch logs:', error)
+		}
+	}
+
+	async function fetchSystemHealth() {
+		try {
+			const res = await fetch(`/api/admin/system-health?requesterEmail=${encodeURIComponent(user?.email || '')}`)
+			if (res.ok) {
+				const data = await res.json()
+				if (data?.ok) setSystemHealth(data.health)
+			}
+		} catch (error) {
+			console.error('Failed to fetch system health:', error)
+		}
+	}
+
+	async function runQuickFix(action: string) {
+		setLoading(true)
+		try {
+			const res = await fetch('/api/admin/quick-fix', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ action, requesterEmail: user?.email })
+			})
+			const data = await res.json()
+			if (data?.ok) {
+				alert(`${action} completed successfully`)
+				await fetchSystemHealth() // Refresh health data
+			} else {
+				alert(`Failed: ${data?.error || 'Unknown error'}`)
+			}
+		} catch (error) {
+			console.error('Quick fix failed:', error)
+			alert('Quick fix failed')
+		} finally {
+			setLoading(false)
+		}
+	}
+
 	async function loadEmailCopy() {
 		try {
 			const res = await fetch(`/api/admin/email-copy?requesterEmail=${encodeURIComponent(user?.email||'')}`)
@@ -254,6 +305,13 @@ export default function AdminDashboard({ user }: { user: any }) {
 		} catch {}
 	}
 	useEffect(()=>{ if (isOwner) loadEmailCopy() }, [isOwner])
+
+	useEffect(() => {
+		if (isOwner && activeTab === 'general') {
+			fetchLogs()
+			fetchSystemHealth()
+		}
+	}, [isOwner, activeTab])
 
 	async function saveEmailCopy(kind: string, payload: any) {
 		await fetch('/api/admin/email-copy', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ requesterEmail: user?.email, kind, ...payload }) })
@@ -310,310 +368,330 @@ export default function AdminDashboard({ user }: { user: any }) {
 	return (
 		<div className="space-y-4">
 			{isOwner && (
-				<div className="card">
-					<h3 className="text-xl font-semibold mb-2">Game Usage</h3>
-					<div className="text-sm opacity-80 mb-2">Bar height shows total plays per mode. Wins are listed under each label. This helps decide which modes to keep or iterate on.</div>
-					<div className="rounded-xl border border-indigo-500/40 bg-indigo-500/10 p-3">
-						<BarChart data={gmBars.map(d => ({ label: d.label, value: d.value }))} />
-						<div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px] opacity-80">
-										{gmBars.map((d, i) => (
-											<div key={i} className="flex items-center justify-between px-2 py-1 rounded-md bg-white/5 border border-white/10">
-												<span className="truncate mr-2">{d.label}</span>
-												<span className="whitespace-nowrap">Played {d.value} · Won {d.won}</span>
-											</div>
-										))}
-									</div>
+				<TabPills
+					tabs={[
+						{ key: 'general', label: 'General' },
+						{ key: 'maintenance', label: 'Maintenance' }
+					]}
+					active={activeTab}
+					onChange={(key) => setActiveTab(key as 'general' | 'maintenance')}
+					className="mb-4"
+				/>
+			)}
+
+			{activeTab === 'general' && (
+				<>
+					{isOwner && (
+						<div className="card">
+							<h3 className="text-xl font-semibold mb-2">Game Usage</h3>
+							<div className="text-sm opacity-80 mb-2">Bar height shows total plays per mode. Wins are listed under each label. This helps decide which modes to keep or iterate on.</div>
+							<div className="rounded-xl border border-indigo-500/40 bg-indigo-500/10 p-3">
+								<BarChart data={gmBars.map(d => ({ label: d.label, value: d.value }))} />
+								<div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px] opacity-80">
+									{gmBars.map((d, i) => (
+										<div key={i} className="flex items-center justify-between px-2 py-1 rounded-md bg-white/5 border border-white/10">
+											<span className="truncate mr-2">{d.label}</span>
+											<span className="whitespace-nowrap">Played {d.value} · Won {d.won}</span>
+										</div>
+									))}
 								</div>
+							</div>
+						</div>
+					)}
+
+					<div className="card">
+						<h2 className="text-2xl font-bold mb-2">Admin Control</h2>
+						<div className="text-sm opacity-80 mb-3">Grant or revoke Admin to trusted users. Only the owner can perform these actions.</div>
+						<div className="flex gap-2 mb-3">
+							<input className="input flex-1" placeholder="user@example.com" value={email} onChange={e=>setEmail(e.target.value)} />
+							<button className="btn" disabled={loading} onClick={grantAdmin}>Grant</button>
+							<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={revokeAdmin}>Revoke</button>
+						</div>
+						<div className="text-sm opacity-80 mb-2">Current Admins:</div>
+						<div className="flex flex-wrap gap-2">
+							{admins.map((admin)=> (
+								<div key={admin} className="px-2 py-1 rounded bg-indigo-600/20 border border-indigo-500/40 text-sm">
+									{admin}
+								</div>
+							))}
+						</div>
+					</div>
+
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-2">Announcements</h3>
+						<div className="text-sm opacity-80 mb-2">Send a message to all users. This will appear as a toast notification.</div>
+						<div className="flex gap-2">
+							<input className="input flex-1" placeholder="Announcement message..." value={announcement} onChange={e=>setAnnouncement(e.target.value)} />
+							<button className="btn" disabled={loading || !announcement.trim()} onClick={sendAnnouncement}>Send</button>
+						</div>
+					</div>
+
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-2">User Search</h3>
+						<div className="text-sm opacity-80 mb-2">Search for users by email or name.</div>
+						<div className="flex gap-2 mb-3">
+							<input className="input flex-1" placeholder="Search users..." value={userSearch} onChange={e=>setUserSearch(e.target.value)} />
+							<button className="btn" disabled={loading} onClick={searchUsers}>Search</button>
+						</div>
+						{userResults.length > 0 && (
+							<div className="space-y-2">
+								<div className="text-sm opacity-80 mb-2">Results:</div>
+								{userResults.map((u)=> (
+									<div key={u.email} className="p-2 rounded bg-black/20 text-sm flex items-center justify-between">
+										<div>
+											<div className="font-semibold">{u.name || 'No name'}</div>
+											<div className="opacity-70">{u.email}</div>
+											<div className="opacity-60 text-xs">Joined {new Date(u.createdAt).toLocaleDateString()}</div>
+										</div>
+									</div>
+								))}
 							</div>
 						)}
+					</div>
 
+					{isOwner && (
 						<div className="card">
-				<h2 className="text-2xl font-bold mb-2">Admin Control</h2>
-				<div className="text-sm opacity-80 mb-3">Grant or revoke Admin to trusted users. Only the owner can perform these actions.</div>
-				<div className="flex gap-2 mb-3">
-					<input className="input flex-1" placeholder="user@example.com" value={email} onChange={e=>setEmail(e.target.value)} />
-					<button className="btn" onClick={grant} disabled={!email}>Grant Admin</button>
-				</div>
-				<div>
-					<div className="font-semibold mb-1">Current Admins</div>
-					<ul className="space-y-1">
-						{admins.map(a => (
-							<li key={a} className="flex items-center justify-between p-2 rounded bg-black/20">
-								<span>{a}</span>
-								{a.toLowerCase() !== OWNER_EMAIL && (
-									<button className="btn bg-rose-600 hover:bg-rose-700" onClick={()=>revoke(a)}>Revoke</button>
-								)}
-							</li>
-						))}
-						{admins.length === 0 && <li className="text-sm opacity-60">No admins yet.</li>}
-					</ul>
-				</div>
-			</div>
-
-			{isOwner && (
-				<div className="card">
-					<h3 className="text-xl font-semibold mb-2">Premium Overrides</h3>
-					<div className="text-sm opacity-80 mb-2">Grant temporary PREMIUM to specific emails (e.g., winners, testers). Owner only.</div>
-					<div className="flex gap-2 mb-3">
-						<input className="input flex-1" placeholder="user@example.com" value={email} onChange={e=>setEmail(e.target.value)} />
-						<input className="input w-28" type="number" min={1} defaultValue={30} onChange={()=>{}} id="ndn-premium-days" placeholder="Days" />
-						<button className="btn" onClick={()=>{
-							const el = document.getElementById('ndn-premium-days') as HTMLInputElement | null
-							const days = Number(el?.value || '30')
-							grantPremium(email, Number.isFinite(days) ? days : 30)
-						}} disabled={!email}>Grant</button>
-					</div>
-					<div>
-						<div className="font-semibold mb-1">Active Overrides</div>
-						<ul className="space-y-1 text-sm">
-							{winners.map(w => (
-								<li key={w.email} className="flex items-center justify-between p-2 rounded bg-black/20">
-									<div>
-										<div>{w.email}</div>
-										<div className="text-xs opacity-70">Expires: {w.expiresAt ? new Date(w.expiresAt).toLocaleString() : '—'} {w.expired ? '(expired)' : ''}</div>
-									</div>
-									<button className="btn bg-rose-600 hover:bg-rose-700" onClick={()=>revokePremium(w.email)}>Revoke</button>
-								</li>
-							))}
-							{winners.length===0 && <li className="opacity-60">No overrides.</li>}
-						</ul>
-					</div>
-				</div>
-			)}
-
-			{isOwner && (
-				<div className="card">
-					<h3 className="text-xl font-semibold mb-2">Server status</h3>
-					{status?.ok ? (
-						<div className="text-sm grid grid-cols-2 gap-2">
-							<div>Clients: <span className="font-semibold">{status.server.clients}</span></div>
-							<div>Open matches: <span className="font-semibold">{status.server.matches}</span></div>
-							<div>Rooms: <span className="font-semibold">{status.server.rooms}</span></div>
-							<div>Premium: <span className="font-semibold">{status.server.premium ? 'ON' : 'OFF'}</span></div>
-							<div>Maintenance: <span className="font-semibold">{status.server.maintenance ? 'ON' : 'OFF'}</span></div>
-						</div>
-					) : (
-						<div className="text-sm opacity-70">Loading…</div>
-					)}
-				</div>
-			)}
-
-			{isOwner && (
-				<div className="card">
-					<h3 className="text-xl font-semibold mb-3">Operations</h3>
-					<div className="flex flex-wrap gap-2 items-center mb-3">
-						<button className="btn" disabled={loading} onClick={()=>toggleMaintenance(!(status?.server?.maintenance))}>
-							{status?.server?.maintenance ? 'Disable Maintenance' : 'Enable Maintenance'}
-						</button>
-						<button className="btn" disabled={loading} onClick={()=>flipPremium(!(status?.server?.premium))}>
-							{status?.server?.premium ? 'Disable PREMIUM' : 'Enable PREMIUM'}
-						</button>
-					</div>
-					<div className="flex gap-2">
-						<input className="input flex-1" placeholder="Announcement message" value={announcement} onChange={e=>setAnnouncement(e.target.value)} />
-						<button className="btn" disabled={loading || !announcement.trim()} onClick={sendAnnouncement}>Broadcast</button>
-					</div>
-				</div>
-			)}
-
-			{isOwner && (
-				<div className="card">
-					<h3 className="text-xl font-semibold mb-3">User Management</h3>
-					<div className="mb-4">
-						<input className="input w-full mb-2" placeholder="Search user by email or username" value={userSearch} onChange={e=>setUserSearch(e.target.value)} />
-						<button className="btn" onClick={searchUsers}>Search</button>
-					</div>
-					{userResults.length > 0 && (
-						<div className="space-y-2">
-							{userResults.map(u => (
-								<div key={u.email} className="flex items-center justify-between p-2 bg-slate-700 rounded">
-									<div>
-										<div className="font-medium">{u.username || 'No username'}</div>
-										<div className="text-sm text-slate-300">{u.email}</div>
-										<div className="text-xs text-slate-400">Joined: {new Date(u.created_at).toLocaleDateString()}</div>
-									</div>
-									<div className="flex gap-2">
-										<button className="btn bg-red-600 hover:bg-red-700 text-xs" onClick={()=>banUser(u.email)}>Ban</button>
-										<button className="btn bg-green-600 hover:bg-green-700 text-xs" onClick={()=>unbanUser(u.email)}>Unban</button>
+							<h3 className="text-xl font-semibold mb-3">Tournaments Management</h3>
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div>
+									<div className="font-semibold mb-2">Create Official</div>
+									<div className="space-y-2">
+										<input className="input w-full" placeholder="Title" value={createForm.title} onChange={e=>setCreateForm((f:any)=>({ ...f, title: e.target.value }))} />
+										<div className="grid grid-cols-3 gap-2">
+											<select className="input" value={createForm.game} onChange={e=>setCreateForm((f:any)=>({ ...f, game: e.target.value }))}>
+												{['X01','Around the Clock','Cricket','Halve It','Shanghai','High-Low'].map((g)=> <option key={g} value={g}>{g}</option>)}
+											</select>
+											<select className="input" value={createForm.mode} onChange={e=>setCreateForm((f:any)=>({ ...f, mode: e.target.value }))}>
+												<option value="bestof">Best of</option>
+												<option value="firstto">First to</option>
+											</select>
+											<input className="input" type="number" min={1} value={createForm.value} onChange={e=>setCreateForm((f:any)=>({ ...f, value: Number(e.target.value) }))} />
+										</div>
+										<textarea className="input w-full" rows={2} placeholder="Description" value={createForm.description} onChange={e=>setCreateForm((f:any)=>({ ...f, description: e.target.value }))} />
+										<div className="grid grid-cols-2 gap-2">
+											<input className="input" type="datetime-local" value={createForm.startAt} onChange={e=>setCreateForm((f:any)=>({ ...f, startAt: e.target.value }))} />
+											<input className="input" type="number" min={0} value={createForm.checkinMinutes} onChange={e=>setCreateForm((f:any)=>({ ...f, checkinMinutes: Number(e.target.value) }))} />
+										</div>
+										<input className="input w-full" type="number" min={6} max={64} value={createForm.capacity} onChange={e=>setCreateForm((f:any)=>({ ...f, capacity: Number(e.target.value) }))} />
+										<div className="grid grid-cols-3 gap-2 items-center">
+											<select className="input" value={createForm.prizeType} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeType: e.target.value }))}>
+												<option value="premium">PREMIUM month</option>
+												<option value="cash">Cash</option>
+											</select>
+											<input className="input" type="number" min={0} disabled={createForm.prizeType!=='cash'} value={createForm.prizeAmount} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeAmount: Number(e.target.value) }))} />
+											<select className="input" disabled={createForm.prizeType!=='cash'} value={createForm.currency} onChange={e=>setCreateForm((f:any)=>({ ...f, currency: e.target.value }))}>
+												<option value="GBP">GBP</option>
+												<option value="USD">USD</option>
+												<option value="EUR">EUR</option>
+												<option value="CAD">CAD</option>
+												<option value="AUD">AUD</option>
+											</select>
+										</div>
+										<input className="input w-full" placeholder="Prize notes (optional)" value={createForm.prizeNotes} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeNotes: e.target.value }))} />
+										<div className="flex justify-end">
+											<button className="btn" disabled={loading} onClick={createOfficialTournament}>Create</button>
+										</div>
 									</div>
 								</div>
-							))}
-						</div>
-					)}
-				</div>
-			)}
-
-			{isOwner && (
-				<div className="card">
-					<h3 className="text-xl font-semibold mb-3">Tournaments Management</h3>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-						<div>
-							<div className="font-semibold mb-2">Create Official</div>
-							<div className="space-y-2">
-								<input className="input w-full" placeholder="Title" value={createForm.title} onChange={e=>setCreateForm((f:any)=>({ ...f, title: e.target.value }))} />
-								<div className="grid grid-cols-3 gap-2">
-									<select className="input" value={createForm.game} onChange={e=>setCreateForm((f:any)=>({ ...f, game: e.target.value }))}>
-										{['X01','Around the Clock','Cricket','Halve It','Shanghai','High-Low'].map((g)=> <option key={g} value={g}>{g}</option>)}
-									</select>
-									<select className="input" value={createForm.mode} onChange={e=>setCreateForm((f:any)=>({ ...f, mode: e.target.value }))}>
-										<option value="bestof">Best of</option>
-										<option value="firstto">First to</option>
-									</select>
-									<input className="input" type="number" min={1} value={createForm.value} onChange={e=>setCreateForm((f:any)=>({ ...f, value: Number(e.target.value) }))} />
-								</div>
-								<textarea className="input w-full" rows={2} placeholder="Description" value={createForm.description} onChange={e=>setCreateForm((f:any)=>({ ...f, description: e.target.value }))} />
-								<div className="grid grid-cols-2 gap-2">
-									<input className="input" type="datetime-local" value={createForm.startAt} onChange={e=>setCreateForm((f:any)=>({ ...f, startAt: e.target.value }))} />
-									<input className="input" type="number" min={0} value={createForm.checkinMinutes} onChange={e=>setCreateForm((f:any)=>({ ...f, checkinMinutes: Number(e.target.value) }))} />
-								</div>
-								<input className="input w-full" type="number" min={6} max={64} value={createForm.capacity} onChange={e=>setCreateForm((f:any)=>({ ...f, capacity: Number(e.target.value) }))} />
-								<div className="grid grid-cols-3 gap-2 items-center">
-									<select className="input" value={createForm.prizeType} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeType: e.target.value }))}>
-										<option value="premium">PREMIUM month</option>
-										<option value="cash">Cash</option>
-									</select>
-														<input className="input" type="number" min={0} disabled={createForm.prizeType!=='cash'} value={createForm.prizeAmount} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeAmount: Number(e.target.value) }))} />
-														<select className="input" disabled={createForm.prizeType!=='cash'} value={createForm.currency} onChange={e=>setCreateForm((f:any)=>({ ...f, currency: e.target.value }))}>
-															<option value="GBP">GBP</option>
-															<option value="USD">USD</option>
-															<option value="EUR">EUR</option>
-															<option value="CAD">CAD</option>
-															<option value="AUD">AUD</option>
-														</select>
-								</div>
-								<input className="input w-full" placeholder="Prize notes (optional)" value={createForm.prizeNotes} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeNotes: e.target.value }))} />
-								<div className="flex justify-end">
-									<button className="btn" disabled={loading} onClick={createOfficialTournament}>Create</button>
+								<div>
+									<div className="font-semibold mb-2">Existing</div>
+									<ul className="space-y-2">
+										{tournaments.map((t:any)=> (
+											<li key={t.id} className="p-2 rounded bg-black/20 text-sm">
+												<div className="flex items-center justify-between">
+													<div className="font-semibold">{t.title}</div>
+													<div className="opacity-70">{t.status}</div>
+												</div>
+												<div className="opacity-80">{t.game} · {t.mode==='firstto'?'FT':'BO'} {t.value} · {new Date(t.startAt).toLocaleString()} · {t.capacity} cap</div>
+												{t.prize && (
+													<div className="text-xs mt-1">Prize: {t.prizeType==='cash' && t.prizeAmount ? `${t.currency||'USD'} ${t.prizeAmount}` : '3 months PREMIUM'} {t.prizeType==='cash' && t.status==='completed' && t.payoutStatus && (<span className={`ml-2 px-1.5 py-0.5 rounded ${t.payoutStatus==='paid'?'bg-emerald-600':'bg-amber-600'}`}>{t.payoutStatus}</span>)}</div>
+												)}
+												<div className="mt-2 flex flex-wrap gap-2">
+													<button className="btn" disabled={loading || t.status!=='scheduled'} onClick={()=>setWinner(t.id, prompt('Winner email?')||'')}>Set Winner</button>
+													{t.prizeType==='cash' && t.status==='completed' && t.payoutStatus!=='paid' && (
+														<button className="btn" disabled={loading} onClick={()=>markPaid(t.id)}>Mark Paid</button>
+													)}
+												</div>
+											</li>
+										))}
+										{tournaments.length===0 && <li className="opacity-60">No tournaments.</li>}
+									</ul>
+									<div className="mt-3 flex justify-end">
+										<button className="btn" disabled={loading} onClick={reseedWeekly}>Reseed Weekly Giveaway</button>
+									</div>
 								</div>
 							</div>
-						</div>
-						<div>
-							<div className="font-semibold mb-2">Existing</div>
-							<ul className="space-y-2">
-								{tournaments.map((t:any)=> (
-									<li key={t.id} className="p-2 rounded bg-black/20 text-sm">
-										<div className="flex items-center justify-between">
-											<div className="font-semibold">{t.title}</div>
-											<div className="opacity-70">{t.status}</div>
-										</div>
-										<div className="opacity-80">{t.game} · {t.mode==='firstto'?'FT':'BO'} {t.value} · {new Date(t.startAt).toLocaleString()} · {t.capacity} cap</div>
-										{t.prize && (
-											<div className="text-xs mt-1">Prize: {t.prizeType==='cash' && t.prizeAmount ? `${t.currency||'USD'} ${t.prizeAmount}` : '1 month PREMIUM'} {t.prizeType==='cash' && t.status==='completed' && t.payoutStatus && (<span className={`ml-2 px-1.5 py-0.5 rounded ${t.payoutStatus==='paid'?'bg-emerald-600':'bg-amber-600'}`}>{t.payoutStatus}</span>)}</div>
-										)}
-
-												{isOwner && (
-													<div className="card">
-														<h3 className="text-xl font-semibold mb-3">Withdrawals</h3>
-														<ul className="space-y-2">
-															{withdrawals.map((w:any) => (
-																<li key={w.id} className="p-2 rounded bg-black/20 text-sm flex items-center justify-between">
-																	<div>
-																		<div className="font-mono text-xs">{w.id}</div>
-																		<div>{w.email} · {w.currency} {(w.amountCents/100).toFixed(2)}</div>
-																		<div className="opacity-70">{w.status} · {new Date(w.requestedAt).toLocaleString()}</div>
-																	</div>
-																	<div className="flex gap-2">
-																		{w.status==='pending' && (
-																			<>
-																				<button className="btn bg-emerald-600 hover:bg-emerald-700" disabled={loading} onClick={()=>decideWithdrawal(w.id, true)}>Approve</button>
-																				<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={()=>decideWithdrawal(w.id, false)}>Reject</button>
-																			</>
-																		)}
-																	</div>
-																</li>
-															))}
-															{withdrawals.length===0 && <li className="opacity-60">No withdrawal requests.</li>}
-														</ul>
-													</div>
-												)}
-										<div className="mt-2 flex flex-wrap gap-2">
-											<button className="btn" disabled={loading || t.status!=='scheduled'} onClick={()=>setWinner(t.id, prompt('Winner email?')||'')}>Set Winner</button>
-											{t.prizeType==='cash' && t.status==='completed' && t.payoutStatus!=='paid' && (
-												<button className="btn" disabled={loading} onClick={()=>markPaid(t.id)}>Mark Paid</button>
-											)}
-											<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={()=>deleteTournament(t.id)}>Delete</button>
-										</div>
-									</li>
-								))}
-								{tournaments.length===0 && <li className="opacity-60">No tournaments.</li>}
-							</ul>
-							<div className="mt-3 flex justify-end">
-								<button className="btn" disabled={loading} onClick={reseedWeekly}>Reseed Weekly Giveaway</button>
-							</div>
-						</div>
-					</div>
-				</div>
-			)}
-
-			{isOwner && (
-				<div className="card">
-							<h3 className="text-xl font-semibold mb-3">User Reports</h3>
-							<ul className="space-y-2">
-								{reports.map((r:any)=> (
-									<li key={r.id} className="p-2 rounded bg-black/20 text-sm">
-										<div className="flex items-center justify-between">
-											<div>
-												<div className="font-mono text-xs">{r.id}</div>
-												<div><span className="font-semibold">{r.reporter}</span> → <span className="font-semibold">{r.offender}</span> · {new Date(r.ts).toLocaleString()}</div>
-												<div className="opacity-80">Reason: {r.reason}</div>
-												{r.messageId && <div className="opacity-60 text-xs">Message ID: {r.messageId}</div>}
-											</div>
-											<div className="flex gap-2">
-												<span className={`px-2 py-0.5 rounded text-xs ${r.status==='open'?'bg-amber-600':'bg-emerald-600'}`}>{r.status}</span>
-												{r.status==='open' && (
-													<>
-														<button className="btn bg-emerald-600 hover:bg-emerald-700" disabled={loading} onClick={async()=>{
-															await fetch('/api/admin/reports/resolve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: r.id, action: 'resolved', requesterEmail: user?.email }) })
-															await refresh()
-														}}>Resolve</button>
-														<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={async()=>{
-															const notes = prompt('Enter notes for action taken (e.g., warning, block):') || ''
-															await fetch('/api/admin/reports/resolve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: r.id, action: 'actioned', notes, requesterEmail: user?.email }) })
-															await refresh()
-														}}>Action</button>
-													</>
-												)}
-											</div>
-										</div>
-									</li>
-								))}
-								{reports.length===0 && <li className="opacity-60">No reports.</li>}
-							</ul>
 						</div>
 					)}
 
 					{isOwner && (
 						<div className="card">
-					<h3 className="text-xl font-semibold mb-2">Open Matches</h3>
-					<ul className="space-y-1">
-						{(status?.matches || []).map((m: any) => (
-							<li key={m.id} className="flex items-center justify-between p-2 rounded bg-black/20 text-sm">
-								<div className="flex items-center gap-3">
-									<span className="font-mono text-xs">{m.id}</span>
-									<span className="opacity-80">{m.creatorName}</span>
-									<span className="opacity-60">{m.game} {m.mode==='firstto'?'FT':'BO'} {m.value} {m.game==='X01'?`/${m.startingScore}`:''}</span>
-								</div>
-								<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={()=>deleteMatch(m.id)}>Remove</button>
-							</li>
-						))}
-						{(!status?.matches || status.matches.length === 0) && (
-							<li className="text-sm opacity-60">No open matches.</li>
-						)}
-					</ul>
-				</div>
+							<h3 className="text-xl font-semibold mb-3">Email Templates</h3>
+							<div className="text-sm opacity-80 mb-2">Customize titles, intro lines, and button text. Previews open in a new tab or as a popup.</div>
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+								<EmailEditor kind="reset" label="Password reset" />
+								<EmailEditor kind="reminder" label="Password reset reminder" />
+								<EmailEditor kind="confirm-email" label="Confirm new email" />
+								<EmailEditor kind="changed" label="Password changed notice" />
+							</div>
+						</div>
+					)}
+				</>
 			)}
 
-			{isOwner && (
-				<div className="card">
-					<h3 className="text-xl font-semibold mb-3">Email Templates</h3>
-					<div className="text-sm opacity-80 mb-2">Customize titles, intro lines, and button text. Previews open in a new tab or as a popup.</div>
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-						<EmailEditor kind="reset" label="Password reset" />
-						<EmailEditor kind="reminder" label="Password reset reminder" />
-						<EmailEditor kind="confirm-email" label="Confirm new email" />
-						<EmailEditor kind="changed" label="Password changed notice" />
+			{activeTab === 'maintenance' && isOwner && (
+				<>
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-2">User Management</h3>
+						<div className="text-sm opacity-80 mb-2">Ban or unban users. Use with caution.</div>
+						<div className="flex gap-2 mb-3">
+							<input className="input flex-1" placeholder="user@example.com" value={userSearch} onChange={e=>setUserSearch(e.target.value)} />
+							<button className="btn" disabled={loading} onClick={searchUsers}>Search</button>
+						</div>
+						{userResults.length > 0 && (
+							<div className="space-y-2">
+								<div className="text-sm opacity-80 mb-2">Results:</div>
+								{userResults.map((u)=> (
+									<div key={u.email} className="p-2 rounded bg-black/20 text-sm flex items-center justify-between">
+										<div>
+											<div className="font-semibold">{u.name || 'No name'}</div>
+											<div className="opacity-70">{u.email}</div>
+											<div className="opacity-60 text-xs">Joined {new Date(u.createdAt).toLocaleDateString()}</div>
+										</div>
+										<div className="flex gap-2">
+											<button className="btn bg-red-600 hover:bg-red-700 text-xs" onClick={()=>banUser(u.email)}>Ban</button>
+											<button className="btn bg-green-600 hover:bg-green-700 text-xs" onClick={()=>unbanUser(u.email)}>Unban</button>
+										</div>
+									</div>
+								))}
+							</div>
+						)}
 					</div>
-				</div>
+
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-3">Withdrawals</h3>
+						<ul className="space-y-2">
+							{withdrawals.map((w:any) => (
+								<li key={w.id} className="p-2 rounded bg-black/20 text-sm flex items-center justify-between">
+									<div>
+										<div className="font-mono text-xs">{w.id}</div>
+										<div>{w.email} · {w.currency} {(w.amountCents/100).toFixed(2)}</div>
+										<div className="opacity-70">{w.status} · {new Date(w.requestedAt).toLocaleString()}</div>
+									</div>
+									<div className="flex gap-2">
+										{w.status==='pending' && (
+											<>
+												<button className="btn bg-emerald-600 hover:bg-emerald-700" disabled={loading} onClick={()=>decideWithdrawal(w.id, true)}>Approve</button>
+												<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={()=>decideWithdrawal(w.id, false)}>Reject</button>
+											</>
+										)}
+									</div>
+								</li>
+							))}
+							{withdrawals.length===0 && <li className="opacity-60">No withdrawal requests.</li>}
+						</ul>
+					</div>
+
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-3">User Reports</h3>
+						<ul className="space-y-2">
+							{reports.map((r:any)=> (
+								<li key={r.id} className="p-2 rounded bg-black/20 text-sm">
+									<div className="flex items-center justify-between">
+										<div>
+											<div className="font-mono text-xs">{r.id}</div>
+											<div><span className="font-semibold">{r.reporter}</span> → <span className="font-semibold">{r.offender}</span> · {new Date(r.ts).toLocaleString()}</div>
+											<div className="opacity-80">Reason: {r.reason}</div>
+											{r.messageId && <div className="opacity-60 text-xs">Message ID: {r.messageId}</div>}
+										</div>
+										<div className="flex gap-2">
+											<span className={`px-2 py-0.5 rounded text-xs ${r.status==='open'?'bg-amber-600':'bg-emerald-600'}`}>{r.status}</span>
+											{r.status==='open' && (
+												<>
+													<button className="btn bg-emerald-600 hover:bg-emerald-700" disabled={loading} onClick={async()=>{
+														await fetch('/api/admin/reports/resolve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: r.id, action: 'resolved', requesterEmail: user?.email }) })
+														await refresh()
+													}}>Resolve</button>
+													<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={async()=>{
+														const notes = prompt('Enter notes for action taken (e.g., warning, block):') || ''
+														await fetch('/api/admin/reports/resolve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: r.id, action: 'actioned', notes, requesterEmail: user?.email }) })
+														await refresh()
+													}}>Action</button>
+												</>
+											)}
+										</div>
+									</div>
+								</li>
+							))}
+							{reports.length===0 && <li className="opacity-60">No reports.</li>}
+						</ul>
+					</div>
+
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-3">Open Matches</h3>
+						<ul className="space-y-1">
+							{(status?.matches || []).map((m: any) => (
+								<li key={m.id} className="flex items-center justify-between p-2 rounded bg-black/20 text-sm">
+									<div className="flex items-center gap-3">
+										<span className="font-mono text-xs">{m.id}</span>
+										<span className="opacity-80">{m.creatorName}</span>
+										<span className="opacity-60">{m.game} {m.mode==='firstto'?'FT':'BO'} {m.value} {m.game==='X01'?`/${m.startingScore}`:''}</span>
+									</div>
+									<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={()=>deleteMatch(m.id)}>Remove</button>
+								</li>
+							))}
+							{(!status?.matches || status.matches.length === 0) && (
+								<li className="text-sm opacity-60">No open matches.</li>
+							)}
+						</ul>
+					</div>
+
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-3">Dangerous Operations</h3>
+						<div className="text-sm opacity-80 mb-3 text-red-400">⚠️ These operations can cause data loss or service disruption. Use with extreme caution.</div>
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+							<div>
+								<div className="font-semibold mb-2 text-red-400">Tournament Deletion</div>
+								<ul className="space-y-2">
+									{tournaments.map((t:any)=> (
+										<li key={t.id} className="p-2 rounded bg-red-900/20 border border-red-500/40 text-sm">
+											<div className="flex items-center justify-between">
+												<div className="font-semibold">{t.title}</div>
+												<div className="opacity-70">{t.status}</div>
+											</div>
+											<div className="opacity-80">{t.game} · {t.mode==='firstto'?'FT':'BO'} {t.value}</div>
+											<div className="mt-2">
+												<button className="btn bg-red-600 hover:bg-red-700 text-xs" disabled={loading} onClick={()=>deleteTournament(t.id)}>Delete Tournament</button>
+											</div>
+										</li>
+									))}
+									{tournaments.length===0 && <li className="opacity-60">No tournaments.</li>}
+								</ul>
+							</div>
+							<div>
+								<div className="font-semibold mb-2 text-red-400">System Maintenance</div>
+								<div className="space-y-2">
+									<div className="p-3 rounded bg-red-900/20 border border-red-500/40">
+										<div className="font-semibold text-red-400 mb-2">Maintenance Mode</div>
+										<div className="text-sm opacity-80 mb-3">Put the entire site into maintenance mode. Users won't be able to access games or create matches.</div>
+										<div className="flex items-center gap-2">
+											<span className={`px-2 py-1 rounded text-xs ${status?.maintenance ? 'bg-red-600' : 'bg-green-600'}`}>
+												{status?.maintenance ? 'MAINTENANCE ACTIVE' : 'NORMAL OPERATION'}
+											</span>
+											<button 
+												className={`btn ${status?.maintenance ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`} 
+												disabled={loading} 
+												onClick={()=>toggleMaintenance(!status?.maintenance)}
+											>
+												{status?.maintenance ? 'Disable' : 'Enable'}
+											</button>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</>
 			)}
 
 			{/* Inline email preview overlay */}
@@ -637,6 +715,3 @@ export default function AdminDashboard({ user }: { user: any }) {
 		</div>
 	)
 }
-
-// Inline preview overlay (click anywhere to close)
-// Rendered at the bottom of AdminDashboard via a fragment – integrated above with state

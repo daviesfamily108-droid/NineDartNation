@@ -67,6 +67,9 @@ export default function Tournaments({ user }: { user: any }) {
     const unsub = wsGlobal.addListener((msg) => {
       try {
         if (msg.type === 'tournaments') setList(msg.tournaments || [])
+        if (msg.type === 'tournament-win' && msg.message) {
+          toast(msg.message, { type: 'success', timeout: 10000 }) // Show for 10 seconds
+        }
         // tournament-reminder handled optionally here if desired
       } catch {}
     })
@@ -157,6 +160,10 @@ export default function Tournaments({ user }: { user: any }) {
           setErrorMsg(`You're a recent NDN tournament winner. You can re-enter after ${fmt(data.until)}.`)
           setTimeout(()=>setErrorMsg(''), 6000)
           toast('Join blocked: winner cooldown active', { type: 'error' })
+        } else if (data?.error === 'ALREADY_IN_TOURNAMENT') {
+          setErrorMsg(String(data.message || 'You can only join one tournament at a time.'))
+          setTimeout(()=>setErrorMsg(''), 6000)
+          toast('Join blocked: already in another tournament', { type: 'error' })
         } else if (data?.error) {
           setErrorMsg(String(data.error))
           setTimeout(()=>setErrorMsg(''), 3500)
@@ -258,7 +265,7 @@ export default function Tournaments({ user }: { user: any }) {
                   <div className="text-sm opacity-80">{nextOfficial.game}{nextOfficial.game==='X01' && nextOfficial.startingScore?`/${nextOfficial.startingScore}`:''} · {nextOfficial.mode==='firstto'?'First to':'Best of'} {nextOfficial.value} · Starts {fmt(nextOfficial.startAt)} · Cap {nextOfficial.capacity} · Joined {nextOfficial.participants.length}</div>
               {nextOfficial.prize && (
                 <div className="text-xs mt-1">
-                  Prize: {nextOfficial.prizeType === 'cash' && nextOfficial.prizeAmount ? `${nextOfficial.currency||'USD'} ${nextOfficial.prizeAmount}` : '1 month PREMIUM'}
+                  Prize: {nextOfficial.prizeType === 'cash' && nextOfficial.prizeAmount ? `${nextOfficial.currency||'USD'} ${nextOfficial.prizeAmount}` : '3 months PREMIUM'}
                 </div>
               )}
               {nextOfficial.status !== 'scheduled' && <div className="text-xs">Status: {nextOfficial.status}</div>}
@@ -294,7 +301,7 @@ export default function Tournaments({ user }: { user: any }) {
             {cooldownUntil && cooldownUntil > Date.now() ? (
               <>You’re a recent NDN tournament winner — to keep it fair, you can re-enter after {fmt(cooldownUntil)}.</>
             ) : (
-              <>Note: Weekly winners can re-enter once their prize month of PREMIUM ends.</>
+              <>Note: Weekly winners can re-enter once their 3 months of PREMIUM ends.</>
             )}
           </div>
           <ul className="space-y-2">
@@ -306,7 +313,7 @@ export default function Tournaments({ user }: { user: any }) {
                       <span className="text-xs px-2 py-0.5 rounded bg-amber-500 text-black">Prize</span>
                       <span
                         className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-600 text-white text-[10px] leading-none cursor-help"
-                        title={t.prizeType==='cash' ? 'Official cash prize tournament — payout handled by admin.' : 'Weekly winners get 1 month of PREMIUM and can re-enter once their prize month ends.'}
+                        title={t.prizeType==='cash' ? 'Official cash prize tournament — payout handled by admin.' : 'Weekly winners get 3 months of PREMIUM and can re-enter once their prize period ends.'}
                         aria-label="Prize info"
                       >i</span>
                     </span>
@@ -314,7 +321,7 @@ export default function Tournaments({ user }: { user: any }) {
                   <div className="text-sm opacity-80">{t.game}{t.game==='X01' && t.startingScore?`/${t.startingScore}`:''} · {t.mode==='firstto'?'First to':'Best of'} {t.value} · {fmt(t.startAt)} · Cap {t.capacity} · Joined {t.participants.length}</div>
                   {t.prize && (
                     <div className="text-xs">
-                      Prize: {t.prizeType === 'cash' && t.prizeAmount ? `${t.currency||'USD'} ${t.prizeAmount}` : '1 month PREMIUM'}
+                      Prize: {t.prizeType === 'cash' && t.prizeAmount ? `${t.currency||'USD'} ${t.prizeAmount}` : '3 months PREMIUM'}
                       {t.status==='completed' && t.prizeType==='cash' && t.payoutStatus && (
                         <span className={`ml-2 px-2 py-0.5 rounded ${t.payoutStatus==='paid'?'bg-emerald-600':'bg-amber-600'}`}>{t.payoutStatus==='paid'?'Paid':'Pending'}</span>
                       )}
