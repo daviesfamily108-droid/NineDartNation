@@ -962,7 +962,7 @@ app.get('/api/admins/check', (req, res) => {
   res.json({ isAdmin: adminEmails.has(email) })
 })
 
-app.post('/api/admins/grant', (req, res) => {
+app.post('/api/admins/grant', async (req, res) => {
   const { email, requesterEmail } = req.body || {}
   if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
@@ -970,10 +970,18 @@ app.post('/api/admins/grant', (req, res) => {
   const target = String(email || '').toLowerCase()
   if (!target) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
   adminEmails.add(target)
+  // Update DB
+  if (supabase) {
+    try {
+      await supabase.from('users').update({ admin: true }).eq('email', target)
+    } catch (error) {
+      console.error('[DB] Failed to grant admin in DB:', error)
+    }
+  }
   res.json({ ok: true, admins: Array.from(adminEmails) })
 })
 
-app.post('/api/admins/revoke', (req, res) => {
+app.post('/api/admins/revoke', async (req, res) => {
   const { email, requesterEmail } = req.body || {}
   if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
@@ -982,6 +990,14 @@ app.post('/api/admins/revoke', (req, res) => {
   if (!target) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
   if (target === OWNER_EMAIL) return res.status(400).json({ ok: false, error: 'CANNOT_REVOKE_OWNER' })
   adminEmails.delete(target)
+  // Update DB
+  if (supabase) {
+    try {
+      await supabase.from('users').update({ admin: false }).eq('email', target)
+    } catch (error) {
+      console.error('[DB] Failed to revoke admin in DB:', error)
+    }
+  }
   res.json({ ok: true, admins: Array.from(adminEmails) })
 })
 
@@ -1513,6 +1529,18 @@ async function loadPersistentData() {
 
     // Load wallets
     // Note: wallets are loaded on-demand, not preloaded
+
+    // Load admins
+    const { data: adminUsers } = await supabase
+      .from('users')
+      .select('email')
+      .eq('admin', true);
+    if (adminUsers) {
+      for (const u of adminUsers) {
+        adminEmails.add(u.email.toLowerCase());
+      }
+      console.log(`[DB] Loaded ${adminEmails.size} admins`);
+    }
 
     // Clean up expired camera sessions
     await db.deleteExpiredCameraSessions();

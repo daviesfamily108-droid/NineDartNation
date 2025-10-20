@@ -211,6 +211,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [showMatchSummary, setShowMatchSummary] = useState<boolean>(false)
   // Manual correction input for offline (matches CameraView UX)
   const [manualBox, setManualBox] = useState<string>('')
+  const [manualTextarea, setManualTextarea] = useState<string>('')
   // Settings: favourite double and caller
   const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect } = useUserSettings()
   // Fit-all scaling measurement
@@ -737,6 +738,17 @@ export default function OfflinePlay({ user }: { user: any }) {
     setManualBox('')
   }
 
+  function addManualTextarea() {
+    const lines = manualTextarea.trim().split('\n').map(l => l.trim()).filter(l => l)
+    if (lines.length === 0) return
+    for (const line of lines) {
+      const val = parseManualDart(line)
+      if (val == null) { alert(`Invalid score: ${line}`); return }
+      applyDartValue(val)
+    }
+    setManualTextarea('')
+  }
+
   function replaceLast() {
     if (playerVisitDarts === 0) return
     // Rewind one dart: approximate by adding back last dart into score
@@ -1147,7 +1159,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
               </div>
             ) : offlineLayout === 'modern' ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2 items-stretch min-w-0">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 mb-2 items-stretch">
                 {/* Left column: Player panel, Match Summary, Opponent panel stacked */}
                 <div className="flex flex-col gap-2 min-w-0">
                   <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col">
@@ -1789,6 +1801,18 @@ export default function OfflinePlay({ user }: { user: any }) {
                     />
                     <button className="btn btn--ghost px-3 py-1 text-sm" onClick={replaceLastManual} disabled={playerVisitDarts===0}>Replace Last</button>
                     <button className="btn px-3 py-1 text-sm" onClick={addManual}>Add</button>
+                  </div>
+                  <div>
+                    <textarea
+                      className="input w-full h-24 resize-none"
+                      placeholder="Type scores manually (one per line, e.g. T20&#10;D16&#10;5&#10;25&#10;50) - No camera needed!"
+                      value={manualTextarea}
+                      onChange={e=>setManualTextarea(e.target.value)}
+                    />
+                    <div className="flex gap-2 mt-1">
+                      <button className="btn px-3 py-1 text-sm" onClick={addManualTextarea}>Add All Scores</button>
+                      <button className="btn btn--ghost px-3 py-1 text-sm" onClick={() => setManualTextarea('')}>Clear</button>
+                    </div>
                   </div>
                 </div>
                 <div className="text-xs text-slate-300">Tip: Enter to Add · Shift+Enter to Replace Last</div>
