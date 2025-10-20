@@ -825,11 +825,12 @@ app.get('/metrics', async (req, res) => {
 // Liveness and readiness
 app.get('/healthz', (req, res) => res.json({ ok: true }))
 app.get('/readyz', (req, res) => {
-  // Basic readiness: HTTP up and WS server initialized; optionally include memory snapshot
+  // Basic readiness: route reachable means HTTP is serving. WS readiness depends on whether wss was initialized.
   try {
     const mem = process.memoryUsage()
-    const ready = !!wss
-    res.json({ ok: ready, ws: ready, rooms: rooms?.size || 0, clients: clients?.size || 0, mem: { rss: mem.rss, heapUsed: mem.heapUsed } })
+    const wsReady = !!(typeof wss !== 'undefined' && wss && wss.clients)
+    // If this handler runs, HTTP is up — set ok:true. WS and counts reflect runtime state.
+    res.json({ ok: true, ws: wsReady, rooms: (typeof rooms !== 'undefined' ? rooms.size : 0), clients: (typeof clients !== 'undefined' ? clients.size : 0), mem: { rss: mem.rss, heapUsed: mem.heapUsed } })
   } catch (e) {
     res.status(500).json({ ok: false, error: 'UNEXPECTED' })
   }

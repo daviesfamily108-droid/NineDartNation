@@ -428,14 +428,23 @@ export default function SettingsPanel({ user }: { user?: any }) {
               >
                 <option value="any">Any Double</option>
                 <option value="D20">Double 20</option>
+                <option value="D19">Double 19</option>
                 <option value="D18">Double 18</option>
+                <option value="D17">Double 17</option>
                 <option value="D16">Double 16</option>
+                <option value="D15">Double 15</option>
                 <option value="D14">Double 14</option>
+                <option value="D13">Double 13</option>
                 <option value="D12">Double 12</option>
+                <option value="D11">Double 11</option>
                 <option value="D10">Double 10</option>
+                <option value="D9">Double 9</option>
                 <option value="D8">Double 8</option>
+                <option value="D7">Double 7</option>
                 <option value="D6">Double 6</option>
+                <option value="D5">Double 5</option>
                 <option value="D4">Double 4</option>
+                <option value="D3">Double 3</option>
                 <option value="D2">Double 2</option>
                 <option value="D1">Double 1</option>
                 <option value="DB">Bullseye</option>
