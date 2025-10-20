@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { User, Settings, Volume2, Camera, Gamepad2, Eye, Mic, Save, Edit3 } from 'lucide-react';
+import { User, Settings, Volume2, Camera, Gamepad2, Eye, Mic, Save, Edit3, Shield } from 'lucide-react';
 import { useUserSettings } from '../store/userSettings';
 
 export default function SettingsPanel({ user }: { user?: any }) {
@@ -38,6 +38,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
   const [favTeam, setFavTeam] = useState('');
   const [favDarts, setFavDarts] = useState('');
   const [bio, setBio] = useState('');
+  const [subscription, setSubscription] = useState<any>(null);
 
   useEffect(() => {
     const uname = user?.username || '';
@@ -49,6 +50,14 @@ export default function SettingsPanel({ user }: { user?: any }) {
       setBio(localStorage.getItem(`ndn:bio:bio:${uname}`) || '');
     } catch {}
   }, [user?.username]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    fetch(`/api/subscription?email=${encodeURIComponent(user.email)}`)
+      .then(r => r.json())
+      .then(setSubscription)
+      .catch(() => {});
+  }, [user?.email]);
 
   const saveBio = () => {
     const uname = user?.username || '';
@@ -488,6 +497,58 @@ export default function SettingsPanel({ user }: { user?: any }) {
           </div>
         </div>
       </div>
+
+      {/* Premium Management */}
+      {subscription && (
+        <div className="card">
+          <div className="p-3 rounded-xl border border-green-500/40 bg-green-500/10">
+            <div className="font-semibold mb-4 flex items-center gap-2 text-black">
+              <Shield className="w-5 h-5" /> Premium
+            </div>
+            <div className="space-y-3">
+              <div className="text-sm">
+                <div className="font-medium">Status: {subscription.fullAccess ? 'Active' : 'Inactive'}</div>
+                {subscription.source && <div className="text-xs opacity-80">Source: {subscription.source}</div>}
+                {subscription.expiresAt && (
+                  <div className="text-xs opacity-80">
+                    Expires: {new Date(subscription.expiresAt).toLocaleDateString()}
+                  </div>
+                )}
+                {subscription.renewalWarning && (
+                  <div className="text-amber-600 text-xs mt-2 p-2 bg-amber-100 rounded">
+                    ⚠️ {subscription.renewalWarning}
+                  </div>
+                )}
+              </div>
+              {subscription.source === 'tournament' && (
+                <div className="flex justify-center">
+                  <button
+                    onClick={async () => {
+                      if (confirm('Are you sure you want to cancel your premium subscription? You will lose access to premium features.')) {
+                        try {
+                          await fetch('/api/admin/premium/revoke', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: user.email, requesterEmail: user.email })
+                          });
+                          // Refresh subscription
+                          const res = await fetch(`/api/subscription?email=${encodeURIComponent(user.email)}`);
+                          setSubscription(await res.json());
+                        } catch (error) {
+                          alert('Failed to cancel premium. Please try again.');
+                        }
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+                  >
+                    Cancel Premium
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

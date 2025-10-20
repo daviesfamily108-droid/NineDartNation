@@ -771,7 +771,9 @@ app.get('/api/subscription', async (req, res) => {
     const exp = premiumWinners.get(email)
     const now = Date.now()
     if (exp && exp > now) {
-      return res.json({ fullAccess: true, source: 'tournament', expiresAt: exp })
+      const daysLeft = Math.ceil((exp - now) / (24 * 60 * 60 * 1000))
+      const renewalWarning = daysLeft <= 3 ? `Your premium expires in ${daysLeft} day${daysLeft > 1 ? 's' : ''}. After expiration, continuous payment will be made unless you cancel in settings.` : null
+      return res.json({ fullAccess: true, source: 'tournament', expiresAt: exp, renewalWarning })
     }
   }
 
@@ -2626,9 +2628,9 @@ app.post('/api/admin/tournaments/winner', async (req, res) => {
         creditWallet(t.winnerEmail, t.currency, Math.round(t.prizeAmount * 100))
       }
     } else {
-      // default premium prize - now 3 months
-      const THREE_MONTHS = 3 * 30 * 24 * 60 * 60 * 1000
-      const expiryDate = Date.now() + THREE_MONTHS
+      // default premium prize - use prizeAmount as months (default 3)
+      const months = t.prizeAmount || 3
+      const expiryDate = Date.now() + (months * 30 * 24 * 60 * 60 * 1000)
       premiumWinners.set(t.winnerEmail, expiryDate)
       t.payoutStatus = 'none'
       
@@ -2648,7 +2650,7 @@ app.post('/api/admin/tournaments/winner', async (req, res) => {
           target.send(JSON.stringify({ 
             type: 'tournament-win', 
             tournamentId: t.id,
-            message: `Congratulations! You won the tournament "${t.title}" and have been awarded 3 months of PREMIUM! Your premium expires on ${expiryStr}.` 
+            message: `Congratulations! You won the tournament "${t.title}" and have been awarded ${months} month${months > 1 ? 's' : ''} of PREMIUM! Your premium expires on ${expiryStr}.` 
           }))
         }
       }

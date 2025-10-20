@@ -23,7 +23,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 		checkinMinutes: 30,
 		capacity: 16,
 		prizeType: 'premium',
-		prizeAmount: 0,
+		prizeAmount: 3,
 			currency: 'GBP',
 		prizeNotes: '',
 	})
@@ -400,18 +400,28 @@ export default function AdminDashboard({ user }: { user: any }) {
 								</div>
 								<input className="input w-full" type="number" min={6} max={64} value={createForm.capacity} onChange={e=>setCreateForm((f:any)=>({ ...f, capacity: Number(e.target.value) }))} />
 								<div className="grid grid-cols-3 gap-2 items-center">
-									<select className="input" value={createForm.prizeType} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeType: e.target.value }))}>
-										<option value="premium">PREMIUM month</option>
+									<select className="input" value={createForm.prizeType} onChange={e=>{
+										const newType = e.target.value
+										setCreateForm((f:any)=>({ ...f, prizeType: newType, prizeAmount: newType === 'premium' ? 3 : 0 }))
+									}}>
+										<option value="premium">PREMIUM</option>
 										<option value="cash">Cash</option>
 									</select>
-														<input className="input" type="number" min={0} disabled={createForm.prizeType!=='cash'} value={createForm.prizeAmount} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeAmount: Number(e.target.value) }))} />
-														<select className="input" disabled={createForm.prizeType!=='cash'} value={createForm.currency} onChange={e=>setCreateForm((f:any)=>({ ...f, currency: e.target.value }))}>
-															<option value="GBP">GBP</option>
-															<option value="USD">USD</option>
-															<option value="EUR">EUR</option>
-															<option value="CAD">CAD</option>
-															<option value="AUD">AUD</option>
-														</select>
+									{createForm.prizeType === 'premium' ? (
+										<select className="input" value={createForm.prizeAmount} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeAmount: Number(e.target.value) }))}>
+											<option value={1}>1 month</option>
+											<option value={3}>3 months</option>
+										</select>
+									) : (
+										<input className="input" type="number" min={0} value={createForm.prizeAmount} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeAmount: Number(e.target.value) }))} />
+									)}
+									<select className="input" disabled={createForm.prizeType!=='cash'} value={createForm.currency} onChange={e=>setCreateForm((f:any)=>({ ...f, currency: e.target.value }))}>
+										<option value="GBP">GBP</option>
+										<option value="USD">USD</option>
+										<option value="EUR">EUR</option>
+										<option value="CAD">CAD</option>
+										<option value="AUD">AUD</option>
+									</select>
 								</div>
 								<input className="input w-full" placeholder="Prize notes (optional)" value={createForm.prizeNotes} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeNotes: e.target.value }))} />
 								<div className="flex justify-end">
@@ -430,7 +440,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 										</div>
 										<div className="opacity-80">{t.game} · {t.mode==='firstto'?'FT':'BO'} {t.value} · {new Date(t.startAt).toLocaleString()} · {t.capacity} cap</div>
 										{t.prize && (
-											<div className="text-xs mt-1">Prize: {t.prizeType==='cash' && t.prizeAmount ? `${t.currency||'USD'} ${t.prizeAmount}` : '1 month PREMIUM'} {t.prizeType==='cash' && t.status==='completed' && t.payoutStatus && (<span className={`ml-2 px-1.5 py-0.5 rounded ${t.payoutStatus==='paid'?'bg-emerald-600':'bg-amber-600'}`}>{t.payoutStatus}</span>)}</div>
+											<div className="text-xs mt-1">Prize: {t.prizeType==='cash' && t.prizeAmount ? `${t.currency||'USD'} ${t.prizeAmount}` : `${t.prizeAmount || 3} month${(t.prizeAmount || 3) > 1 ? 's' : ''} PREMIUM`} {t.prizeType==='cash' && t.status==='completed' && t.payoutStatus && (<span className={`ml-2 px-1.5 py-0.5 rounded ${t.payoutStatus==='paid'?'bg-emerald-600':'bg-amber-600'}`}>{t.payoutStatus}</span>)}</div>
 										)}
 
 												{isOwner && (
