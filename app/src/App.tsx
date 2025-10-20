@@ -54,6 +54,7 @@ export default function App() {
       .then(data => {
         if (data?.user) {
           setUser(data.user);
+          fetchSubscription(data.user);
         } else {
           // Token invalid, remove it
           localStorage.removeItem('authToken');
