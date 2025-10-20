@@ -32,7 +32,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 	})
 	const [emailCopy, setEmailCopy] = useState<any>({ reset:{}, reminder:{}, confirmEmail:{}, changed:{} })
 	const [preview, setPreview] = useState<{ open: boolean, kind?: string, html?: string }>({ open: false })
-	const [activeTab, setActiveTab] = useState<'general' | 'maintenance'>('general')
+	const [activeTab, setActiveTab] = useState<'general' | 'maintenance' | 'premium'>('general')
 	const isOwner = user?.email?.toLowerCase() === OWNER_EMAIL
   const [winners, setWinners] = useState<any[]>([])
 		const [reports, setReports] = useState<any[]>([])
@@ -307,7 +307,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 	useEffect(()=>{ if (isOwner) loadEmailCopy() }, [isOwner])
 
 	useEffect(() => {
-		if (isOwner && activeTab === 'general') {
+		if (isOwner && (activeTab === 'general' || activeTab === 'maintenance')) {
 			fetchLogs()
 			fetchSystemHealth()
 		}
@@ -371,10 +371,11 @@ export default function AdminDashboard({ user }: { user: any }) {
 				<TabPills
 					tabs={[
 						{ key: 'general', label: 'General' },
-						{ key: 'maintenance', label: 'Maintenance' }
+						{ key: 'maintenance', label: 'Maintenance' },
+						{ key: 'premium', label: 'Premium' }
 					]}
 					active={activeTab}
-					onChange={(key) => setActiveTab(key as 'general' | 'maintenance')}
+					onChange={(key) => setActiveTab(key as 'general' | 'maintenance' | 'premium')}
 					className="mb-4"
 				/>
 			)}
@@ -408,12 +409,66 @@ export default function AdminDashboard({ user }: { user: any }) {
 							<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={() => revoke(email)}>Revoke</button>
 						</div>
 						<div className="text-sm opacity-80 mb-2">Current Admins:</div>
-						<div className="flex flex-wrap gap-2">
+						<div className="flex flex-wrap gap-2 mb-4">
 							{admins.map((admin)=> (
 								<div key={admin} className="px-2 py-1 rounded bg-indigo-600/20 border border-indigo-500/40 text-sm">
 									{admin}
 								</div>
 							))}
+						</div>
+
+						<hr className="border-indigo-500/20 my-4" />
+
+						<h3 className="text-lg font-semibold mb-2">Premium Access Control</h3>
+						<div className="text-sm opacity-80 mb-3">Grant or revoke Premium subscription access to users.</div>
+						<div className="flex gap-2 mb-3">
+							<input className="input flex-1" placeholder="user@example.com" value={email} onChange={e=>setEmail(e.target.value)} />
+							<button className="btn bg-emerald-600 hover:bg-emerald-700" disabled={loading || !email.trim()} onClick={() => grantPremium(email, 36500)}>Grant Premium</button>
+							<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={() => revokePremium(email)}>Revoke Premium</button>
+						</div>
+						<div className="text-sm opacity-80">Premium grants provide unlimited access to all features.</div>
+					</div>
+
+					<div className="card">
+						<h3 className="text-lg font-semibold mb-2">Tournament Premium Winners</h3>
+						<div className="text-sm opacity-80 mb-3">Users who have won premium prizes in tournaments and need access granted.</div>
+						<div className="space-y-2">
+							{tournaments
+								.filter((t: any) => t.status === 'completed' && t.winnerEmail && t.prizeType === 'premium')
+								.map((t: any) => {
+									const winner = winners.find((w: any) => w.email === t.winnerEmail)
+									const hasAccess = winner && !winner.expired
+									return (
+										<div key={t.id} className="p-3 rounded bg-black/20 text-sm">
+											<div className="flex items-center justify-between mb-2">
+												<div className="font-semibold">{t.title}</div>
+												<div className="text-xs opacity-70">{new Date(t.startAt).toLocaleDateString()}</div>
+											</div>
+											<div className="flex items-center justify-between">
+												<div>
+													<div className="font-medium">{t.winnerEmail}</div>
+													<div className="text-xs opacity-70">Prize: {t.prizeAmount} month{t.prizeAmount > 1 ? 's' : ''} PREMIUM</div>
+												</div>
+												<div className="flex items-center gap-2">
+													{hasAccess ? (
+														<span className="px-2 py-1 rounded bg-emerald-600 text-xs">Access Granted</span>
+													) : (
+														<button 
+															className="btn bg-emerald-600 hover:bg-emerald-700 text-xs" 
+															disabled={loading}
+															onClick={() => grantPremium(t.winnerEmail, t.prizeAmount * 30 * 24 * 60 * 60 * 1000)}
+														>
+															Grant Access
+														</button>
+													)}
+												</div>
+											</div>
+										</div>
+									)
+								})}
+							{tournaments.filter((t: any) => t.status === 'completed' && t.winnerEmail && t.prizeType === 'premium').length === 0 && (
+								<div className="text-center py-4 text-sm opacity-60">No completed premium tournaments.</div>
+							)}
 						</div>
 					</div>
 
@@ -603,6 +658,60 @@ export default function AdminDashboard({ user }: { user: any }) {
 					</div>
 
 					<div className="card">
+						<h3 className="text-xl font-semibold mb-3">System Health</h3>
+						<div className="text-sm opacity-80 mb-3">Current status of system components and services.</div>
+						{systemHealth ? (
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div className="space-y-2">
+									<div className="flex items-center justify-between">
+										<span>Database</span>
+										<span className={`px-2 py-1 rounded text-xs ${systemHealth.database ? 'bg-emerald-600' : 'bg-red-600'}`}>
+											{systemHealth.database ? 'Ready' : 'Down'}
+										</span>
+									</div>
+									<div className="flex items-center justify-between">
+										<span>WebSocket</span>
+										<span className={`px-2 py-1 rounded text-xs ${systemHealth.websocket ? 'bg-emerald-600' : 'bg-red-600'}`}>
+											{systemHealth.websocket ? 'Ready' : 'Down'}
+										</span>
+									</div>
+									<div className="flex items-center justify-between">
+										<span>HTTPS</span>
+										<span className={`px-2 py-1 rounded text-xs ${systemHealth.https ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+											{systemHealth.https ? 'Enabled' : 'HTTP Only'}
+										</span>
+									</div>
+									<div className="flex items-center justify-between">
+										<span>Maintenance Mode</span>
+										<span className={`px-2 py-1 rounded text-xs ${!systemHealth.maintenance ? 'bg-emerald-600' : 'bg-red-600'}`}>
+											{!systemHealth.maintenance ? 'Normal' : 'Active'}
+										</span>
+									</div>
+								</div>
+								<div className="space-y-2">
+									<div className="text-sm">
+										<span className="font-semibold">Uptime:</span> {Math.floor(systemHealth.uptime / 3600)}h {Math.floor((systemHealth.uptime % 3600) / 60)}m
+									</div>
+									<div className="text-sm">
+										<span className="font-semibold">Memory:</span> {Math.round(systemHealth.memory.heapUsed / 1024 / 1024)}MB used
+									</div>
+									<div className="text-sm">
+										<span className="font-semibold">Version:</span> {systemHealth.version}
+									</div>
+									<div className="flex gap-2 mt-3">
+										<button className="btn" onClick={fetchSystemHealth}>Refresh</button>
+									</div>
+								</div>
+							</div>
+						) : (
+							<div className="text-center py-4">
+								<div className="text-sm opacity-60 mb-2">Loading system health...</div>
+								<button className="btn" onClick={fetchSystemHealth}>Load Health Status</button>
+							</div>
+						)}
+					</div>
+
+					<div className="card">
 						<h3 className="text-xl font-semibold mb-3">User Reports</h3>
 						<ul className="space-y-2">
 							{reports.map((r:any)=> (
@@ -635,6 +744,60 @@ export default function AdminDashboard({ user }: { user: any }) {
 							))}
 							{reports.length===0 && <li className="opacity-60">No reports.</li>}
 						</ul>
+					</div>
+
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-3">System Health</h3>
+						<div className="text-sm opacity-80 mb-3">Current status of system components and services.</div>
+						{systemHealth ? (
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div className="space-y-2">
+									<div className="flex items-center justify-between">
+										<span>Database</span>
+										<span className={`px-2 py-1 rounded text-xs ${systemHealth.database ? 'bg-emerald-600' : 'bg-red-600'}`}>
+											{systemHealth.database ? 'Ready' : 'Down'}
+										</span>
+									</div>
+									<div className="flex items-center justify-between">
+										<span>WebSocket</span>
+										<span className={`px-2 py-1 rounded text-xs ${systemHealth.websocket ? 'bg-emerald-600' : 'bg-red-600'}`}>
+											{systemHealth.websocket ? 'Ready' : 'Down'}
+										</span>
+									</div>
+									<div className="flex items-center justify-between">
+										<span>HTTPS</span>
+										<span className={`px-2 py-1 rounded text-xs ${systemHealth.https ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+											{systemHealth.https ? 'Enabled' : 'HTTP Only'}
+										</span>
+									</div>
+									<div className="flex items-center justify-between">
+										<span>Maintenance Mode</span>
+										<span className={`px-2 py-1 rounded text-xs ${!systemHealth.maintenance ? 'bg-emerald-600' : 'bg-red-600'}`}>
+											{!systemHealth.maintenance ? 'Normal' : 'Active'}
+										</span>
+									</div>
+								</div>
+								<div className="space-y-2">
+									<div className="text-sm">
+										<span className="font-semibold">Uptime:</span> {Math.floor(systemHealth.uptime / 3600)}h {Math.floor((systemHealth.uptime % 3600) / 60)}m
+									</div>
+									<div className="text-sm">
+										<span className="font-semibold">Memory:</span> {Math.round(systemHealth.memory.heapUsed / 1024 / 1024)}MB used
+									</div>
+									<div className="text-sm">
+										<span className="font-semibold">Version:</span> {systemHealth.version}
+									</div>
+									<div className="flex gap-2 mt-3">
+										<button className="btn" onClick={fetchSystemHealth}>Refresh</button>
+									</div>
+								</div>
+							</div>
+						) : (
+							<div className="text-center py-4">
+								<div className="text-sm opacity-60 mb-2">Loading system health...</div>
+								<button className="btn" onClick={fetchSystemHealth}>Load Health Status</button>
+							</div>
+						)}
 					</div>
 
 					<div className="card">
@@ -699,6 +862,45 @@ export default function AdminDashboard({ user }: { user: any }) {
 									</div>
 								</div>
 							</div>
+						</div>
+					</div>
+				</>
+			)}
+
+			{activeTab === 'premium' && isOwner && (
+				<>
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-2">Premium Subscription Grants</h3>
+						<div className="text-sm opacity-80 mb-3">Grant or revoke premium subscriptions for users. Premium grants are permanent until revoked.</div>
+						<div className="flex gap-2 mb-3">
+							<input className="input flex-1" placeholder="user@example.com" value={email} onChange={e=>setEmail(e.target.value)} />
+							<button className="btn" disabled={loading || !email.trim()} onClick={() => grantPremium(email, 36500)}>Grant</button>
+							<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={() => revokePremium(email)}>Revoke</button>
+						</div>
+						<div className="text-sm opacity-80 mb-2">Premium users can access all features without restrictions.</div>
+					</div>
+
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-2">Premium Winners</h3>
+						<div className="text-sm opacity-80 mb-2">Users who have won premium through tournaments.</div>
+						<div className="space-y-2">
+							{winners.map((w: any) => (
+								<div key={w.email} className="p-2 rounded bg-black/20 text-sm flex items-center justify-between">
+									<div>
+										<div className="font-semibold">{w.name || 'No name'}</div>
+										<div className="opacity-70">{w.email}</div>
+										<div className="opacity-60 text-xs">Expires {new Date(w.expiresAt).toLocaleDateString()}</div>
+									</div>
+									<div className="flex gap-2">
+										{!w.expired ? (
+											<span className="px-2 py-1 rounded bg-emerald-600 text-xs">Premium Active</span>
+										) : (
+											<span className="px-2 py-1 rounded bg-amber-600 text-xs">Premium Expired</span>
+										)}
+									</div>
+								</div>
+							))}
+							{winners.length === 0 && <div className="opacity-60">No premium winners.</div>}
 						</div>
 					</div>
 				</>

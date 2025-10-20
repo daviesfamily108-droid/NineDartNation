@@ -672,6 +672,24 @@ app.post('/api/admin/premium/revoke', (req, res) => {
   res.json({ ok: true })
 })
 
+app.get('/api/admin/system-health', async (req, res) => {
+  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
+  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  
+  const health = {
+    database: supabase ? true : false,
+    redis: false, // Not implemented yet
+    websocket: wss ? true : false,
+    https: HTTPS_ACTIVE,
+    maintenance: maintenanceMode,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    version: '1.0.0'
+  }
+  
+  res.json({ ok: true, health })
+})
+
 app.get('/api/admin/matches', (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
@@ -1768,16 +1786,20 @@ app.get('/api/tournaments', (req, res) => {
 })
 
 app.post('/api/tournaments/create', (req, res) => {
-  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeAmount, currency, prizeNotes, requesterEmail } = req.body || {}
+  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeAmount, currency, prizeNotes, entryFee, requesterEmail } = req.body || {}
   const id = nanoid(10)
   // Only the owner can create "official" tournaments or set prize metadata
   const isOwner = String(requesterEmail || '').toLowerCase() === OWNER_EMAIL
   const isOfficial = !!official && isOwner
+  // Only owner can create money tournaments (entryFee > 0) or premium tournaments
+  const canCreateMoneyTournament = isOwner && Number(entryFee) > 0
+  const canCreatePremiumTournament = isOwner
   // Normalize prize metadata
   const pType = isOfficial ? (prizeType === 'cash' ? 'cash' : 'premium') : 'none'
   const amount = (pType === 'cash' && isOwner) ? Math.max(0, Number(prizeAmount) || 0) : 0
-  const curr = (pType === 'cash' && isOwner) ? (String(currency || 'USD').toUpperCase()) : undefined
+  const curr = (pType === 'cash' && isOwner) ? (String(currency || 'GBP').toUpperCase()) : undefined
   const notes = (isOwner && typeof prizeNotes === 'string') ? prizeNotes : ''
+  const fee = (canCreateMoneyTournament && Number(entryFee) > 0) ? Math.max(0, Number(entryFee)) : 0
   const t = {
     id,
     title: String(title || 'Community Tournament'),
@@ -1796,6 +1818,8 @@ app.post('/api/tournaments/create', (req, res) => {
     currency: curr,
     payoutStatus: pType === 'cash' ? 'none' : 'none',
     prizeNotes: notes,
+    entryFee: fee, // Entry fee in cents
+    prizeFund: 0, // Total collected prize fund in cents
     status: 'scheduled',
     winnerEmail: null,
     creatorEmail: String(creatorEmail || ''),
@@ -1825,6 +1849,20 @@ app.post('/api/tournaments/join', (req, res) => {
   const already = t.participants.find(p => p.email === addr)
   if (already) return res.json({ ok: true, joined: false, already: true, tournament: t })
   if (t.participants.length >= t.capacity) return res.status(400).json({ ok: false, error: 'FULL' })
+  
+  // Check entry fee payment for money tournaments
+  if (t.entryFee > 0) {
+    const currency = t.currency || 'GBP'
+    const w = wallets.get(addr)
+    const balance = w ? (w.balances[currency] || 0) : 0
+    if (balance < t.entryFee) {
+      return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS', required: t.entryFee, balance, currency })
+    }
+    // Deduct entry fee and add to prize fund
+    debitWallet(addr, currency, t.entryFee)
+    t.prizeFund = (t.prizeFund || 0) + t.entryFee
+  }
+  
   t.participants.push({ email: addr, username: String(username || addr) })
   broadcastTournaments()
   res.json({ ok: true, joined: true, tournament: t })

@@ -286,7 +286,7 @@ export default function LobbyPanel({
                 <div>
                   <span className="font-semibold">{match.creatorName}</span> — {match.game} —{' '}
                   {match.mode === 'bestof' ? `Best Of ${match.value}` : `First To ${match.value}`}
-                  {match.game === 'X01' && match.startingScore && ` — X01 ${match.startingScore}`}
+                  {match.game === 'X01' && match.startingScore && ` — ${match.startingScore}`}
                 </div>
                 {match.requireCalibration && (
                   <div className="text-[11px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-600/30 mt-1">

@@ -20,6 +20,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
   const [reminder, setReminder] = useState('');
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // Use VITE_API_URL for API requests, fallback to relative path for local dev
   const API_URL = (import.meta as any).env?.VITE_API_URL || '';
@@ -27,8 +28,10 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
   async function handleSignIn(e: any) {
     e.preventDefault();
     setError('');
+    setLoading(true);
     if (!username || !password) {
       setError('Username and password required.');
+      setLoading(false);
       return;
     }
     try {
@@ -46,14 +49,18 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       }
     } catch {
       setError('Network error.');
+    } finally {
+      setLoading(false);
     }
   }
 
   async function handleSignUp(e: any) {
     e.preventDefault();
     setError('');
+    setLoading(true);
     if (!email || !username || !password) {
       setError('Email, username, and password required.');
+      setLoading(false);
       return;
     }
     try {
@@ -71,13 +78,16 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       }
     } catch {
       setError('Network error.');
+    } finally {
+      setLoading(false);
     }
   }
 
   async function handleReset(e: any) {
     e.preventDefault();
     setError('');
-    if (!email || !email.includes('@')) { setError('Enter your email address.'); return }
+    setLoading(true);
+    if (!email || !email.includes('@')) { setError('Enter your email address.'); setLoading(false); return }
     try {
       const r = await fetch(`${API_URL}/api/auth/send-reset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
       const j = await r.json()
@@ -85,13 +95,16 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       setError('Password reset link sent to your email.');
     } catch (err: any) {
       setError(err?.message || 'Failed to send reset email');
+    } finally {
+      setLoading(false);
     }
   }
 
   async function handleSendUsername(e: any) {
     e.preventDefault();
     setError('');
-    if (!email || !email.includes('@')) { setError('Enter your email address.'); return }
+    setLoading(true);
+    if (!email || !email.includes('@')) { setError('Enter your email address.'); setLoading(false); return }
     try {
       const r = await fetch(`${API_URL}/api/auth/send-username`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) })
       const j = await r.json()
@@ -99,6 +112,8 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       setError('Your username has been emailed to you.');
     } catch (err: any) {
       setError(err?.message || 'Failed to send username email');
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -152,13 +167,13 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
             <input className="input w-full" type="text" placeholder="Password Reminder (optional)" value={reminder} onChange={e => setReminder(e.target.value)} />
           )}
           {error && <div className="text-red-400 font-semibold text-sm">{error}</div>}
-          <button className="btn w-full" type="submit">{mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Sign Up' : 'Send Reset Link'}</button>
+          <button className="btn w-full" type="submit" disabled={loading}>{loading ? 'Signing In...' : (mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Sign Up' : 'Send Reset Link')}</button>
           {mode === 'reset' && (
-            <button className="btn w-full mt-2 bg-white/10 hover:bg-white/20" type="button" onClick={handleSendUsername}>Email me my username</button>
+            <button className="btn w-full mt-2 bg-white/10 hover:bg-white/20" type="button" onClick={handleSendUsername} disabled={loading}>Email me my username</button>
           )}
           <div className="flex justify-between text-sm mt-2">
-            <button type="button" className="underline" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>{mode === 'signin' ? 'Need an account? Sign Up' : 'Already have an account? Sign In'}</button>
-            <button type="button" className="underline" onClick={() => setMode('reset')}>Forgot password?</button>
+            <button type="button" className="underline" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')} disabled={loading}>{mode === 'signin' ? 'Need an account? Sign Up' : 'Already have an account? Sign In'}</button>
+            <button type="button" className="underline" onClick={() => setMode('reset')} disabled={loading}>Forgot password?</button>
           </div>
           <div className="text-xs text-slate-200/80">
             Tip: Use the admin demo credentials to explore admin features.

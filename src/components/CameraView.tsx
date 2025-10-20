@@ -131,15 +131,20 @@ export default function CameraView({
     if (cameraStarting || streaming) return
     setCameraStarting(true)
     try {
-      // If a preferred camera is set, request it; otherwise default
-      const constraints: MediaStreamConstraints = preferredCameraId ? { video: { deviceId: { exact: preferredCameraId } }, audio: false } : { video: true, audio: false }
+      // If a preferred camera is set, request it; otherwise default to back camera on mobile
+      const constraints: MediaStreamConstraints = preferredCameraId 
+        ? { video: { deviceId: { exact: preferredCameraId } }, audio: false } 
+        : { video: { facingMode: 'environment' }, audio: false } // Prefer back camera on mobile
       let stream: MediaStream
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints)
       } catch (err: any) {
-        // Fallback if specific device isn't available
+        // Fallback if specific device isn't available or facingMode not supported
         const name = (err && (err.name || err.code)) || ''
         if (preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError')) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        } else if (!preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError' || name === 'NotSupportedError')) {
+          // Fallback for devices that don't support facingMode
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         } else {
           throw err
@@ -570,7 +575,7 @@ export default function CameraView({
         <h2 className="text-xl font-semibold mb-3">Camera</h2>
         <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={640} defaultHeight={480} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
           <CameraSelector />
-          <video ref={videoRef} className="w-full h-full object-cover" />
+          <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
           <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
         </ResizablePanel>
         <div className="flex gap-2 mt-3">
@@ -782,7 +787,7 @@ export default function CameraView({
                 <h2 className="text-lg font-semibold mb-3">Camera</h2>
                 <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={640} defaultHeight={480} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
                   <CameraSelector />
-                  <video ref={videoRef} className="w-full h-full object-cover" />
+                  <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
                   <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
                 </ResizablePanel>
                 <div className="flex gap-2 mt-3">
