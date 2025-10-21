@@ -1374,6 +1374,30 @@ function handleSyncMessage(syncData) {
         camSessions.set(syncData.session.code, syncData.session);
         console.log(`[SYNC] Camera session ${syncData.session.code} synchronized across workers`);
       }
+    } else if (syncData.type === 'friendship-added') {
+      // Update local friendships cache
+      if (syncData.userEmail && syncData.friendEmail) {
+        const userFriends = friendships.get(syncData.userEmail) || new Set();
+        const friendFriends = friendships.get(syncData.friendEmail) || new Set();
+        userFriends.add(syncData.friendEmail);
+        friendFriends.add(syncData.userEmail);
+        friendships.set(syncData.userEmail, userFriends);
+        friendships.set(syncData.friendEmail, friendFriends);
+        console.log(`[SYNC] Friendship added between ${syncData.userEmail} and ${syncData.friendEmail}`);
+      }
+    } else if (syncData.type === 'friendship-removed') {
+      // Update local friendships cache
+      if (syncData.userEmail && syncData.friendEmail) {
+        const userFriends = friendships.get(syncData.userEmail);
+        const friendFriends = friendships.get(syncData.friendEmail);
+        if (userFriends) userFriends.delete(syncData.friendEmail);
+        if (friendFriends) friendFriends.delete(syncData.userEmail);
+        console.log(`[SYNC] Friendship removed between ${syncData.userEmail} and ${syncData.friendEmail}`);
+      }
+    } else if (syncData.type === 'friend-request-updated') {
+      // Reload friend requests from file
+      loadFriendRequests();
+      console.log(`[SYNC] Friend requests updated`);
     }
   } catch (err) {
     console.error('[SYNC] Error handling sync message:', err);
@@ -1628,6 +1652,8 @@ if (!users.has('daviesfamily108@gmail.com')) {
 }
 // friends: email -> Set(friendEmail)
 const friendships = new Map();
+// friend requests: Array of { id, fromEmail, fromUsername, toEmail, toUsername, requestedAt }
+const friendRequests = [];
 // simple messages store: recipientEmail -> [{ id, from, message, ts }]
 const messages = new Map();
 // In-memory wallets: email -> { email, balances: { [currency]: cents } }
@@ -1680,11 +1706,36 @@ function loadFriendships() {
 }
 loadFriendships()
 
+// Friend requests persistence
+const FRIEND_REQUESTS_FILE = './friend-requests.json'
+function saveFriendRequests() {
+  try {
+    fs.writeFileSync(FRIEND_REQUESTS_FILE, JSON.stringify({ requests: friendRequests }, null, 2))
+  } catch {}
+}
+function loadFriendRequests() {
+  try {
+    if (!fs.existsSync(FRIEND_REQUESTS_FILE)) return
+    const j = JSON.parse(fs.readFileSync(FRIEND_REQUESTS_FILE, 'utf8'))
+    if (j && j.requests) {
+      friendRequests.splice(0, friendRequests.length, ...j.requests)
+    }
+  } catch {}
+}
+loadFriendRequests()
+
 function broadcastAll(data) {
   if (!wss) return
   const payload = (typeof data === 'string') ? data : JSON.stringify(data)
   for (const client of wss.clients) {
     if (client.readyState === 1) client.send(payload)
+  }
+}
+
+// Broadcast friendship updates to all workers via Redis
+function broadcastFriendshipUpdate(type, data) {
+  if (redisClient) {
+    redisClient.publish('sync', JSON.stringify({ type, ...data }))
   }
 }
 
@@ -2309,10 +2360,37 @@ app.post('/api/friends/add', (req, res) => {
   const me = String(email || '').toLowerCase()
   const other = String(friend || '').toLowerCase()
   if (!me || !other || me === other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  const set = friendships.get(me) || new Set()
-  set.add(other)
-  friendships.set(me, set)
-  saveFriendships()
+  
+  // Check if already friends
+  const myFriends = friendships.get(me) || new Set()
+  if (myFriends.has(other)) return res.status(400).json({ ok: false, error: 'ALREADY_FRIENDS' })
+  
+  // Check if request already exists
+  const existingRequest = friendRequests.find(r => 
+    (r.fromEmail === me && r.toEmail === other) || (r.fromEmail === other && r.toEmail === me)
+  )
+  if (existingRequest) return res.status(400).json({ ok: false, error: 'REQUEST_EXISTS' })
+  
+  // Get usernames
+  const myUser = users.get(me)
+  const otherUser = users.get(other)
+  
+  // Create friend request
+  const request = {
+    id: `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    fromEmail: me,
+    fromUsername: myUser?.username || me,
+    toEmail: other,
+    toUsername: otherUser?.username || other,
+    requestedAt: Date.now()
+  }
+  
+  friendRequests.push(request)
+  saveFriendRequests()
+  
+  // Broadcast friend request update to all workers
+  broadcastFriendshipUpdate('friend-request-updated', {})
+  
   res.json({ ok: true })
 })
 
@@ -2320,9 +2398,15 @@ app.post('/api/friends/remove', (req, res) => {
   const { email, friend } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(friend || '').toLowerCase()
-  const set = friendships.get(me)
-  if (set) set.delete(other)
+  const mySet = friendships.get(me)
+  const otherSet = friendships.get(other)
+  if (mySet) mySet.delete(other)
+  if (otherSet) otherSet.delete(me)
   saveFriendships()
+  
+  // Broadcast friendship removal to all workers
+  broadcastFriendshipUpdate('friendship-removed', { userEmail: me, friendEmail: other })
+  
   res.json({ ok: true })
 })
 
@@ -2353,7 +2437,7 @@ app.post('/api/friends/message', (req, res) => {
   let msg
   try { msg = profanityFilter.clean(raw) } catch { msg = raw }
   const arr = messages.get(to) || []
-  const item = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, from, message: msg, ts: Date.now() }
+  const item = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, from, message: msg, ts: Date.now(), read: false }
   arr.push(item)
   messages.set(to, arr)
   // Try deliver via WS if recipient online
@@ -2373,6 +2457,114 @@ app.get('/api/friends/messages', (req, res) => {
   if (!email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   const arr = messages.get(email) || []
   res.json({ ok: true, messages: arr.slice(-200).sort((a,b)=>b.ts-a.ts) })
+})
+
+// Mark messages as read
+app.post('/api/friends/messages/read', (req, res) => {
+  const { email, messageIds } = req.body || {}
+  const userEmail = String(email || '').toLowerCase()
+  if (!userEmail || !Array.isArray(messageIds)) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  
+  const arr = messages.get(userEmail) || []
+  let updated = false
+  for (const msg of arr) {
+    if (messageIds.includes(msg.id)) {
+      msg.read = true
+      updated = true
+    }
+  }
+  
+  if (updated) {
+    messages.set(userEmail, arr)
+  }
+  
+  res.json({ ok: true })
+})
+
+// Get incoming friend requests
+app.get('/api/friends/requests', (req, res) => {
+  const email = String(req.query.email || '').toLowerCase()
+  if (!email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  const requests = friendRequests.filter(r => r.toEmail === email)
+  res.json({ ok: true, requests })
+})
+
+// Get outgoing friend requests
+app.get('/api/friends/outgoing', (req, res) => {
+  const email = String(req.query.email || '').toLowerCase()
+  if (!email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  const requests = friendRequests.filter(r => r.fromEmail === email)
+  res.json({ ok: true, requests })
+})
+
+// Accept friend request
+app.post('/api/friends/accept', (req, res) => {
+  const { email, requester } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  const other = String(requester || '').toLowerCase()
+  if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  
+  // Find and remove the request
+  const reqIndex = friendRequests.findIndex(r => r.fromEmail === other && r.toEmail === me)
+  if (reqIndex === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  
+  friendRequests.splice(reqIndex, 1)
+  
+  // Add mutual friendship
+  const myFriends = friendships.get(me) || new Set()
+  const otherFriends = friendships.get(other) || new Set()
+  myFriends.add(other)
+  otherFriends.add(me)
+  friendships.set(me, myFriends)
+  friendships.set(other, otherFriends)
+  
+  saveFriendships()
+  saveFriendRequests()
+  
+  // Broadcast friendship update to all workers
+  broadcastFriendshipUpdate('friendship-added', { userEmail: me, friendEmail: other })
+  
+  res.json({ ok: true })
+})
+
+// Decline friend request
+app.post('/api/friends/decline', (req, res) => {
+  const { email, requester } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  const other = String(requester || '').toLowerCase()
+  if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  
+  // Find and remove the request
+  const reqIndex = friendRequests.findIndex(r => r.fromEmail === other && r.toEmail === me)
+  if (reqIndex === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  
+  friendRequests.splice(reqIndex, 1)
+  saveFriendRequests()
+  
+  // Broadcast friend request update to all workers
+  broadcastFriendshipUpdate('friend-request-updated', {})
+  
+  res.json({ ok: true })
+})
+
+// Cancel outgoing friend request
+app.post('/api/friends/cancel', (req, res) => {
+  const { email, friend } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  const other = String(friend || '').toLowerCase()
+  if (!me || !other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  
+  // Find and remove the request
+  const reqIndex = friendRequests.findIndex(r => r.fromEmail === me && r.toEmail === other)
+  if (reqIndex === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  
+  friendRequests.splice(reqIndex, 1)
+  saveFriendRequests()
+  
+  // Broadcast friend request update to all workers
+  broadcastFriendshipUpdate('friend-request-updated', {})
+  
+  res.json({ ok: true })
 })
 
 // Report bad behavior or a specific message

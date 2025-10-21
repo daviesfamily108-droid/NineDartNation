@@ -1,4 +1,4 @@
-import { LayoutDashboard, Camera, Users, Trophy, Settings, MessageCircle, Lock, PoundSterling } from 'lucide-react';
+import { LayoutDashboard, Camera, Users, Trophy, Settings, MessageCircle, Lock, PoundSterling, Bell } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFreeRemaining } from '../utils/quota'
@@ -48,6 +48,47 @@ export function Sidebar({
   }
   const [showDiscord, setShowDiscord] = useState(false);
   const freeLeft = user?.username && !user?.fullAccess ? getFreeRemaining(user.username) : Infinity
+  
+  // Notification counts
+  const [notifications, setNotifications] = useState({
+    friendRequests: 0,
+    messages: 0,
+    tournaments: 0
+  });
+  
+  // Fetch notification counts
+  useEffect(() => {
+    if (!user?.email) return;
+    
+    const fetchNotifications = async () => {
+      try {
+        const [requestsRes, messagesRes] = await Promise.all([
+          fetch(`/api/friends/requests?email=${encodeURIComponent(user.email)}`),
+          fetch(`/api/friends/messages?email=${encodeURIComponent(user.email)}`)
+        ]);
+        
+        const requests = requestsRes.ok ? await requestsRes.json() : { requests: [] };
+        const messages = messagesRes.ok ? await messagesRes.json() : { messages: [] };
+        
+        // Count unread messages (messages without read status, assuming all are unread for now)
+        const unreadMessages = messages.messages?.filter((m: any) => !m.read).length || 0;
+        
+        setNotifications({
+          friendRequests: requests.requests?.length || 0,
+          messages: unreadMessages,
+          tournaments: 0 // TODO: Add tournament notifications
+        });
+      } catch (err) {
+        console.error('Failed to fetch notifications:', err);
+      }
+    };
+    
+    fetchNotifications();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [user?.email]);
+  
   useEffect(() => {
     if (!showDiscord) return
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' || e.key === 'Enter') setShowDiscord(false) }
@@ -73,6 +114,17 @@ export function Sidebar({
               <span title="Weekly free games used" className="inline-flex items-center gap-1 text-[0.65rem] px-2 py-0.5 rounded-full bg-rose-600 text-white">
                 <Lock className="w-3 h-3" />
                 Locked
+              </span>
+            )}
+            {/* Notification badges */}
+            {key === 'friends' && notifications.friendRequests > 0 && (
+              <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-orange-500 rounded-full">
+                {notifications.friendRequests > 9 ? '9+' : notifications.friendRequests}
+              </span>
+            )}
+            {key === 'score' && (notifications.messages > 0 || notifications.tournaments > 0) && (
+              <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-orange-500 rounded-full">
+                {(notifications.messages + notifications.tournaments) > 9 ? '9+' : (notifications.messages + notifications.tournaments)}
               </span>
             )}
           </span>
