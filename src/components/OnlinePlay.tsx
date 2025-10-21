@@ -418,7 +418,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
         // auto-clear after a bit
         setTimeout(()=>setErrorMsg(''), 3500)
       } else if (data.type === 'friend-invite') {
-        const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}${(data.game==='X01' && data.startingScore)?` = ${data.startingScore}`:''}). Accept?`)
+        const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}). Accept?`)
         if (accept) {
           ws.send(JSON.stringify({ type: 'start-friend-match', toEmail: data.fromEmail, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore }))
         } else {
@@ -584,7 +584,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
           }
           setTimeout(()=>setErrorMsg(''), 3500)
         } else if (data.type === 'friend-invite') {
-          const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}${(data.game==='X01' && data.startingScore)?` = ${data.startingScore}`:''}). Accept?`)
+          const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}). Accept?`)
           if (accept) {
             wsGlobal.send({ type: 'start-friend-match', toEmail: data.fromEmail, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore })
           } else {
@@ -1146,7 +1146,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
               {filteredLobby.map((m:any)=> (
                 <div key={m.id} className="p-3 rounded-lg bg-black/20 flex items-center justify-between relative">
                   <div className="text-sm">
-                    <div><span className="font-semibold">{m.creatorName}</span> - {m.game || 'X01'} - {m.mode==='bestof' ? `Best Of ${m.value}` : `First To ${m.value}`} {m.game==='X01' ? ` - ${m.startingScore}` : ''}</div>
+                    <div>{m.game || 'X01'} {m.game==='X01' ? ` ${m.startingScore}` : ''} - {m.mode==='bestof' ? `Best Of ${m.value}` : `First To ${m.value}`} - Created by {m.creatorName}</div>
                     {m.requireCalibration && (
                       <div className="text-[11px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-600/30 mt-1">Calibration required</div>
                     )}
@@ -1156,7 +1156,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     <div className="text-xs opacity-70">ID: {m.id}</div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button className="btn px-3 py-1 text-sm bg-rose-600 hover:bg-rose-700" disabled={locked || (!user?.fullAccess && (premiumGames as readonly string[]).includes(m.game)) || (!!m.requireCalibration && !calibH)} title={
+                    <button className="btn px-3 py-1 text-sm bg-green-600 hover:bg-green-700" disabled={locked || (!user?.fullAccess && (premiumGames as readonly string[]).includes(m.game)) || (!!m.requireCalibration && !calibH)} title={
                       !user?.fullAccess && (premiumGames as readonly string[]).includes(m.game)
                         ? 'PREMIUM game'
                         : (locked ? 'Weekly free games used' : (!!m.requireCalibration && !calibH ? 'Calibration required' : ''))

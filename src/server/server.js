@@ -48,17 +48,25 @@ if (!supabase) {
 }
 
 // Initialize Redis for cross-server session management
-const redis = require('redis');
+let redisClient = null;
 
-// DEBUG: Check if REDIS_URL is set
+// DEBUG: Check Redis configuration
 console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
-if (process.env.REDIS_URL) {
-  console.log('🔍 DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
-}
+console.log('🔍 DEBUG: UPSTASH_REDIS_REST_URL exists:', !!process.env.UPSTASH_REDIS_REST_URL);
+console.log('🔍 DEBUG: UPSTASH_REDIS_REST_TOKEN exists:', !!process.env.UPSTASH_REDIS_REST_TOKEN);
 
-const redisClient = process.env.REDIS_URL ? redis.createClient({ url: process.env.REDIS_URL }) : null;
-
-if (redisClient) {
+if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  // Use Upstash Redis (REST-based, better for serverless)
+  const { Redis } = require('@upstash/redis');
+  redisClient = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN,
+  });
+  console.log('[REDIS] Using Upstash Redis');
+} else if (process.env.REDIS_URL) {
+  // Fallback to standard Redis client
+  const redis = require('redis');
+  redisClient = redis.createClient({ url: process.env.REDIS_URL });
   redisClient.on('error', (err) => console.error('[REDIS] Error:', err));
   redisClient.on('connect', () => console.log('[REDIS] Connected'));
   redisClient.connect().catch(err => console.warn('[REDIS] Failed to connect:', err));

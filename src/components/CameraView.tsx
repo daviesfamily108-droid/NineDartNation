@@ -581,7 +581,7 @@ export default function CameraView({
         <div className="flex gap-2 mt-3">
           {!streaming ? (
             <button className="btn" onClick={startCamera} disabled={cameraStarting}>
-              {cameraStarting ? 'Starting Camera...' : 'Start Camera'}
+              {cameraStarting ? 'Connecting Camera...' : 'Connect Camera'}
             </button>
           ) : (
             <button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
@@ -792,7 +792,7 @@ export default function CameraView({
                 </ResizablePanel>
                 <div className="flex gap-2 mt-3">
                   {!streaming ? (
-                    <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={startCamera}>Start Camera</button>
+                    <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={startCamera}>Connect Camera</button>
                   ) : (
                     <button className="btn bg-gradient-to-r from-rose-600 to-rose-700 text-white font-bold" onClick={stopCamera}>Stop Camera</button>
                   )}
