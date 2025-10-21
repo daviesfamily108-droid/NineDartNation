@@ -130,20 +130,26 @@ export default function CameraView({
   async function startCamera() {
     if (cameraStarting || streaming) return
     setCameraStarting(true)
+    console.log('[CAMERA] Starting camera...')
     try {
       // If a preferred camera is set, request it; otherwise default to back camera on mobile
       const constraints: MediaStreamConstraints = preferredCameraId 
         ? { video: { deviceId: { exact: preferredCameraId } }, audio: false } 
         : { video: { facingMode: 'environment' }, audio: false } // Prefer back camera on mobile
+      console.log('[CAMERA] Using constraints:', constraints)
       let stream: MediaStream
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints)
+        console.log('[CAMERA] Got stream:', !!stream)
       } catch (err: any) {
+        console.warn('[CAMERA] First attempt failed:', err)
         // Fallback if specific device isn't available or facingMode not supported
         const name = (err && (err.name || err.code)) || ''
         if (preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError')) {
+          console.log('[CAMERA] Trying fallback without deviceId')
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         } else if (!preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError' || name === 'NotSupportedError')) {
+          console.log('[CAMERA] Trying fallback for facingMode not supported')
           // Fallback for devices that don't support facingMode
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         } else {
@@ -151,16 +157,30 @@ export default function CameraView({
         }
       }
       if (videoRef.current) {
+        console.log('[CAMERA] Setting stream to video element')
         videoRef.current.srcObject = stream
-        await videoRef.current.play()
+        console.log('[CAMERA] Stream tracks:', stream.getTracks().length, 'video tracks:', stream.getVideoTracks().length)
+        try {
+          await videoRef.current.play()
+          console.log('[CAMERA] Video playing successfully')
+        } catch (playErr) {
+          console.error('[CAMERA] Video play failed:', playErr)
+          throw playErr
+        }
+      } else {
+        console.error('[CAMERA] Video element not found')
       }
       setStreaming(true)
       // Capture device list for inline picker - no automatic preference updates
       try {
         const list = await navigator.mediaDevices.enumerateDevices()
         setAvailableCameras(list.filter(d=>d.kind==='videoinput'))
-      } catch {}
+        console.log('[CAMERA] Found cameras:', list.filter(d=>d.kind==='videoinput').length)
+      } catch (enumErr) {
+        console.warn('[CAMERA] Failed to enumerate devices:', enumErr)
+      }
     } catch (e) {
+      console.error('[CAMERA] Camera start failed:', e)
       alert('Camera permission denied or not available.')
     } finally {
       setCameraStarting(false)
@@ -575,7 +595,7 @@ export default function CameraView({
         <h2 className="text-xl font-semibold mb-3">Camera</h2>
         <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={640} defaultHeight={480} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
           <CameraSelector />
-          <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
+          <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
           <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
         </ResizablePanel>
         <div className="flex gap-2 mt-3">
@@ -787,7 +807,7 @@ export default function CameraView({
                 <h2 className="text-lg font-semibold mb-3">Camera</h2>
                 <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={640} defaultHeight={480} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
                   <CameraSelector />
-                  <video ref={videoRef} className="w-full h-full object-cover" playsInline muted autoPlay />
+                  <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
                   <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
                 </ResizablePanel>
                 <div className="flex gap-2 mt-3">
