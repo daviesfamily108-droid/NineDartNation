@@ -420,13 +420,13 @@ export default function AdminDashboard({ user }: { user: any }) {
 						<hr className="border-indigo-500/20 my-4" />
 
 						<h3 className="text-lg font-semibold mb-2">Premium Access Control</h3>
-						<div className="text-sm opacity-80 mb-3">Grant or revoke Premium subscription access to users.</div>
+						<div className="text-sm opacity-80 mb-3">Grant or revoke Premium subscription access to users (grants 30 days).</div>
 						<div className="flex gap-2 mb-3">
 							<input className="input flex-1" placeholder="user@example.com" value={email} onChange={e=>setEmail(e.target.value)} />
-							<button className="btn bg-emerald-600 hover:bg-emerald-700" disabled={loading || !email.trim()} onClick={() => grantPremium(email, 36500)}>Grant Premium</button>
+							<button className="btn bg-emerald-600 hover:bg-emerald-700" disabled={loading || !email.trim()} onClick={() => grantPremium(email, 30)}>Grant Premium</button>
 							<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={() => revokePremium(email)}>Revoke Premium</button>
 						</div>
-						<div className="text-sm opacity-80">Premium grants provide unlimited access to all features.</div>
+						<div className="text-sm opacity-80">Premium grants provide 30 days of unlimited access to all features.</div>
 					</div>
 
 					<div className="card">
@@ -871,13 +871,13 @@ export default function AdminDashboard({ user }: { user: any }) {
 				<>
 					<div className="card">
 						<h3 className="text-xl font-semibold mb-2">Premium Subscription Grants</h3>
-						<div className="text-sm opacity-80 mb-3">Grant or revoke premium subscriptions for users. Premium grants are permanent until revoked.</div>
+						<div className="text-sm opacity-80 mb-3">Grant or revoke premium subscriptions for users (grants 30 days).</div>
 						<div className="flex gap-2 mb-3">
 							<input className="input flex-1" placeholder="user@example.com" value={email} onChange={e=>setEmail(e.target.value)} />
-							<button className="btn" disabled={loading || !email.trim()} onClick={() => grantPremium(email, 36500)}>Grant</button>
+							<button className="btn" disabled={loading || !email.trim()} onClick={() => grantPremium(email, 30)}>Grant</button>
 							<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={() => revokePremium(email)}>Revoke</button>
 						</div>
-						<div className="text-sm opacity-80 mb-2">Premium users can access all features without restrictions.</div>
+						<div className="text-sm opacity-80 mb-2">Premium users get 30 days of access to all features.</div>
 					</div>
 
 					<div className="card">
