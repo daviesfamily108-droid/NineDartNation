@@ -160,12 +160,25 @@ export default function CameraView({
         console.log('[CAMERA] Setting stream to video element')
         videoRef.current.srcObject = stream
         console.log('[CAMERA] Stream tracks:', stream.getTracks().length, 'video tracks:', stream.getVideoTracks().length)
+        // Add event listeners for debugging
+        videoRef.current.addEventListener('loadeddata', () => console.log('[CAMERA] Video loadeddata'))
+        videoRef.current.addEventListener('canplay', () => console.log('[CAMERA] Video canplay'))
+        videoRef.current.addEventListener('play', () => console.log('[CAMERA] Video started playing'))
+        videoRef.current.addEventListener('error', (e) => console.error('[CAMERA] Video error:', e))
         try {
-          await videoRef.current.play()
-          console.log('[CAMERA] Video playing successfully')
+          videoRef.current.play()
+          console.log('[CAMERA] Play called successfully')
         } catch (playErr) {
           console.error('[CAMERA] Video play failed:', playErr)
-          throw playErr
+          // Try again after a short delay
+          setTimeout(() => {
+            try {
+              videoRef.current?.play()
+              console.log('[CAMERA] Retry play called')
+            } catch (retryErr) {
+              console.error('[CAMERA] Retry play failed:', retryErr)
+            }
+          }, 100)
         }
       } else {
         console.error('[CAMERA] Video element not found')
@@ -593,7 +606,7 @@ export default function CameraView({
   {!hideInlinePanels ? (
   <div className="card">
         <h2 className="text-xl font-semibold mb-3">Camera</h2>
-        <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={640} defaultHeight={480} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
+        <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={320} minHeight={240} maxWidth={1600} maxHeight={900}>
           <CameraSelector />
           <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
           <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
@@ -805,7 +818,7 @@ export default function CameraView({
               {/* Camera section */}
               <div className="bg-black/30 rounded-2xl p-4">
                 <h2 className="text-lg font-semibold mb-3">Camera</h2>
-                <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={640} defaultHeight={480} minWidth={480} minHeight={270} maxWidth={1600} maxHeight={900}>
+                <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={320} minHeight={240} maxWidth={1600} maxHeight={900}>
                   <CameraSelector />
                   <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
                   <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
