@@ -441,12 +441,15 @@ export default function OnlinePlay({ user }: { user?: any }) {
         setPairingCode(data.code)
         toast(`Pairing code: ${data.code}`, { type: 'info' })
       } else if (data.type === 'cam-peer-joined') {
+        console.log('Mobile peer joined for code:', data.code)
         // Mobile camera connected, start WebRTC
         startMobileWebRTC(data.code)
       } else if (data.type === 'cam-answer') {
+        console.log('Received cam-answer')
         const pc = (window as any).mobilePC
         if (pc) pc.setRemoteDescription(new RTCSessionDescription(data.payload))
       } else if (data.type === 'cam-ice') {
+        console.log('Received cam-ice')
         const pc = (window as any).mobilePC
         if (pc) pc.addIceCandidate(data.payload)
       }
@@ -1013,16 +1016,20 @@ export default function OnlinePlay({ user }: { user?: any }) {
 
   // WebRTC for mobile camera
   const startMobileWebRTC = async (code: string) => {
+    console.log('Starting WebRTC for code:', code)
     try {
       const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
       pc.ontrack = (event) => {
+        console.log('Received track:', event.streams[0])
         setMobileStream(event.streams[0])
         if (mobileVideoRef.current) {
           mobileVideoRef.current.srcObject = event.streams[0]
+          console.log('Set video srcObject')
         }
       }
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log('Sending ICE candidate')
           if (wsGlobal) {
             wsGlobal.send({ type: 'cam-ice', code, payload: event.candidate })
           } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -1030,8 +1037,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
           }
         }
       }
+      pc.onconnectionstatechange = () => console.log('Connection state:', pc.connectionState)
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
+      console.log('Sending offer')
       if (wsGlobal) {
         wsGlobal.send({ type: 'cam-offer', code, payload: offer })
       } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {

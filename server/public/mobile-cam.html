@@ -94,24 +94,29 @@
       const code = (input.value || '').trim().toUpperCase()
       if (!code) { log('Enter a code'); return }
       log('Connecting...')
+      console.log('Joining with code:', code)
       await startCam(lastFacing)
       await ensureWS()
       log('Joining session...')
       ws.send(JSON.stringify({ type: 'cam-join', code }))
       ws.onmessage = async (ev) => {
         const data = JSON.parse(ev.data)
+        console.log('Received message:', data.type)
         if (data.type === 'cam-joined') {
           log('Paired. Negotiating...')
         } else if (data.type === 'cam-offer') {
+          console.log('Received offer, creating answer')
           pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
           stream.getTracks().forEach(t => pc.addTrack(t, stream))
-          pc.onicecandidate = (e) => { if (e.candidate) ws.send(JSON.stringify({ type: 'cam-ice', code, payload: e.candidate })) }
+          pc.onicecandidate = (e) => { if (e.candidate) { console.log('Sending ICE'); ws.send(JSON.stringify({ type: 'cam-ice', code, payload: e.candidate })) } }
           await pc.setRemoteDescription(new RTCSessionDescription(data.payload))
           const answer = await pc.createAnswer()
           await pc.setLocalDescription(answer)
+          console.log('Sending answer')
           ws.send(JSON.stringify({ type: 'cam-answer', code, payload: answer }))
           log('Streaming to desktop...')
         } else if (data.type === 'cam-ice') {
+          console.log('Received ICE')
           try { await pc.addIceCandidate(data.payload) } catch {}
         } else if (data.type === 'cam-error') {
           log('Error: ' + (data.code || 'UNKNOWN'))
