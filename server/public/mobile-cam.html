@@ -62,9 +62,15 @@
 
     async function startCam(facing) {
       if (stream) { try { stream.getTracks().forEach(t => t.stop()) } catch {} }
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing || 'environment' }, audio: false })
-      v.srcObject = stream
-      await v.play().catch(()=>{})
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing || 'environment' }, audio: false })
+        v.srcObject = stream
+        await v.play().catch(()=>{})
+        log('Camera started')
+      } catch (err) {
+        log('Camera error: ' + err.message)
+        console.error('Camera error:', err)
+      }
     }
 
     function ensureWS() {
