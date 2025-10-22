@@ -1698,8 +1698,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyKillerAuto(r, info?.sector ?? null) }} />
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} onKeyDown={e=>{ if(e.key==='Enter'){ applyKillerAuto(Math.max(0, visitScore|0)); setVisitScore(0) } }} />
-                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ applyKillerAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                      <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} onKeyDown={e=>{ if(e.key==='Enter'){ applyKillerAuto('SINGLE', Math.max(0, visitScore|0)); setVisitScore(0) } }} />
+                      <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ applyKillerAuto('SINGLE', Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                     </div>
                   </div>
                 ) : (user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
@@ -1955,7 +1955,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       </div>
                       <div className="flex items-center gap-2">
                         <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
-                        <button className="btn" onClick={() => { applyKillerAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
+                        <button className="btn" onClick={() => { applyKillerAuto('SINGLE', Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                       </div>
                       <div className="text-xs opacity-70">Tip: Only doubles/triples on the opponentsÔÇÖ numbers remove lives. To become Killer, hit your own double.</div>
                     </div>

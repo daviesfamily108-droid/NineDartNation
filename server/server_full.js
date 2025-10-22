@@ -1077,8 +1077,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
 });
 // Constrain ws payload size for safety
-const wss = null; // new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
-console.log(`[WS] WebSocket disabled for debugging`);
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
+console.log(`[WS] WebSocket server enabled`);
 // wsConnections.set(0)
 
 // Optional HTTPS server for iOS camera (requires certs)
@@ -1862,7 +1862,7 @@ function shutdown() {
   console.log('\n[Shutdown] closing servers...')
   try { clearInterval(hbTimer) } catch {}
   if (wss) try { wss.close() } catch {}
-  try { server.close(() => process.exit(0)) } catch { process.exit(0) }
+  try { server.close(() => console.log('Server closed gracefully')) } catch { console.log('Server close failed') }
 }
 process.on('SIGINT', shutdown)
 process.on('SIGTERM', shutdown)

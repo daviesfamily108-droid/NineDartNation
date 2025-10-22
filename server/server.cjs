@@ -27,6 +27,17 @@ let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
 const app = express();
 
+// Global error handlers
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  // process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // process.exit(1);
+});
+
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -919,39 +930,39 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
   }
 }
 // Load users from Supabase on startup
-(async () => {
-  if (supabase) {
-    try {
-      console.log('[DB] Loading users from Supabase...');
-      const { data, error } = await supabase
-        .from('users')
-        .select('*');
+// (async () => {
+//   if (supabase) {
+//     try {
+//       console.log('[DB] Loading users from Supabase...');
+//       const { data, error } = await supabase
+//         .from('users')
+//         .select('*');
 
-      if (error) {
-        console.error('[DB] Failed to load users from Supabase:', error);
-      } else if (data) {
-        let loadedCount = 0;
-        for (const user of data) {
-          users.set(user.email, {
-            email: user.email,
-            username: user.username,
-            password: user.password,
-            admin: user.admin || false,
-            subscription: user.subscription || { fullAccess: false }
-          });
-          loadedCount++;
-        }
-        console.log(`[DB] Successfully loaded ${loadedCount} users from Supabase`);
-      } else {
-        console.log('[DB] No users found in Supabase');
-      }
-    } catch (err) {
-      console.error('[DB] Error loading users from Supabase:', err);
-    }
-  } else {
-    console.warn('[DB] Supabase not configured - using in-memory storage only');
-  }
-})();
+//       if (error) {
+//         console.error('[DB] Failed to load users from Supabase:', error);
+//       } else if (data) {
+//         let loadedCount = 0;
+//         for (const user of data) {
+//           users.set(user.email, {
+//             email: user.email,
+//             username: user.username,
+//             password: user.password,
+//             admin: user.admin || false,
+//             subscription: user.subscription || { fullAccess: false }
+//           });
+//           loadedCount++;
+//         }
+//         console.log(`[DB] Successfully loaded ${loadedCount} users from Supabase`);
+//       } else {
+//         console.log('[DB] No users found in Supabase');
+//       }
+//     } catch (err) {
+//       console.error('[DB] Error loading users from Supabase:', err);
+//     }
+//   } else {
+//     console.warn('[DB] Supabase not configured - using in-memory storage only');
+//   }
+// })();
 // Initialize demo admin user
 if (!users.has('daviesfamily108@gmail.com')) {
   users.set('daviesfamily108@gmail.com', {
@@ -1554,8 +1565,8 @@ function shutdown() {
   try { wss.close() } catch {}
   try { server.close(() => process.exit(0)) } catch { process.exit(0) }
 }
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
+// process.on('SIGINT', shutdown)
+// process.on('SIGTERM', shutdown)
 
 app.get('/api/friends/search', (req, res) => {
   const q = String(req.query.q || '').toLowerCase()

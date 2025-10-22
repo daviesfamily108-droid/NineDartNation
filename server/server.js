@@ -579,6 +579,9 @@ if (staticBase) {
   console.warn('[SPA] No built frontend found at ../dist or ../app/dist; "/" will 404 (API+WS OK).')
 }
 
+// Simple in-memory users and friendships (demo)
+// users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
+const users = new Map();
 
 // Signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
@@ -1492,8 +1495,8 @@ if (cluster.isMaster || cluster.isPrimary) {
   }
 });
 // Constrain ws payload size for safety
-const wss = null; // new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
-console.log(`[WS] WebSocket disabled for debugging`);
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
+console.log(`[WS] WebSocket server enabled`);
 // wsConnections.set(0)
 
 // Optional HTTPS server for iOS camera (requires certs)
@@ -1595,7 +1598,6 @@ function genCamCode() {
 const tournaments = new RedisMap(redisClient, 'tournaments');
 // Simple in-memory users and friendships (demo)
 // users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
-const users = new Map();
 
 // Load persistent data on startup
 loadPersistentData();
