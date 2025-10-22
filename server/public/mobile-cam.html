@@ -38,6 +38,12 @@
         <button id="enable" class="secondary">Enable Camera</button>
       </div>
       <div id="msg" class="muted" style="margin-top:8px;"></div>
+      <div class="row" style="margin-top:8px; gap:8px; align-items:center;">
+        <div id="wsStatus" class="muted">WS: disconnected</div>
+        <button id="sendDiag" class="secondary">Send Diagnostics</button>
+        <button id="dumpDiag" class="secondary">Show Diagnostics</button>
+      </div>
+      <pre id="diagOut" style="margin-top:8px; white-space:pre-wrap; max-height:200px; overflow:auto; background:rgba(255,255,255,0.02); padding:8px; border-radius:8px;"> </pre>
     </div>
   </div>
   <script>
@@ -59,6 +65,10 @@
   let lastFacing = 'environment'
   let deviceId = null
   let devicesList = []
+  const wsStatus = document.getElementById('wsStatus')
+  const sendDiagBtn = document.getElementById('sendDiag')
+  const dumpDiagBtn = document.getElementById('dumpDiag')
+  const diagOut = document.getElementById('diagOut')
 
     function wsUrl() {
       // Allow overriding the backend host via ?server= or ?ws= query param
@@ -94,6 +104,16 @@
           window.__ndn_pending_diag.push(payload)
         }
       } catch (e) { console.warn('diag send fail', e) }
+    }
+
+    function flushPendingDiagnostics() {
+      try {
+        if (!window.__ndn_pending_diag || !window.__ndn_pending_diag.length) return
+        const pending = window.__ndn_pending_diag.splice(0)
+        pending.forEach(p => {
+          try { ws.send(JSON.stringify(p)) } catch (e) { console.warn('flush send failed', e); window.__ndn_pending_diag.push(p) }
+        })
+      } catch (e) { console.warn('flush error', e) }
     }
 
     function log(t) { msg.textContent = t }
@@ -205,11 +225,24 @@
 
     function ensureWS() {
       const u = wsUrl()
-      ws = new WebSocket(u)
+      try {
+        ws = new WebSocket(u)
+      } catch (e) {
+        log('WebSocket creation failed')
+        sendDiagnostic('ws-create-failed', { err: String(e), url: u })
+        return Promise.reject(e)
+      }
       return new Promise((resolve) => {
-        ws.onopen = () => resolve(ws)
-        ws.onclose = () => log('Connection closed')
-        ws.onerror = () => log('WebSocket error')
+        ws.onopen = () => {
+          wsStatus.textContent = 'WS: open'
+          log('WS connected')
+          try { // send any queued diagnostics
+            if (window.__ndn_pending_diag && window.__ndn_pending_diag.length) flushPendingDiagnostics()
+          } catch (e) { console.warn('pending flush failed', e) }
+          resolve(ws)
+        }
+        ws.onclose = () => { wsStatus.textContent = 'WS: closed'; log('Connection closed'); sendDiagnostic('ws-closed') }
+        ws.onerror = (ev) => { wsStatus.textContent = 'WS: error'; log('WebSocket error'); sendDiagnostic('ws-error', { ev: String(ev) }) }
       })
     }
 
@@ -218,8 +251,8 @@
       if (!code) { log('Enter a code'); return }
       log('Connecting...')
       console.log('Joining with code:', code)
-      await startCam(lastFacing)
-      await ensureWS()
+      try { await startCam(lastFacing) } catch (e) { sendDiagnostic('startCam-failed', { err: String(e) }) }
+      try { await ensureWS() } catch (e) { log('WS connect failed'); sendDiagnostic('ensureWS-failed', { err: String(e) }); return }
       log('Joining session...')
       ws.send(JSON.stringify({ type: 'cam-join', code }))
       ws.onmessage = async (ev) => {
@@ -243,13 +276,18 @@
           try { await pc.addIceCandidate(data.payload) } catch {}
         } else if (data.type === 'cam-error') {
           log('Error: ' + (data.code || 'UNKNOWN'))
+          sendDiagnostic('cam-error-received', data)
         }
       }
     }
 
-    joinBtn.addEventListener('click', (e) => { e.preventDefault(); join() })
+  joinBtn.addEventListener('click', (e) => { e.preventDefault(); join() })
     stopBtn.addEventListener('click', (e) => { e.preventDefault(); try { if (pc) pc.close(); if (ws) ws.close(); if (stream) stream.getTracks().forEach(t=>t.stop()) } catch {}; log('Stopped.') })
-    swapBtn.addEventListener('click', async (e) => { e.preventDefault(); lastFacing = (lastFacing === 'environment' ? 'user' : 'environment'); await startCam(lastFacing) })
+  swapBtn.addEventListener('click', async (e) => { e.preventDefault(); lastFacing = (lastFacing === 'environment' ? 'user' : 'environment'); await startCam(lastFacing) })
+
+  // Diagnostic buttons
+  sendDiagBtn.addEventListener('click', (e) => { e.preventDefault(); try { if (ws && ws.readyState === WebSocket.OPEN) flushPendingDiagnostics(); log('Diagnostics sent') } catch (e) { console.warn(e); log('Send failed') } })
+  dumpDiagBtn.addEventListener('click', (e) => { e.preventDefault(); try { diagOut.textContent = JSON.stringify(window.__ndn_pending_diag || [], null, 2) } catch (e) { diagOut.textContent = String(e) } })
   </script>
 </body>
 </html>
