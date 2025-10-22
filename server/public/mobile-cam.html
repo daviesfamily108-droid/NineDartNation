@@ -25,15 +25,17 @@
         <label>Pair code</label>
         <input id="code" placeholder="ABCD" maxlength="8" />
         <button id="join">Join</button>
-        <button id="enable" class="secondary">Enable Camera</button>
       </div>
       <div class="muted" style="margin-bottom:12px;">Tip: If camera doesn’t start, allow camera permission and retry the Join button.</div>
       <video id="v" playsinline autoplay muted></video>
-      <div class="row" style="margin-top:8px;">
+      <div class="row" style="margin-top:8px; gap:6px; align-items:center;">
         <label for="deviceSelect" class="muted">Camera:</label>
         <select id="deviceSelect" style="min-width:120px;"></select>
         <button id="swap" class="secondary">Switch camera</button>
         <button id="stop" class="secondary">Stop</button>
+      </div>
+      <div class="row" style="margin-top:6px;">
+        <button id="enable" class="secondary">Enable Camera</button>
       </div>
       <div id="msg" class="muted" style="margin-top:8px;"></div>
     </div>
