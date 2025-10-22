@@ -61,10 +61,32 @@
   let devicesList = []
 
     function wsUrl() {
+      // Allow overriding the backend host via ?server= or ?ws= query param
+      const serverParam = params.get('server') || params.get('ws')
+      if (serverParam) {
+        try {
+          const url = new URL(serverParam)
+          const proto = url.protocol === 'https:' ? 'wss' : 'ws'
+          return `${proto}://${url.host}/ws`
+        } catch (e) { console.warn('Invalid server param', e) }
+      }
       // Prefer same-origin ws path
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
       let base = `${proto}://${location.host}/ws`
       return base
+    }
+
+    function sendDiagnostic(msg, details) {
+      try {
+        const payload = { type: 'cam-diagnostic', code: input.value || '', msg, details }
+        // If ws open, send immediately
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload))
+        else {
+          // store to send on connect
+          window.__ndn_pending_diag = window.__ndn_pending_diag || []
+          window.__ndn_pending_diag.push(payload)
+        }
+      } catch (e) { console.warn('diag send fail', e) }
     }
 
     function log(t) { msg.textContent = t }
