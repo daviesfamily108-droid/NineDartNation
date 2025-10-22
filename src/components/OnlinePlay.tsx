@@ -80,6 +80,9 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [atcManual, setAtcManual] = useState('')
   // Mobile camera pairing
   const [pairingCode, setPairingCode] = useState<string | null>(null)
+  // WebRTC for mobile camera
+  const [mobileStream, setMobileStream] = useState<MediaStream | null>(null)
+  const mobileVideoRef = useRef<HTMLVideoElement>(null)
   // Tic Tac Toe manual input
   const [tttManual, setTttManual] = useState('')
   // Per-player states for premium games
@@ -438,7 +441,14 @@ export default function OnlinePlay({ user }: { user?: any }) {
         setPairingCode(data.code)
         toast(`Pairing code: ${data.code}`, { type: 'info' })
       } else if (data.type === 'cam-peer-joined') {
-        toast('Mobile camera connected!', { type: 'success' })
+        // Mobile camera connected, start WebRTC
+        startMobileWebRTC(data.code)
+      } else if (data.type === 'cam-answer') {
+        const pc = (window as any).mobilePC
+        if (pc) pc.setRemoteDescription(new RTCSessionDescription(data.payload))
+      } else if (data.type === 'cam-ice') {
+        const pc = (window as any).mobilePC
+        if (pc) pc.addIceCandidate(data.payload)
       }
     }
     ws.onclose = () => {
@@ -1001,6 +1011,40 @@ export default function OnlinePlay({ user }: { user?: any }) {
     }
   }
 
+  // WebRTC for mobile camera
+  const startMobileWebRTC = async (code: string) => {
+    try {
+      const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+      pc.ontrack = (event) => {
+        setMobileStream(event.streams[0])
+        if (mobileVideoRef.current) {
+          mobileVideoRef.current.srcObject = event.streams[0]
+        }
+      }
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          if (wsGlobal) {
+            wsGlobal.send({ type: 'cam-ice', code, payload: event.candidate })
+          } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'cam-ice', code, payload: event.candidate }))
+          }
+        }
+      }
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      if (wsGlobal) {
+        wsGlobal.send({ type: 'cam-offer', code, payload: offer })
+      } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'cam-offer', code, payload: offer }))
+      }
+      // Store pc for later use
+      (window as any).mobilePC = pc
+    } catch (err) {
+      console.error('WebRTC error:', err)
+      toast('Failed to start mobile camera', { type: 'error' })
+    }
+  }
+
   return (
     <div className="card flex flex-col min-h-[85vh] relative overflow-hidden">
       <h2 className="text-xl font-semibold mb-1">Online Play</h2>
@@ -1427,6 +1471,18 @@ export default function OnlinePlay({ user }: { user?: any }) {
                           label="Your Board" 
                           autoStart={user?.username && match.players[match.currentPlayerIdx]?.name === user.username} 
                         />
+                        {mobileStream && (
+                          <div className="mt-2">
+                            <video 
+                              ref={mobileVideoRef} 
+                              autoPlay 
+                              playsInline 
+                              muted 
+                              className="w-full h-auto max-h-32 object-cover rounded border" 
+                            />
+                            <div className="text-xs opacity-70 mt-1">Mobile Camera</div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="text-xs opacity-60">Camera disabled in settings</div>
