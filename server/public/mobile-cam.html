@@ -167,6 +167,21 @@
 
     function log(t) { msg.textContent = t }
 
+    function detectFeatures() {
+      const isAndroid = /Android/i.test(navigator.userAgent)
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+      const supportsPermissions = !!(navigator.permissions && navigator.permissions.query)
+      return { isAndroid, isIOS, supportsPermissions }
+    }
+
+    // show guidance for Permissions API
+    const features = detectFeatures()
+    if (features.supportsPermissions) {
+      navigator.permissions.query({ name: 'camera' }).then(st => {
+        log('Camera permission state: ' + st.state)
+      }).catch(() => {})
+    }
+
     async function enumerateDevices() {
       try {
         // Request a minimal stream to ensure labels are available in browsers like iOS Safari

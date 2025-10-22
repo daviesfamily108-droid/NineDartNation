@@ -1051,7 +1051,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
         wsRef.current.send(JSON.stringify({ type: 'cam-offer', code, payload: offer }))
       } else {
         console.log('WS not available, POSTing offer to /cam/signal')
-        try { await fetch(`/cam/signal/${code}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cam-offer', payload: offer, source: 'desktop' }) }) } catch (e) { console.warn('REST offer failed', e) }
+        try {
+          const base = window.location.origin || ''
+          await fetch(`${base}/cam/signal/${code}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cam-offer', payload: offer, source: 'desktop' }) })
+        } catch (e) { console.warn('REST offer failed', e) }
       }
       // Store pc for later use
       (window as any).mobilePC = pc

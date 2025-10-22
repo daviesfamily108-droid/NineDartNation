@@ -1544,7 +1544,15 @@ function pushSignal(code, msg) {
 }
 
 // POST a signal message: { type, payload, source }
+// Add simple CORS handling for cam signaling and admin endpoints
+app.options('/cam/signal/:code', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, x-admin-secret')
+  return res.status(204).end()
+})
 app.post('/cam/signal/:code', express.json(), (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
   const code = String(req.params.code || '').toUpperCase()
   const body = req.body || {}
   if (!code) return res.status(400).json({ ok: false, error: 'MISSING_CODE' })
@@ -1565,6 +1573,7 @@ app.post('/cam/signal/:code', express.json(), (req, res) => {
 
 // GET and clear queued signals for a code
 app.get('/cam/signal/:code', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
   const code = String(req.params.code || '').toUpperCase()
   if (!code) return res.status(400).json({ ok: false, error: 'MISSING_CODE' })
   const arr = camSignalQueues.get(code) || []
