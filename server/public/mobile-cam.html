@@ -72,7 +72,14 @@
       }
       // Prefer same-origin ws path
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      let base = `${proto}://${location.host}/ws`
+      // If this page is opened as a file or from a different host, default to Render backend
+      const fallbackHost = 'ninedartnation.onrender.com'
+      let host = location.host && location.host !== '' ? location.host : fallbackHost
+      // If origin looks like Netlify or something else and the backend is known, prefer Render
+      if (!location.host.includes('render') && location.hostname !== 'ninedartnation.onrender.com') {
+        host = fallbackHost
+      }
+      let base = `${proto}://${host}/ws`
       return base
     }
 
