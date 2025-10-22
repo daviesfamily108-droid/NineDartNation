@@ -78,6 +78,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [atcIndex, setAtcIndex] = useState(0)
   const [atcHits, setAtcHits] = useState(0)
   const [atcManual, setAtcManual] = useState('')
+  // Mobile camera pairing
+  const [pairingCode, setPairingCode] = useState<string | null>(null)
   // Tic Tac Toe manual input
   const [tttManual, setTttManual] = useState('')
   // Per-player states for premium games
@@ -432,6 +434,11 @@ export default function OnlinePlay({ user }: { user?: any }) {
         const who = data.by || 'Player'
         const kind = data.kind === 'leg' ? 'leg' : '180'
         triggerCelebration(kind, who)
+      } else if (data.type === 'cam-code') {
+        setPairingCode(data.code)
+        toast(`Pairing code: ${data.code}`, { type: 'info' })
+      } else if (data.type === 'cam-peer-joined') {
+        toast('Mobile camera connected!', { type: 'success' })
       }
     }
     ws.onclose = () => {
@@ -1388,6 +1395,21 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
                   <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
                   <button className={`btn ${buttonSizeClass}`} onClick={openManual}>Manual Correction</button>
+                  <button className={`btn ${buttonSizeClass}`} onClick={() => {
+                    if (wsGlobal) {
+                      wsGlobal.send({ type: 'cam-create' })
+                    } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                      wsRef.current.send(JSON.stringify({ type: 'cam-create' }))
+                    } else {
+                      toast('Not connected to server', { type: 'error' })
+                    }
+                  }}>Pair Phone</button>
+                  {pairingCode && (
+                    <div className="ml-2 text-sm bg-blue-900/50 p-2 rounded">
+                      <div><span className="opacity-70">Mobile pairing code: </span><span className="font-mono font-bold text-lg">{pairingCode}</span></div>
+                      <div className="text-xs opacity-70 mt-1">On your phone, go to: <a href={`/mobile-cam.html?code=${pairingCode}`} target="_blank" className="underline">{window.location.origin}/mobile-cam.html?code={pairingCode}</a></div>
+                    </div>
+                  )}
                   <div className="ml-auto flex items-center gap-1 text-[11px]">
                     <span className="opacity-70">Cam size</span>
                     <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
