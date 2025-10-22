@@ -1511,6 +1511,25 @@ const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 })
 console.log(`[WS] WebSocket server enabled`);
 // wsConnections.set(0)
 
+// Simple in-memory diagnostics store for mobile camera reports
+const camDiagnostics = [] // { ts, code, ua, msg, details }
+function addCamDiagnostic(d) {
+  d.ts = Date.now()
+  camDiagnostics.push(d)
+  // keep last 200
+  while (camDiagnostics.length > 200) camDiagnostics.shift()
+}
+// Admin endpoint to retrieve recent camera diagnostics
+app.get('/admin/cam-diagnostics', (req, res) => {
+  // Optionally protect via env var secret
+  const secret = process.env.NDN_ADMIN_SECRET
+  if (secret) {
+    const auth = req.headers['x-admin-secret'] || req.query.secret
+    if (!auth || String(auth) !== String(secret)) return res.status(401).send('Unauthorized')
+  }
+  res.json({ ok: true, count: camDiagnostics.length, diagnostics: camDiagnostics.slice(-100).reverse() })
+})
+
 // Optional HTTPS server for iOS camera (requires certs)
 let httpsServer = null
 let wssSecure = null
@@ -2184,6 +2203,18 @@ if (wss) {
         if (target && target.readyState === 1) {
           target.send(JSON.stringify({ type: data.type, code, payload: data.payload }))
         }
+        } else if (data.type === 'cam-diagnostic') {
+          // Receive diagnostic messages from mobile clients
+          try {
+            const diag = {
+              code: String(data.code || ''),
+              ua: String(ws._ua || ''),
+              msg: String(data.msg || ''),
+              details: data.details || null
+            }
+            addCamDiagnostic(diag)
+            console.log('[DIAG] cam-diagnostic:', diag.code, diag.msg)
+          } catch (e) { console.error('cam-diagnostic parse error', e) }
       } else if (data.type === 'start-friend-match') {
         const toEmail = String(data.toEmail || '').toLowerCase()
         const game = typeof data.game === 'string' ? data.game : 'X01'
