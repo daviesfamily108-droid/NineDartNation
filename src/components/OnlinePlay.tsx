@@ -438,6 +438,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
         const kind = data.kind === 'leg' ? 'leg' : '180'
         triggerCelebration(kind, who)
       } else if (data.type === 'cam-code') {
+        console.log('Received cam-code:', data.code)
         setPairingCode(data.code)
         toast(`Pairing code: ${data.code}`, { type: 'info' })
       } else if (data.type === 'cam-peer-joined') {
@@ -1042,8 +1043,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
       await pc.setLocalDescription(offer)
       console.log('Sending offer')
       if (wsGlobal) {
+        console.log('Sending offer via wsGlobal')
         wsGlobal.send({ type: 'cam-offer', code, payload: offer })
       } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        console.log('Sending offer via wsRef')
         wsRef.current.send(JSON.stringify({ type: 'cam-offer', code, payload: offer }))
       }
       // Store pc for later use
@@ -1449,6 +1452,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
                   <button className={`btn ${buttonSizeClass}`} onClick={openManual}>Manual Correction</button>
                   <button className={`btn ${buttonSizeClass}`} onClick={() => {
+                    console.log('Sending cam-create')
                     if (wsGlobal) {
                       wsGlobal.send({ type: 'cam-create' })
                     } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {

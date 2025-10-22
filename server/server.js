@@ -2172,7 +2172,14 @@ if (wss) {
         const code = String(data.code || '').toUpperCase()
         const sess = camSessions.get(code)
         if (!sess) return
-        const targetId = (data.type === 'cam-offer') ? sess.desktopId : sess.phoneId
+        let targetId
+        if (data.type === 'cam-offer') {
+          targetId = sess.phoneId
+        } else if (data.type === 'cam-answer') {
+          targetId = sess.desktopId
+        } else if (data.type === 'cam-ice') {
+          targetId = (ws._id === sess.desktopId) ? sess.phoneId : sess.desktopId
+        }
         const target = clients.get(targetId)
         if (target && target.readyState === 1) {
           target.send(JSON.stringify({ type: data.type, code, payload: data.payload }))
