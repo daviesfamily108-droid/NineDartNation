@@ -582,6 +582,8 @@ if (staticBase) {
 // Simple in-memory users and friendships (demo)
 // users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
 const users = new Map();
+// Login cache: username -> { user, cachedAt }
+const loginCache = new Map();
 
 // Signup endpoint
 app.post('/api/auth/signup', async (req, res) => {
@@ -677,7 +679,15 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    // If not found in memory, check Supabase
+    // Check login cache (5 minute TTL)
+    if (!user) {
+      const cached = loginCache.get(username);
+      if (cached && (Date.now() - cached.cachedAt) < 5 * 60 * 1000 && cached.user.password === password) {
+        user = cached.user;
+      }
+    }
+
+    // If not found in memory or cache, check Supabase
     if (!user && supabase) {
       const { data, error } = await supabase
         .from('users')
@@ -694,12 +704,14 @@ app.post('/api/auth/login', async (req, res) => {
           password: data.password,
           admin: data.admin || false
         };
-        // Store in Redis for cross-server session sharing
-        await redisHelpers.setUserSession(data.email, {
+        // Cache for future logins
+        loginCache.set(username, { user, cachedAt: Date.now() });
+        // Store in Redis for cross-server session sharing (non-blocking)
+        redisHelpers.setUserSession(data.email, {
           ...user,
           status: 'online',
           lastSeen: Date.now()
-        });
+        }).catch(err => console.warn('[REDIS] Failed to set session:', err.message));
         // Cache in memory for current session (fallback)
         users.set(data.email, user);
       }
