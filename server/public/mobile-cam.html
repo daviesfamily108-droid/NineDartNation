@@ -106,6 +106,55 @@
       } catch (e) { console.warn('diag send fail', e) }
     }
 
+    // REST signaling fallback - POST a signal to server
+    async function postSignal(type, payload) {
+      try {
+        const code = (input.value || '').trim().toUpperCase()
+        const url = new URL(`/cam/signal/${code}`, window.location.origin)
+        await fetch(url.toString(), { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ type, payload, source: 'phone' }) })
+      } catch (e) { console.warn('postSignal failed', e); sendDiagnostic('postSignal-fail', { err: String(e) }) }
+    }
+
+    // Poll for signals via REST
+    let pollInterval = null
+    async function startPolling(code) {
+      if (pollInterval) clearInterval(pollInterval)
+      pollInterval = setInterval(async () => {
+        try {
+          const url = new URL(`/cam/signal/${code}`, window.location.origin)
+          const res = await fetch(url.toString())
+          const j = await res.json()
+          if (j && Array.isArray(j.messages)) {
+            for (const m of j.messages) {
+              try { handleSignal(m) } catch (e) { console.warn('handleSignal err', e) }
+            }
+          }
+        } catch (e) { console.warn('poll err', e) }
+      }, 1500)
+    }
+
+    function stopPolling() { if (pollInterval) clearInterval(pollInterval); pollInterval = null }
+
+    function handleSignal(m) {
+      if (!m || !m.type) return
+      if (m.type === 'cam-offer') {
+        // same as ws cam-offer handling
+        (async ()=>{
+          console.log('REST received offer')
+          pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+          stream.getTracks().forEach(t => pc.addTrack(t, stream))
+          pc.onicecandidate = (e) => { if (e.candidate) postSignal('cam-ice', e.candidate) }
+          await pc.setRemoteDescription(new RTCSessionDescription(m.payload))
+          const answer = await pc.createAnswer()
+          await pc.setLocalDescription(answer)
+          await postSignal('cam-answer', answer)
+          log('Streaming to desktop (REST)')
+        })()
+      } else if (m.type === 'cam-ice') {
+        try { pc && pc.addIceCandidate(m.payload) } catch (e) { console.warn('addIce fail', e) }
+      }
+    }
+
     function flushPendingDiagnostics() {
       try {
         if (!window.__ndn_pending_diag || !window.__ndn_pending_diag.length) return

@@ -1530,6 +1530,49 @@ app.get('/admin/cam-diagnostics', (req, res) => {
   res.json({ ok: true, count: camDiagnostics.length, diagnostics: camDiagnostics.slice(-100).reverse() })
 })
 
+// Simple in-memory signal queue for REST fallback (per cam code)
+const camSignalQueues = new Map() // code -> [{ ts, type, payload, source }]
+
+function pushSignal(code, msg) {
+  try {
+    const arr = camSignalQueues.get(code) || []
+    arr.push(Object.assign({ ts: Date.now() }, msg))
+    // keep last 200
+    while (arr.length > 200) arr.shift()
+    camSignalQueues.set(code, arr)
+  } catch (e) { console.warn('pushSignal error', e) }
+}
+
+// POST a signal message: { type, payload, source }
+app.post('/cam/signal/:code', express.json(), (req, res) => {
+  const code = String(req.params.code || '').toUpperCase()
+  const body = req.body || {}
+  if (!code) return res.status(400).json({ ok: false, error: 'MISSING_CODE' })
+  const msg = { type: body.type, payload: body.payload, source: body.source || 'unknown' }
+  pushSignal(code, msg)
+  // try to forward to connected WS peer if present
+  const sess = camSessions.get(code)
+  if (sess) {
+    // decide target: if source is desktop, forward to phone and vice-versa
+    const targetId = (msg.source === 'desktop') ? sess.phoneId : sess.desktopId
+    const target = clients.get(targetId)
+    if (target && target.readyState === 1) {
+      try { target.send(JSON.stringify({ type: msg.type, code, payload: msg.payload })) } catch (e) { console.warn('forward fail', e) }
+    }
+  }
+  res.json({ ok: true })
+})
+
+// GET and clear queued signals for a code
+app.get('/cam/signal/:code', (req, res) => {
+  const code = String(req.params.code || '').toUpperCase()
+  if (!code) return res.status(400).json({ ok: false, error: 'MISSING_CODE' })
+  const arr = camSignalQueues.get(code) || []
+  // return and clear
+  camSignalQueues.delete(code)
+  res.json({ ok: true, messages: arr })
+})
+
 // Optional HTTPS server for iOS camera (requires certs)
 let httpsServer = null
 let wssSecure = null
