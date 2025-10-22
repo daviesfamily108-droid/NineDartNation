@@ -63,13 +63,20 @@
     async function startCam(facing) {
       if (stream) { try { stream.getTracks().forEach(t => t.stop()) } catch {} }
       try {
+        console.log('Requesting camera with facing:', facing)
         stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing || 'environment' }, audio: false })
+        console.log('Camera stream obtained:', stream)
         v.srcObject = stream
-        await v.play().catch(()=>{})
+        await v.play().catch((e) => console.error('Video play failed:', e))
         log('Camera started')
       } catch (err) {
         log('Camera error: ' + err.message)
         console.error('Camera error:', err)
+        // Try fallback to user facing if environment failed
+        if (facing === 'environment' && err.name === 'NotFoundError') {
+          console.log('Trying user facing camera as fallback')
+          await startCam('user')
+        }
       }
     }
 
