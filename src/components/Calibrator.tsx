@@ -18,7 +18,8 @@ export default function Calibrator() {
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const [streaming, setStreaming] = useState(false)
 	const [phase, setPhase] = useState<Phase>('camera')
-	const [mode, setMode] = useState<CamMode>(() => (localStorage.getItem('ndn:cal:mode') as CamMode) || 'local')
+	// Lock mode to 'phone' for this instance
+	const [mode, setMode] = useState<CamMode>('phone')
 	const [dstPoints, setDstPoints] = useState<Point[]>([]) // image points clicked in order TOP, RIGHT, BOTTOM, LEFT
 	const [snapshotSet, setSnapshotSet] = useState(false)
 	// Track current frame (video/snapshot) size to preserve aspect ratio in the preview container
@@ -848,19 +849,9 @@ export default function Calibrator() {
 											})}
 											<div 
 												key="phone-camera" 
-												className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm text-indigo-400"
-												onClick={() => {
-													// Only set mode if not already phone
-													if (mode !== 'phone') {
-														setMode('phone');
-														setPhase('camera');
-														setStreaming(false);
-														setSnapshotSet(false);
-														startPhonePairing();
-													}
-												}}
+												className="px-3 py-2 text-sm text-indigo-400 opacity-60 cursor-not-allowed"
 											>
-												📱 Phone Camera
+												📱 Phone Camera (locked)
 											</div>
 											<div className="px-3 py-2 text-right">
 												<button className="btn btn--ghost px-2 py-1 text-xs" onClick={() => setDropdownOpen(false)}>Close</button>
@@ -898,26 +889,23 @@ export default function Calibrator() {
 									<span className="text-xs opacity-70">Video Source:</span>
 									<div className="flex items-center gap-1 text-xs">
 										<button 
-											className={`btn px-2 py-1 ${mode==='local'?'bg-emerald-600':'bg-gray-600'} ${streaming ? 'opacity-50 cursor-not-allowed' : ''}`} 
-											onClick={() => !streaming && setMode('local')}
-											disabled={streaming}
-											title={streaming ? 'Stop camera first to change mode' : 'Use local device camera'}
+											className={`btn px-2 py-1 bg-gray-600 opacity-50 cursor-not-allowed`} 
+											disabled
+											title="Local camera mode disabled"
 										>
 											Local
 										</button>
 										<button 
-											className={`btn px-2 py-1 ${mode==='phone'?'bg-emerald-600':'bg-gray-600'} ${streaming ? 'opacity-50 cursor-not-allowed' : ''}`} 
-											onClick={() => !streaming && setMode('phone')}
-											disabled={streaming}
-											title={streaming ? 'Stop camera first to change mode' : 'Pair with phone camera'}
+											className={`btn px-2 py-1 bg-emerald-600`} 
+											disabled
+											title="Phone camera mode locked"
 										>
 											Phone
 										</button>
 										<button 
-											className={`btn px-2 py-1 ${mode==='wifi'?'bg-emerald-600':'bg-gray-600'} ${streaming ? 'opacity-50 cursor-not-allowed' : ''}`} 
-											onClick={() => !streaming && setMode('wifi')}
-											disabled={streaming}
-											title={streaming ? 'Stop camera first to change mode' : 'Connect to wifi scoring device'}
+											className={`btn px-2 py-1 bg-gray-600 opacity-50 cursor-not-allowed`} 
+											disabled
+											title="Wifi camera mode disabled"
 										>
 											Wifi
 										</button>
