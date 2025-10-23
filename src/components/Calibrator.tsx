@@ -377,9 +377,7 @@ export default function Calibrator() {
 	}
 
 	function regenerateCode() {
-		setPairCode(null)
-		setExpiresAt(null)
-		setPaired(false)
+		// Only regenerate code, do not reset UI or camera state
 		if (ws && ws.readyState === WebSocket.OPEN) {
 			ws.send(JSON.stringify({ type: 'cam-create' }))
 		} else {
