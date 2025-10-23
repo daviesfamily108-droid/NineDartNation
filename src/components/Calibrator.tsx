@@ -66,8 +66,12 @@ export default function Calibrator() {
 		}).catch(()=>{})
 	}, [])
 
-	// Auto-start pairing when user switches to Phone mode, or wifi discovery for wifi mode
-	// No automatic mode switching. Only start camera/pairing when user clicks the button. Camera mode and device remain solid after selection.
+	// Always trigger phone pairing and code generation immediately on load for phone mode
+	useEffect(() => {
+		if (mode === 'phone') {
+			startPhonePairing();
+		}
+	}, [mode]);
 	const mobileUrl = useMemo(() => {
 		const code = pairCode || '____'
 		// Prefer configured WS host (Render) when available to build the correct server origin
