@@ -836,9 +836,16 @@ export default function Calibrator() {
 											})}
 											<div 
 												key="phone-camera" 
-												className="px-3 py-2 text-sm text-indigo-400 opacity-60 cursor-not-allowed"
+												className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm text-indigo-400"
+												onClick={() => {
+													setMode('phone');
+													setPhase('camera');
+													setStreaming(false);
+													setSnapshotSet(false);
+													startPhonePairing();
+												}}
 											>
-												📱 Phone Camera (locked)
+												📱 Phone Camera
 											</div>
 											<div className="px-3 py-2 text-right">
 												<button className="btn btn--ghost px-2 py-1 text-xs" onClick={() => setDropdownOpen(false)}>Close</button>
