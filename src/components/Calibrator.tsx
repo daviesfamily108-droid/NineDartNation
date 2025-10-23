@@ -66,10 +66,18 @@ export default function Calibrator() {
 
 	// Auto-start pairing when user switches to Phone mode, or wifi discovery for wifi mode
 	useEffect(() => {
-		if (mode === 'phone' && !paired && !streaming) {
-			startPhonePairing()
-		} else if (mode === 'wifi' && !streaming) {
-			startWifiConnection()
+		if (mode === 'phone') {
+			if (!paired || !streaming) {
+				startPhonePairing()
+			}
+		} else if (mode === 'wifi') {
+			if (!streaming) {
+				startWifiConnection()
+			}
+		} else if (mode === 'local') {
+			if (!streaming) {
+				startCamera()
+			}
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [mode])
@@ -333,19 +341,22 @@ export default function Calibrator() {
 		if (mode === 'phone') return startPhonePairing()
 		if (mode === 'wifi') return startWifiConnection()
 		try {
+			console.log('[Calibrator] Attempting camera access...')
 			const constraints: MediaStreamConstraints = {
 				video: preferredCameraId ? { deviceId: { exact: preferredCameraId } } : { facingMode: 'environment' },
 				audio: false
 			}
+			console.log('[Calibrator] Camera constraints:', constraints)
 			let stream: MediaStream
 			try {
 				stream = await navigator.mediaDevices.getUserMedia(constraints)
+				console.log('[Calibrator] Camera stream obtained:', stream)
 			} catch (err: any) {
-				// Fallback if specific device isn't available
 				const name = (err && (err.name || err.code)) || ''
+				console.warn('[Calibrator] Preferred camera not available:', err)
 				if (preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError' || name === 'NotAllowedError')) {
-					console.warn('Preferred camera not available, falling back to auto:', err)
 					stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+					console.log('[Calibrator] Fallback camera stream obtained:', stream)
 				} else {
 					throw err
 				}
@@ -353,11 +364,14 @@ export default function Calibrator() {
 			if (videoRef.current) {
 				videoRef.current.srcObject = stream
 				await videoRef.current.play()
+				console.log('[Calibrator] Video playback started')
+			} else {
+				console.warn('[Calibrator] videoRef.current is null')
 			}
 			setStreaming(true)
 			setPhase('capture')
 		} catch (e) {
-			console.error('Camera access failed:', e)
+			console.error('[Calibrator] Camera access failed:', e)
 			alert(`Camera access failed: ${e instanceof Error ? e.message : 'Unknown error'}. Try refreshing the page or check camera permissions.`)
 		}
 	}
@@ -825,6 +839,20 @@ export default function Calibrator() {
 											</div>
 										)
 									})}
+									<div 
+										key="phone-camera" 
+										className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm text-indigo-400"
+										onClick={() => {
+											setMode('phone');
+											setDropdownOpen(false);
+											setPhase('camera');
+											setStreaming(false);
+											setSnapshotSet(false);
+											startPhonePairing();
+										}}
+									>
+										📱 Phone Camera
+									</div>
 								</div>
 							)}
 						</div>
@@ -931,7 +959,7 @@ export default function Calibrator() {
 									className="relative w-full max-w-[min(100%,60vh)] rounded-2xl overflow-hidden border border-indigo-400/30 bg-black flex items-center justify-center"
 									style={{ aspectRatio: frameSize ? `${frameSize.w} / ${frameSize.h}` : '16 / 9' }}
 								>
-									{!streaming && (
+									{(!streaming || (mode === 'phone' && !paired)) && (
 										<DartLoader calibrationComplete={phase === 'computed'} />
 									)}
 									<div className="absolute inset-0" style={{ transform: `scale(${zoom||1})`, transformOrigin: 'center center' }}>
