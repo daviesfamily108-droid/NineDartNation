@@ -962,9 +962,9 @@ export default function Calibrator() {
 									className="relative w-full max-w-[min(100%,60vh)] rounded-2xl overflow-hidden border border-indigo-400/30 bg-black flex items-center justify-center"
 									style={{ aspectRatio: frameSize ? `${frameSize.w} / ${frameSize.h}` : '16 / 9' }}
 								>
-									{(!streaming || (mode === 'phone' && !paired)) && (
+									{(!streaming || !paired) ? (
 										<DartLoader calibrationComplete={phase === 'computed'} />
-									)}
+									) : null}
 									<div className="absolute inset-0" style={{ transform: `scale(${zoom||1})`, transformOrigin: 'center center' }}>
 										<video
 											ref={videoRef}
@@ -975,6 +975,9 @@ export default function Calibrator() {
 												} catch {}
 											}}
 											className={`absolute inset-0 w-full h-full object-cover ${snapshotSet ? 'opacity-0 -z-10' : 'opacity-100 z-10'}`}
+											autoPlay
+											playsInline
+											muted
 										/>
 										<canvas ref={canvasRef} className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`} />
 										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 w-full h-full z-30" />
