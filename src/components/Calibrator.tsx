@@ -67,7 +67,7 @@ export default function Calibrator() {
 	}, [])
 
 	// Auto-start pairing when user switches to Phone mode, or wifi discovery for wifi mode
-	// Remove all automatic mode switching. Only start camera/pairing when user clicks the button.
+	// No automatic mode switching. Only start camera/pairing when user clicks the button. Camera mode and device remain solid after selection.
 	const mobileUrl = useMemo(() => {
 		const code = pairCode || '____'
 		// Prefer configured WS host (Render) when available to build the correct server origin
@@ -800,8 +800,8 @@ export default function Calibrator() {
 					<div className="grid grid-cols-3 gap-2 items-center text-sm">
 						<div className="col-span-2 relative" ref={dropdownRef}>
 							<div 
-								className={`input w-full flex items-center justify-between ${streaming ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-								onClick={() => !streaming && setDropdownOpen(!dropdownOpen)}
+								className={`input w-full flex items-center justify-between cursor-pointer`}
+								onClick={() => setDropdownOpen(!dropdownOpen)}
 							>
 								<span className="truncate">{selectedLabel}</span>
 								<svg className={`w-4 h-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
