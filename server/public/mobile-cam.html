@@ -48,7 +48,9 @@
     </div>
   </div>
   <script>
-    const params = new URLSearchParams(location.search)
+  // Show a visible test message in the error box to confirm latest code is running
+  document.getElementById('fatal-error').textContent = 'Diagnostics loaded: ' + new Date().toLocaleString();
+  const params = new URLSearchParams(location.search)
   const input = document.getElementById('code')
   const joinBtn = document.getElementById('join')
   const enableBtn = document.getElementById('enable')
