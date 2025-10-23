@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import ReactDOM from 'react-dom'
 import DartLoader from './DartLoader'
 
 import QRCode from 'qrcode'
@@ -742,6 +743,12 @@ export default function Calibrator() {
 			const [err, setErr] = useState('')
 			const [dropdownOpen, setDropdownOpen] = useState(false)
 			const dropdownRef = useRef<HTMLDivElement>(null)
+			const dropdownPortal = document.getElementById('dropdown-portal-root') || (() => {
+				const el = document.createElement('div');
+				el.id = 'dropdown-portal-root';
+				document.body.appendChild(el);
+				return el;
+			})();
 
 			async function enumerate() {
 				setErr('')
@@ -813,47 +820,52 @@ export default function Calibrator() {
 									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
 								</svg>
 							</div>
-							{dropdownOpen && (
-								<div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-									<div 
-										className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm"
-										onClick={() => {
-											setPreferredCamera(undefined, '')
-											setDropdownOpen(false)
-										}}
-									>
-										Auto (browser default)
-									</div>
-									{devices.map(d => {
-										const label = `${d.label || 'Camera'}`
-										return (
+							{dropdownOpen && ReactDOM.createPortal(
+								<div className="fixed left-0 top-0 w-full h-full z-[9999]" style={{ pointerEvents: 'none' }}>
+									<div className="absolute" style={{ left: dropdownRef.current?.getBoundingClientRect().left || 0, top: dropdownRef.current?.getBoundingClientRect().bottom || 0, width: dropdownRef.current?.offsetWidth || 240, pointerEvents: 'auto' }}>
+										<div className="bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
 											<div 
-												key={d.deviceId} 
 												className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm"
 												onClick={() => {
-													setPreferredCamera(d.deviceId, d.label || '')
-													setDropdownOpen(false)
+													setPreferredCamera(undefined, '')
 												}}
 											>
-												{label}
+												Auto (browser default)
 											</div>
-										)
-									})}
-									<div 
-										key="phone-camera" 
-										className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm text-indigo-400"
-										onClick={() => {
-											setMode('phone');
-											setDropdownOpen(false);
-											setPhase('camera');
-											setStreaming(false);
-											setSnapshotSet(false);
-											startPhonePairing();
-										}}
-									>
-										📱 Phone Camera
+											{devices.map(d => {
+												const label = `${d.label || 'Camera'}`
+												return (
+													<div 
+														key={d.deviceId} 
+														className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm"
+														onClick={() => {
+															setPreferredCamera(d.deviceId, d.label || '')
+														}}
+													>
+														{label}
+													</div>
+												)
+											})}
+											<div 
+												key="phone-camera" 
+												className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm text-indigo-400"
+												onClick={() => {
+													setMode('phone');
+													setPhase('camera');
+													setStreaming(false);
+													setSnapshotSet(false);
+													startPhonePairing();
+												}}
+											>
+												📱 Phone Camera
+											</div>
+											<div className="px-3 py-2 text-right">
+												<button className="btn btn--ghost px-2 py-1 text-xs" onClick={() => setDropdownOpen(false)}>Close</button>
+											</div>
+										</div>
 									</div>
-								</div>
+								</div>,
+								dropdownPortal
 							)}
 						</div>
 						<div className="text-right">
