@@ -795,6 +795,7 @@ export default function Calibrator() {
 							<button 
 								className="underline ml-1" 
 								onClick={() => setPreferredCamera(undefined, '')}
+								disabled={streaming}
 							>
 								Use auto-selection
 							</button>
@@ -807,21 +808,22 @@ export default function Calibrator() {
 							checked={cameraEnabled}
 							onChange={e => setCameraEnabled(e.target.checked)}
 							className="w-4 h-4"
+							disabled={streaming}
 						/>
 						<label htmlFor="cameraEnabled-calibrator" className="text-sm">Enable camera for scoring</label>
 					</div>
 					<div className="grid grid-cols-3 gap-2 items-center text-sm">
 						<div className="col-span-2 relative" ref={dropdownRef}>
 							<div 
-								className="input w-full cursor-pointer flex items-center justify-between"
-								onClick={() => setDropdownOpen(!dropdownOpen)}
+								className={`input w-full flex items-center justify-between ${streaming ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
+								onClick={() => !streaming && setDropdownOpen(!dropdownOpen)}
 							>
 								<span className="truncate">{selectedLabel}</span>
 								<svg className={`w-4 h-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
 								</svg>
 							</div>
-							{dropdownOpen && ReactDOM.createPortal(
+							{dropdownOpen && !streaming && ReactDOM.createPortal(
 								<div className="fixed left-0 top-0 w-full h-full z-[9999]" style={{ pointerEvents: 'none' }}>
 									<div className="absolute" style={{ left: dropdownRef.current?.getBoundingClientRect().left || 0, top: dropdownRef.current?.getBoundingClientRect().bottom || 0, width: dropdownRef.current?.offsetWidth || 240, pointerEvents: 'auto' }}>
 										<div className="bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
@@ -863,7 +865,7 @@ export default function Calibrator() {
 							)}
 						</div>
 						<div className="text-right">
-							<button className="btn px-2 py-1" onClick={enumerate}>Refresh</button>
+							<button className="btn px-2 py-1" onClick={enumerate} disabled={streaming}>Refresh</button>
 						</div>
 					</div>
 					{preferredCameraLabel && (
