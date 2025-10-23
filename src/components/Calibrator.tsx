@@ -66,12 +66,7 @@ export default function Calibrator() {
 		}).catch(()=>{})
 	}, [])
 
-	// Always trigger phone pairing and code generation immediately on load for phone mode
-	useEffect(() => {
-		if (mode === 'phone') {
-			startPhonePairing();
-		}
-	}, [mode]);
+	// Remove automatic phone pairing on mode change; only pair on explicit user action
 	const mobileUrl = useMemo(() => {
 		const code = pairCode || '____'
 		// Prefer configured WS host (Render) when available to build the correct server origin
@@ -108,40 +103,13 @@ export default function Calibrator() {
 		return () => clearInterval(t)
 	}, [expiresAt])
 	const ttl = useMemo(() => expiresAt ? Math.max(0, Math.ceil((expiresAt - now)/1000)) : null, [expiresAt, now])
-	useEffect(() => {
-		if (ttl === null) return
-		if (ttl <= 0 && !paired && !streaming && mode === 'phone') {
-			regenerateCode()
-		}
-	}, [ttl, paired, streaming, mode])
+	// Removed automatic regeneration of code when ttl expires. Only regenerate on explicit user action.
 
 	useEffect(() => {
 		return () => stopCamera()
 	}, [])
 
-	// Restart camera when preferred camera changes from one specific camera to another (not initial selection)
-	const prevPreferredCameraIdRef = useRef<string | undefined>(preferredCameraId)
-	useEffect(() => {
-		const prevId = prevPreferredCameraIdRef.current
-		prevPreferredCameraIdRef.current = preferredCameraId
-		
-		// Only restart if we were already streaming with a specific camera and now switching to a different available one
-		if (streaming && mode === 'local' && prevId && prevId !== preferredCameraId && preferredCameraId) {
-			// Check if the new camera is still available
-			navigator.mediaDevices.enumerateDevices().then(devices => {
-				const videoDevices = devices.filter(d => d.kind === 'videoinput')
-				const deviceExists = videoDevices.some(d => d.deviceId === preferredCameraId)
-				if (deviceExists) {
-					stopCamera()
-					setTimeout(() => startCamera(), 100) // Small delay to ensure cleanup
-				} else {
-					console.warn('Selected camera no longer available:', preferredCameraId)
-				}
-			}).catch(err => {
-				console.warn('Failed to check device availability:', err)
-			})
-		}
-	}, [preferredCameraId, streaming, mode])
+	// Remove automatic camera restart on preferredCameraId change to prevent flicker
 
 	function ensureWS() {
 		if (ws && ws.readyState === WebSocket.OPEN) return ws
@@ -802,8 +770,8 @@ export default function Calibrator() {
 					<div className="grid grid-cols-3 gap-2 items-center text-sm">
 						<div className="col-span-2 relative" ref={dropdownRef}>
 							<div 
-								className={`input w-full flex items-center justify-between cursor-pointer`}
-								onClick={() => setDropdownOpen(!dropdownOpen)}
+								className={`input w-full flex items-center justify-between cursor-pointer ${streaming ? 'opacity-50 cursor-not-allowed' : ''}`}
+								onClick={() => !streaming && setDropdownOpen(!dropdownOpen)}
 							>
 								<span className="truncate">{selectedLabel}</span>
 								<svg className={`w-4 h-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -844,7 +812,7 @@ export default function Calibrator() {
 													setPhase('camera');
 													setStreaming(false);
 													setSnapshotSet(false);
-													startPhonePairing();
+													// Only start pairing if user clicks 'Pair Phone Camera' button
 												}}
 											>
 												📱 Phone Camera
@@ -930,14 +898,24 @@ export default function Calibrator() {
 								</label>
 								{/* Vertical action buttons */}
 								<div className="flex flex-col gap-2 mt-3">
-									{!streaming ? (
-										<button className="btn" onClick={startCamera}>{mode==='local' ? 'Start Camera' : 'Pair Phone Camera'}</button>
+									{(!streaming ? (
+										<>
+											{mode === 'local' && (
+												<button className="btn" onClick={startCamera}>Start Camera</button>
+											)}
+											{mode === 'phone' && (
+												<button className="btn" onClick={startPhonePairing}>Pair Phone Camera</button>
+											)}
+											{mode === 'wifi' && (
+												<button className="btn" onClick={startWifiConnection}>Connect Wifi Camera</button>
+											)}
+										</>
 									) : (
 										<>
 											<button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
-																<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture Frame</button>
+											<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture Frame</button>
 										</>
-									)}
+									))}
 									<div className="flex items-center gap-2 mt-1">
 										<input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onUploadPhotoChange} />
 										<button className="btn" onClick={triggerUpload}>Upload Photo</button>

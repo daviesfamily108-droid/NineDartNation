@@ -61,13 +61,7 @@ export default function Calibrator() {
 		}).catch(()=>{})
 	}, [])
 
-	// Auto-start pairing when user switches to Phone mode
-	useEffect(() => {
-		if (mode === 'phone' && !paired && !streaming) {
-			startPhonePairing()
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [mode])
+	// Removed automatic phone pairing effect. Only pair on explicit user action.
 	const mobileUrl = useMemo(() => {
 		const code = pairCode || '____'
 		// Prefer configured WS host (Render) when available to build the correct server origin
