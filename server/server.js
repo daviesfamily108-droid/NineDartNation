@@ -560,23 +560,23 @@ app.use(compression())
 // Guard JSON body size to avoid excessive memory
 app.use(express.json({ limit: '100kb' }));
 // Serve static assets (mobile camera page)
-app.use(express.static('./server/public'))
-// In production, also serve the built client app. Prefer root ../dist, fallback to ../app/dist.
-const rootDistPath = path.resolve(process.cwd(), 'dist')
-const appDistPath = path.resolve(process.cwd(), 'app', 'dist')
-let staticBase = null
+// Serve static assets (mobile camera page) with priority
+app.use(express.static(path.join(__dirname, 'public')));
+// In production, also serve the built client app, but only for files not found in public
+const rootDistPath = path.resolve(process.cwd(), 'dist');
+const appDistPath = path.resolve(process.cwd(), 'app', 'dist');
+let staticBase = null;
 if (fs.existsSync(rootDistPath)) {
-  staticBase = rootDistPath
-  app.use(express.static(rootDistPath))
+  staticBase = rootDistPath;
+  app.use('/dist', express.static(rootDistPath));
 } else if (fs.existsSync(appDistPath)) {
-  staticBase = appDistPath
-  app.use(express.static(appDistPath))
+  staticBase = appDistPath;
+  app.use('/app/dist', express.static(appDistPath));
 }
-// Log whether we found a built SPA to serve
 if (staticBase) {
-  console.log(`[SPA] Serving static frontend from ${staticBase}`)
+  console.log(`[SPA] Serving static frontend from ${staticBase}`);
 } else {
-  console.warn('[SPA] No built frontend found at ../dist or ../app/dist; "/" will 404 (API+WS OK).')
+  console.warn('[SPA] No built frontend found at ../dist or ../app/dist; "/" will 404 (API+WS OK).');
 }
 
 // Simple in-memory users and friendships (demo)
