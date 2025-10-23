@@ -129,7 +129,7 @@ export default function Calibrator() {
 	}
 
 	async function startPhonePairing() {
-		// Do not reset paired state, keep UI static
+		// Do not reset paired/streaming/phase state here to keep UI static
 		const socket = ensureWS()
 		if (socket.readyState === WebSocket.OPEN) {
 			socket.send(JSON.stringify({ type: 'cam-create' }))
@@ -139,15 +139,9 @@ export default function Calibrator() {
 		socket.onerror = (error) => {
 			console.error('WebSocket connection error:', error)
 			alert('Failed to connect to camera pairing service. Please check your internet connection and try again.')
-			setPaired(false)
-			setStreaming(false)
-			setPhase('camera')
 		}
 		socket.onclose = (event) => {
 			console.log('WebSocket closed:', event.code, event.reason)
-			setPaired(false)
-			setStreaming(false)
-			setPhase('camera')
 			if (pc) {
 				pc.close()
 				setPc(null)
@@ -750,7 +744,7 @@ export default function Calibrator() {
 							<button 
 								className="underline ml-1" 
 								onClick={() => setPreferredCamera(undefined, '')}
-								disabled={streaming}
+								disabled={streaming || mode !== 'local'}
 							>
 								Use auto-selection
 							</button>
@@ -763,22 +757,22 @@ export default function Calibrator() {
 							checked={cameraEnabled}
 							onChange={e => setCameraEnabled(e.target.checked)}
 							className="w-4 h-4"
-							disabled={streaming}
+							disabled={streaming || mode !== 'local'}
 						/>
 						<label htmlFor="cameraEnabled-calibrator" className="text-sm">Enable camera for scoring</label>
 					</div>
 					<div className="grid grid-cols-3 gap-2 items-center text-sm">
 						<div className="col-span-2 relative" ref={dropdownRef}>
 							<div 
-								className={`input w-full flex items-center justify-between cursor-pointer ${streaming ? 'opacity-50 cursor-not-allowed' : ''}`}
-								onClick={() => !streaming && setDropdownOpen(!dropdownOpen)}
+								className={`input w-full flex items-center justify-between cursor-pointer ${streaming || mode !== 'local' ? 'opacity-50 cursor-not-allowed' : ''}`}
+								onClick={() => !streaming && mode === 'local' && setDropdownOpen(!dropdownOpen)}
 							>
 								<span className="truncate">{selectedLabel}</span>
 								<svg className={`w-4 h-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
 								</svg>
 							</div>
-							{dropdownOpen && !streaming && ReactDOM.createPortal(
+							{dropdownOpen && !streaming && mode === 'local' && ReactDOM.createPortal(
 								<div className="fixed left-0 top-0 w-full h-full z-[9999]" style={{ pointerEvents: 'none' }}>
 									<div className="absolute" style={{ left: dropdownRef.current?.getBoundingClientRect().left || 0, top: dropdownRef.current?.getBoundingClientRect().bottom || 0, width: dropdownRef.current?.offsetWidth || 240, pointerEvents: 'auto' }}>
 										<div className="bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
@@ -827,7 +821,7 @@ export default function Calibrator() {
 							)}
 						</div>
 						<div className="text-right">
-							<button className="btn px-2 py-1" onClick={enumerate} disabled={streaming}>Refresh</button>
+							<button className="btn px-2 py-1" onClick={enumerate} disabled={streaming || mode !== 'local'}>Refresh</button>
 						</div>
 					</div>
 					{preferredCameraLabel && (
