@@ -18,8 +18,8 @@ export default function Calibrator() {
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const [streaming, setStreaming] = useState(false)
 	const [phase, setPhase] = useState<Phase>('camera')
-	// Lock mode to 'phone' for this instance
-	const [mode, setMode] = useState<CamMode>('phone')
+	// Default to local or last-used mode, but allow user to freely change
+	const [mode, setMode] = useState<CamMode>(() => (localStorage.getItem('ndn:cal:mode') as CamMode) || 'local')
 	const [dstPoints, setDstPoints] = useState<Point[]>([]) // image points clicked in order TOP, RIGHT, BOTTOM, LEFT
 	const [snapshotSet, setSnapshotSet] = useState(false)
 	// Track current frame (video/snapshot) size to preserve aspect ratio in the preview container
@@ -67,22 +67,7 @@ export default function Calibrator() {
 	}, [])
 
 	// Auto-start pairing when user switches to Phone mode, or wifi discovery for wifi mode
-	useEffect(() => {
-		if (mode === 'phone') {
-			if (!paired || !streaming) {
-				startPhonePairing()
-			}
-		} else if (mode === 'wifi') {
-			if (!streaming) {
-				startWifiConnection()
-			}
-		} else if (mode === 'local') {
-			if (!streaming) {
-				startCamera()
-			}
-		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [mode])
+	// Remove all automatic mode switching. Only start camera/pairing when user clicks the button.
 	const mobileUrl = useMemo(() => {
 		const code = pairCode || '____'
 		// Prefer configured WS host (Render) when available to build the correct server origin
