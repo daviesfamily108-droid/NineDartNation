@@ -18,6 +18,7 @@
   </style>
 </head>
 <body>
+  <div id="fatal-error" style="color: #ff5555; margin: 12px auto; max-width: 720px; font-weight: bold;"></div>
   <div class="container">
     <h2>📷 NDN Mobile Camera</h2>
     <div class="card">
@@ -166,6 +167,14 @@
     }
 
     function log(t) { msg.textContent = t }
+    function showFatalError(msg) {
+      const el = document.getElementById('fatal-error');
+      if (el) el.textContent = msg;
+    }
+    function clearFatalError() {
+      const el = document.getElementById('fatal-error');
+      if (el) el.textContent = '';
+    }
 
     function detectFeatures() {
       const isAndroid = /Android/i.test(navigator.userAgent)
@@ -184,9 +193,13 @@
 
     async function enumerateDevices() {
       try {
+        clearFatalError();
         // Request a minimal stream to ensure labels are available in browsers like iOS Safari
         let miniStream = null
-        try { miniStream = await navigator.mediaDevices.getUserMedia({ video: true }) } catch (e) { console.warn('Permission prompt denied or not available:', e) }
+        try { miniStream = await navigator.mediaDevices.getUserMedia({ video: true }) } catch (e) {
+          showFatalError('Permission prompt denied or not available: ' + (e && e.message ? e.message : String(e)));
+          console.warn('Permission prompt denied or not available:', e)
+        }
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(d => d.kind === 'videoinput');
         devicesList = videoDevices
@@ -207,6 +220,7 @@
         console.log('Devices:', videoDevices)
         return videoDevices
       } catch (err) {
+        showFatalError('Device enumeration error: ' + (err && err.message ? err.message : String(err)));
         log('Device enumeration error')
         console.error('Device enumeration error:', err)
         return []
@@ -216,9 +230,9 @@
     async function startCam(facing) {
       if (stream) { try { stream.getTracks().forEach(t => t.stop()) } catch {} }
       try {
+        clearFatalError();
         let constraints = { video: {} };
         if (deviceId) {
-          // Try deviceId first; if it fails we'll retry with facingMode
           constraints.video.deviceId = { exact: deviceId };
         } else {
           constraints.video.facingMode = facing || 'environment';
@@ -227,12 +241,13 @@
         try {
           stream = await navigator.mediaDevices.getUserMedia(constraints);
         } catch (err) {
+          showFatalError('getUserMedia with deviceId failed: ' + (err && err.message ? err.message : String(err)));
           console.warn('getUserMedia with deviceId failed, retrying with facingMode if possible', err)
           if (deviceId) {
-            // Try without deviceId
             try {
               stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing || 'environment' } })
             } catch (err2) {
+              showFatalError('getUserMedia with facingMode failed: ' + (err2 && err2.message ? err2.message : String(err2)));
               throw err2
             }
           } else {
@@ -241,13 +256,14 @@
         }
         console.log('Camera stream obtained:', stream);
         v.srcObject = stream;
-        await v.play().catch((e) => console.error('Video play failed:', e));
+        await v.play().catch((e) => { showFatalError('Video play failed: ' + (e && e.message ? e.message : String(e))); console.error('Video play failed:', e); });
         log('Camera started');
       } catch (err) {
+        showFatalError('Camera error: ' + (err && err.message ? err.message : String(err)));
         log('Camera error: ' + (err && err.message ? err.message : String(err)));
         console.error('Camera error:', err);
-        // Guidance for users
         if (err && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
+          showFatalError('Permission denied. Please enable camera in Safari settings and retry.');
           log('Permission denied. Please enable camera in Safari settings and retry.')
         }
       }
@@ -290,8 +306,10 @@
     function ensureWS() {
       const u = wsUrl()
       try {
+        clearFatalError();
         ws = new WebSocket(u)
       } catch (e) {
+        showFatalError('WebSocket creation failed: ' + (e && e.message ? e.message : String(e)));
         log('WebSocket creation failed')
         sendDiagnostic('ws-create-failed', { err: String(e), url: u })
         return Promise.reject(e)
@@ -305,8 +323,8 @@
           } catch (e) { console.warn('pending flush failed', e) }
           resolve(ws)
         }
-        ws.onclose = () => { wsStatus.textContent = 'WS: closed'; log('Connection closed'); sendDiagnostic('ws-closed') }
-        ws.onerror = (ev) => { wsStatus.textContent = 'WS: error'; log('WebSocket error'); sendDiagnostic('ws-error', { ev: String(ev) }) }
+  ws.onclose = () => { wsStatus.textContent = 'WS: closed'; log('Connection closed'); showFatalError('WebSocket connection closed.'); sendDiagnostic('ws-closed') }
+  ws.onerror = (ev) => { wsStatus.textContent = 'WS: error'; log('WebSocket error'); showFatalError('WebSocket error.'); sendDiagnostic('ws-error', { ev: String(ev) }) }
       })
     }
 
