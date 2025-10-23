@@ -161,7 +161,7 @@ export default function Calibrator() {
 	}
 
 	async function startPhonePairing() {
-		setPaired(false)
+		// Do not reset paired state, keep UI static
 		const socket = ensureWS()
 		if (socket.readyState === WebSocket.OPEN) {
 			socket.send(JSON.stringify({ type: 'cam-create' }))
