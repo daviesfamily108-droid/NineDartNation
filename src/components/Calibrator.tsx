@@ -27,7 +27,7 @@ export default function Calibrator() {
 	// Zoom for pixel-perfect point picking (0.5x – 2.0x)
 	const [zoom, setZoom] = useState<number>(1)
 		const { H, setCalibration, reset, errorPx, locked } = useCalibration()
-  const { calibrationGuide, setCalibrationGuide, preferredCameraId, cameraEnabled, setCameraEnabled } = useUserSettings()
+	const { calibrationGuide, setCalibrationGuide, preferredCameraId, cameraEnabled, setCameraEnabled, preferredCameraLocked, setPreferredCameraLocked } = useUserSettings()
 		// Detected ring data (from auto-detect) in image pixels
 	const [detected, setDetected] = useState<null | {
 		cx: number; cy: number;
@@ -349,6 +349,17 @@ export default function Calibrator() {
 		} else {
 			startPhonePairing()
 		}
+		// Lock the preferred camera selection while pairing is active so it doesn't
+		// flip automatically during the pairing flow.
+		lockSelectionForPairing()
+	}
+
+	// When user regenerates a pairing code we lock the preferred camera selection so
+	// it won't be changed accidentally by other parts of the UI while pairing is active.
+	// This implements the user's request that the camera selection 'stay static' after
+	// generating a code. The lock can be toggled by the user in the DevicePicker UI.
+	function lockSelectionForPairing() {
+		try { setPreferredCameraLocked(true) } catch {}
 	}
 
 	// Allow uploading a photo instead of using a live camera
@@ -688,7 +699,7 @@ export default function Calibrator() {
 
 		// DevicePicker moved from SettingsPanel
 		function DevicePicker() {
-			const { preferredCameraId, preferredCameraLabel, setPreferredCamera, cameraEnabled, setCameraEnabled } = useUserSettings()
+			const { preferredCameraId, preferredCameraLabel, setPreferredCamera, cameraEnabled, setCameraEnabled, preferredCameraLocked, setPreferredCameraLocked } = useUserSettings()
 			const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
 			const [err, setErr] = useState('')
 			const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -743,13 +754,22 @@ export default function Calibrator() {
 							Selected camera is no longer available. 
 							<button 
 								className="underline ml-1" 
-								onClick={() => setPreferredCamera(undefined, '')}
+											onClick={() => setPreferredCamera(undefined, '', true)}
 								disabled={streaming}
 							>
 								Use auto-selection
 							</button>
 						</div>
 					)}
+					{/* Lock indicator and toggle for camera selection */}
+					<div className="flex items-center gap-2 mb-2">
+						{preferredCameraLocked ? (
+							<div className="text-xs text-emerald-400">🔒 Camera selection locked</div>
+						) : (
+							<div className="text-xs text-slate-400">Camera selection unlocked</div>
+						)}
+						<button className="btn btn--ghost px-2 py-0.5 text-xs ml-2" onClick={() => setPreferredCameraLocked(!preferredCameraLocked)}>{preferredCameraLocked ? 'Unlock' : 'Lock'}</button>
+					</div>
 					<div className="flex items-center gap-3 mb-3">
 						<input
 							type="checkbox"
@@ -779,7 +799,7 @@ export default function Calibrator() {
 											<div 
 												className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm"
 												onClick={() => {
-													setPreferredCamera(undefined, '')
+													setPreferredCamera(undefined, '', true)
 												}}
 											>
 												Auto (browser default)
@@ -791,7 +811,7 @@ export default function Calibrator() {
 														key={d.deviceId} 
 														className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm"
 														onClick={() => {
-															setPreferredCamera(d.deviceId, d.label || '')
+															setPreferredCamera(d.deviceId, d.label || '', true)
 														}}
 													>
 														{label}

@@ -20,6 +20,7 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
   const [discoveringWifi, setDiscoveringWifi] = useState<boolean>(false)
   const [usbDevices, setUsbDevices] = useState<USBDevice[]>([])
   const [discoveringUsb, setDiscoveringUsb] = useState<boolean>(false)
+  const setPreferredCameraLocked = useUserSettings(s => s.setPreferredCameraLocked)
   useEffect(() => {
     const h = window.location.hostname
     if (h === 'localhost' || h === '127.0.0.1') {
@@ -68,13 +69,9 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
     return () => clearInterval(t)
   }, [expiresAt])
   const ttl = useMemo(() => expiresAt ? Math.max(0, Math.ceil((expiresAt - now)/1000)) : null, [expiresAt, now])
-  // Auto-regenerate only if code expired and phone has not joined yet
-  useEffect(() => {
-    if (ttl === null) return
-    if (ttl <= 0 && !paired && !streaming && mode === 'phone') {
-      regenerateCode()
-    }
-  }, [ttl, paired, streaming, mode])
+  // Intentionally disabled automatic regeneration of phone pairing codes.
+  // Codes will only be created when the user explicitly requests it (button click).
+  // This prevents a code expiring and the UI silently generating a new one while pairing.
 
   useEffect(() => {
     if (autoStart) {
@@ -282,6 +279,7 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
     } else {
       startPhonePairing()
     }
+    try { setPreferredCameraLocked(true) } catch {}
   }
 
   function stopAll() {

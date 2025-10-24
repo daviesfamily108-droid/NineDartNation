@@ -25,6 +25,7 @@ type SettingsState = {
   // Devices & preferences
   preferredCameraId?: string
   preferredCameraLabel?: string
+  preferredCameraLocked?: boolean
   // UI variants
   offlineLayout?: 'classic' | 'modern'
   setFavoriteDouble: (d: string) => void
@@ -42,14 +43,15 @@ type SettingsState = {
   setCameraScale: (n: number) => void
   setCameraAspect: (a: 'wide' | 'square') => void
   setCalibrationGuide: (v: boolean) => void
-  setPreferredCamera: (id: string|undefined, label?: string) => void
+  setPreferredCamera: (id: string|undefined, label?: string, force?: boolean) => void
+  setPreferredCameraLocked: (v: boolean) => void
   setOfflineLayout: (mode: 'classic'|'modern') => void
   setAutoscoreProvider: (p: 'built-in' | 'external-ws') => void
   setAutoscoreWsUrl: (u: string) => void
 }
 const KEY = 'ndn_user_settings'
 
-function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'callerVoice' | 'avgMode' | 'callerVolume' | 'speakCheckoutOnly' | 'autoStartOffline' | 'rememberLastOffline' | 'lastOffline' | 'reducedMotion' | 'compactHeader' | 'allowSpectate' | 'cameraScale' | 'cameraAspect' | 'calibrationGuide' | 'preferredCameraId' | 'preferredCameraLabel' | 'offlineLayout' | 'autoscoreProvider' | 'autoscoreWsUrl'> {
+function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'callerVoice' | 'avgMode' | 'callerVolume' | 'speakCheckoutOnly' | 'autoStartOffline' | 'rememberLastOffline' | 'lastOffline' | 'reducedMotion' | 'compactHeader' | 'allowSpectate' | 'cameraScale' | 'cameraAspect' | 'calibrationGuide' | 'preferredCameraId' | 'preferredCameraLabel' | 'preferredCameraLocked' | 'offlineLayout' | 'autoscoreProvider' | 'autoscoreWsUrl'> {
   try {
     const raw = localStorage.getItem(KEY)
   if (!raw) return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '' }
@@ -77,12 +79,13 @@ function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'calle
   autoscoreProvider: (j.autoscoreProvider === 'external-ws') ? 'external-ws' : 'built-in',
   autoscoreWsUrl: typeof j.autoscoreWsUrl === 'string' ? j.autoscoreWsUrl : '',
       calibrationGuide: (typeof j.calibrationGuide === 'boolean') ? j.calibrationGuide : true,
-      preferredCameraId: typeof j.preferredCameraId === 'string' ? j.preferredCameraId : undefined,
-      preferredCameraLabel: typeof j.preferredCameraLabel === 'string' ? j.preferredCameraLabel : undefined,
+  preferredCameraId: typeof j.preferredCameraId === 'string' ? j.preferredCameraId : undefined,
+  preferredCameraLabel: typeof j.preferredCameraLabel === 'string' ? j.preferredCameraLabel : undefined,
+  preferredCameraLocked: (typeof j.preferredCameraLocked === 'boolean') ? j.preferredCameraLocked : false,
       offlineLayout: j.offlineLayout === 'classic' ? 'classic' : 'modern',
     }
   } catch {
-  return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '' }
+  return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, preferredCameraLocked: false, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '' }
   }
 }
 
@@ -93,7 +96,7 @@ function save(partial: Partial<SettingsState>) {
   } catch {}
 }
 
-export const useUserSettings = create<SettingsState>((set) => ({
+export const useUserSettings = create<SettingsState>((set, get) => ({
   ...load(),
   setFavoriteDouble: (d) => { save({ favoriteDouble: d }); set({ favoriteDouble: d }) },
   setCallerEnabled: (v) => { save({ callerEnabled: v }); set({ callerEnabled: v }) },
@@ -112,6 +115,13 @@ export const useUserSettings = create<SettingsState>((set) => ({
   setAutoscoreProvider: (p) => { save({ autoscoreProvider: p }); set({ autoscoreProvider: p }) },
   setAutoscoreWsUrl: (u) => { save({ autoscoreWsUrl: u }); set({ autoscoreWsUrl: u }) },
   setCalibrationGuide: (v) => { save({ calibrationGuide: v }); set({ calibrationGuide: v }) },
-  setPreferredCamera: (id, label) => { save({ preferredCameraId: id, preferredCameraLabel: label }); set({ preferredCameraId: id, preferredCameraLabel: label }) },
+  setPreferredCamera: (id, label, force = false) => {
+    try {
+      const state = get()
+      if (state.preferredCameraLocked && !force) return
+    } catch {}
+    save({ preferredCameraId: id, preferredCameraLabel: label }); set({ preferredCameraId: id, preferredCameraLabel: label })
+  },
+  setPreferredCameraLocked: (v) => { save({ preferredCameraLocked: v }); set({ preferredCameraLocked: v }) },
   setOfflineLayout: (mode) => { save({ offlineLayout: mode }); set({ offlineLayout: mode }) },
 }))

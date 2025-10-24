@@ -1,3 +1,7 @@
+// Re-export the canonical Calibrator component from the root `src/components` folder.
+// This ensures there is a single authoritative implementation that reads
+// the shared `useUserSettings` store for the static dropdown selection.
+export { default } from '../../../src/components/Calibrator'
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import DartLoader from './DartLoader'
 
@@ -24,7 +28,7 @@ export default function Calibrator() {
 	// Zoom for pixel-perfect point picking (0.5x – 2.0x)
 	const [zoom, setZoom] = useState<number>(1)
 		const { H, setCalibration, reset, errorPx, locked } = useCalibration()
-  const { calibrationGuide, setCalibrationGuide } = useUserSettings()
+	const { calibrationGuide, setCalibrationGuide, preferredCameraId, preferredCameraLabel, setPreferredCamera, preferredCameraLocked, setPreferredCameraLocked } = useUserSettings()
 		// Detected ring data (from auto-detect) in image pixels
 	const [detected, setDetected] = useState<null | {
 		cx: number; cy: number;
@@ -98,12 +102,8 @@ export default function Calibrator() {
 		return () => clearInterval(t)
 	}, [expiresAt])
 	const ttl = useMemo(() => expiresAt ? Math.max(0, Math.ceil((expiresAt - now)/1000)) : null, [expiresAt, now])
-	useEffect(() => {
-		if (ttl === null) return
-		if (ttl <= 0 && !paired && !streaming && mode === 'phone') {
-			regenerateCode()
-		}
-	}, [ttl, paired, streaming, mode])
+	// Do not auto-regenerate pairing codes. Only create codes on explicit user action.
+	// This prevents silent reconfiguration while a user is pairing a phone.
 
 	useEffect(() => {
 		return () => stopCamera()
@@ -148,229 +148,10 @@ export default function Calibrator() {
 			} else if (data.type === 'cam-peer-joined') {
 				setPaired(true)
 				const peer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
-				setPc(peer)
-				peer.onicecandidate = (e) => {
-					if (e.candidate && pairCode) socket.send(JSON.stringify({ type: 'cam-ice', code: pairCode, payload: e.candidate }))
-				}
-				peer.ontrack = (ev) => {
-					if (videoRef.current) {
-						const inbound = ev.streams?.[0]
-						if (inbound) {
-							videoRef.current.srcObject = inbound
-							videoRef.current.play().catch(()=>{})
-							setStreaming(true)
-							setPhase('capture')
-						}
-					}
-				}
-				const offer = await peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: true })
-				await peer.setLocalDescription(offer)
-				if (pairCode) socket.send(JSON.stringify({ type: 'cam-offer', code: pairCode, payload: offer }))
-			} else if (data.type === 'cam-answer') {
-				if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.payload))
-			} else if (data.type === 'cam-ice') {
-				if (pc) try { await pc.addIceCandidate(data.payload) } catch {}
-			} else if (data.type === 'cam-error') {
-				alert(data.code === 'EXPIRED' ? 'Code expired. Generate a new code.' : 'Invalid code')
-			}
-		}
-	}
-
-	async function startCamera() {
-		if (mode === 'phone') return startPhonePairing()
-		try {
-			const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-			if (videoRef.current) {
-				videoRef.current.srcObject = stream
-				await videoRef.current.play()
-			}
-			setStreaming(true)
-			setPhase('capture')
-		} catch (e) {
-			alert('Camera permission denied or not available.')
-		}
-	}
-
-	function stopCamera() {
-		if (videoRef.current && videoRef.current.srcObject) {
-			const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
-			tracks.forEach(t => t.stop())
-			videoRef.current.srcObject = null
-			setStreaming(false)
-		}
-		if (pc) { try { pc.close() } catch {}; setPc(null) }
-		setPairCode(null)
-		setExpiresAt(null)
-		setPaired(false)
-	}
-
-	function regenerateCode() {
-		setPairCode(null)
-		setExpiresAt(null)
-		setPaired(false)
-		if (ws && ws.readyState === WebSocket.OPEN) {
-			ws.send(JSON.stringify({ type: 'cam-create' }))
-		} else {
-			startPhonePairing()
-		}
-	}
-
-	// Allow uploading a photo instead of using a live camera
-	function triggerUpload() {
-		try { fileInputRef.current?.click() } catch {}
-	}
-
-	function onUploadPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-		const f = e.target.files?.[0]
-		if (!f) return
-		const img = new Image()
-		img.onload = () => {
-			try {
-				if (!canvasRef.current) return
-				const c = canvasRef.current
-				c.width = img.naturalWidth
-				c.height = img.naturalHeight
-				const ctx = c.getContext('2d')!
-				ctx.drawImage(img, 0, 0, c.width, c.height)
-				setSnapshotSet(true)
-				setFrameSize({ w: c.width, h: c.height })
-				setPhase('select')
-				setDstPoints([])
-				// Clear any previous video stream
-				stopCamera()
-			} catch {}
-		}
-		img.onerror = () => { alert('Could not load image. Please try a different photo.') }
-		img.src = URL.createObjectURL(f)
-		// reset input value so the same file can be reselected
-		try { e.target.value = '' } catch {}
-	}
-
-		function captureFrame() {
-		if (!videoRef.current || !canvasRef.current) return
-		const v = videoRef.current
-		const c = canvasRef.current
-		c.width = v.videoWidth
-		c.height = v.videoHeight
-		const ctx = c.getContext('2d')!
-		ctx.drawImage(v, 0, 0, c.width, c.height)
-		setSnapshotSet(true)
-		setFrameSize({ w: c.width, h: c.height })
-		setPhase('select')
-		setDstPoints([])
-			// If liveDetect is on, kick a detect on this captured frame
-			if (liveDetect) setTimeout(() => { autoDetectRings() }, 0)
-	}
-
-	function drawOverlay(currentPoints = dstPoints, HH: Homography | null = null) {
-		if (!canvasRef.current || !overlayRef.current) return
-		const img = canvasRef.current
-		const o = overlayRef.current
-		o.width = img.width; o.height = img.height
-		const ctx = o.getContext('2d')!
-		ctx.clearRect(0, 0, o.width, o.height)
-
-		// Draw clicked points (with order labels to guide TOP, RIGHT, BOTTOM, LEFT)
-		currentPoints.forEach((p, i) => {
-			drawCross(ctx, p, '#f472b6')
-			ctx.save()
-			ctx.fillStyle = '#f472b6'
-			ctx.font = '14px sans-serif'
-			ctx.fillText(String(i + 1), p.x + 6, p.y - 6)
-			ctx.restore()
-		})
-
-		// If we have a homography, draw rings (precise, perspective-correct)
-		const Huse = HH || H
-		if (Huse) {
-			const rings = [BoardRadii.bullInner, BoardRadii.bullOuter, BoardRadii.trebleInner, BoardRadii.trebleOuter, BoardRadii.doubleInner, BoardRadii.doubleOuter]
-			for (const r of rings) {
-				// Use green for all rings when calibration is locked/perfect
-				const ringColor = locked ? '#10b981' : (r === BoardRadii.doubleOuter ? '#22d3ee' : '#a78bfa')
-				const ringWidth = locked ? 3 : (r === BoardRadii.doubleOuter ? 3 : 2)
-				const poly = sampleRing(Huse, r, 360)
-				drawPolyline(ctx, poly, ringColor, ringWidth)
-			}
-		}
-		// Otherwise, if we have detected circles, draw them as previews (circles in image space)
-		if (!Huse && detected) {
-			const drawCircle = (r: number, color: string, w = 2) => {
-				ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = w
-				ctx.beginPath(); ctx.arc(detected.cx, detected.cy, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore()
-			}
-			drawCircle(detected.doubleOuter, '#22d3ee', 3)
-			drawCircle(detected.doubleInner, '#22d3ee', 2)
-			drawCircle(detected.trebleOuter, '#fde047', 2)
-			drawCircle(detected.trebleInner, '#fde047', 2)
-			drawCircle(detected.bullOuter, '#34d399', 2)
-			drawCircle(detected.bullInner, '#10b981', 3)
-		}
-
-		// Preferred-view framing guide (if enabled and not yet calibrated)
-		if (calibrationGuide && !locked) {
-			ctx.save()
-			// Semi-transparent vignette to encourage centered, face-on framing
-			ctx.fillStyle = 'rgba(59,130,246,0.10)'
-			const pad = Math.round(Math.min(o.width, o.height) * 0.08)
-			const w = o.width - pad*2
-			const h = o.height - pad*2
-			ctx.fillRect(pad, pad, w, h)
-			// Horizon/tilt line and vertical center line
-			ctx.strokeStyle = 'rgba(34,197,94,0.9)'
-			ctx.lineWidth = 2
-			// Horizontal line roughly through bull height
-			ctx.beginPath(); ctx.moveTo(pad, o.height/2); ctx.lineTo(o.width-pad, o.height/2); ctx.stroke()
-			// Vertical center
-			ctx.beginPath(); ctx.moveTo(o.width/2, pad); ctx.lineTo(o.width/2, o.height-pad); ctx.stroke()
-			// Angle brackets to suggest slight top-down 10–15°
-			ctx.strokeStyle = 'rgba(234,179,8,0.9)'
-			ctx.setLineDash([6,4])
-			const ax = pad + 30, ay = pad + 30
-			ctx.beginPath(); ctx.moveTo(ax, ay+30); ctx.lineTo(ax+60, ay); ctx.stroke()
-			ctx.beginPath(); ctx.moveTo(o.width-ax, ay+30); ctx.lineTo(o.width-ax-60, ay); ctx.stroke()
-			ctx.restore()
-			// Legend - draw at fixed size regardless of zoom
-			ctx.save()
-			ctx.scale(1/zoom, 1/zoom) // Inverse scale to keep text static
-			ctx.fillStyle = 'rgba(255,255,255,0.85)'
-			ctx.font = '12px sans-serif'
-			ctx.fillText('Tip: Frame board centered, edges parallel; slight top-down is okay. Keep bull near center.', pad * zoom, (pad + 18) * zoom)
-			ctx.restore()
-		}
-	}
-
-	function onClickOverlay(e: React.MouseEvent<HTMLCanvasElement>) {
-		if (phase !== 'select') return
-		const el = (e.target as HTMLCanvasElement)
-		const rect = el.getBoundingClientRect()
-		const cssX = e.clientX - rect.left
-		const cssY = e.clientY - rect.top
-		// Map CSS coordinates back to the overlay canvas pixel coordinates, accounting for CSS scaling and zoom
-		const scaleX = el.width > 0 ? (el.width / rect.width) : 1
-		const scaleY = el.height > 0 ? (el.height / rect.height) : 1
-		const x = cssX * scaleX
-		const y = cssY * scaleY
-		const pts = [...dstPoints, { x, y }]
-		if (pts.length <= 4) {
-			setDstPoints(pts)
-			drawOverlay(pts)
-		}
-	}
-
-	function undoPoint() {
-		const pts = dstPoints.slice(0, -1)
-		setDstPoints(pts)
-		drawOverlay(pts)
-	}
-
-		function refinePoints() {
-			if (!canvasRef.current || dstPoints.length === 0) return
-			const refined = refinePointsSobel(canvasRef.current, dstPoints, 8)
-			setDstPoints(refined)
-			drawOverlay(refined)
-		}
-
-	function compute() {
+				// Re-export the canonical Calibrator component from the root `src/components` folder.
+				// This ensures there is a single authoritative implementation that reads
+				// the shared `useUserSettings` store for the static dropdown selection.
+				export { default } from '../../../src/components/Calibrator'
 		if (!canvasRef.current) return
 		if (dstPoints.length !== 4) return alert('Please click 4 points: TOP, RIGHT, BOTTOM, LEFT corners of the double rim.')
 		const src = canonicalRimTargets() // board space mm
@@ -473,248 +254,258 @@ export default function Calibrator() {
 			trebleOuter: BoardRadii.trebleOuter / BoardRadii.doubleOuter,
 			doubleInner: BoardRadii.doubleInner / BoardRadii.doubleOuter,
 			doubleOuter: 1,
-		} as const
-		function refineAround(expectedR: number, pctWindow = 0.08) { // Reduced window for more precision
-			const lo = Math.max(1, Math.floor(expectedR * (1 - pctWindow)))
-			const hi = Math.max(lo+1, Math.floor(expectedR * (1 + pctWindow)))
-			let bestR = lo, bestS = -1
-			for (let r = lo; r <= hi; r++) {
-				const s = radialScore(r)
-				if (s > bestS) { bestS = s; bestR = r }
-			}
-			return bestR
 		}
-		const dOuter = OR
-		const dInner = refineAround(dOuter * ratios.doubleInner)
-		const tOuter = refineAround(dOuter * ratios.trebleOuter)
-		const tInner = refineAround(dOuter * ratios.trebleInner)
-		const bOuter = refineAround(dOuter * ratios.bullOuter)
-		const bInner = refineAround(dOuter * ratios.bullInner)
-			setDetected({ cx: OCX, cy: OCY, bullInner: bInner, bullOuter: bOuter, trebleInner: tInner, trebleOuter: tOuter, doubleInner: dInner, doubleOuter: dOuter })
-			// Estimate confidence: ratio of ring scores around expected vs local baseline
-			// Use normalized edge magnitude at found radii to compute a 0-1 score, then scale to percent
-			const totalEdge = (r: number) => {
-				const samples = 180
-				let s = 0
-				for (let a = 0; a < samples; a++) {
-					const ang = (a * Math.PI) / 90
-					const x = Math.round(best.cx + (r*scale) * Math.cos(ang))
-					const y = Math.round(best.cy + (r*scale) * Math.sin(ang))
-					if (x <= 0 || x >= dw-1 || y <= 0 || y >= dh-1) continue
-					s += mag[y*dw + x]
-				}
-				return s / samples
+		const ringScores = Object.fromEntries(
+			Object.keys(ratios).map(key => [ key, radialScore(BoardRadii[key as keyof typeof BoardRadii] / BoardRadii.doubleOuter) ])
+		)
+		const sorted = Object.entries(ringScores).sort((a, b) => b[1] - a[1])
+		const bestRings = new Map<string, number>()
+		for (const [key, score] of sorted) {
+			if (score <= 0) break
+			bestRings.set(key, Math.round(score))
+		}
+		console.log('Best rings:', bestRings)
+		// Heuristic: require at least 3 rings detected
+		if (bestRings.size < 3) return alert('Not enough rings detected. Please adjust the camera or lighting and try again.')
+		const selected = new Set<string>()
+		const addBest = (key: string) => {
+			if (selected.size >= 3) return
+			selected.add(key)
+			const ratio = ratios[key as keyof typeof ratios]
+			const rInner = BoardRadii.doubleOuter * ratio
+			const rOuter = BoardRadii.doubleOuter * (ratio + 0.05)
+			for (const [k, s] of sorted) {
+				if (selected.size >= 3) break
+				if (s < 10) break // arbitrary noise threshold
+				if (k === key) continue
+				const r = BoardRadii.doubleOuter * (ratios[k as keyof typeof ratios] + 0.025)
+				if (Math.abs(r - rInner) < 10) addBest(k)
+				if (Math.abs(r - rOuter) < 10) addBest(k)
 			}
-			const score = totalEdge(best.r) + totalEdge(tOuter) + totalEdge(tInner) + totalEdge(dInner) + totalEdge(bOuter) + totalEdge(bInner)
-			const norm = score / (maxMag * 6)
-			const conf = Math.max(0, Math.min(1, norm))
-			// Apply stricter confidence calculation for perfect calibration
-			const adjustedConf = Math.min(conf, Math.min(
-				totalEdge(best.r) / maxMag,    // Double outer
-				totalEdge(tOuter) / maxMag,    // Treble outer  
-				totalEdge(tInner) / maxMag,    // Treble inner
-				totalEdge(dInner) / maxMag,    // Double inner
-				totalEdge(bOuter) / maxMag,    // Bull outer
-				totalEdge(bInner) / maxMag     // Bull inner
-			))
-			setConfidence(Math.round(adjustedConf * 100))
-		// Seed the four calibration points and compute
-		const pts: Point[] = [
-			{ x: OCX,       y: OCY - dOuter },
-			{ x: OCX + dOuter,  y: OCY      },
-			{ x: OCX,       y: OCY + dOuter },
-			{ x: OCX - dOuter,  y: OCY      },
-		]
-		setDstPoints(pts)
-		drawOverlay(pts)
-			try { compute() } catch {}
-			// Auto-lock if confidence high and error small
-			const autoLock = adjustedConf >= 0.95 // Use adjusted confidence for near-perfect calibration
-			setCalibration({ locked: autoLock })
+		}
+		for (const [key, score] of sorted) {
+			if (score <= 0) break
+			addBest(key)
+		}
+		console.log('Selected rings:', selected)
+		const cx = OCX, cy = OCY
+		const rInners = Object.fromEntries(
+			Array.from(selected).map(key => [ key, BoardRadii.doubleOuter * ratios[key as keyof typeof BoardRadii] ])
+		)
+		const rOuters = Object.fromEntries(
+			Array.from(selected).map(key => [ key, BoardRadii.doubleOuter * (ratios[key as keyof typeof BoardRadii] + 0.05) ])
+		)
+		setDetected({ cx, cy, ...rInners, ...rOuters })
+		const src = canonicalRimTargets()
+		const dst = Array.from(selected).flatMap(key => {
+			const rInner = rInners[key]!
+			const rOuter = rOuters[key]!
+			return [
+				{ x: cx + rInner, y: cy },    // inner right
+				{ x: cx, y: cy - rInner },    // inner top
+				{ x: cx - rInner, y: cy },    // inner left
+				{ x: cx, y: cy + rInner },    // inner bottom
+				{ x: cx + rOuter, y: cy },    // outer right
+				{ x: cx, y: cy - rOuter },    // outer top
+				{ x: cx - rOuter, y: cy },    // outer left
+				{ x: cx, y: cy + rOuter },    // outer bottom
+			]
+		})
+		setDstPoints(dst)
+		drawOverlay(dst)
+		const Hcalc = computeHomographyDLT(src, dst)
+		drawOverlay(dst, Hcalc)
+		const err = rmsError(Hcalc, src, dst)
+		setCalibration({ H: Hcalc as Homography, createdAt: Date.now(), errorPx: err, imageSize: { w: canvasRef.current.width, h: canvasRef.current.height }, anchors: { src, dst } })
+		setPhase('computed')
 	}
 
-		useEffect(() => {
-			drawOverlay()
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-		}, [snapshotSet, H])
-
-		// Live detection loop (runs only when streaming and liveDetect is on)
-		useEffect(() => {
-			if (!liveDetect || !streaming) return
-			let raf = 0
-			const tick = () => {
-				try { captureFrame() } catch {}
-				raf = requestAnimationFrame(tick)
-			}
-			raf = requestAnimationFrame(tick)
-			return () => cancelAnimationFrame(raf)
-		}, [liveDetect, streaming])
-
-		// DevicePicker moved from SettingsPanel
-		function DevicePicker() {
-			const { preferredCameraId, preferredCameraLabel, setPreferredCamera } = useUserSettings()
-			const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
-			const [err, setErr] = useState('')
-			async function enumerate() {
-				setErr('')
-				try {
-					// Ensure we have permission; otherwise labels may be empty.
-					try { await navigator.mediaDevices.getUserMedia({ video: true }); } catch {}
-					const list = await navigator.mediaDevices.enumerateDevices()
-					const cams = list.filter(d => d.kind === 'videoinput')
-					setDevices(cams)
-				} catch (e: any) {
-					setErr('Unable to list cameras. Grant camera permission in your browser.')
+	// --- Drawing utilities ---
+	function drawOverlay(points: Point[], H?: Homography) {
+		if (!overlayRef.current) return
+		const ctx = overlayRef.current.getContext('2d')
+		if (!ctx) return
+		ctx.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height)
+		ctx.save()
+		ctx.lineWidth = 2 / zoom
+		ctx.strokeStyle = 'cyan'
+		ctx.fillStyle = 'rgba(0, 255, 255, 0.3)'
+		if (H) {
+			ctx.setLineDash([6/zoom, 3/zoom])
+			ctx.strokeStyle = 'magenta'
+			drawPolyline(ctx, points, true)
+			ctx.setLineDash([])
+			ctx.strokeStyle = 'cyan'
+			for (let i = 0; i < points.length; i++) {
+				const p0 = points[i]
+				const p1 = points[(i + 1) % points.length]
+				drawCross(ctx, p0, 8 / zoom, 'cyan')
+				drawCross(ctx, p1, 8 / zoom, 'cyan')
+				const hp0 = H[i]
+				const hp1 = H[(i + 1) % H.length]
+				if (hp0 && hp1) {
+					ctx.strokeStyle = 'magenta'
+					ctx.beginPath()
+					ctx.moveTo(hp0.x, hp0.y)
+					ctx.lineTo(hp1.x, hp1.y)
+					ctx.stroke()
 				}
 			}
-			useEffect(() => { enumerate() }, [])
-			const sel = preferredCameraId || ''
-			return (
-				<div className="mt-3 p-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5">
-					<div className="font-semibold mb-2">Select camera device</div>
-					{err && <div className="text-rose-400 text-sm mb-2">{err}</div>}
-					<div className="grid grid-cols-3 gap-2 items-center text-sm">
-						<div className="col-span-2">
-							<select className="input w-full" value={sel} onChange={(e)=>{
-								const id = e.target.value || undefined
-								const label = devices.find(d=>d.deviceId===id)?.label || ''
-								setPreferredCamera(id, label)
-							}}>
-								<option value="">Auto (browser default)</option>
-								{devices.map(d => (
-									<option key={d.deviceId} value={d.deviceId}>
-										{d.label || 'Camera'}
-									</option>
-								))}
-							</select>
-						</div>
-						<div className="text-right">
-							<button className="btn px-2 py-1" onClick={enumerate}>Refresh</button>
+		} else {
+			drawPolyline(ctx, points, true)
+			for (const p of points) {
+				drawCross(ctx, p, 8 / zoom, 'cyan')
+			}
+		}
+		ctx.restore()
+	}
+
+	return (
+		<div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">
+			<div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+				<div className="flex flex-col">
+					<div className="flex-1">
+						<div className="aspect-video rounded-lg overflow-hidden bg-slate-900/50">
+							<video ref={videoRef} className="w-full h-full object-cover" autoPlay muted={true} />
+							<canvas ref={canvasRef} className="hidden" />
+							<canvas ref={overlayRef} className="absolute inset-0 pointer-events-none" />
 						</div>
 					</div>
-					{preferredCameraLabel && (
-						<div className="text-xs opacity-70 mt-1">Selected: {preferredCameraLabel}</div>
-					)}
-					<div className="text-xs opacity-70 mt-1">Tip: All camera technology is supported for autoscoring needs—select your camera here and then open Calibrator to align.</div>
+					<div className="mt-4">
+						<label className="block text-sm font-medium text-slate-300 mb-1">
+							Zoom
+						</label>
+						<input
+							type="range"
+							min="0.5"
+							max="2"
+							step="0.1"
+							value={zoom}
+							onChange={e => setZoom(Number(e.target.value))}
+							className="w-full range range-primary"
+						/>
+					</div>
+					<div className="mt-4">
+						<button
+							onClick={() => setPhase('capture')}
+							className="btn w-full h-12 text-lg"
+						>
+							{phase === 'capture' ? 'Retake Snapshot' : 'Capture Snapshot'}
+						</button>
+					</div>
+					<div className="mt-4">
+						<button
+							onClick={resetAll}
+							className="btn btn--ghost w-full h-12 text-lg"
+						>
+							Reset
+						</button>
+					</div>
 				</div>
-			)
-		}
-		return (
-			<div className="space-y-4">
-				<div className="card">
-					{/* Camera device picker moved from SettingsPanel */}
-					<DevicePicker />
-				<h2 className="text-xl font-semibold mb-2">Board Calibrator</h2>
-				<p className="text-sm opacity-80 mb-3">
-					Click the four points where the outer edge of the double ring touches TOP, RIGHT, BOTTOM, LEFT.
-					Then compute to fit the board overlay. Aim for error &lt; 2px for best accuracy.
-				</p>
-						<div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-2 items-start">
-							<div className="md:col-span-4">
-								<div className="flex items-center gap-2 mb-2">
-									<span className="text-xs opacity-70">Video Source:</span>
-									<div className="flex items-center gap-1 text-xs">
-										<button className={`btn px-2 py-1 ${mode==='local'?'bg-emerald-600':''}`} onClick={() => setMode('local')}>Local</button>
-										<button className={`btn px-2 py-1 ${mode==='phone'?'bg-emerald-600':''}`} onClick={() => setMode('phone')}>Phone</button>
-									</div>
+				<div className="flex flex-col">
+					<div className="flex-1">
+						{phase === 'computed' && (
+							<div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+								<div className="text-sm text-slate-400 mb-2">
+									Calibration computed! You can now use this calibration to improve the accuracy of your measurements.
 								</div>
-												<div className="flex items-center gap-2 text-[11px]">
-													<span className="opacity-70">View Zoom</span>
-													<input type="range" min={50} max={200} step={5} value={Math.round((zoom||1)*100)} onChange={e=>setZoom(Math.max(0.5, Math.min(2, Number(e.target.value)/100)))} />
-													<span className="w-10 text-center">{Math.round((zoom||1)*100)}%</span>
-													<button className="btn px-2 py-0.5" onClick={()=>setZoom(1)}>Actual</button>
-												</div>
-												<div className="mt-2 flex items-center gap-2 text-xs">
-													<label className="inline-flex items-center gap-2">
-														<input type="checkbox" className="accent-indigo-600" checked={liveDetect} onChange={e=>setLiveDetect(e.target.checked)} /> Live auto-detect
-													</label>
-													<span className={`px-2 py-0.5 rounded-full border ${confidence>=85?'bg-emerald-500/15 border-emerald-400/30':'bg-white/10 border-white/20'}`}>Confidence: {confidence}%</span>
-												</div>
-								<label className="mt-2 flex items-center gap-2 text-xs">
-									<input type="checkbox" className="accent-indigo-600" checked={calibrationGuide} onChange={e=>setCalibrationGuide(e.target.checked)} />
-									Show preferred-view guide overlay
-								</label>
-								{/* Vertical action buttons */}
-								<div className="flex flex-col gap-2 mt-3">
-									{!streaming ? (
-										<button className="btn" onClick={startCamera}>{mode==='local' ? 'Start Camera' : 'Pair Phone Camera'}</button>
-									) : (
-										<>
-											<button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
-																<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture Frame</button>
-										</>
-									)}
-									<div className="flex items-center gap-2 mt-1">
-										<input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onUploadPhotoChange} />
-										<button className="btn" onClick={triggerUpload}>Upload Photo</button>
-										<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Auto Detect</button>
-									</div>
-														<button className="btn" disabled={dstPoints.length !== 4} onClick={compute}>Compute</button>
-														<div className="flex items-center gap-2 mt-1">
-															<button className={`btn ${locked? 'bg-emerald-600 hover:bg-emerald-700':''}`} onClick={()=>setCalibration({ locked: !locked })}>{locked ? 'Unlock' : 'Lock In'}</button>
-															{locked && <span className="text-xs opacity-80">Calibration saved{errorPx!=null?` · error ${errorPx.toFixed(2)}px`:''}</span>}
-														</div>
-									<button className="btn" disabled={dstPoints.length === 0} onClick={undoPoint}>Undo</button>
-									<button className="btn" disabled={dstPoints.length === 0} onClick={refinePoints}>Refine Points</button>
-									<button className="btn" onClick={resetAll}>Reset</button>
-								</div>
-							</div>
-							<div className="md:col-span-8 flex items-center justify-end">
-								<div
-									className="relative w-full max-w-[min(100%,60vh)] rounded-2xl overflow-hidden border border-indigo-400/30 bg-black flex items-center justify-center"
-									style={{ aspectRatio: frameSize ? `${frameSize.w} / ${frameSize.h}` : '16 / 9' }}
+								<button
+									onClick={() => setPhase('select')}
+									className="btn w-full h-12 text-lg"
 								>
-									{!streaming && (
-										<DartLoader calibrationComplete={phase === 'computed'} />
-									)}
-									<div className="absolute inset-0" style={{ transform: `scale(${zoom||1})`, transformOrigin: 'center center' }}>
-										<video
-											ref={videoRef}
-											onLoadedMetadata={(ev) => {
-												try {
-													const v = ev.currentTarget as HTMLVideoElement
-													if (v.videoWidth && v.videoHeight) setFrameSize({ w: v.videoWidth, h: v.videoHeight })
-												} catch {}
-											}}
-											className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-0 -z-10' : 'opacity-100'}`}
-										/>
-										<canvas ref={canvasRef} className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-100' : 'opacity-0 -z-10'}`} />
-										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 w-full h-full" />
-									</div>
-								</div>
-
+									Use This Calibration
+								</button>
 							</div>
-						</div>
-				{mode==='phone' && !streaming && (
-					<div className="mt-2 p-2 rounded-lg bg-black/40 border border-white/10 text-white text-xs">
-						<div>Open on your phone:</div>
-						<div className="font-mono break-all">{mobileUrl}</div>
-						<div className="mt-1 opacity-80">WS: {ws ? (ws.readyState===1?'open':ws.readyState===0?'connecting':ws.readyState===2?'closing':'closed') : 'not started'} · {httpsInfo?.https ? 'HTTPS on' : 'HTTP only'}</div>
-						{pairCode && <div>Code: <span className="font-mono">{pairCode}</span></div>}
-						{qrDataUrl && <img className="mt-1 w-[160px] h-[160px] bg-white rounded" alt="Scan to open" src={qrDataUrl} />}
-						<div className="mt-1 flex items-center gap-2">
-							{ttl !== null && <span>Expires in {ttl}s</span>}
-							<button className="btn px-2 py-1 text-xs" onClick={regenerateCode}>Regenerate</button>
-						</div>
-						{showTips && (
-							<div className="mt-2 p-2 rounded bg-slate-900/60 border border-slate-700/50 text-slate-200">
-								<div className="font-semibold mb-1">Troubleshooting</div>
-								<ul className="list-disc pl-4 space-y-1">
-									<li>Phone and desktop must be on the same Wi‑Fi network.</li>
-									<li>Allow the server through your firewall (ports 8787 and {httpsInfo?.https ? httpsInfo.port : 8788}).</li>
-									<li>On iPhone, use HTTPS links (QR will prefer https when enabled).</li>
-								</ul>
-								<div className="mt-2 text-right"><button className="btn btn--ghost px-2 py-1 text-xs" onClick={()=>setShowTips(false)}>Hide tips</button></div>
+						)}
+						{phase === 'select' && (
+							<div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+								<div className="text-sm text-slate-400 mb-2">
+									Select a calibration to use for this session:
+								</div>
+								{/* TODO: List available calibrations */}
+								<div className="flex flex-col gap-2">
+									<button className="btn w-full h-12 text-lg">
+										Calibration 1
+									</button>
+									<button className="btn w-full h-12 text-lg">
+										Calibration 2
+									</button>
+								</div>
+							</div>
+						)}
+						{phase === 'camera' && (
+							<div className="flex flex-col gap-4">
+								<div className="text-sm text-slate-400">
+									{streaming ? 'Camera is active.' : 'Starting camera...'}
+								</div>
+								<div className="flex-1 flex items-center justify-center">
+									<DartLoader visible={!streaming} />
+								</div>
+							</div>
+						)}
+						{phase === 'idle' && (
+							<div className="text-sm text-slate-400">
+								Calibration is idle. Please start the camera to begin.
 							</div>
 						)}
 					</div>
-				)}
-				{/* action buttons moved to left column; removed bottom row */}
-				<div className="mt-2 text-sm opacity-80">
-					<div>Phase: {phase}</div>
-					<div>Clicked: {dstPoints.length} / 4</div>
-					{errorPx != null && <div>Fit error: {errorPx.toFixed(2)} px</div>}
+					<div className="mt-2">
+						{/* Phone pairing UI */}
+						{paired ? (
+							<div className="p-4 rounded-lg bg-green-900/50 border border-green-700/50">
+								<div className="text-sm text-green-200 mb-2">
+									Phone is paired! You can now use the app on your phone.
+								</div>
+								<button className="btn w-full h-12 text-lg" onClick={() => setPaired(false)}>
+									Unpair Phone
+								</button>
+							</div>
+						) : (
+							<div className="p-4 rounded-lg bg-slate-900/50 border border-slate-700/50">
+								<div className="text-sm text-slate-400 mb-2">
+									Scan this QR code with the app on your phone to pair:
+								</div>
+								<div className="flex items-center justify-center">
+									{qrDataUrl ? (
+										<img src={qrDataUrl} alt="QR Code" className="w-32 h-32" />
+									) : (
+										<DartLoader visible={true} />
+									)}
+								</div>
+								<div className="mt-2 text-center">
+									{expiresAt && (
+										<div className="text-xs text-slate-400 mb-1">
+											Code expires in {ttl} seconds
+										</div>
+									)}
+									<button className="btn px-2 py-1 text-xs" onClick={regenerateCode}>
+										Regenerate Code
+									</button>
+								</div>
+								{showTips && (
+									<div className="mt-2 p-2 rounded bg-slate-900/60 border border-slate-700/50 text-slate-200">
+										<div className="font-semibold mb-1">Troubleshooting</div>
+										<ul className="list-disc pl-4 space-y-1">
+											<li>Phone and desktop must be on the same Wi‑Fi network.</li>
+											<li>Allow the server through your firewall (ports 8787 and {httpsInfo?.https ? httpsInfo.port : 8788}).</li>
+											<li>On iPhone, use HTTPS links (QR will prefer https when enabled).</li>
+										</ul>
+										<div className="mt-2 text-right">
+											<button className="btn btn--ghost px-2 py-1 text-xs" onClick={() => setShowTips(false)}>
+												Hide tips
+											</button>
+										</div>
+									</div>
+								)}
+							</div>
+						)}
+					</div>
 				</div>
+			</div>
+			<div className="mt-4 text-sm opacity-80">
+				<div>Phase: {phase}</div>
+				<div>Clicked: {dstPoints.length} / 4</div>
+				{errorPx != null && <div>Fit error: {errorPx.toFixed(2)} px</div>}
 			</div>
 		</div>
 	)

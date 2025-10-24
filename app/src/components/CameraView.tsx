@@ -32,7 +32,7 @@ export default function CameraView({
   onGenericReplace?: (value: number, ring: Ring, meta: { label: string }) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const { preferredCameraId, setPreferredCamera, autoscoreProvider, autoscoreWsUrl } = useUserSettings()
+    const { preferredCameraId, setPreferredCamera, autoscoreProvider, autoscoreWsUrl } = useUserSettings()
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -184,9 +184,10 @@ export default function CameraView({
           className="bg-black/20 rounded px-1 py-0.5"
           value={preferredCameraId || ''}
           onChange={async (e)=>{
-            const id = e.target.value || undefined
-            const label = availableCameras.find(d=>d.deviceId===id)?.label
-            setPreferredCamera(id, label||'')
+              const id = e.target.value || undefined
+              const label = availableCameras.find(d=>d.deviceId===id)?.label
+              // Force the user-initiated change even if selection is locked
+              setPreferredCamera(id, label||'', true)
             stopCamera(); await startCamera()
           }}
         >

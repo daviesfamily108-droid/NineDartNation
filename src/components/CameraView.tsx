@@ -240,7 +240,8 @@ export default function CameraView({
             if (cameraStarting) return
             const id = e.target.value || undefined
             const label = availableCameras.find(d=>d.deviceId===id)?.label
-            setPreferredCamera(id, label||'')
+            // This is a user-initiated change so force the preference even when locked
+            setPreferredCamera(id, label||'', true)
             // Stop current camera and wait for cleanup
             stopCamera()
             // Small delay to ensure camera device is fully released
