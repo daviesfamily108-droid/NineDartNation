@@ -57,8 +57,25 @@ if (process.env.REDIS_URL) {
   console.log('?? DEBUG: REDIS_URL length:', process.env.REDIS_URL.length);
 }
 
-// Handle Redis URL - ensure it has proper protocol
+// Handle Redis URL - prefer REDIS_URL; if not present, attempt to build one from
+// Upstash REST variables (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN) so
+// Render users who set those don't need to re-paste credentials.
 let redisUrl = process.env.REDIS_URL;
+if (!redisUrl && process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+  try {
+    // UPSTASH_REDIS_REST_URL looks like: https://<id>.upstash.io
+    // We build a redis URI of the form: rediss://default:<TOKEN>@<host>
+    const restUrl = String(process.env.UPSTASH_REDIS_REST_URL).trim();
+    const token = String(process.env.UPSTASH_REDIS_REST_TOKEN).trim();
+    // Remove protocol
+    const host = restUrl.replace(/^https?:\/\//, '')
+    // Construct rediss URI (Upstash accepts 'default' as username in some variants)
+    redisUrl = `rediss://default:${encodeURIComponent(token)}@${host}`
+    console.log('[REDIS] Built REDIS_URL from UPSTASH_REDIS_REST_URL+TOKEN')
+  } catch (e) {
+    console.warn('[REDIS] Failed to build REDIS_URL from Upstash env vars', e?.message || e)
+  }
+}
 if (redisUrl) {
   // Convert https:// to rediss:// for TLS connections (Upstash, etc.)
   if (redisUrl.startsWith('https://')) {
@@ -81,8 +98,26 @@ if (redisClient) {
     }
   });
   redisClient.on('connect', () => console.log('[REDIS] Connected successfully'));
-  redisClient.connect().catch(err => {
-    console.warn('[REDIS] Failed to connect:', err.message);
+  redisClient.connect().then(async () => {
+    try {
+      // Quick connectivity check (ping) and atomic reservation test so startup logs
+      const pong = await redisClient.ping();
+      console.log('[REDIS] ping:', pong);
+      const testKey = `ndn_startup_test_${Date.now()}`;
+      let setRes = null;
+      try {
+        setRes = await redisClient.set(testKey, '1', { PX: 5000, NX: true });
+        // cleanup
+        try { await redisClient.del(testKey) } catch (e) {}
+      } catch (e) {
+        setRes = String(e?.message || e);
+      }
+      console.log('[REDIS] reservation test:', setRes);
+    } catch (err) {
+      console.warn('[REDIS] connectivity test failed:', err?.message || err);
+    }
+  }).catch(err => {
+    console.warn('[REDIS] Failed to connect:', err.message || err);
     console.warn('[REDIS] Falling back to in-memory storage for sessions');
   });
 } else {
@@ -540,36 +575,8 @@ const redisHelpers = {
 // register.registerMetric(celebrations180Total)
 
 // Security & performance
-// Enable CORS using configured origin to allow frontends (Netlify) to call API
-try {
-  const rawCors = (process.env.CORS_ORIGIN || '*').trim()
-  let corsOptions = {
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
-  }
-
-  if (rawCors === '*') {
-    corsOptions.origin = true
-  } else if (rawCors.includes(',')) {
-    // Support comma-separated list of allowed origins
-    const allowed = rawCors.split(',').map(s => s.trim()).filter(Boolean)
-    corsOptions.origin = function(origin, callback) {
-      // allow non-browser requests like curl (no origin)
-      if (!origin) return callback(null, true)
-      if (allowed.indexOf(origin) !== -1) return callback(null, true)
-      return callback(new Error('Not allowed by CORS'), false)
-    }
-  } else {
-    corsOptions.origin = rawCors
-  }
-
-  app.use(cors(corsOptions))
-  app.options('*', cors(corsOptions))
-  console.log('[CORS] Enabled with origin:', rawCors)
-} catch (err) {
-  console.warn('[CORS] Failed to enable CORS middleware, continuing without it:', err && err.message)
-}
+// app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
+// app.use(cors())
 app.use(compression())
 // const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
 // app.use(limiter)
@@ -854,6 +861,29 @@ app.get('/api/debug/supabase', (req, res) => {
     supabaseUrl: supabase ? 'configured' : 'not configured'
   });
 });
+
+// Debug endpoint to check Redis / Upstash connectivity and reservation test
+app.get('/api/debug/redis', async (req, res) => {
+  try {
+    if (!redisClient) return res.json({ configured: false, message: 'REDIS_URL not configured' })
+    // basic ping
+    let pong = null
+    try { pong = await redisClient.ping() } catch (e) { pong = String(e.message || e) }
+    // attempt an atomic reservation test
+    const testKey = `ndn_test_${Date.now()}`
+    let setRes = null
+    try {
+      setRes = await redisClient.set(testKey, '1', { PX: 5000, NX: true })
+      // cleanup
+      try { await redisClient.del(testKey) } catch (e) {}
+    } catch (e) {
+      setRes = String(e.message || e)
+    }
+    return res.json({ configured: true, ping: pong, reservationSetResult: setRes })
+  } catch (e) {
+    return res.status(500).json({ configured: false, error: e?.message || String(e) })
+  }
+})
 app.get('/metrics', async (req, res) => {
   try {
     res.setHeader('Content-Type', register.contentType)
@@ -1383,6 +1413,37 @@ app.post('/api/admin/quick-fix', (req, res) => {
   }
 })
 
+// Admin: graceful shutdown via HTTP (cross-platform friendly)
+// Authorization: either provide requesterEmail === OWNER_EMAIL in the body,
+// or include a valid secret in header `x-admin-secret` or body { secret } matching NDN_ADMIN_SECRET.
+app.post('/api/admin/shutdown', (req, res) => {
+  const { requesterEmail } = req.body || {}
+  const providedSecret = req.headers['x-admin-secret'] || req.body?.secret
+  const secretOk = process.env.NDN_ADMIN_SECRET && String(providedSecret || '') === String(process.env.NDN_ADMIN_SECRET)
+  const ownerOk = String(requesterEmail || '').toLowerCase() === OWNER_EMAIL
+  if (!ownerOk && !secretOk) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+
+  try {
+    console.log('[ADMIN] Shutdown requested via HTTP by', ownerOk ? requesterEmail : 'secret')
+    // Respond before initiating shutdown so caller gets confirmation
+    res.json({ ok: true, message: 'Shutting down server (graceful).' })
+    // Allow a tiny delay to flush response, then shutdown
+    setTimeout(() => {
+      try { shutdown() } catch (e) { console.error('[ADMIN] shutdown() failed', e) }
+    }, 50)
+  } catch (e) {
+    console.error('[ADMIN] shutdown request error', e)
+    try { res.status(500).json({ ok: false, error: 'SHUTDOWN_FAILED' }) } catch {}
+  }
+})
+
+// Public legal pages route (serves professional static pages in /public/legal)
+app.get('/legal', (req, res) => {
+  const p = path.join(__dirname, 'public', 'legal', 'index.html')
+  if (fs.existsSync(p)) return res.sendFile(p)
+  res.status(404).send('Legal information not available')
+})
+
 // SPA fallback: serve index.html for any non-API, non-static route when a dist exists
 if (staticBase) {
   app.get('*', (req, res, next) => {
@@ -1450,8 +1511,10 @@ function handleSyncMessage(syncData) {
 // Node.js clustering for horizontal scaling
 const cluster = require('cluster');
 const numCPUs = Math.min(os.cpus().length, 7); // Limit to 7 workers max
+const DEBUG_SINGLE_WORKER = (String(process.env.DEBUG_SINGLE_WORKER || '').toLowerCase() === '1' || String(process.env.DEBUG_SINGLE_WORKER || '').toLowerCase() === 'true');
 
-if (cluster.isMaster || cluster.isPrimary) {
+// If DEBUG_SINGLE_WORKER is set, run the worker code in-process instead of forking a master/worker set.
+if ((cluster.isMaster || cluster.isPrimary) && !DEBUG_SINGLE_WORKER) {
   console.log(`[CLUSTER] Master process ${process.pid} starting ${numCPUs} workers...`);
 
   // Set up Redis pub/sub for cross-worker communication
@@ -1502,8 +1565,12 @@ if (cluster.isMaster || cluster.isPrimary) {
   });
 
 } else {
-  // Worker process - start the server
-  console.log(`[CLUSTER] Worker ${process.pid} starting...`);
+  // Worker process - start the server (or when DEBUG_SINGLE_WORKER=1 we'll run worker code directly in this process)
+  if (DEBUG_SINGLE_WORKER && (cluster.isMaster || cluster.isPrimary)) {
+    console.log(`[CLUSTER] DEBUG_SINGLE_WORKER=1 — running worker code in-process (pid=${process.pid})`);
+  } else {
+    console.log(`[CLUSTER] Worker ${process.pid} starting...`);
+  }
 
   // Handle messages from master process (Redis broadcasts and sync)
   process.on('message', (data) => {
@@ -1579,7 +1646,7 @@ app.options('/cam/signal/:code', (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, x-admin-secret')
   return res.status(204).end()
 })
-app.post('/cam/signal/:code', express.json(), (req, res) => {
+app.post('/cam/signal/:code', express.json(), async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   const code = String(req.params.code || '').toUpperCase()
   const body = req.body || {}
@@ -1587,7 +1654,7 @@ app.post('/cam/signal/:code', express.json(), (req, res) => {
   const msg = { type: body.type, payload: body.payload, source: body.source || 'unknown' }
   pushSignal(code, msg)
   // try to forward to connected WS peer if present
-  const sess = camSessions.get(code)
+  const sess = await camSessions.get(code)
   if (sess) {
     // decide target: if source is desktop, forward to phone and vice-versa
     const targetId = (msg.source === 'desktop') ? sess.phoneId : sess.desktopId
@@ -1698,12 +1765,18 @@ const clients = new Map(); // wsId -> ws (not persisted)
 // WebRTC camera pairing sessions (stored in DB)
 const camSessions = new RedisMap(redisClient, 'camSessions', 120); // code -> session data, 2min TTL
 const CAM_TTL_MS = 2 * 60 * 1000 // 2 minutes
+// Keep a synchronous in-memory set of active camera codes so code generation
+// and validation are deterministic and do not rely on async Redis lookups.
+const activeCamCodes = new Set();
 function genCamCode() {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  let code = ''
-  for (let i=0;i<4;i++) code += letters[Math.floor(Math.random()*letters.length)]
-  if (camSessions.has(code)) return genCamCode()
-  return code
+  let code = '';
+  // Loop until we generate a code not currently active in-memory.
+  do {
+    code = '';
+    for (let i = 0; i < 4; i++) code += letters[Math.floor(Math.random() * letters.length)];
+  } while (activeCamCodes.has(code));
+  return code;
 }
 // Simple in-memory tournaments (loaded from DB)
 const tournaments = new RedisMap(redisClient, 'tournaments');
@@ -2252,24 +2325,57 @@ if (wss) {
         }
       } else if (data.type === 'cam-create') {
         // Desktop requests a 4-letter pairing code
-        const code = genCamCode()
-        camSessions.set(code, { code, desktopId: ws._id, phoneId: null, ts: Date.now() })
+        let code;
+        let tries = 0;
+        // Attempt to reserve a code globally using Redis if available; otherwise reserve in-memory.
+        while (true) {
+          code = genCamCode()
+          if (redisClient) {
+            try {
+              const key = `camReserve:${code}`
+              const setRes = await redisClient.set(key, '1', { PX: CAM_TTL_MS, NX: true })
+              if (setRes === 'OK' || setRes === 'OK') {
+                // reserved in redis
+                try { activeCamCodes.add(code) } catch (e) {}
+                break
+              }
+            } catch (e) {
+              // Redis reservation failed; fallback to in-memory
+              try { activeCamCodes.add(code) } catch (er) {}
+              break
+            }
+          } else {
+            try { activeCamCodes.add(code) } catch (e) {}
+            break
+          }
+          tries++
+          if (tries > 12) break
+        }
+        try {
+          await camSessions.set(code, { code, desktopId: ws._id, phoneId: null, ts: Date.now() })
+        } catch (e) { console.warn('[CAM] failed to persist session', e) }
         try { ws.send(JSON.stringify({ type: 'cam-code', code, expiresAt: Date.now() + CAM_TTL_MS })) } catch {}
       } else if (data.type === 'cam-join') {
         // Phone joins with code
         const code = String(data.code || '').toUpperCase()
-        const sess = camSessions.get(code)
+        const sess = await camSessions.get(code)
         if (!sess) { try { ws.send(JSON.stringify({ type: 'cam-error', code: 'INVALID_CODE' })) } catch {}; return }
         // Expire stale codes
-        if (sess.ts && (Date.now() - sess.ts) > CAM_TTL_MS) { camSessions.delete(code); try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {}; return }
+        if (sess.ts && (Date.now() - sess.ts) > CAM_TTL_MS) {
+          try { await camSessions.delete(code) } catch (e) { /* ignore */ }
+          try { activeCamCodes.delete(code) } catch (e) {}
+          try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
+          try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {};
+          return
+        }
         sess.phoneId = ws._id
-        camSessions.set(code, sess)
+        try { await camSessions.set(code, sess) } catch (e) { console.warn('[CAM] failed to update session', e) }
         const desktop = clients.get(sess.desktopId)
         if (desktop && desktop.readyState === 1) desktop.send(JSON.stringify({ type: 'cam-peer-joined', code }))
         try { ws.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
       } else if (data.type === 'cam-offer' || data.type === 'cam-answer' || data.type === 'cam-ice') {
         const code = String(data.code || '').toUpperCase()
-        const sess = camSessions.get(code)
+        const sess = await camSessions.get(code)
         if (!sess) return
         let targetId
         if (data.type === 'cam-offer') {
@@ -2391,7 +2497,11 @@ if (wss) {
     clients.delete(ws._id)
     // Cleanup camera sessions involving this client
     for (const [code, sess] of Array.from(camSessions.entries())) {
-      if (sess.desktopId === ws._id || sess.phoneId === ws._id) camSessions.delete(code)
+      if (sess.desktopId === ws._id || sess.phoneId === ws._id) {
+        try { await camSessions.delete(code) } catch (e) { /* ignore */ }
+  try { activeCamCodes.delete(code) } catch (e) {}
+  try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
+      }
     }
     if (ws._email && users.has(ws._email)) {
       const u = users.get(ws._email)
@@ -2420,7 +2530,11 @@ if (wss) {
     }
     // Cleanup any camera sessions involving this client
     for (const [code, sess] of Array.from(camSessions.entries())) {
-      if (sess.desktopId === ws._id || sess.phoneId === ws._id) camSessions.delete(code)
+      if (sess.desktopId === ws._id || sess.phoneId === ws._id) {
+        try { await camSessions.delete(code) } catch (e) { /* ignore */ }
+  try { activeCamCodes.delete(code) } catch (e) {}
+  try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
+      }
     }
   });
 });
@@ -2453,18 +2567,70 @@ const hbTimer = setInterval(() => {
   // Clean up expired camera sessions
   const now = Date.now()
   for (const [code, sess] of camSessions.entries()) {
-    if (now - (sess.ts || 0) > CAM_TTL_MS) camSessions.delete(code)
+    if (now - (sess.ts || 0) > CAM_TTL_MS) {
+      try { camSessions.delete(code).catch(()=>{}) } catch (e) {}
+  try { activeCamCodes.delete(code) } catch (e) {}
+  try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
+    }
   }
 }, HEARTBEAT_INTERVAL)
 
 function shutdown() {
-  console.log('\n[Shutdown] closing servers...')
-  try { clearInterval(hbTimer) } catch {}
-  if (wss) try { wss.close() } catch {}
-  try { server.close(() => process.exit(0)) } catch { process.exit(0) }
+  console.error('\n[Shutdown] invoked — printing backtrace');
+  try { console.trace() } catch {}
+  try { clearInterval(hbTimer) } catch (e) { console.warn('[Shutdown] clearInterval error', e) }
+  // Determine whether debug single-worker mode is active now (in-memory flag or env)
+  const debugNow = (typeof DEBUG_SINGLE_WORKER !== 'undefined' && DEBUG_SINGLE_WORKER) ||
+    (String(process.env.DEBUG_SINGLE_WORKER || '').toLowerCase() === '1') ||
+    (String(process.env.DEBUG_SINGLE_WORKER || '').toLowerCase() === 'true');
+
+  if (debugNow) {
+    console.log('[Shutdown] DEBUG_SINGLE_WORKER set — performing graceful shutdown (closing servers). Process will remain alive for interactive debugging (no process.exit()).');
+  } else {
+    console.log('[Shutdown] Performing graceful shutdown (closing servers) and will exit process.');
+  }
+
+  if (wss) try { wss.close() } catch (e) { console.warn('[Shutdown] wss.close error', e) }
+  try {
+    if (server && typeof server.close === 'function') {
+      server.close(() => {
+        if (!debugNow) {
+          try { process.exit(0) } catch (e) { /* ignore */ }
+        } else {
+          console.log('[Shutdown] server closed; process left running for debugging.');
+        }
+      });
+      // For non-debug mode, ensure we don't hang forever if close never calls back
+      if (!debugNow) {
+        setTimeout(() => {
+          console.warn('[Shutdown] server.close did not complete in time — forcing exit');
+          try { process.exit(0) } catch (e) { /* ignore */ }
+        }, 30 * 1000);
+      }
+    } else {
+      if (!debugNow) try { process.exit(0) } catch (e) { /* ignore */ }
+    }
+  } catch (e) { console.warn('[Shutdown] server.close error', e); if (!debugNow) try { process.exit(0) } catch (er) { /* ignore */ } }
 }
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
+
+// Register signal handlers so shutdown is invoked on SIGINT/SIGTERM. In
+// DEBUG_SINGLE_WORKER mode shutdown will still run (and close servers), but
+// the process will not call process.exit so you can inspect state interactively.
+process.on('SIGINT', () => {
+  console.log('[Signal] SIGINT received');
+  shutdown();
+});
+process.on('SIGTERM', () => {
+  console.log('[Signal] SIGTERM received');
+  shutdown();
+});
+if (DEBUG_SINGLE_WORKER) {
+  console.log('[CLUSTER] DEBUG_SINGLE_WORKER=1 — SIGINT/SIGTERM handlers registered; shutdown will close servers but keep process alive for debugging by default.');
+}
+
+process.on('exit', (code) => {
+  try { console.log(`[Process] exit event; code=${code}`) } catch {}
+});
 
 app.get('/api/friends/search', (req, res) => {
   const q = String(req.query.q || '').toLowerCase()
