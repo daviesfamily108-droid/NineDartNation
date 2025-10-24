@@ -540,8 +540,22 @@ const redisHelpers = {
 // register.registerMetric(celebrations180Total)
 
 // Security & performance
-// app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
-// app.use(cors())
+// Enable CORS using configured origin to allow frontends (Netlify) to call API
+try {
+  const corsOrigin = process.env.CORS_ORIGIN || '*'
+  const corsOptions = {
+    origin: corsOrigin === '*' ? true : corsOrigin,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
+  }
+  app.use(cors(corsOptions))
+  // Explicitly handle preflight
+  app.options('*', cors(corsOptions))
+  console.log('[CORS] Enabled with origin:', corsOrigin)
+} catch (err) {
+  console.warn('[CORS] Failed to enable CORS middleware, continuing without it:', err && err.message)
+}
 app.use(compression())
 // const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
 // app.use(limiter)
