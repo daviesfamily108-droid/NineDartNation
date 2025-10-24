@@ -542,17 +542,31 @@ const redisHelpers = {
 // Security & performance
 // Enable CORS using configured origin to allow frontends (Netlify) to call API
 try {
-  const corsOrigin = process.env.CORS_ORIGIN || '*'
-  const corsOptions = {
-    origin: corsOrigin === '*' ? true : corsOrigin,
+  const rawCors = (process.env.CORS_ORIGIN || '*').trim()
+  let corsOptions = {
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
   }
+
+  if (rawCors === '*') {
+    corsOptions.origin = true
+  } else if (rawCors.includes(',')) {
+    // Support comma-separated list of allowed origins
+    const allowed = rawCors.split(',').map(s => s.trim()).filter(Boolean)
+    corsOptions.origin = function(origin, callback) {
+      // allow non-browser requests like curl (no origin)
+      if (!origin) return callback(null, true)
+      if (allowed.indexOf(origin) !== -1) return callback(null, true)
+      return callback(new Error('Not allowed by CORS'), false)
+    }
+  } else {
+    corsOptions.origin = rawCors
+  }
+
   app.use(cors(corsOptions))
-  // Explicitly handle preflight
   app.options('*', cors(corsOptions))
-  console.log('[CORS] Enabled with origin:', corsOrigin)
+  console.log('[CORS] Enabled with origin:', rawCors)
 } catch (err) {
   console.warn('[CORS] Failed to enable CORS middleware, continuing without it:', err && err.message)
 }
