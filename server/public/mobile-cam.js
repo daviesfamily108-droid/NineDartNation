@@ -24,6 +24,7 @@
     const wsStatus = document.getElementById('wsStatus');
     const sendDiagBtn = document.getElementById('sendDiag');
     const dumpDiagBtn = document.getElementById('dumpDiag');
+    const downloadDiagBtn = document.getElementById('downloadDiag');
     const diagOut = document.getElementById('diagOut');
 
     function wsUrl() {
@@ -110,6 +111,21 @@
                 try { ws.send(JSON.stringify(p)); } catch (e) { console.warn('flush send failed', e); window.__ndn_pending_diag.push(p); }
             });
         } catch (e) { console.warn('flush error', e); }
+    }
+
+    // Download diagnostics as a JSON file for easy sharing from mobile
+    function downloadDiagnostics() {
+        try {
+            const payload = JSON.stringify(window.__ndn_pending_diag || [], null, 2);
+            const blob = new Blob([payload], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ndn-diagnostics-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { try { document.body.removeChild(a); URL.revokeObjectURL(url); } catch (e) {} }, 500);
+        } catch (e) { console.warn('downloadDiagnostics failed', e); }
     }
 
     function log(t) { msg.textContent = t; }
@@ -312,4 +328,5 @@
 
     sendDiagBtn.addEventListener('click', (e) => { e.preventDefault(); try { if (ws && ws.readyState === WebSocket.OPEN) flushPendingDiagnostics(); log('Diagnostics sent'); } catch (e) { console.warn(e); log('Send failed'); } });
     dumpDiagBtn.addEventListener('click', (e) => { e.preventDefault(); try { diagOut.textContent = JSON.stringify(window.__ndn_pending_diag || [], null, 2); } catch (e) { diagOut.textContent = String(e); } });
+    if (downloadDiagBtn) downloadDiagBtn.addEventListener('click', (e) => { e.preventDefault(); downloadDiagnostics(); });
 })();

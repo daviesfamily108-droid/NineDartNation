@@ -123,6 +123,7 @@ export default function Calibrator() {
 			const host = window.location.hostname
 			const fallbacks = [sameOrigin, `${proto}://${host}:8787/ws`, `${proto}://${host}:3000/ws`]
 			const url = normalizedEnv || fallbacks[0]
+			console.log('[Calibrator] Connecting WebSocket to:', url)
 			let socket: WebSocket = new WebSocket(url)
 		setWs(socket)
 		return socket
@@ -223,6 +224,7 @@ export default function Calibrator() {
 				try {
 					const offer = await peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: true })
 					await peer.setLocalDescription(offer)
+					console.log('[Calibrator] Sending cam-offer for code:', pairCode)
 					if (pairCode) socket.send(JSON.stringify({ type: 'cam-offer', code: pairCode, payload: offer }))
 				} catch (err) {
 					console.error('Failed to create WebRTC offer:', err)
@@ -230,9 +232,11 @@ export default function Calibrator() {
 					stopCamera()
 				}
 			} else if (data.type === 'cam-answer') {
+				console.log('[Calibrator] Received cam-answer')
 				if (pc) {
 					try {
 						await pc.setRemoteDescription(new RTCSessionDescription(data.payload))
+						console.log('[Calibrator] Remote description set (answer)')
 					} catch (err) {
 						console.error('Failed to set remote description:', err)
 						alert('Camera pairing failed. Please try again.')
@@ -240,9 +244,11 @@ export default function Calibrator() {
 					}
 				}
 			} else if (data.type === 'cam-ice') {
+				console.log('[Calibrator] Received cam-ice')
 				if (pc) {
 					try {
 						await pc.addIceCandidate(data.payload)
+						console.log('[Calibrator] ICE candidate added')
 					} catch (err) {
 						console.error('Failed to add ICE candidate:', err)
 						// Don't alert for ICE candidate errors as they're often non-critical
