@@ -575,8 +575,24 @@ const redisHelpers = {
 // register.registerMetric(celebrations180Total)
 
 // Security & performance
-// app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
-// app.use(cors())
+// Configure CORS. In production set ALLOWED_ORIGINS env var to a comma-separated
+// list of allowed origins (for example: https://your-netlify-site.netlify.app,https://ninedartnation.onrender.com)
+const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : [
+  // sensible defaults: allow the API host and any common Netlify preview host (adjust as needed)
+  'https://ninedartnation.onrender.com',
+  'https://ninedartnation.netlify.app'
+];
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
+app.use(cors({
+  origin: function (origin, callback) {
+    // allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // else reject
+    return callback(new Error('CORS origin denied'));
+  },
+  credentials: true
+}));
 app.use(compression())
 // const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
 // app.use(limiter)
