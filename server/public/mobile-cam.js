@@ -18,6 +18,7 @@
     let stream = null;
     let pc = null;
     let ws = null;
+    let usingPolling = false;
     let lastFacing = 'environment';
     let deviceId = null;
     let devicesList = [];
@@ -63,6 +64,22 @@
             const url = new URL(`/cam/signal/${code}`, window.location.origin);
             await fetch(url.toString(), { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ type, payload, source: 'phone' }) });
         } catch (e) { console.warn('postSignal failed', e); sendDiagnostic('postSignal-fail', { err: String(e) }); }
+    }
+
+    // sendSignal: prefer WebSocket, fall back to REST postSignal polling
+    async function sendSignal(type, payload) {
+        const code = (input.value || '').trim().toUpperCase();
+        try {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type, code, payload }));
+            } else {
+                // Use REST POST as fallback
+                await postSignal(type, payload);
+            }
+        } catch (e) {
+            console.warn('sendSignal failed, falling back to postSignal', e);
+            try { await postSignal(type, payload); } catch (err) { console.warn('postSignal also failed', err); }
+        }
     }
 
     let pollInterval = null;
@@ -293,33 +310,46 @@
         log('Connecting...');
         console.log('Joining with code:', code);
         try { await startCam(lastFacing); } catch (e) { sendDiagnostic('startCam-failed', { err: String(e) }); }
-        try { await ensureWS(); } catch (e) { log('WS connect failed'); sendDiagnostic('ensureWS-failed', { err: String(e) }); return; }
-        log('Joining session...');
-        ws.send(JSON.stringify({ type: 'cam-join', code }));
-        ws.onmessage = async (ev) => {
-            const data = JSON.parse(ev.data);
-            console.log('Received message:', data.type);
-            if (data.type === 'cam-joined') {
-                log('Paired. Negotiating...');
-            } else if (data.type === 'cam-offer') {
-                console.log('Received offer, creating answer');
-                pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-                stream.getTracks().forEach(t => pc.addTrack(t, stream));
-                pc.onicecandidate = (e) => { if (e.candidate) { console.log('Sending ICE'); ws.send(JSON.stringify({ type: 'cam-ice', code, payload: e.candidate })); } };
-                await pc.setRemoteDescription(new RTCSessionDescription(data.payload));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                console.log('Sending answer');
-                ws.send(JSON.stringify({ type: 'cam-answer', code, payload: answer }));
-                log('Streaming to desktop...');
-            } else if (data.type === 'cam-ice') {
-                console.log('Received ICE');
-                try { await pc.addIceCandidate(data.payload); } catch {}
-            } else if (data.type === 'cam-error') {
-                log('Error: ' + (data.code || 'UNKNOWN'));
-                sendDiagnostic('cam-error-received', data);
-            }
-        };
+        try {
+            await ensureWS();
+            log('Joining session...');
+            // Inform server we intend to join (prefer WS)
+            await sendSignal('cam-join', null);
+            // Set up WS message handler
+            ws.onmessage = async (ev) => {
+                const data = JSON.parse(ev.data);
+                console.log('Received message:', data.type);
+                if (data.type === 'cam-joined') {
+                    log('Paired. Negotiating...');
+                } else if (data.type === 'cam-offer') {
+                    console.log('Received offer, creating answer');
+                    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+                    pc.onicecandidate = (e) => { if (e.candidate) { console.log('Sending ICE'); sendSignal('cam-ice', e.candidate); } };
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.payload));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    console.log('Sending answer');
+                    await sendSignal('cam-answer', answer);
+                    log('Streaming to desktop...');
+                } else if (data.type === 'cam-ice') {
+                    console.log('Received ICE');
+                    try { await pc.addIceCandidate(data.payload); } catch {}
+                } else if (data.type === 'cam-error') {
+                    log('Error: ' + (data.code || 'UNKNOWN'));
+                    sendDiagnostic('cam-error-received', data);
+                }
+            };
+        } catch (e) {
+            // WS failed — fall back to polling REST endpoint
+            console.warn('WS connect failed, falling back to polling:', e);
+            sendDiagnostic('ensureWS-failed', { err: String(e) });
+            usingPolling = true;
+            log('WS connect failed — using polling fallback');
+            startPolling(code);
+            // Notify server via REST that we're joining
+            try { await postSignal('cam-join', null); } catch (err) { console.warn('postSignal cam-join failed', err); }
+        }
     }
 
     joinBtn.addEventListener('click', (e) => { e.preventDefault(); join(); });
