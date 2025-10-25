@@ -862,6 +862,57 @@ app.get('/_debug/redis', async (req, res) => {
   }
 });
 
+// Save calibration for authenticated user
+app.post('/api/user/calibration', express.json(), async (req, res) => {
+  const authHeader = req.headers.authorization || ''
+  const token = authHeader.split(' ')[1]
+  if (!token) return res.status(401).json({ ok: false, error: 'MISSING_TOKEN' })
+  let decoded
+  try { decoded = jwt.verify(token, JWT_SECRET) } catch (e) { return res.status(401).json({ ok: false, error: 'INVALID_TOKEN' }) }
+  const email = decoded.email || decoded.username || null
+  if (!email) return res.status(400).json({ ok: false, error: 'NO_USER' })
+  const body = req.body || {}
+  try {
+    // Save to RedisMap (which will fall back to in-memory cache if Redis unavailable)
+    await userCalibrations.set(email, Object.assign({ ts: Date.now() }, body))
+    // If Supabase configured, upsert into user_calibrations table for persistence
+    if (supabase) {
+      try {
+        await supabase.from('user_calibrations').upsert([{ email, calibration: body, updated_at: new Date().toISOString() }], { onConflict: ['email'] })
+      } catch (e) { console.warn('[DB] supabase upsert user_calibration failed', e?.message || e) }
+    }
+    return res.json({ ok: true })
+  } catch (e) {
+    console.error('[CAL] save failed', e)
+    return res.status(500).json({ ok: false, error: 'SAVE_FAILED' })
+  }
+})
+
+// Get calibration for authenticated user
+app.get('/api/user/calibration', async (req, res) => {
+  const authHeader = req.headers.authorization || ''
+  const token = authHeader.split(' ')[1]
+  if (!token) return res.status(401).json({ ok: false, error: 'MISSING_TOKEN' })
+  let decoded
+  try { decoded = jwt.verify(token, JWT_SECRET) } catch (e) { return res.status(401).json({ ok: false, error: 'INVALID_TOKEN' }) }
+  const email = decoded.email || decoded.username || null
+  if (!email) return res.status(400).json({ ok: false, error: 'NO_USER' })
+  try {
+    let data = await userCalibrations.get(email)
+    if (!data && supabase) {
+      try {
+        const { data: rows } = await supabase.from('user_calibrations').select('*').eq('email', email).limit(1)
+        if (rows && rows.length) data = rows[0].calibration
+      } catch (e) { console.warn('[DB] supabase fetch user_calibration failed', e?.message || e) }
+    }
+    if (!data) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+    return res.json({ ok: true, calibration: data })
+  } catch (e) {
+    console.error('[CAL] fetch failed', e)
+    return res.status(500).json({ ok: false, error: 'FETCH_FAILED' })
+  }
+})
+
 
 // In-memory subscription store (demo)
 let subscription = { fullAccess: false };
@@ -1707,6 +1758,9 @@ app.get('/admin/cam-diagnostics', (req, res) => {
 const camSignalQueues = new Map() // code -> [{ ts, type, payload, source }]
 // Simple in-memory calibration store for a pairing code (lightweight, short TTL via RedisMap not required)
 const camCalibrations = new Map() // code -> calibration payload
+
+// Per-user calibration storage (backed by RedisMap when available, falls back to in-memory)
+const userCalibrations = new RedisMap(redisClient, 'userCalibration', 60 * 60 * 24 * 7) // 7 days TTL
 
 function pushSignal(code, msg) {
   try {

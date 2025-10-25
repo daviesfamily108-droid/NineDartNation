@@ -243,7 +243,24 @@
             }
             console.log('Camera stream obtained:', stream);
             v.srcObject = stream;
-            await v.play().catch((e) => { showFatalError('Video play failed: ' + (e && e.message ? e.message : String(e))); console.error('Video play failed:', e); });
+            await v.play().catch((e) => {
+                showFatalError('Video play failed: ' + (e && e.message ? e.message : String(e)));
+                console.error('Video play failed:', e);
+                // Show an on-video tap-to-play button for mobile browsers
+                try {
+                    const btnId = 'ndn-tap-to-play'
+                    if (!document.getElementById(btnId)) {
+                        const btn = document.createElement('button')
+                        btn.id = btnId
+                        btn.textContent = 'Tap to enable camera'
+                        Object.assign(btn.style, { position: 'absolute', zIndex: 9999, left: '50%', top: '50%', transform: 'translate(-50%,-50%)', padding: '10px 16px', background: 'white', color: '#111827', borderRadius: '8px' })
+                        btn.onclick = async () => {
+                            try { await v.play(); btn.remove(); clearFatalError(); log('Camera started'); } catch (err) { console.warn('tap-to-play retry failed', err); }
+                        }
+                        v.parentElement && v.parentElement.appendChild(btn)
+                    }
+                } catch (err) { console.warn('tap button attach failed', err) }
+            });
             log('Camera started');
         } catch (err) {
             showFatalError('Camera error: ' + (err && err.message ? err.message : String(err)));

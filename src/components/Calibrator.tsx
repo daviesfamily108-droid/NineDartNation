@@ -17,6 +17,7 @@ export default function Calibrator() {
 	const overlayRef = useRef<HTMLCanvasElement>(null)
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	const [streaming, setStreaming] = useState(false)
+	const [videoPlayBlocked, setVideoPlayBlocked] = useState(false)
 	const [phase, setPhase] = useState<Phase>('camera')
 	// Default to local or last-used mode, but allow user to freely change
 	const [mode, setMode] = useState<CamMode>(() => (localStorage.getItem('ndn:cal:mode') as CamMode) || 'local')
@@ -198,7 +199,7 @@ export default function Calibrator() {
 							setTimeout(() => {
 								if (videoRef.current) {
 											videoRef.current.srcObject = inbound
-											videoRef.current.play().then(() => {
+												videoRef.current.play().then(() => {
 												console.log('Video playback started successfully')
 												// Mark that we're streaming from the phone and transition to capture
 												setStreaming(true)
@@ -207,9 +208,13 @@ export default function Calibrator() {
 												try { setPreferredCamera(undefined, 'Phone Camera', true) } catch {}
 												try { setPreferredCameraLocked(true) } catch {}
 												try { setCameraEnabled(true) } catch {}
+												// If an overlay prompt was shown earlier, hide it now
+												setVideoPlayBlocked(false)
 											}).catch((err) => {
 												console.error('Video play failed:', err)
-												alert('Failed to start video playback. Please check your browser settings.')
+												// Show a friendly tap-to-play overlay so user can enable playback
+												setVideoPlayBlocked(true)
+												console.warn('[Calibrator] video play blocked — prompting user interaction')
 											})
 								}
 							}, 100)
@@ -1004,6 +1009,26 @@ export default function Calibrator() {
 											playsInline
 											muted
 										/>
+										{videoPlayBlocked && (
+											<div className="absolute inset-0 z-50 flex items-center justify-center">
+												<button
+													className="bg-white/90 text-slate-900 px-4 py-2 rounded-lg shadow-lg"
+													onClick={async () => {
+													try {
+														await videoRef.current?.play()
+														setVideoPlayBlocked(false)
+														setStreaming(true)
+														setPhase('capture')
+													} catch (e) {
+														console.warn('Tap-to-play retry failed', e)
+														alert('Tap to enable video failed. Please check browser settings or reload the page.')
+													}
+												}}
+												>
+													Tap to allow video
+												</button>
+											</div>
+										)}
 										<canvas ref={canvasRef} className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`} />
 										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 w-full h-full z-30" />
 									</div>
