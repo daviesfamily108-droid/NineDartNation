@@ -734,6 +734,16 @@ export default function Calibrator() {
 					} catch (err) {
 						console.warn('[Calibrator] Upload calibration failed', err)
 					}
+						// If user is authenticated, persist calibration to their account (Supabase-backed)
+						try {
+							const token = localStorage.getItem('authToken')
+							if (token) {
+								await fetch('/api/user/calibration', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body })
+								console.log('[Calibrator] Synced calibration to user account')
+							}
+						} catch (err) {
+							console.warn('[Calibrator] User calibration sync failed', err)
+						}
 				} catch (e) { /* ignore */ }
 			})()
 		// eslint-disable-next-line react-hooks/exhaustive-deps

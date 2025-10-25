@@ -872,14 +872,13 @@ app.post('/api/user/calibration', express.json(), async (req, res) => {
   const email = decoded.email || decoded.username || null
   if (!email) return res.status(400).json({ ok: false, error: 'NO_USER' })
   const body = req.body || {}
+  if (!supabase) return res.status(503).json({ ok: false, error: 'SUPABASE_NOT_CONFIGURED' })
   try {
-    // Save to RedisMap (which will fall back to in-memory cache if Redis unavailable)
-    await userCalibrations.set(email, Object.assign({ ts: Date.now() }, body))
-    // If Supabase configured, upsert into user_calibrations table for persistence
-    if (supabase) {
-      try {
-        await supabase.from('user_calibrations').upsert([{ email, calibration: body, updated_at: new Date().toISOString() }], { onConflict: ['email'] })
-      } catch (e) { console.warn('[DB] supabase upsert user_calibration failed', e?.message || e) }
+    // Upsert calibration in Supabase for long-term persistence
+    const up = await supabase.from('user_calibrations').upsert([{ email, calibration: body, updated_at: new Date().toISOString() }], { onConflict: ['email'] })
+    if (up.error) {
+      console.warn('[DB] supabase upsert user_calibration failed', up.error.message || up.error)
+      return res.status(500).json({ ok: false, error: 'DB_UPSERT_FAILED' })
     }
     return res.json({ ok: true })
   } catch (e) {
@@ -897,16 +896,15 @@ app.get('/api/user/calibration', async (req, res) => {
   try { decoded = jwt.verify(token, JWT_SECRET) } catch (e) { return res.status(401).json({ ok: false, error: 'INVALID_TOKEN' }) }
   const email = decoded.email || decoded.username || null
   if (!email) return res.status(400).json({ ok: false, error: 'NO_USER' })
+  if (!supabase) return res.status(503).json({ ok: false, error: 'SUPABASE_NOT_CONFIGURED' })
   try {
-    let data = await userCalibrations.get(email)
-    if (!data && supabase) {
-      try {
-        const { data: rows } = await supabase.from('user_calibrations').select('*').eq('email', email).limit(1)
-        if (rows && rows.length) data = rows[0].calibration
-      } catch (e) { console.warn('[DB] supabase fetch user_calibration failed', e?.message || e) }
+    const { data: rows, error } = await supabase.from('user_calibrations').select('calibration').eq('email', email).limit(1)
+    if (error) {
+      console.warn('[DB] supabase fetch user_calibration failed', error.message || error)
+      return res.status(500).json({ ok: false, error: 'DB_FETCH_FAILED' })
     }
-    if (!data) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
-    return res.json({ ok: true, calibration: data })
+    if (!rows || rows.length === 0) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+    return res.json({ ok: true, calibration: rows[0].calibration })
   } catch (e) {
     console.error('[CAL] fetch failed', e)
     return res.status(500).json({ ok: false, error: 'FETCH_FAILED' })
@@ -1759,8 +1757,8 @@ const camSignalQueues = new Map() // code -> [{ ts, type, payload, source }]
 // Simple in-memory calibration store for a pairing code (lightweight, short TTL via RedisMap not required)
 const camCalibrations = new Map() // code -> calibration payload
 
-// Per-user calibration storage (backed by RedisMap when available, falls back to in-memory)
-const userCalibrations = new RedisMap(redisClient, 'userCalibration', 60 * 60 * 24 * 7) // 7 days TTL
+// NOTE: user calibration persistence will be stored in Supabase for long-term reliability.
+// We intentionally do not rely on Redis TTL for user calibrations so they remain persistent.
 
 function pushSignal(code, msg) {
   try {
