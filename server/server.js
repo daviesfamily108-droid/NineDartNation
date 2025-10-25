@@ -784,6 +784,68 @@ app.get('/api/auth/me', (req, res) => {
   }
 });
 
+// Debug endpoint: ping Redis (uses the same redisClient configured at startup)
+// Note: this endpoint is intended for short-lived debugging on deployed instances
+// (it intentionally does not expose secrets). Deploy to Render/Netlify (server) and
+// then call GET /_debug/redis to verify Upstash/Redis connectivity from that host.
+app.get('/_debug/redis', async (req, res) => {
+  try {
+    const info = {
+      redisConfigured: !!redisClient,
+      redisUrlProvided: !!redisUrl,
+      supabaseConfigured: !!supabaseUrl
+    };
+
+    if (!redisClient) {
+      return res.json({ ...info, message: 'Redis not configured on this instance' });
+    }
+
+    let ping = null;
+    try {
+      // Support multiple client implementations (node-redis, @upstash/redis)
+      if (typeof redisClient.ping === 'function') {
+        ping = await redisClient.ping();
+      } else {
+        ping = String(redisClient.ping || 'ping-not-supported');
+      }
+    } catch (e) {
+      ping = String(e?.message || e);
+    }
+
+    const reservation = { ok: false, details: null };
+    try {
+      const testKey = `ndn_debug_${Date.now()}`;
+      // Try a few set styles because different Redis clients have different signatures
+      if (typeof redisClient.set === 'function') {
+        try {
+          // Try Upstash-style set(key, value)
+          await redisClient.set(testKey, '1');
+          reservation.ok = true;
+          if (typeof redisClient.del === 'function') await redisClient.del(testKey);
+        } catch (e1) {
+          try {
+            // Try node-redis set with options
+            await redisClient.set(testKey, '1', { PX: 5000, NX: true });
+            reservation.ok = true;
+            if (typeof redisClient.del === 'function') await redisClient.del(testKey);
+          } catch (e2) {
+            reservation.details = `set attempts failed: ${e1?.message || e1} | ${e2?.message || e2}`;
+          }
+        }
+      } else {
+        reservation.details = 'redisClient.set not a function on this client';
+      }
+    } catch (e) {
+      reservation.details = String(e?.message || e);
+    }
+
+    return res.json({ ...info, ping, reservation });
+  } catch (err) {
+    console.error('[DEBUG/REDIS] Error:', err);
+    return res.status(500).json({ error: 'internal', detail: String(err?.message || err) });
+  }
+});
+
 
 // In-memory subscription store (demo)
 let subscription = { fullAccess: false };
@@ -1778,6 +1840,37 @@ function genCamCode() {
   } while (activeCamCodes.has(code));
   return code;
 }
+// Periodic cleanup: remove expired non-persistent camera sessions (runs every 30s)
+setInterval(async () => {
+  try {
+    const now = Date.now()
+    for (const code of Array.from(activeCamCodes)) {
+      try {
+        const sess = await camSessions.get(code)
+        if (!sess) {
+          activeCamCodes.delete(code)
+          if (redisClient) try { await redisClient.del(`camReserve:${code}`) } catch {}
+          continue
+        }
+        if (sess.persistent) continue
+        if (sess.expiresAt && sess.expiresAt < now) {
+          try { await camSessions.delete(code) } catch {}
+          activeCamCodes.delete(code)
+          if (redisClient) try { await redisClient.del(`camReserve:${code}`) } catch {}
+          continue
+        }
+        if (sess.ts && (now - sess.ts) > CAM_TTL_MS) {
+          try { await camSessions.delete(code) } catch {}
+          activeCamCodes.delete(code)
+          if (redisClient) try { await redisClient.del(`camReserve:${code}`) } catch {}
+          continue
+        }
+      } catch (e) { /* ignore per-code errors */ }
+    }
+  } catch (e) {
+    console.warn('[CAM] cleanup error', e?.message || e)
+  }
+}, 30 * 1000)
 // Simple in-memory tournaments (loaded from DB)
 const tournaments = new RedisMap(redisClient, 'tournaments');
 // Simple in-memory users and friendships (demo)
@@ -2351,22 +2444,49 @@ if (wss) {
           tries++
           if (tries > 12) break
         }
+        // Allow the client to request a persistent session: { type: 'cam-create', persistent: true }
+        const persistent = !!data.persistent
+        const now = Date.now()
+        const expiresAt = persistent ? null : (now + CAM_TTL_MS)
+        const sessObj = { code, desktopId: ws._id, phoneId: null, ts: now, persistent: persistent, expiresAt }
         try {
-          await camSessions.set(code, { code, desktopId: ws._id, phoneId: null, ts: Date.now() })
+          if (persistent && redisClient) {
+            // store without TTL in Redis so it won't be auto-evicted
+            try {
+              await redisClient.set(`camSessions:${code}`, JSON.stringify(sessObj))
+            } catch (e) {
+              // fallback
+              await camSessions.set(code, sessObj)
+            }
+          } else {
+            await camSessions.set(code, sessObj)
+          }
         } catch (e) { console.warn('[CAM] failed to persist session', e) }
-        try { ws.send(JSON.stringify({ type: 'cam-code', code, expiresAt: Date.now() + CAM_TTL_MS })) } catch {}
+        try { ws.send(JSON.stringify({ type: 'cam-code', code, expiresAt })) } catch {}
       } else if (data.type === 'cam-join') {
         // Phone joins with code
         const code = String(data.code || '').toUpperCase()
         const sess = await camSessions.get(code)
         if (!sess) { try { ws.send(JSON.stringify({ type: 'cam-error', code: 'INVALID_CODE' })) } catch {}; return }
-        // Expire stale codes
-        if (sess.ts && (Date.now() - sess.ts) > CAM_TTL_MS) {
-          try { await camSessions.delete(code) } catch (e) { /* ignore */ }
-          try { activeCamCodes.delete(code) } catch (e) {}
-          try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
-          try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {};
-          return
+        // Expire stale codes only if not persistent
+        const now2 = Date.now()
+        const isPersistent = !!sess.persistent
+        if (!isPersistent) {
+          if (sess.expiresAt && sess.expiresAt < now2) {
+            try { await camSessions.delete(code) } catch (e) { /* ignore */ }
+            try { activeCamCodes.delete(code) } catch (e) {}
+            try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
+            try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {};
+            return
+          }
+          // backward-compatible TTL check in case expiresAt isn't set
+          if (sess.ts && (now2 - sess.ts) > CAM_TTL_MS) {
+            try { await camSessions.delete(code) } catch (e) { /* ignore */ }
+            try { activeCamCodes.delete(code) } catch (e) {}
+            try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
+            try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {};
+            return
+          }
         }
         sess.phoneId = ws._id
         try { await camSessions.set(code, sess) } catch (e) { console.warn('[CAM] failed to update session', e) }

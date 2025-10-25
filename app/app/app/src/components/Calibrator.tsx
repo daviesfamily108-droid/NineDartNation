@@ -1,3 +1,7 @@
+// Pure re-export of the canonical Calibrator component
+export { default } from '../../../../../src/components/Calibrator'
+
+// Intentionally a re-export to avoid duplicate implementations in nested app trees.
 // Re-export canonical Calibrator to centralize implementation
 export { default } from '../../../../../src/components/Calibrator'
 import React, { useEffect, useMemo, useRef, useState } from 'react'

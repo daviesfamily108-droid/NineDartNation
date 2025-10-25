@@ -1,3 +1,9 @@
+// Pure re-export of the canonical Calibrator component
+export { default } from '../../../src/components/Calibrator'
+
+// NOTE: This file intentionally contains only a re-export. The canonical
+// implementation lives at `src/components/Calibrator.tsx`. Keeping a single
+// authoritative source prevents divergent behavior across duplicate copies.
 // Re-export the canonical Calibrator component from the root `src/components` folder.
 // This ensures there is a single authoritative implementation that reads
 // the shared `useUserSettings` store for the static dropdown selection.
@@ -57,7 +63,9 @@ export default function Calibrator() {
 			fetch(`/api/hosts`).then(r => r.json()).then(j => {
 				const ip = Array.isArray(j?.hosts) && j.hosts.find((x: string) => x)
 				if (ip) setLanHost(ip)
-			}).catch(()=>{})
+		const [streaming, setStreaming] = useState(false)
+		// Pure re-export of the canonical Calibrator component
+		export { default } from '../../../src/components/Calibrator'
 		}
 		// Try to detect if server exposes HTTPS info
 		fetch(`/api/https-info`).then(r=>r.json()).then(j=>{
