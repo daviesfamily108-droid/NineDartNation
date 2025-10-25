@@ -8,6 +8,7 @@ import { addSample } from '../store/profileStats'
 import { subscribeExternalWS } from '../utils/scoring'
 import ResizablePanel from './ui/ResizablePanel'
 import ResizableModal from './ui/ResizableModal'
+import useHeatmapStore from '../store/heatmap'
 
 // Shared ring type across autoscore/manual flows
 type Ring = 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'
@@ -50,6 +51,7 @@ export default function CameraView({
   const addVisit = useMatch(s => s.addVisit)
   const endLeg = useMatch(s => s.endLeg)
   const matchState = useMatch(s => s)
+  const addHeatSample = useHeatmapStore(s => s.addSample)
   // Quick entry dropdown selections
   const [quickSelAuto, setQuickSelAuto] = useState('')
   const [quickSelManual, setQuickSelManual] = useState('')
@@ -311,9 +313,11 @@ export default function CameraView({
       // Prefer parent hook if provided; otherwise add to visit directly
       if (onAutoDart) {
         try { onAutoDart(d.value, d.ring as any, { sector: d.sector ?? null, mult: (d.mult as any) ?? 0 }) } catch {}
+        try { addHeatSample({ playerId: matchState.players[matchState.currentPlayerIdx]?.id ?? null, sector: d.sector ?? null, mult: (d.mult as any) ?? 0, ring: d.ring as any, ts: Date.now() }) } catch {}
       } else {
         const label = d.ring === 'INNER_BULL' ? 'INNER_BULL 50' : d.ring === 'BULL' ? 'BULL 25' : `${d.ring[0]}${(d.value/(d.mult||1))||d.value} ${d.value}`
         addDart(d.value, label, d.ring as any)
+        try { addHeatSample({ playerId: matchState.players[matchState.currentPlayerIdx]?.id ?? null, sector: d.sector ?? null, mult: (d.mult as any) ?? 0, ring: d.ring as any, ts: Date.now() }) } catch {}
       }
     })
     return () => sub.close()
@@ -338,6 +342,7 @@ export default function CameraView({
     try {
       if (immediateAutoCommit && onAutoDart) {
         onAutoDart(score.base, score.ring as Ring, { sector: score.sector, mult: score.mult })
+        try { addHeatSample({ playerId: matchState.players[matchState.currentPlayerIdx]?.id ?? null, sector: score.sector ?? null, mult: score.mult ?? 0, ring: score.ring as any, ts: Date.now() }) } catch {}
         setHadRecentAuto(false)
       }
     } catch {}

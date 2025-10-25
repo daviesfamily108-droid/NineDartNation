@@ -5,6 +5,7 @@ import { useUserSettings } from '../store/userSettings';
 import { useToast } from '../store/toast';
 import CameraTile from './CameraTile'
 import CameraView from './CameraView'
+import HeatMap from './HeatMap'
 import { getUserCurrency, formatPriceInCurrency } from '../utils/config';
 import { bumpGameMode } from '../store/profileStats'
 import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart } from '../game/types'
@@ -1960,6 +1961,13 @@ export default function OfflinePlay({ user }: { user: any }) {
                     Leg {i+1}: {leg.winner==='player' ? 'You' : (ai==='None'?'Opp':'AI')} · Dbl {leg.doubleDarts} · CO {leg.checkoutDarts}
                   </div>
                 ))}
+              </div>
+            </div>
+            <div className="mt-4">
+              <div className="text-sm font-semibold mb-2">Shot Heat Map</div>
+              <div className="rounded-2xl overflow-hidden bg-black p-3">
+                {/* Lazy-load HeatMap component to avoid increasing initial bundle too much */}
+                <HeatMap />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 mt-4">
