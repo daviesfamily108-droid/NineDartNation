@@ -27,7 +27,7 @@ export default function Calibrator() {
 	// Zoom for pixel-perfect point picking (0.5x – 2.0x)
 	const [zoom, setZoom] = useState<number>(1)
 		const { H, setCalibration, reset, errorPx, locked } = useCalibration()
-	const { calibrationGuide, setCalibrationGuide, preferredCameraId, cameraEnabled, setCameraEnabled, preferredCameraLocked, setPreferredCameraLocked } = useUserSettings()
+	const { calibrationGuide, setCalibrationGuide, preferredCameraId, cameraEnabled, setCameraEnabled, preferredCameraLocked, setPreferredCameraLocked, setPreferredCamera } = useUserSettings()
 		// Detected ring data (from auto-detect) in image pixels
 	const [detected, setDetected] = useState<null | {
 		cx: number; cy: number;
@@ -130,6 +130,11 @@ export default function Calibrator() {
 
 	async function startPhonePairing() {
 		// Do not reset paired/streaming/phase state here to keep UI static
+		// Switch UI into phone pairing mode so the calibrator shows phone-specific hints
+		setMode('phone')
+		// Lock selection and ensure camera UI is enabled while pairing is active
+		lockSelectionForPairing()
+		try { setCameraEnabled(true) } catch {}
 		const socket = ensureWS()
 		if (socket.readyState === WebSocket.OPEN) {
 			socket.send(JSON.stringify({ type: 'cam-create' }))
@@ -191,15 +196,20 @@ export default function Calibrator() {
 							// Use setTimeout to ensure DOM updates before assigning stream
 							setTimeout(() => {
 								if (videoRef.current) {
-									videoRef.current.srcObject = inbound
-									videoRef.current.play().then(() => {
-										console.log('Video playback started successfully')
-										setStreaming(true)
-										setPhase('capture')
-									}).catch((err) => {
-										console.error('Video play failed:', err)
-										alert('Failed to start video playback. Please check your browser settings.')
-									})
+											videoRef.current.srcObject = inbound
+											videoRef.current.play().then(() => {
+												console.log('Video playback started successfully')
+												// Mark that we're streaming from the phone and transition to capture
+												setStreaming(true)
+												setPhase('capture')
+												// Set user settings to reflect that the active camera is the phone
+												try { setPreferredCamera(undefined, 'Phone Camera', true) } catch {}
+												try { setPreferredCameraLocked(true) } catch {}
+												try { setCameraEnabled(true) } catch {}
+											}).catch((err) => {
+												console.error('Video play failed:', err)
+												alert('Failed to start video playback. Please check your browser settings.')
+											})
 								}
 							}, 100)
 						} else {
@@ -340,6 +350,8 @@ export default function Calibrator() {
 		setPairCode(null)
 		setExpiresAt(null)
 		setPaired(false)
+	    // Unlock preferred camera selection when camera pairing/stops so the user can change it again
+	    try { setPreferredCameraLocked(false) } catch {}
 	}
 
 	function regenerateCode() {
