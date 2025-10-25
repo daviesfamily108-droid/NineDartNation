@@ -715,6 +715,25 @@ export default function Calibrator() {
 			return () => cancelAnimationFrame(raf)
 		}, [liveDetect, streaming])
 
+		// When calibration is locked and we have a pairing code, publish calibration to server
+		useEffect(() => {
+			(async () => {
+				try {
+					if (!locked || !pairCode) return
+					const payload = { H, anchors: (H ? undefined : undefined), imageSize: (imageSize || null), errorPx: (errorPx ?? null), createdAt: Date.now() }
+					// include anchors and other calibration metadata if available from store
+					try {
+						const body = JSON.stringify({ H, anchors: (typeof (H) !== 'undefined' ? null : null), imageSize: imageSize || null, errorPx: errorPx || null })
+						await fetch(`/cam/calibration/${pairCode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+						console.log('[Calibrator] Posted calibration for code', pairCode)
+					} catch (err) {
+						console.warn('[Calibrator] Upload calibration failed', err)
+					}
+				} catch (e) { /* ignore */ }
+			})()
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		}, [locked, pairCode])
+
 		// DevicePicker moved from SettingsPanel
 		function DevicePicker() {
 			const { preferredCameraId, preferredCameraLabel, setPreferredCamera, cameraEnabled, setCameraEnabled, preferredCameraLocked, setPreferredCameraLocked } = useUserSettings()

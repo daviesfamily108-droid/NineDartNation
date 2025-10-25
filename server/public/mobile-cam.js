@@ -103,6 +103,14 @@
 
     function handleSignal(m) {
         if (!m || !m.type) return;
+        if (m.type === 'cam-calibration') {
+            try {
+                window.__ndn_received_calibration = m.payload;
+                if (diagOut) diagOut.textContent = JSON.stringify(m.payload, null, 2);
+                log('Received calibration (REST)');
+            } catch (e) { console.warn('handleSignal calibration failed', e); }
+            return;
+        }
         if (m.type === 'cam-offer') {
             (async ()=>{
                 console.log('REST received offer');
@@ -370,6 +378,14 @@
             ws.onmessage = async (ev) => {
                 const data = JSON.parse(ev.data);
                 console.log('Received message:', data.type);
+                if (data.type === 'cam-calibration') {
+                    try {
+                        window.__ndn_received_calibration = data.payload;
+                        if (diagOut) diagOut.textContent = JSON.stringify(data.payload, null, 2);
+                        log('Received calibration for code');
+                    } catch (e) { console.warn('calibration message handling failed', e); }
+                    return;
+                }
                 if (data.type === 'cam-joined') {
                     log('Paired. Negotiating...');
                 } else if (data.type === 'cam-offer') {
@@ -398,6 +414,21 @@
             usingPolling = true;
             log('WS connect failed — using polling fallback');
             startPolling(code);
+            // Also try to fetch any calibration that may already be present for this code
+            (async () => {
+                try {
+                    const calUrl = new URL(`/cam/calibration/${code}`, window.location.origin);
+                    const r = await fetch(calUrl.toString());
+                    if (r.ok) {
+                        const j = await r.json();
+                        if (j && j.ok && j.calibration) {
+                            window.__ndn_received_calibration = j.calibration;
+                            if (diagOut) diagOut.textContent = JSON.stringify(j.calibration, null, 2);
+                            log('Retrieved calibration (REST)');
+                        }
+                    }
+                } catch (err) { console.warn('fetch calibration failed', err); }
+            })();
             // Notify server via REST that we're joining
             try { await postSignal('cam-join', null); } catch (err) { console.warn('postSignal cam-join failed', err); }
         }

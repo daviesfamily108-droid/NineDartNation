@@ -57,7 +57,7 @@ if (process.env.REDIS_URL) {
   console.log('?? DEBUG: REDIS_URL length:', process.env.REDIS_URL.length);
 }
 
-// Handle Redis URL - prefer REDIS_URL; if not present, attempt to build one from
+this is// Handle Redis URL - prefer REDIS_URL; if not present, attempt to build one from
 // Upstash REST variables (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN) so
 // Render users who set those don't need to re-paste credentials.
 let redisUrl = process.env.REDIS_URL;
@@ -1705,6 +1705,8 @@ app.get('/admin/cam-diagnostics', (req, res) => {
 
 // Simple in-memory signal queue for REST fallback (per cam code)
 const camSignalQueues = new Map() // code -> [{ ts, type, payload, source }]
+// Simple in-memory calibration store for a pairing code (lightweight, short TTL via RedisMap not required)
+const camCalibrations = new Map() // code -> calibration payload
 
 function pushSignal(code, msg) {
   try {
@@ -1742,6 +1744,38 @@ app.post('/cam/signal/:code', express.json(), async (req, res) => {
     }
   }
   res.json({ ok: true })
+})
+
+// POST a calibration blob for a pairing code so the peer device can fetch/apply it
+app.post('/cam/calibration/:code', express.json(), async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  const code = String(req.params.code || '').toUpperCase()
+  if (!code) return res.status(400).json({ ok: false, error: 'MISSING_CODE' })
+  const payload = req.body || {}
+  try {
+    camCalibrations.set(code, Object.assign({ ts: Date.now() }, payload))
+  } catch (e) { console.warn('save calibration failed', e) }
+  // Try to forward to connected desktop peer if present
+  try {
+    const sess = await camSessions.get(code)
+    if (sess && sess.desktopId) {
+      const target = clients.get(sess.desktopId)
+      if (target && target.readyState === 1) {
+        try { target.send(JSON.stringify({ type: 'cam-calibration', code, payload })); } catch (e) { console.warn('forward calibration fail', e) }
+      }
+    }
+  } catch (e) { console.warn('calibration forward lookup failed', e) }
+  res.json({ ok: true })
+})
+
+// GET calibration for a pairing code (returns last posted calibration)
+app.get('/cam/calibration/:code', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  const code = String(req.params.code || '').toUpperCase()
+  if (!code) return res.status(400).json({ ok: false, error: 'MISSING_CODE' })
+  const data = camCalibrations.get(code)
+  if (!data) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  res.json({ ok: true, calibration: data })
 })
 
 // GET and clear queued signals for a code
