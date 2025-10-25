@@ -131,3 +131,14 @@ CREATE INDEX IF NOT EXISTS idx_tournament_participants_email ON public.tournamen
 CREATE INDEX IF NOT EXISTS idx_friendships_user ON public.friendships(user_email);
 CREATE INDEX IF NOT EXISTS idx_friendships_friend ON public.friendships(friend_email);
 CREATE INDEX IF NOT EXISTS idx_camera_sessions_expires ON public.camera_sessions(expires_at);
+
+-- Per-user calibration persistence (stores calibration blobs for each user)
+CREATE TABLE IF NOT EXISTS public.user_calibrations (
+    email TEXT PRIMARY KEY REFERENCES public.users(email) ON DELETE CASCADE,
+    calibration JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.user_calibrations DISABLE ROW LEVEL SECURITY;
+
+CREATE INDEX IF NOT EXISTS idx_user_calibrations_email ON public.user_calibrations(email);
