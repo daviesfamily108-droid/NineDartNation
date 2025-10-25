@@ -280,28 +280,79 @@
     });
 
     function ensureWS() {
-        const u = wsUrl();
-        try {
-            clearFatalError();
-            ws = new WebSocket(u);
-        } catch (e) {
-            showFatalError('WebSocket creation failed: ' + (e && e.message ? e.message : String(e)));
-            log('WebSocket creation failed');
-            sendDiagnostic('ws-create-failed', { err: String(e), url: u });
-            return Promise.reject(e);
-        }
-        return new Promise((resolve) => {
-            ws.onopen = () => {
-                wsStatus.textContent = 'WS: open';
-                log('WS connected');
+        const candidates = [wsUrl(), `wss://ninedartnation.onrender.com/ws`, `wss://ninedartnation.netlify.app/ws`].filter(Boolean);
+        const connectTimeoutMs = 6000;
+
+        function tryConnect(url) {
+            return new Promise((resolve, reject) => {
+                let socket;
                 try {
-                    if (window.__ndn_pending_diag && window.__ndn_pending_diag.length) flushPendingDiagnostics();
-                } catch (e) { console.warn('pending flush failed', e); }
-                resolve(ws);
-            };
-            ws.onclose = () => { wsStatus.textContent = 'WS: closed'; log('Connection closed'); showFatalError('WebSocket connection closed.'); sendDiagnostic('ws-closed'); };
-            ws.onerror = (ev) => { wsStatus.textContent = 'WS: error'; log('WebSocket error'); showFatalError('WebSocket error.'); sendDiagnostic('ws-error', { ev: String(ev) }); };
-        });
+                    clearFatalError();
+                    socket = new WebSocket(url);
+                } catch (e) {
+                    sendDiagnostic('ws-create-failed', { err: String(e), url });
+                    return reject(e);
+                }
+                let settled = false;
+                const to = setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    try { socket.close(); } catch (e) {}
+                    sendDiagnostic('ws-timeout', { url });
+                    reject(new Error('timeout'));
+                }, connectTimeoutMs);
+
+                socket.onopen = () => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(to);
+                    ws = socket;
+                    wsStatus.textContent = 'WS: open';
+                    log('WS connected (' + url + ')');
+                    try { if (window.__ndn_pending_diag && window.__ndn_pending_diag.length) flushPendingDiagnostics(); } catch (e) { console.warn('pending flush failed', e); }
+                    resolve(socket);
+                };
+                socket.onclose = (ev) => {
+                    if (!settled) {
+                        settled = true; clearTimeout(to);
+                        reject(new Error('closed-before-open'));
+                    } else {
+                        wsStatus.textContent = 'WS: closed';
+                        log('Connection closed');
+                        sendDiagnostic('ws-closed', { code: ev && ev.code });
+                    }
+                };
+                socket.onerror = (ev) => {
+                    if (!settled) {
+                        settled = true; clearTimeout(to);
+                        try { socket.close(); } catch (e) {}
+                        sendDiagnostic('ws-error', { ev: String(ev), url });
+                        reject(ev || new Error('ws-error'));
+                    } else {
+                        wsStatus.textContent = 'WS: error';
+                        log('WebSocket error');
+                        sendDiagnostic('ws-error', { ev: String(ev) });
+                    }
+                };
+            });
+        }
+
+        // Try candidates sequentially; if none succeed, reject so caller can fall back to REST polling
+        return (async () => {
+            for (const url of candidates) {
+                try {
+                    const s = await tryConnect(url);
+                    return s;
+                } catch (e) {
+                    console.warn('WS connect attempt failed for', url, e && (e.message || e));
+                }
+            }
+            // All attempts failed — set clear UI and diagnostics, then reject
+            wsStatus.textContent = 'WS: disconnected';
+            showFatalError('WebSocket unavailable — using REST fallback');
+            sendDiagnostic('ws-all-failed', { tried: candidates });
+            return Promise.reject(new Error('all-ws-failed'));
+        })();
     }
 
     async function join() {
