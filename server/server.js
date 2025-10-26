@@ -55,8 +55,8 @@ console.log('?? DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
 if (process.env.REDIS_URL) {
   console.log('?? DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
   console.log('?? DEBUG: REDIS_URL length:', process.env.REDIS_URL.length);
-}
 
+  // Handlits takinge Redis URL - prefer REDIS_URL; if not present, attempt to build one from
 this is// Handle Redis URL - prefer REDIS_URL; if not present, attempt to build one from
 // Upstash REST variables (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN) so
 // Render users who set those don't need to re-paste credentials.
@@ -2611,6 +2611,20 @@ if (wss) {
         if (target && target.readyState === 1) {
           target.send(JSON.stringify({ type: data.type, code, payload: data.payload }))
         }
+        }
+        // Forward calibration messages sent over WS from desktop -> phone or phone -> desktop
+        else if (data.type === 'cam-calibration') {
+          const code = String(data.code || '').toUpperCase()
+          const sess = await camSessions.get(code)
+          if (!sess) return
+          // If sender is desktop, forward to phone; if sender is phone, forward to desktop
+          let targetId = null
+          if (ws._id === sess.desktopId) targetId = sess.phoneId
+          else if (ws._id === sess.phoneId) targetId = sess.desktopId
+          const target = clients.get(targetId)
+          if (target && target.readyState === 1) {
+            try { target.send(JSON.stringify({ type: 'cam-calibration', code, payload: data.payload })) } catch (e) { console.warn('forward calibration fail', e) }
+          }
         } else if (data.type === 'cam-diagnostic') {
           // Receive diagnostic messages from mobile clients
           try {

@@ -105,8 +105,9 @@
         if (!m || !m.type) return;
         if (m.type === 'cam-calibration') {
             try {
+                // Store and surface UI to allow applying the calibration on the phone
                 window.__ndn_received_calibration = m.payload;
-                if (diagOut) diagOut.textContent = JSON.stringify(m.payload, null, 2);
+                showCalibrationBanner(m.payload);
                 log('Received calibration (REST)');
             } catch (e) { console.warn('handleSignal calibration failed', e); }
             return;
@@ -161,6 +162,38 @@
     function clearFatalError() {
         const el = document.getElementById('fatal-error');
         if (el) el.textContent = '';
+    }
+
+    // Calibration UI helpers for mobile: show banner and allow user to apply calibration
+    function showCalibrationBanner(payload) {
+        try {
+            window.__ndn_received_calibration = payload || null;
+            const banner = document.getElementById('calibBanner');
+            const msg = document.getElementById('calibMsg');
+            const applyBtn = document.getElementById('applyCalib');
+            const dismissBtn = document.getElementById('dismissCalib');
+            if (!banner || !msg || !applyBtn || !dismissBtn) return;
+            msg.textContent = payload && payload.H ? `Calibration received (errorPx: ${payload.errorPx ?? 'n/a'})` : 'Calibration received';
+            banner.style.display = 'block';
+            if (diagOut) diagOut.textContent = JSON.stringify(payload || {}, null, 2);
+
+            applyBtn.onclick = (e) => { e.preventDefault(); applyCalibration(payload); hideCalibrationBanner(); };
+            dismissBtn.onclick = (e) => { e.preventDefault(); hideCalibrationBanner(); };
+        } catch (e) { console.warn('showCalibrationBanner failed', e); }
+    }
+
+    function hideCalibrationBanner() {
+        try { const banner = document.getElementById('calibBanner'); if (banner) banner.style.display = 'none'; } catch (e) {}
+    }
+
+    function applyCalibration(payload) {
+        try {
+            // Persist received calibration locally on the phone so the camera app can use it later
+            localStorage.setItem('ndn:received_calibration', JSON.stringify(payload || {}));
+            if (diagOut) diagOut.textContent = JSON.stringify(payload || {}, null, 2);
+            log('Calibration applied');
+            sendDiagnostic('calibration-applied', { code: input.value || '', payloadSummary: { errorPx: payload?.errorPx } });
+        } catch (e) { console.warn('applyCalibration failed', e); }
     }
 
     function detectFeatures() {
@@ -398,7 +431,8 @@
                 if (data.type === 'cam-calibration') {
                     try {
                         window.__ndn_received_calibration = data.payload;
-                        if (diagOut) diagOut.textContent = JSON.stringify(data.payload, null, 2);
+                        // Immediately show a small UI so user can apply the calibration
+                        showCalibrationBanner(data.payload);
                         log('Received calibration for code');
                     } catch (e) { console.warn('calibration message handling failed', e); }
                     return;

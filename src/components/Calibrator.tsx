@@ -165,6 +165,16 @@ export default function Calibrator() {
 				if (data.expiresAt) setExpiresAt(data.expiresAt)
 			} else if (data.type === 'cam-peer-joined') {
 				setPaired(true)
+				// When a phone peer joins, proactively send current calibration (if locked)
+				try {
+					if (locked && pairCode) {
+						const payload = { H, imageSize: (imageSize || null), errorPx: (errorPx ?? null), createdAt: Date.now() }
+						socket.send(JSON.stringify({ type: 'cam-calibration', code: pairCode, payload }))
+						console.log('[Calibrator] Sent calibration to joined phone for code', pairCode)
+					}
+				} catch (e) {
+					console.warn('[Calibrator] Failed to send calibration on peer join', e)
+				}
 				const peer = new RTCPeerConnection({ 
 					iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 					iceCandidatePoolSize: 10
