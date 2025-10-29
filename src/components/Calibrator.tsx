@@ -122,8 +122,10 @@ export default function Calibrator() {
 			const proto = (window.location.protocol === 'https:' ? 'wss' : 'ws')
 			const sameOrigin = `${proto}://${window.location.host}/ws`
 			const host = window.location.hostname
-			const fallbacks = [sameOrigin, `${proto}://${host}:8787/ws`, `${proto}://${host}:3000/ws`]
-			const url = normalizedEnv || fallbacks[0]
+			// Production safeguard: if we are not on the Render backend host and no env URL is set,
+			// prefer the known Render service as a fallback instead of Netlify same-origin.
+			const renderWS = `wss://ninedartnation.onrender.com/ws`
+			const url = normalizedEnv || (host.endsWith('onrender.com') ? sameOrigin : renderWS)
 			console.log('[Calibrator] Connecting WebSocket to:', url)
 			let socket: WebSocket = new WebSocket(url)
 		setWs(socket)
