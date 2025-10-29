@@ -577,16 +577,26 @@ const redisHelpers = {
 // Security & performance
 // Configure CORS. In production set ALLOWED_ORIGINS env var to a comma-separated
 // list of allowed origins (for example: https://your-netlify-site.netlify.app,https://ninedartnation.onrender.com)
-const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : [
-  // sensible defaults: allow the API host and any common Netlify preview host (adjust as needed)
-  'https://ninedartnation.onrender.com',
-  'https://ninedartnation.netlify.app',
-  // Allow localhost for local development
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:3000'
-];
+const allowedOrigins = (() => {
+  const defaults = [
+    // Production URLs - always required
+    'https://ninedartnation.onrender.com',
+    'https://ninedartnation.netlify.app',
+    // Localhost for local development
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000'
+  ];
+  
+  // If ALLOWED_ORIGINS env var is set, merge with defaults
+  if (process.env.ALLOWED_ORIGINS) {
+    const envOrigins = process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
+    return [...defaults, ...envOrigins];
+  }
+  
+  return defaults;
+})();
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 app.use(cors({
   origin: function (origin, callback) {
