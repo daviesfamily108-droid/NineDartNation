@@ -103,29 +103,51 @@
 
     function handleSignal(m) {
         if (!m || !m.type) return;
+        console.log('[Mobile] Signal received:', m.type, 'code:', input.value)
         if (m.type === 'cam-calibration') {
             try {
                 // Store and surface UI to allow applying the calibration on the phone
                 window.__ndn_received_calibration = m.payload;
                 showCalibrationBanner(m.payload);
+                console.log('[Mobile] Calibration banner displayed');
                 log('Received calibration (REST)');
-            } catch (e) { console.warn('handleSignal calibration failed', e); }
+            } catch (e) { console.warn('[Mobile] handleSignal calibration failed', e); }
             return;
         }
         if (m.type === 'cam-offer') {
+            console.log('[Mobile] Processing cam-offer from desktop');
             (async ()=>{
-                console.log('REST received offer');
-                pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-                stream.getTracks().forEach(t => pc.addTrack(t, stream));
-                pc.onicecandidate = (e) => { if (e.candidate) postSignal('cam-ice', e.candidate); };
-                await pc.setRemoteDescription(new RTCSessionDescription(m.payload));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                await postSignal('cam-answer', answer);
-                log('Streaming to desktop (REST)');
+                try {
+                    console.log('[Mobile] Creating RTCPeerConnection for offer');
+                    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                    console.log('[Mobile] Adding', stream.getTracks().length, 'audio/video tracks to connection');
+                    stream.getTracks().forEach(t => pc.addTrack(t, stream));
+                    pc.onicecandidate = (e) => { 
+                        if (e.candidate) {
+                            console.log('[Mobile] ICE candidate generated:', e.candidate.candidate?.slice(0, 50))
+                            postSignal('cam-ice', e.candidate);
+                        }
+                    };
+                    console.log('[Mobile] Setting remote description (offer)');
+                    await pc.setRemoteDescription(new RTCSessionDescription(m.payload));
+                    console.log('[Mobile] Creating answer');
+                    const answer = await pc.createAnswer();
+                    console.log('[Mobile] Setting local description (answer)');
+                    await pc.setLocalDescription(answer);
+                    console.log('[Mobile] Sending cam-answer back to desktop');
+                    await postSignal('cam-answer', answer);
+                    log('Streaming to desktop (REST)');
+                    console.log('[Mobile] WebRTC handshake complete, streaming started');
+                } catch (e) { 
+                    console.error('[Mobile] cam-offer handler failed:', e);
+                    sendDiagnostic('cam-offer-handler-fail', { err: String(e) });
+                }
             })();
         } else if (m.type === 'cam-ice') {
-            try { pc && pc.addIceCandidate(m.payload); } catch (e) { console.warn('addIce fail', e); }
+            try { 
+                console.log('[Mobile] Adding ICE candidate');
+                pc && pc.addIceCandidate(m.payload); 
+            } catch (e) { console.warn('[Mobile] addIce fail', e); }
         }
     }
 
@@ -417,44 +439,63 @@
         const code = (input.value || '').trim().toUpperCase();
         if (!code) { log('Enter a code'); return; }
         log('Connecting...');
-        console.log('Joining with code:', code);
+        console.log('[Mobile] Joining with code:', code);
         try { await startCam(lastFacing); } catch (e) { sendDiagnostic('startCam-failed', { err: String(e) }); }
         try {
             await ensureWS();
             log('Joining session...');
             // Inform server we intend to join (prefer WS)
+            console.log('[Mobile] Sending cam-join signal');
             await sendSignal('cam-join', null);
             // Set up WS message handler
             ws.onmessage = async (ev) => {
                 const data = JSON.parse(ev.data);
-                console.log('Received message:', data.type);
+                console.log('[Mobile WS] Received:', data.type, 'code:', code);
                 if (data.type === 'cam-calibration') {
                     try {
                         window.__ndn_received_calibration = data.payload;
                         // Immediately show a small UI so user can apply the calibration
                         showCalibrationBanner(data.payload);
+                        console.log('[Mobile WS] Calibration banner displayed');
                         log('Received calibration for code');
-                    } catch (e) { console.warn('calibration message handling failed', e); }
+                    } catch (e) { console.warn('[Mobile WS] calibration message handling failed', e); }
                     return;
                 }
                 if (data.type === 'cam-joined') {
+                    console.log('[Mobile WS] Peer joined, waiting for offer');
                     log('Paired. Negotiating...');
                 } else if (data.type === 'cam-offer') {
-                    console.log('Received offer, creating answer');
-                    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-                    stream.getTracks().forEach(t => pc.addTrack(t, stream));
-                    pc.onicecandidate = (e) => { if (e.candidate) { console.log('Sending ICE'); sendSignal('cam-ice', e.candidate); } };
-                    await pc.setRemoteDescription(new RTCSessionDescription(data.payload));
-                    const answer = await pc.createAnswer();
-                    await pc.setLocalDescription(answer);
-                    console.log('Sending answer');
-                    await sendSignal('cam-answer', answer);
-                    log('Streaming to desktop...');
+                    console.log('[Mobile WS] Received offer from desktop, creating answer');
+                    try {
+                        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                        console.log('[Mobile WS] Adding', stream.getTracks().length, 'tracks to peer connection');
+                        stream.getTracks().forEach(t => pc.addTrack(t, stream));
+                        pc.onicecandidate = (e) => { 
+                            if (e.candidate) { 
+                                console.log('[Mobile WS] ICE candidate generated, sending');
+                                sendSignal('cam-ice', e.candidate); 
+                            }
+                        };
+                        console.log('[Mobile WS] Setting remote description (offer)');
+                        await pc.setRemoteDescription(new RTCSessionDescription(data.payload));
+                        console.log('[Mobile WS] Creating answer');
+                        const answer = await pc.createAnswer();
+                        console.log('[Mobile WS] Setting local description (answer)');
+                        await pc.setLocalDescription(answer);
+                        console.log('[Mobile WS] Sending answer back to desktop');
+                        await sendSignal('cam-answer', answer);
+                        log('Streaming to desktop...');
+                        console.log('[Mobile WS] WebRTC handshake complete');
+                    } catch (e) {
+                        console.error('[Mobile WS] cam-offer handler failed:', e);
+                        sendDiagnostic('cam-offer-ws-failed', { err: String(e) });
+                    }
                 } else if (data.type === 'cam-ice') {
-                    console.log('Received ICE');
-                    try { await pc.addIceCandidate(data.payload); } catch {}
+                    console.log('[Mobile WS] Received ICE candidate');
+                    try { await pc.addIceCandidate(data.payload); } catch (e) { console.warn('[Mobile WS] addIce failed', e); }
                 } else if (data.type === 'cam-error') {
                     log('Error: ' + (data.code || 'UNKNOWN'));
+                    console.error('[Mobile WS] cam-error received:', data.code);
                     sendDiagnostic('cam-error-received', data);
                 }
             };

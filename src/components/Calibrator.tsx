@@ -197,47 +197,50 @@ export default function Calibrator() {
 					if (e.candidate && pairCode) socket.send(JSON.stringify({ type: 'cam-ice', code: pairCode, payload: e.candidate }))
 				}
 				
-				peer.ontrack = (ev) => {
-					console.log('WebRTC ontrack received:', ev.streams?.[0])
-					if (videoRef.current) {
-						const inbound = ev.streams?.[0]
-						if (inbound) {
-							console.log('Assigning video stream to video element')
-							// Ensure video element is visible
-							setSnapshotSet(false)
-							// Use setTimeout to ensure DOM updates before assigning stream
-							setTimeout(() => {
-								if (videoRef.current) {
-											videoRef.current.srcObject = inbound
-												videoRef.current.play().then(() => {
-												console.log('Video playback started successfully')
-												// Mark that we're streaming from the phone and transition to capture
-												setStreaming(true)
-												setPhase('capture')
-												// Set user settings to reflect that the active camera is the phone
-												try { setPreferredCamera(undefined, 'Phone Camera', true) } catch {}
-												try { setPreferredCameraLocked(true) } catch {}
-												try { setCameraEnabled(true) } catch {}
-												// If an overlay prompt was shown earlier, hide it now
-												setVideoPlayBlocked(false)
-											}).catch((err) => {
-												console.error('Video play failed:', err)
-												// Show a friendly tap-to-play overlay so user can enable playback
-												setVideoPlayBlocked(true)
-												console.warn('[Calibrator] video play blocked — prompting user interaction')
-											})
-								}
-							}, 100)
-						} else {
-							console.error('No inbound stream received')
-						}
+			peer.ontrack = (ev) => {
+				console.log('[Calibrator] WebRTC ontrack received:', ev.streams?.length, 'streams, track kind:', ev.track?.kind)
+				if (videoRef.current) {
+					const inbound = ev.streams?.[0]
+					if (inbound) {
+						console.log('[Calibrator] Assigning video stream (tracks:', inbound.getTracks().length, ') to video element')
+						// Ensure video element is visible
+						setSnapshotSet(false)
+						// Use setTimeout to ensure DOM updates before assigning stream
+						setTimeout(() => {
+							if (videoRef.current) {
+										console.log('[Calibrator] Setting srcObject and attempting play')
+										videoRef.current.srcObject = inbound
+										videoRef.current.muted = true // Ensure muted for autoplay policy
+										videoRef.current.playsInline = true // Mobile/iOS support
+										videoRef.current.play().then(() => {
+											console.log('[Calibrator] Video playback started successfully')
+											// Mark that we're streaming from the phone and transition to capture
+											setStreaming(true)
+											setPhase('capture')
+											// Set user settings to reflect that the active camera is the phone
+											try { setPreferredCamera(undefined, 'Phone Camera', true) } catch {}
+											try { setPreferredCameraLocked(true) } catch {}
+											try { setCameraEnabled(true) } catch {}
+											// If an overlay prompt was shown earlier, hide it now
+											setVideoPlayBlocked(false)
+										}).catch((err) => {
+											console.error('[Calibrator] Video play failed:', err)
+											// Show a friendly tap-to-play overlay so user can enable playback
+											setVideoPlayBlocked(true)
+											console.warn('[Calibrator] video play blocked — prompting user interaction')
+										})
+							}
+						}, 100)
 					} else {
-						console.error('Video element not available')
+						console.error('[Calibrator] No inbound stream received in ontrack')
 					}
+				} else {
+					console.error('[Calibrator] Video element not available')
 				}
-				
-				try {
-					const offer = await peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: true })
+			}
+
+			try {
+				const offer = await peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: true })
 					await peer.setLocalDescription(offer)
 					console.log('[Calibrator] Sending cam-offer for code:', pairCode)
 					if (pairCode) socket.send(JSON.stringify({ type: 'cam-offer', code: pairCode, payload: offer }))
@@ -929,16 +932,16 @@ export default function Calibrator() {
 									<span className="text-xs opacity-70">Video Source:</span>
 									<div className="flex items-center gap-1 text-xs">
 										<button 
-											className={`btn px-2 py-1 bg-gray-600 opacity-50 cursor-not-allowed`} 
-											disabled
-											title="Local camera mode disabled"
+											className={`btn px-2 py-1 ${mode === 'local' ? 'bg-emerald-600' : 'bg-gray-600'}`}
+											onClick={() => { setMode('local'); stopCamera() }}
+											title="Use local camera"
 										>
 											Local
 										</button>
 										<button 
-											className={`btn px-2 py-1 bg-emerald-600`} 
-											disabled
-											title="Phone camera mode locked"
+											className={`btn px-2 py-1 ${mode === 'phone' ? 'bg-emerald-600' : 'bg-gray-600'}`}
+											onClick={() => { setMode('phone'); stopCamera() }}
+											title="Use phone camera (pair via QR code)"
 										>
 											Phone
 										</button>
@@ -1028,6 +1031,7 @@ export default function Calibrator() {
 											autoPlay
 											playsInline
 											muted
+											controls={false}
 										/>
 										{videoPlayBlocked && (
 											<div className="absolute inset-0 z-50 flex items-center justify-center">

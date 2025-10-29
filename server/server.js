@@ -24,6 +24,7 @@ const PORT = process.env.PORT || 8787;
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
 // Track HTTPS runtime status and port
 let HTTPS_ACTIVE = false
+console.log('[STARTUP] server.js loaded');
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
 const app = express();
 
@@ -56,8 +57,7 @@ if (process.env.REDIS_URL) {
   console.log('?? DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
   console.log('?? DEBUG: REDIS_URL length:', process.env.REDIS_URL.length);
 
-  // Handlits takinge Redis URL - prefer REDIS_URL; if not present, attempt to build one from
-this is// Handle Redis URL - prefer REDIS_URL; if not present, attempt to build one from
+  // Handle Redis URL - prefer REDIS_URL; if not present, attempt to build one from
 // Upstash REST variables (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN) so
 // Render users who set those don't need to re-paste credentials.
 let redisUrl = process.env.REDIS_URL;
@@ -580,7 +580,12 @@ const redisHelpers = {
 const allowedOrigins = process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : [
   // sensible defaults: allow the API host and any common Netlify preview host (adjust as needed)
   'https://ninedartnation.onrender.com',
-  'https://ninedartnation.netlify.app'
+  'https://ninedartnation.netlify.app',
+  // Allow localhost for local development
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000'
 ];
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 app.use(cors({
@@ -1641,6 +1646,7 @@ const numCPUs = Math.min(os.cpus().length, 7); // Limit to 7 workers max
 const DEBUG_SINGLE_WORKER = (String(process.env.DEBUG_SINGLE_WORKER || '').toLowerCase() === '1' || String(process.env.DEBUG_SINGLE_WORKER || '').toLowerCase() === 'true');
 
 // If DEBUG_SINGLE_WORKER is set, run the worker code in-process instead of forking a master/worker set.
+console.log('[STARTUP] cluster.isMaster=', (cluster.isMaster||false), 'DEBUG_SINGLE_WORKER=', DEBUG_SINGLE_WORKER)
 if ((cluster.isMaster || cluster.isPrimary) && !DEBUG_SINGLE_WORKER) {
   console.log(`[CLUSTER] Master process ${process.pid} starting ${numCPUs} workers...`);
 
@@ -1692,6 +1698,7 @@ if ((cluster.isMaster || cluster.isPrimary) && !DEBUG_SINGLE_WORKER) {
   });
 
 } else {
+  console.log('[STARTUP] entering worker branch')
   // Worker process - start the server (or when DEBUG_SINGLE_WORKER=1 we'll run worker code directly in this process)
   if (DEBUG_SINGLE_WORKER && (cluster.isMaster || cluster.isPrimary)) {
     console.log(`[CLUSTER] DEBUG_SINGLE_WORKER=1 — running worker code in-process (pid=${process.pid})`);
@@ -2601,19 +2608,27 @@ if (wss) {
         if (!sess) return
         let targetId
         if (data.type === 'cam-offer') {
-          targetId = sess.phoneId
-        } else if (data.type === 'cam-answer') {
+          // Phone sends offer, desktop receives (forward to desktop)
           targetId = sess.desktopId
+          console.log(`[CAM] Forwarding cam-offer from phone to desktop (${sess.phoneId} -> ${sess.desktopId})`)
+        } else if (data.type === 'cam-answer') {
+          // Desktop sends answer, phone receives (forward to phone)
+          targetId = sess.phoneId
+          console.log(`[CAM] Forwarding cam-answer from desktop to phone (${sess.desktopId} -> ${sess.phoneId})`)
         } else if (data.type === 'cam-ice') {
           targetId = (ws._id === sess.desktopId) ? sess.phoneId : sess.desktopId
+          console.log(`[CAM] Forwarding cam-ice candidate (from ${ws._id === sess.desktopId ? 'desktop' : 'phone'})`)
         }
         const target = clients.get(targetId)
         if (target && target.readyState === 1) {
+          console.log(`[CAM] Sending ${data.type} to target ${targetId}`)
           target.send(JSON.stringify({ type: data.type, code, payload: data.payload }))
+        } else {
+          console.warn(`[CAM] Target ${targetId} not connected for ${data.type}`)
         }
-        }
+      }
         // Forward calibration messages sent over WS from desktop -> phone or phone -> desktop
-        else if (data.type === 'cam-calibration') {
+      else if (data.type === 'cam-calibration') {
           const code = String(data.code || '').toUpperCase()
           const sess = await camSessions.get(code)
           if (!sess) return
@@ -3488,4 +3503,5 @@ function getNextFridayAt1945(nowMs) {
 (async () => {
   // Removed ensureOfficialWeekly - only allow manually created tournaments
 })();
+}
 }
