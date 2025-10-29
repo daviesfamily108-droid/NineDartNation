@@ -96,6 +96,7 @@ Notes:
 
 - Open the Calibrator tab, switch mode to “Phone”, and pair using the steps above.
 - Once video is visible on desktop, click Capture to take a frame and compute homography.
+- For repeatable alignment, open the in-app marker sheet (Calibrator → Marker Calibration Kit), tape the four ArUco markers on the double ring, capture a frame, and press **Detect Markers**. The calibrator will compute and auto-lock when the RMS error ≤ 1.2 px.
 - Stop ends the pairing/stream. All processing is video-only.
 
 ## TV-style end-of-match summary

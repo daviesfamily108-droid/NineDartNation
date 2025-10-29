@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import ReactDOM from 'react-dom'
 import DartLoader from './DartLoader'
 
 import QRCode from 'qrcode'
 import { useCalibration } from '../store/calibration'
 import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, type Homography, type Point } from '../utils/vision'
+import { detectMarkersFromCanvas, MARKER_ORDER, MARKER_TARGETS, markerIdToMatrix, type MarkerDetection } from '../utils/markerCalibration'
 import { useUserSettings } from '../store/userSettings'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice } from '../utils/networkDevices'
 
@@ -39,6 +40,82 @@ export default function Calibrator() {
 		// Live detection and confidence state
 		const [liveDetect, setLiveDetect] = useState<boolean>(false)
 		const [confidence, setConfidence] = useState<number>(0)
+	const [markerResult, setMarkerResult] = useState<MarkerDetection | null>(null)
+
+	const createMarkerDataUrl = useCallback((id: number, size = 480) => {
+		if (typeof document === 'undefined') throw new Error('Marker rendering only available in browser context')
+		const matrix = markerIdToMatrix(id)
+		const canvas = document.createElement('canvas')
+		canvas.width = size
+		canvas.height = size
+		const ctx = canvas.getContext('2d')
+		if (!ctx) throw new Error('Unable to create marker canvas context')
+		ctx.imageSmoothingEnabled = false
+		ctx.fillStyle = '#ffffff'
+		ctx.fillRect(0, 0, size, size)
+		const padding = size * 0.08
+		const cells = matrix.length
+		const gridSize = size - padding * 2
+		const cellSize = gridSize / cells
+		const origin = padding
+		for (let y = 0; y < cells; y++) {
+			for (let x = 0; x < cells; x++) {
+				const value = matrix[y][x]
+				ctx.fillStyle = value === 1 ? '#000000' : '#ffffff'
+				ctx.fillRect(origin + x * cellSize, origin + y * cellSize, cellSize, cellSize)
+			}
+		}
+		ctx.strokeStyle = '#000000'
+		ctx.lineWidth = Math.max(2, cellSize * 0.08)
+		ctx.strokeRect(origin, origin, cellSize * cells, cellSize * cells)
+		return canvas.toDataURL('image/png')
+	}, [])
+
+	const openMarkerSheet = useCallback(() => {
+		try {
+			const markers = MARKER_ORDER.map((key) => {
+				const id = MARKER_TARGETS[key]
+				return { key, id, dataUrl: createMarkerDataUrl(id) }
+			})
+			const popup = window.open('', '_blank', 'width=900,height=1200')
+			if (!popup) throw new Error('Popup blocked by browser')
+			const html = `<!DOCTYPE html>
+			<html>
+			<head>
+				<meta charset="utf-8" />
+				<title>Nine Dart Nation – Marker Sheet</title>
+				<style>
+					body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 24px; color: #0f172a; }
+					h1 { font-size: 20px; margin-bottom: 4px; }
+					p { margin-top: 0; opacity: 0.7; }
+					.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; margin-top: 24px; }
+					.marker { text-align: center; }
+					.marker h2 { font-size: 16px; margin: 12px 0 8px; }
+					.marker img { width: 100%; max-width: 360px; border: 1px solid #0f172a; }
+					footer { margin-top: 24px; font-size: 12px; opacity: 0.6; }
+				</style>
+			</head>
+			<body>
+				<h1>Marker sheet</h1>
+				<p>Print at 100% scale on letter/A4 paper. Cut out and tape each marker so it is flush with the outer double ring.</p>
+				<div class="grid">
+					${markers.map((m) => `
+						<div class="marker">
+							<h2>${m.key.toUpperCase()} • ID ${m.id}</h2>
+							<img src="${m.dataUrl}" alt="Marker ${m.key}" />
+						</div>
+					`).join('')}
+				</div>
+				<footer>Tip: Keep markers flat, smooth, and unobstructed for best detection results.</footer>
+			</body>
+			</html>`
+			popup.document.write(html)
+			popup.document.close()
+		} catch (err: any) {
+			console.error('Marker sheet generation failed', err)
+			alert(`Unable to open marker sheet: ${err?.message || err}`)
+		}
+	}, [createMarkerDataUrl])
 
 	// Phone pairing state (mirrors CameraTile)
 	const [ws, setWs] = useState<WebSocket | null>(null)
@@ -381,6 +458,7 @@ export default function Calibrator() {
 		setPairCode(null)
 		setExpiresAt(null)
 		setPaired(false)
+		setMarkerResult(null)
 	    // Unlock preferred camera selection when camera pairing/stops so the user can change it again
 	    try { setPreferredCameraLocked(false) } catch {}
 	}
@@ -426,6 +504,7 @@ export default function Calibrator() {
 				setFrameSize({ w: c.width, h: c.height })
 				setPhase('select')
 				setDstPoints([])
+				setMarkerResult(null)
 				// Clear any previous video stream
 				stopCamera()
 			} catch {}
@@ -448,6 +527,7 @@ export default function Calibrator() {
 		setFrameSize({ w: c.width, h: c.height })
 		setPhase('select')
 		setDstPoints([])
+		setMarkerResult(null)
 			// If liveDetect is on, kick a detect on this captured frame
 			if (liveDetect) setTimeout(() => { autoDetectRings() }, 0)
 	}
@@ -576,12 +656,14 @@ export default function Calibrator() {
 		setSnapshotSet(false)
 		setPhase('camera')
 		drawOverlay([])
+		setMarkerResult(null)
 		reset()
 	}
 
 	// --- Auto-detect the double rim from the current snapshot and compute homography ---
 		async function autoDetectRings() {
 		if (!canvasRef.current) return alert('Load a photo or capture a frame first.')
+		setMarkerResult(null)
 		const src = canvasRef.current
 		// Downscale for speed
 		const maxW = 800
@@ -722,6 +804,34 @@ export default function Calibrator() {
 			const autoLock = adjustedConf >= 0.95 // Use adjusted confidence for near-perfect calibration
 			setCalibration({ locked: autoLock })
 	}
+
+			function detectMarkers() {
+				if (!canvasRef.current) return alert('Capture a frame or upload a photo first.')
+				const result = detectMarkersFromCanvas(canvasRef.current)
+				setMarkerResult(result)
+				if (!result.success || !result.homography) {
+					const missingMsg = result.missing.length
+						? ` Missing markers: ${result.missing.map(k => `${k.toUpperCase()} (ID ${MARKER_TARGETS[k]})`).join(', ')}`
+						: ''
+					alert(result.message ? `${result.message}${missingMsg}` : `Marker detection failed.${missingMsg}`)
+					return
+				}
+				setDetected(null)
+				setDstPoints(result.points)
+				drawOverlay(result.points, result.homography)
+				const src = canonicalRimTargets()
+				const imageSize = { w: canvasRef.current.width, h: canvasRef.current.height }
+				const shouldLock = (result.errorPx ?? Number.POSITIVE_INFINITY) <= 1.2
+				setCalibration({
+					H: result.homography as Homography,
+					createdAt: Date.now(),
+					errorPx: result.errorPx ?? null,
+					imageSize,
+					anchors: { src, dst: result.points },
+					locked: shouldLock ? true : locked,
+				})
+				setPhase('computed')
+			}
 
 		useEffect(() => {
 			drawOverlay()
@@ -924,108 +1034,115 @@ export default function Calibrator() {
 			)
 		}
 		return (
-			<div className="space-y-4">
-				<div className="card">
-					{/* Camera device picker moved from SettingsPanel */}
-					<DevicePicker />
-				<h2 className="text-xl font-semibold mb-2">Board Calibrator</h2>
-				<p className="text-sm opacity-80 mb-3">
-					Click the four points where the outer edge of the double ring touches TOP, RIGHT, BOTTOM, LEFT.
-					Then compute to fit the board overlay. Aim for error &lt; 2px for best accuracy.
-				</p>
-						<div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-2 items-start">
-							<div className="md:col-span-4">
-								<div className="flex items-center gap-2 mb-2">
-									<span className="text-xs opacity-70">Video Source:</span>
-									<div className="flex items-center gap-1 text-xs">
-										<button 
-											className={`btn px-2 py-1 ${mode === 'local' ? 'bg-emerald-600' : 'bg-gray-600'}`}
-											onClick={() => { setMode('local'); stopCamera() }}
-											title="Use local camera"
-										>
-											Local
-										</button>
-										<button 
-											className={`btn px-2 py-1 ${mode === 'phone' ? 'bg-emerald-600' : 'bg-gray-600'}`}
-											onClick={() => { setMode('phone'); stopCamera() }}
-											title="Use phone camera (pair via QR code)"
-										>
-											Phone
-										</button>
-										<button 
-											className={`btn px-2 py-1 bg-gray-600 opacity-50 cursor-not-allowed`} 
-											disabled
-											title="Wifi camera mode disabled"
-										>
-											Wifi
-										</button>
-									</div>
-									{streaming && (
-										<span className="text-xs opacity-60 ml-2">
-											({mode === 'local' ? 'Local Camera Active' : mode === 'phone' ? 'Phone Camera Paired' : 'Wifi Device Connected'})
-										</span>
-									)}
-								</div>
-												<div className="flex items-center gap-2 text-[11px]">
-													<span className="opacity-70">View Zoom</span>
-													<input type="range" min={50} max={200} step={5} value={Math.round((zoom||1)*100)} onChange={e=>setZoom(Math.max(0.5, Math.min(2, Number(e.target.value)/100)))} />
-													<span className="w-10 text-center">{Math.round((zoom||1)*100)}%</span>
-													<button className="btn px-2 py-0.5" onClick={()=>setZoom(1)}>Actual</button>
-												</div>
-												<div className="mt-2 flex items-center gap-2 text-xs">
-													<label className="inline-flex items-center gap-2">
-														<input type="checkbox" className="accent-indigo-600" checked={liveDetect} onChange={e=>setLiveDetect(e.target.checked)} /> Live auto-detect
-													</label>
-													<span className={`px-2 py-0.5 rounded-full border ${confidence>=85?'bg-emerald-500/15 border-emerald-400/30':'bg-white/10 border-white/20'}`}>Confidence: {confidence}%</span>
-												</div>
-								<label className="mt-2 flex items-center gap-2 text-xs">
-									<input type="checkbox" className="accent-indigo-600" checked={calibrationGuide} onChange={e=>setCalibrationGuide(e.target.checked)} />
-									Show preferred-view guide overlay
-								</label>
-								{/* Vertical action buttons */}
-								<div className="flex flex-col gap-2 mt-3">
-									{(!streaming ? (
-										<>
-											{mode === 'local' && (
-												<button className="btn" onClick={startCamera}>Start Camera</button>
-											)}
-											{mode === 'phone' && (
-												<button className="btn" onClick={startPhonePairing}>Pair Phone Camera</button>
-											)}
-											{mode === 'wifi' && (
-												<button className="btn" onClick={startWifiConnection}>Connect Wifi Camera</button>
-											)}
-										</>
-									) : (
-										<>
-											<button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
-											<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture Frame</button>
-										</>
-									))}
-									<div className="flex items-center gap-2 mt-1">
-										<input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onUploadPhotoChange} />
-										<button className="btn" onClick={triggerUpload}>Upload Photo</button>
-										<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Auto Detect</button>
-									</div>
-														<button className="btn" disabled={dstPoints.length !== 4} onClick={compute}>Compute</button>
-														<div className="flex items-center gap-2 mt-1">
-															<button className={`btn ${locked? 'bg-emerald-600 hover:bg-emerald-700':''}`} onClick={()=>setCalibration({ locked: !locked })}>{locked ? 'Unlock' : 'Lock In'}</button>
-															{locked && <span className="text-xs opacity-80">Calibration saved{errorPx!=null?` · error ${errorPx.toFixed(2)}px`:''}</span>}
-														</div>
-									<button className="btn" disabled={dstPoints.length === 0} onClick={undoPoint}>Undo</button>
-									<button className="btn" disabled={dstPoints.length === 0} onClick={refinePoints}>Refine Points</button>
-									<button className="btn" onClick={resetAll}>Reset</button>
-								</div>
+			<div className="space-y-6">
+				<div className="card space-y-6 p-6">
+					<header className="flex flex-wrap items-start justify-between gap-4">
+						<div className="space-y-2">
+							<p className="text-xs font-semibold uppercase tracking-wide text-indigo-300">Marker calibration</p>
+							<h2 className="text-2xl font-semibold leading-tight text-white">Align your board with the autoscoring overlay</h2>
+							<p className="max-w-2xl text-sm opacity-80">
+								Place the printable fiducial markers around the double ring, capture a clear frame, and let the calibrator compute a precise homography.
+							</p>
+						</div>
+						<div className="flex flex-col items-end gap-2 text-xs font-medium">
+							<span className="inline-flex items-center gap-2 rounded-full border border-indigo-400/50 bg-indigo-500/10 px-3 py-1">
+								<span className="opacity-60">Mode</span>
+								<span>{mode === 'local' ? 'Desktop camera' : mode === 'phone' ? 'Phone camera' : 'Wifi device'}</span>
+							</span>
+							<span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 ${streaming ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-100' : 'border-white/20 bg-white/5 text-slate-200'}`}>
+								<span className={`h-2 w-2 rounded-full ${streaming ? 'bg-emerald-400' : 'bg-slate-400'}`} />
+								{streaming ? 'Live stream active' : 'Stream idle'}
+							</span>
+							{locked ? (
+								<span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/60 bg-emerald-500/10 px-3 py-1 text-emerald-100">
+									<span>Locked • {errorPx != null ? `${errorPx.toFixed(2)}px error` : 'ready'}</span>
+								</span>
+							) : (
+								<span className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-amber-100">
+									<span>Not locked</span>
+									{errorPx != null && <span>• {errorPx.toFixed(2)}px</span>}
+								</span>
+							)}
+						</div>
+					</header>
+
+					<section className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-5">
+						<div className="flex flex-wrap items-start justify-between gap-4">
+							<div>
+								<h3 className="text-sm font-semibold uppercase tracking-wide text-indigo-200">Marker kit</h3>
+								<p className="mt-1 text-sm opacity-80">
+									Print the fiducials, tape them flush with the outer double ring, then capture a clear frame before running detection.
+								</p>
 							</div>
-							<div className="md:col-span-8 flex items-center justify-end">
+							<div className="flex flex-wrap gap-2">
+								<button className="btn px-3 py-1.5" onClick={openMarkerSheet}>Open printable sheet</button>
+								<button className="btn btn--ghost px-3 py-1.5" onClick={() => setMarkerResult(null)}>Clear marker status</button>
+							</div>
+						</div>
+						<ol className="mt-3 list-decimal list-inside space-y-2 text-sm opacity-75">
+							<li>Print and cut out the four markers. Place them on the top, right, bottom, and left edges of the double ring.</li>
+							<li>Start your camera or upload a still frame with the full board visible and the markers unobstructed.</li>
+							<li>Run <strong>Auto detect</strong> for circle fitting or <strong>Detect markers</strong> for fiducials, then lock calibration when error ≤ 1.2px.</li>
+						</ol>
+					</section>
+
+					<div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+						<section className="space-y-4">
+							<div className="space-y-4 rounded-2xl border border-white/10 bg-black/40 p-4">
+								<div className="flex flex-wrap items-center justify-between gap-4 text-xs">
+									<div className="flex flex-wrap items-center gap-3">
+										<span className="uppercase tracking-wide opacity-60">Video source</span>
+										<div className="flex items-center gap-1">
+											<button
+												className={`btn px-3 py-1 ${mode === 'local' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 hover:bg-slate-600'}`}
+												onClick={() => { setMode('local'); stopCamera() }}
+												title="Use local camera"
+											>
+												Local
+											</button>
+											<button
+												className={`btn px-3 py-1 ${mode === 'phone' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 hover:bg-slate-600'}`}
+												onClick={() => { setMode('phone'); stopCamera() }}
+												title="Pair phone camera"
+											>
+												Phone
+											</button>
+											<button
+												className="btn px-3 py-1 bg-slate-700 opacity-50 cursor-not-allowed"
+												disabled
+												title="Wifi camera mode coming soon"
+											>
+												Wifi
+											</button>
+										</div>
+									</div>
+									<div className="flex flex-wrap items-center gap-3">
+										<div className="flex items-center gap-2">
+											<span className="opacity-70">Zoom</span>
+											<input
+												type="range"
+												min={50}
+												max={200}
+												step={5}
+												value={Math.round((zoom || 1) * 100)}
+												onChange={e => setZoom(Math.max(0.5, Math.min(2, Number(e.target.value) / 100)))}
+											/>
+											<span className="w-12 text-right">{Math.round((zoom || 1) * 100)}%</span>
+										</div>
+										<button className="btn px-3 py-1" onClick={() => setZoom(1)}>Actual</button>
+									</div>
+								</div>
+
 								<div
-									className="relative w-full max-w-[min(100%,60vh)] rounded-2xl overflow-hidden border border-indigo-400/30 bg-black flex items-center justify-center"
+									className="relative w-full overflow-hidden rounded-2xl border border-indigo-400/30 bg-black"
 									style={{ aspectRatio: frameSize ? `${frameSize.w} / ${frameSize.h}` : '16 / 9' }}
 								>
-									{(!streaming || !paired) ? (
-										<DartLoader calibrationComplete={phase === 'computed'} />
-									) : null}
-									<div className="absolute inset-0" style={{ transform: `scale(${zoom||1})`, transformOrigin: 'center center' }}>
+									{(!streaming || !paired) && (
+										<div className="absolute inset-0 z-20 flex items-center justify-center bg-gradient-to-br from-black/40 to-black/10">
+											<DartLoader calibrationComplete={phase === 'computed'} />
+										</div>
+									)}
+									<div className="absolute inset-0" style={{ transform: `scale(${zoom || 1})`, transformOrigin: 'center center' }}>
 										<video
 											ref={videoRef}
 											onLoadedMetadata={(ev) => {
@@ -1034,16 +1151,16 @@ export default function Calibrator() {
 													if (v.videoWidth && v.videoHeight) setFrameSize({ w: v.videoWidth, h: v.videoHeight })
 												} catch {}
 											}}
-											className={`absolute inset-0 w-full h-full object-cover ${snapshotSet ? 'opacity-0 -z-10' : 'opacity-100 z-10'}`}
+											className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${snapshotSet ? 'opacity-0 -z-10' : 'opacity-100 z-10'}`}
 											autoPlay
 											playsInline
 											muted
 											controls={false}
 										/>
 										{videoPlayBlocked && (
-											<div className="absolute inset-0 z-50 flex items-center justify-center">
+											<div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur">
 												<button
-													className="bg-white/90 text-slate-900 px-4 py-2 rounded-lg shadow-lg"
+													className="rounded-lg bg-white px-4 py-2 font-semibold text-slate-900 shadow-lg"
 													onClick={async () => {
 													try {
 														await videoRef.current?.play()
@@ -1060,85 +1177,202 @@ export default function Calibrator() {
 												</button>
 											</div>
 										)}
-										<canvas ref={canvasRef} className={`absolute inset-0 w-full h-full ${snapshotSet ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`} />
-										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 w-full h-full z-30" />
+										<canvas ref={canvasRef} className={`absolute inset-0 h-full w-full transition-opacity duration-300 ${snapshotSet ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`} />
+										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 z-30 h-full w-full cursor-crosshair" />
 									</div>
 								</div>
 
+								<label className="flex items-center gap-2 text-xs">
+									<input type="checkbox" className="accent-indigo-600" checked={calibrationGuide} onChange={e => setCalibrationGuide(e.target.checked)} />
+									Show preferred-view guide overlay
+								</label>
 							</div>
-						</div>
-				{mode==='phone' && !streaming && (
-					<div className="mt-2 p-2 rounded-lg bg-black/40 border border-white/10 text-white text-xs">
-						<div>Open on your phone:</div>
-						<div className="font-mono break-all">{mobileUrl}</div>
-						<div className="mt-1 opacity-80">WS: {ws ? (ws.readyState===1?'open':ws.readyState===0?'connecting':ws.readyState===2?'closing':'closed') : 'not started'} · {httpsInfo?.https ? 'HTTPS on' : 'HTTP only'}</div>
-						{pairCode && <div>Code: <span className="font-mono">{pairCode}</span></div>}
-						{qrDataUrl && <img className="mt-1 w-[160px] h-[160px] bg-white rounded" alt="Scan to open" src={qrDataUrl} />}
-						<div className="mt-1 flex items-center gap-2">
-							{ttl !== null && <span>Expires in {ttl}s</span>}
-							<button className="btn px-2 py-1 text-xs" onClick={regenerateCode}>Regenerate</button>
-						</div>
-						{showTips && (
-							<div className="mt-2 p-2 rounded bg-slate-900/60 border border-slate-700/50 text-slate-200">
-								<div className="font-semibold mb-1">Troubleshooting</div>
-								<ul className="list-disc pl-4 space-y-1">
-									<li>Phone and desktop must be on the same Wi‑Fi network.</li>
-									<li>Allow the server through your firewall (ports 8787 and {httpsInfo?.https ? httpsInfo.port : 8788}).</li>
-									<li>On iPhone, use HTTPS links (QR will prefer https when enabled).</li>
-								</ul>
-								<div className="mt-2 text-right"><button className="btn btn--ghost px-2 py-1 text-xs" onClick={()=>setShowTips(false)}>Hide tips</button></div>
-							</div>
-						)}
-					</div>
-				)}
-				{mode==='wifi' && !streaming && (
-					<div className="mt-2 p-2 rounded-lg bg-black/40 border border-white/10 text-white text-xs">
-						<div className="font-semibold mb-2">Wifi Scoring Devices</div>
-						{discoveringWifi ? (
-							<div className="flex items-center gap-2">
-								<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-								<span>Scanning network for devices...</span>
-							</div>
-						) : wifiDevices.length > 0 ? (
-							<div className="space-y-2">
-								{wifiDevices.map(device => (
-									<div key={device.id} className="flex items-center justify-between p-2 rounded bg-slate-900/60 border border-slate-700/50">
-										<div>
-											<div className="font-medium">{device.name}</div>
-											<div className="opacity-70">{device.ip}:{device.port} · {device.type.toUpperCase()}</div>
-											<div className="opacity-70 text-xs">Capabilities: {device.capabilities.join(', ')}</div>
-										</div>
-										<button 
-											className={`btn px-2 py-1 text-xs ${
-												device.status === 'connecting' ? 'bg-yellow-600' :
-												device.status === 'online' ? 'bg-green-600' : 'bg-blue-600'
-											}`}
-											onClick={() => connectToWifiDevice(device)}
-											disabled={device.status === 'connecting'}
-										>
-											{device.status === 'connecting' ? 'Connecting...' : 'Connect'}
-										</button>
-									</div>
-								))}
-								<div className="text-center">
-									<button className="btn px-2 py-1 text-xs" onClick={startWifiConnection}>Rescan Network</button>
+
+							<div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
+								<div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+									<div className="uppercase tracking-wide opacity-60">Phase</div>
+									<div className="text-sm font-semibold capitalize">{phase}</div>
+								</div>
+								<div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+									<div className="uppercase tracking-wide opacity-60">Points selected</div>
+									<div className="text-sm font-semibold">{dstPoints.length} / 4</div>
+								</div>
+								<div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+									<div className="uppercase tracking-wide opacity-60">Fit error</div>
+									<div className="text-sm font-semibold">{errorPx != null ? `${errorPx.toFixed(2)} px` : '—'}</div>
 								</div>
 							</div>
-						) : (
-							<div className="text-center">
-								<div className="mb-2">No wifi scoring devices found.</div>
-								<div className="mb-2 opacity-70">Make sure your wifi cameras are powered on and connected to the same network.</div>
-								<button className="btn px-2 py-1 text-xs" onClick={startWifiConnection}>Scan Again</button>
-							</div>
-						)}
+						</section>
+
+						<aside className="space-y-4">
+							<DevicePicker />
+
+							<section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+								<div>
+									<h3 className="text-sm font-semibold">Step 1 · Capture image</h3>
+									<p className="text-xs opacity-70">Start your preferred camera or upload a static photo of the board.</p>
+								</div>
+								<div className="flex flex-wrap gap-2">
+									{!streaming ? (
+										<>
+											{mode === 'local' && <button className="btn" onClick={startCamera}>Start camera</button>}
+											{mode === 'phone' && <button className="btn" onClick={startPhonePairing}>Pair phone camera</button>}
+											{mode === 'wifi' && <button className="btn" onClick={startWifiConnection}>Connect wifi camera</button>}
+										</>
+									) : (
+										<>
+											<button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop camera</button>
+											<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture frame</button>
+										</>
+									)}
+								</div>
+								<div className="flex flex-wrap gap-2">
+									<input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onUploadPhotoChange} />
+									<button className="btn" onClick={triggerUpload}>Upload photo</button>
+								</div>
+							</section>
+
+							<section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+								<div className="flex items-center justify-between gap-2">
+									<div>
+										<h3 className="text-sm font-semibold">Step 2 · Detect markers</h3>
+										<p className="text-xs opacity-70">Use fiducials or auto-detect to seed the rim points.</p>
+									</div>
+									<span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] ${confidence >= 85 ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-100' : 'border-white/20 bg-white/5 text-slate-200'}`}>
+										<span className="opacity-70">Confidence</span>
+										<span>{confidence}%</span>
+									</span>
+								</div>
+								<label className="inline-flex items-center gap-2 text-xs">
+									<input type="checkbox" className="accent-indigo-600" checked={liveDetect} onChange={e => setLiveDetect(e.target.checked)} />
+									Live auto-detect while streaming
+								</label>
+								<div className="flex flex-wrap gap-2">
+									<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Auto detect</button>
+									<button className="btn" disabled={!snapshotSet} onClick={detectMarkers}>Detect markers</button>
+								</div>
+								{markerResult && (
+									<div
+										className={`rounded-lg border px-3 py-2 text-xs ${markerResult.success ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-100' : 'bg-rose-500/10 border-rose-500/30 text-rose-100'}`}
+									>
+										{markerResult.success ? (
+											<div className="space-y-1">
+												<div>
+													Detected markers → board anchors:{' '}
+													{MARKER_ORDER.map((key) => {
+														const assignment = markerResult.assignments?.[key]
+														return `${key.toUpperCase()}→${assignment ? `ID ${assignment.id}` : '—'}`
+													}).join(', ')}
+												</div>
+												{markerResult.errorPx != null && <div>RMS error: {markerResult.errorPx.toFixed(2)} px</div>}
+												<div className="opacity-80">Markers correspond to IDs TOP {MARKER_TARGETS.top}, RIGHT {MARKER_TARGETS.right}, BOTTOM {MARKER_TARGETS.bottom}, LEFT {MARKER_TARGETS.left}.</div>
+											</div>
+										) : (
+											<div className="space-y-1">
+												<div>{markerResult.message || 'Unable to detect all markers.'}</div>
+												{markerResult.missing.length > 0 && (
+													<div>Missing: {markerResult.missing.map(k => `${k.toUpperCase()} (ID ${MARKER_TARGETS[k]})`).join(', ')}</div>
+												)}
+											</div>
+										)}
+									</div>
+								)}
+							</section>
+
+							<section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
+								<div>
+									<h3 className="text-sm font-semibold">Step 3 · Align & lock</h3>
+									<p className="text-xs opacity-70">Click points in TOP → RIGHT → BOTTOM → LEFT order, refine edges, then lock the calibration.</p>
+								</div>
+								<div className="flex flex-wrap gap-2">
+									<button className="btn" disabled={dstPoints.length !== 4} onClick={compute}>Compute</button>
+									<button className={`btn ${locked ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`} onClick={() => setCalibration({ locked: !locked })}>
+										{locked ? 'Unlock' : 'Lock in'}
+									</button>
+								</div>
+								{locked && (
+									<div className="text-xs opacity-75">
+										Calibration saved {errorPx != null ? `· error ${errorPx.toFixed(2)} px` : ''}
+									</div>
+								)}
+								<div className="flex flex-wrap gap-2">
+									<button className="btn" disabled={dstPoints.length === 0} onClick={undoPoint}>Undo</button>
+									<button className="btn" disabled={dstPoints.length === 0} onClick={refinePoints}>Refine points</button>
+									<button className="btn" onClick={resetAll}>Reset</button>
+								</div>
+							</section>
+						</aside>
 					</div>
-				)}
-				<div className="mt-2 text-sm opacity-80">
-					<div>Phase: {phase}</div>
-					<div>Clicked: {dstPoints.length} / 4</div>
-					{errorPx != null && <div>Fit error: {errorPx.toFixed(2)} px</div>}
+
+					{mode === 'phone' && !streaming && (
+						<div className="space-y-2 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
+							<div className="font-semibold">Phone pairing</div>
+							<div className="font-mono break-all">{mobileUrl}</div>
+							<div className="opacity-80">
+								WS: {ws ? (ws.readyState === 1 ? 'open' : ws.readyState === 0 ? 'connecting' : ws.readyState === 2 ? 'closing' : 'closed') : 'not started'} · {httpsInfo?.https ? 'HTTPS on' : 'HTTP only'}
+							</div>
+							{pairCode && <div>Code: <span className="font-mono">{pairCode}</span></div>}
+							{qrDataUrl && <img className="mt-1 h-40 w-40 rounded bg-white" alt="Scan to open" src={qrDataUrl} />}
+							<div className="flex items-center gap-2">
+								{ttl !== null && <span>Expires in {ttl}s</span>}
+								<button className="btn px-2 py-1 text-xs" onClick={regenerateCode}>Regenerate</button>
+							</div>
+							{showTips && (
+								<div className="space-y-2 rounded-lg border border-slate-700/50 bg-slate-900/60 p-3 text-slate-200">
+									<div className="font-semibold">Troubleshooting</div>
+									<ul className="list-disc space-y-1 pl-4">
+										<li>Phone and desktop must be on the same Wi‑Fi network.</li>
+										<li>Allow the server through your firewall (ports 8787 and {httpsInfo?.https ? httpsInfo.port : 8788}).</li>
+										<li>On iPhone, use HTTPS links (QR will prefer HTTPS when enabled).</li>
+									</ul>
+									<div className="text-right">
+										<button className="btn btn--ghost px-2 py-1 text-xs" onClick={() => setShowTips(false)}>Hide tips</button>
+									</div>
+								</div>
+							)}
+						</div>
+					)}
+
+					{mode === 'wifi' && !streaming && (
+						<div className="space-y-3 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
+							<div className="font-semibold">Wifi scoring devices</div>
+							{discoveringWifi ? (
+								<div className="flex items-center gap-2">
+									<div className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+									<span>Scanning network for devices…</span>
+								</div>
+							) : wifiDevices.length > 0 ? (
+								<div className="space-y-2">
+									{wifiDevices.map(device => (
+										<div key={device.id} className="flex items-center justify-between rounded border border-slate-700/50 bg-slate-900/60 p-2">
+											<div>
+												<div className="font-medium">{device.name}</div>
+												<div className="opacity-70">{device.ip}:{device.port} · {device.type.toUpperCase()}</div>
+												<div className="opacity-70 text-xs">Capabilities: {device.capabilities.join(', ')}</div>
+											</div>
+											<button
+												className={`btn px-2 py-1 text-xs ${device.status === 'connecting' ? 'bg-yellow-600' : device.status === 'online' ? 'bg-green-600' : 'bg-blue-600'}`}
+												onClick={() => connectToWifiDevice(device)}
+												disabled={device.status === 'connecting'}
+											>
+												{device.status === 'connecting' ? 'Connecting…' : 'Connect'}
+											</button>
+										</div>
+									))}
+									<div className="text-center">
+										<button className="btn px-2 py-1 text-xs" onClick={startWifiConnection}>Rescan network</button>
+									</div>
+								</div>
+							) : (
+								<div className="space-y-2 text-center">
+									<div>No wifi scoring devices found.</div>
+									<div className="opacity-70">Ensure your wifi cameras are powered on and on the same network.</div>
+									<button className="btn px-2 py-1 text-xs" onClick={startWifiConnection}>Scan again</button>
+								</div>
+							)}
+						</div>
+					)}
 				</div>
 			</div>
-		</div>
-	)
+		)
 }

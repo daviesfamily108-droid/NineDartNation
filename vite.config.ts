@@ -7,6 +7,10 @@ export default defineConfig({
   build: {
     sourcemap: true,
   },
+  test: {
+    globals: true,
+    environment: 'node',
+  },
   server: {
     // Bind to all interfaces so Render (and other PaaS) can detect the open port
     host: true,

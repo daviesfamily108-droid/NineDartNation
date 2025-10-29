@@ -723,12 +723,19 @@ export default function SettingsPanel({ user }: { user?: any }) {
               <select
                 className="input w-full"
                 value={autoscoreProvider || 'built-in'}
-                onChange={e => setAutoscoreProvider(e.target.value as 'built-in' | 'external-ws')}
+                onChange={e => setAutoscoreProvider(e.target.value as 'built-in' | 'external-ws' | 'manual')}
               >
                 <option value="built-in">Built-in Vision</option>
+                <option value="manual">Manual scoring only</option>
                 <option value="external-ws">External WebSocket</option>
               </select>
             </div>
+
+            {autoscoreProvider === 'manual' && (
+              <div className="text-xs opacity-70">
+                Camera previews and autoscore overlays are hidden while manual scoring is selected. Use the score inputs or keyboard shortcuts to record each visit.
+              </div>
+            )}
 
             {autoscoreProvider === 'external-ws' && (
               <div>

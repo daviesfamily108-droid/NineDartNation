@@ -19,7 +19,7 @@ type SettingsState = {
   cameraScale: number // 0.5 .. 1.25
   cameraAspect?: 'wide' | 'square'
   // External autoscore provider
-  autoscoreProvider?: 'built-in' | 'external-ws'
+  autoscoreProvider?: 'built-in' | 'external-ws' | 'manual'
   autoscoreWsUrl?: string
   calibrationGuide: boolean
   // Devices & preferences
@@ -53,7 +53,7 @@ type SettingsState = {
   setPreferredCameraLocked: (v: boolean) => void
   setCameraEnabled: (v: boolean) => void
   setOfflineLayout: (mode: 'classic'|'modern') => void
-  setAutoscoreProvider: (p: 'built-in' | 'external-ws') => void
+  setAutoscoreProvider: (p: 'built-in' | 'external-ws' | 'manual') => void
   setAutoscoreWsUrl: (u: string) => void
   setTextSize: (size: 'small' | 'medium' | 'large') => void
   setBoxSize: (size: 'small' | 'medium' | 'large') => void
@@ -85,7 +85,7 @@ function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'calle
       allowSpectate: (typeof j.allowSpectate === 'boolean') ? j.allowSpectate : true,
   cameraScale: (typeof j.cameraScale === 'number' && isFinite(j.cameraScale)) ? Math.max(0.5, Math.min(1.25, j.cameraScale)) : 1.0,
   cameraAspect: j.cameraAspect === 'square' ? 'square' : 'wide',
-  autoscoreProvider: (j.autoscoreProvider === 'external-ws') ? 'external-ws' : 'built-in',
+  autoscoreProvider: (j.autoscoreProvider === 'external-ws') ? 'external-ws' : (j.autoscoreProvider === 'manual' ? 'manual' : 'built-in'),
   autoscoreWsUrl: typeof j.autoscoreWsUrl === 'string' ? j.autoscoreWsUrl : '',
       calibrationGuide: (typeof j.calibrationGuide === 'boolean') ? j.calibrationGuide : true,
   preferredCameraId: typeof j.preferredCameraId === 'string' ? j.preferredCameraId : undefined,

@@ -52,7 +52,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const firstConnectDoneRef = useRef(false)
   const match = useMatch()
   const msgs = useMessages()
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale, cameraEnabled, textSize, boxSize } = useUserSettings()
+  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale, cameraEnabled, textSize, boxSize, autoscoreProvider } = useUserSettings()
+  const manualScoring = autoscoreProvider === 'manual'
 
   // Button size classes for toolbar buttons
   const getButtonSizeClasses = (size: string) => {
@@ -1458,28 +1459,32 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
                   <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
                   <button className={`btn ${buttonSizeClass}`} onClick={openManual}>Manual Correction</button>
-                  <button className={`btn ${buttonSizeClass}`} onClick={() => {
-                    console.log('Sending cam-create')
-                    if (wsGlobal) {
-                      wsGlobal.send({ type: 'cam-create' })
-                    } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                      wsRef.current.send(JSON.stringify({ type: 'cam-create' }))
-                    } else {
-                      toast('Not connected to server', { type: 'error' })
-                    }
-                  }}>Pair Phone</button>
-                  {pairingCode && (
+                  {!manualScoring && (
+                    <button className={`btn ${buttonSizeClass}`} onClick={() => {
+                      console.log('Sending cam-create')
+                      if (wsGlobal) {
+                        wsGlobal.send({ type: 'cam-create' })
+                      } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                        wsRef.current.send(JSON.stringify({ type: 'cam-create' }))
+                      } else {
+                        toast('Not connected to server', { type: 'error' })
+                      }
+                    }}>Pair Phone</button>
+                  )}
+                  {!manualScoring && pairingCode && (
                     <div className="ml-2 text-sm bg-blue-900/50 p-2 rounded">
                       <div><span className="opacity-70">Mobile pairing code: </span><span className="font-mono font-bold text-lg">{pairingCode}</span></div>
                       <div className="text-xs opacity-70 mt-1">On your phone, go to: <a href={`/mobile-cam.html?code=${pairingCode}`} target="_blank" className="underline">{window.location.origin}/mobile-cam.html?code={pairingCode}</a></div>
                     </div>
                   )}
-                  <div className="ml-auto flex items-center gap-1 text-[11px]">
-                    <span className="opacity-70">Cam size</span>
-                    <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
-                    <span className={`btn ${buttonSizeClass} min-w-[2.5rem] text-center`}>{Math.round(cameraScale*100)}%</span>
-                    <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
-                  </div>
+                  {!manualScoring && (
+                    <div className="ml-auto flex items-center gap-1 text-[11px]">
+                      <span className="opacity-70">Cam size</span>
+                      <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
+                      <span className={`btn ${buttonSizeClass} min-w-[2.5rem] text-center`}>{Math.round(cameraScale*100)}%</span>
+                      <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                    </div>
+                  )}
                 </div>
                 {/* Summary (left) + Camera (right) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 items-start">

@@ -34,6 +34,7 @@ export default function CameraView({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const { preferredCameraId, setPreferredCamera, autoscoreProvider, autoscoreWsUrl } = useUserSettings()
+  const manualOnly = autoscoreProvider === 'manual'
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -65,10 +66,10 @@ export default function CameraView({
   const manualPreviewRef = useRef<HTMLCanvasElement | null>(null)
   // Open Autoscore modal from parent via global event
   useEffect(() => {
-    const onOpen = () => setShowAutoModal(true)
+    const onOpen = () => { if (!manualOnly) setShowAutoModal(true) }
     window.addEventListener('ndn:open-autoscore' as any, onOpen)
     return () => window.removeEventListener('ndn:open-autoscore' as any, onOpen)
-  }, [])
+  }, [manualOnly])
 
   // Open Scoring (Camera + Pending Visit) modal from parent via global event
   useEffect(() => {
@@ -88,6 +89,13 @@ export default function CameraView({
       window.removeEventListener('ndn:close-manual' as any, onClose)
     }
   }, [])
+
+  useEffect(() => {
+    if (manualOnly) {
+      setActiveTab('manual')
+      setShowAutoModal(false)
+    }
+  }, [manualOnly])
 
   // Drive a lightweight live preview inside the manual modal from the main video element
   useEffect(() => {
@@ -301,10 +309,11 @@ export default function CameraView({
   }
 
   useEffect(() => {
+    if (manualOnly) return
     const id = setInterval(drawOverlay, 250)
     return () => clearInterval(id)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [H, imageSize, streaming])
+  }, [H, imageSize, streaming, manualOnly])
 
   // External autoscore subscription
   useEffect(() => {
@@ -597,45 +606,60 @@ export default function CameraView({
       {showToolbar && (
         <div className="lg:col-span-2">
           <div className="flex items-center gap-2 mb-2">
-            <button
-              className={`btn px-3 py-1 text-sm ${activeTab==='auto' ? 'tab--active' : ''}`}
-              onClick={()=>{ setActiveTab('auto'); setShowManualModal(false); setShowAutoModal(true) }}
-            >Autoscore</button>
+            {!manualOnly && (
+              <button
+                className={`btn px-3 py-1 text-sm ${activeTab==='auto' ? 'tab--active' : ''}`}
+                onClick={()=>{ setActiveTab('auto'); setShowManualModal(false); setShowAutoModal(true) }}
+              >Autoscore</button>
+            )}
             <button
               className={`btn px-3 py-1 text-sm ${activeTab==='manual' ? 'tab--active' : ''}`}
               onClick={()=>{ setActiveTab('manual'); setShowManualModal(true) }}
               title="Open Manual Correction"
             >Manual Correction</button>
+            {manualOnly && (
+              <span className="text-xs opacity-70">Manual scoring mode active</span>
+            )}
           </div>
         </div>
       )}
-  {!hideInlinePanels ? (
-  <div className="card">
-        <h2 className="text-xl font-semibold mb-3">Camera</h2>
-        <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={320} minHeight={240} maxWidth={1600} maxHeight={900}>
-          <CameraSelector />
-          <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
-          <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
-        </ResizablePanel>
-        <div className="flex gap-2 mt-3">
-          {!streaming ? (
-            <button className="btn" onClick={startCamera} disabled={cameraStarting}>
-              {cameraStarting ? 'Connecting Camera...' : 'Connect Camera'}
-            </button>
-          ) : (
-            <button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
-          )}
-          {/* Removed Snapshot panel; Capture remains for future features (e.g., quick preview) */}
-          <button className="btn" onClick={capture} disabled={!streaming}>Capture Still</button>
-          <button className="btn bg-slate-700 hover:bg-slate-800" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
+      {!hideInlinePanels && !manualOnly ? (
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-3">Camera</h2>
+          <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={320} minHeight={240} maxWidth={1600} maxHeight={900}>
+            <CameraSelector />
+            <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
+            <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+          </ResizablePanel>
+          <div className="flex gap-2 mt-3">
+            {!streaming ? (
+              <button className="btn" onClick={startCamera} disabled={cameraStarting}>
+                {cameraStarting ? 'Connecting Camera...' : 'Connect Camera'}
+              </button>
+            ) : (
+              <button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
+            )}
+            {/* Removed Snapshot panel; Capture remains for future features (e.g., quick preview) */}
+            <button className="btn" onClick={capture} disabled={!streaming}>Capture Still</button>
+            <button className="btn bg-slate-700 hover:bg-slate-800" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
+          </div>
         </div>
-  </div>
-  ) : null}
+      ) : null}
+      {!hideInlinePanels && manualOnly && (
+        <div className="card">
+          <h2 className="text-xl font-semibold mb-3">Manual Scoring</h2>
+          <p className="text-sm opacity-80 mb-3">Camera-based autoscore is disabled. Use the manual visit input or open the Manual Correction panel to record darts.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button className="btn" onClick={()=>{ setShowManualModal(true); setActiveTab('manual') }}>Open Manual Correction</button>
+            <button className="btn btn--ghost" onClick={()=>{ try { window.dispatchEvent(new Event('ndn:open-scoring' as any)) } catch {} }}>Manage Pending Visit</button>
+          </div>
+        </div>
+      )}
       {/* Snapshot panel removed to reduce unused space */}
       <canvas ref={canvasRef} className="hidden"></canvas>
       {/* Autoscore moved into a pill-triggered modal to reduce on-screen clutter */}
       {/* Modal: Autoscore */}
-      {showAutoModal && (
+  {showAutoModal && !manualOnly && (
         <div className="fixed inset-0 bg-black/60 z-[100]" role="dialog" aria-modal="true">
           <div className="absolute inset-0 flex items-center justify-center p-4">
             <ResizableModal

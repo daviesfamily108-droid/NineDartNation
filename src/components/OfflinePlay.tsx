@@ -218,7 +218,8 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [manualBox, setManualBox] = useState<string>('')
   const [manualTextarea, setManualTextarea] = useState<string>('')
   // Settings: favourite double and caller
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect, cameraEnabled, textSize, boxSize } = useUserSettings()
+  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect, cameraEnabled, textSize, boxSize, autoscoreProvider } = useUserSettings()
+  const manualScoring = autoscoreProvider === 'manual'
 
   // Button size classes for toolbar buttons
   const getButtonSizeClasses = (size: string) => {
@@ -1273,21 +1274,30 @@ export default function OfflinePlay({ user }: { user: any }) {
                 </div>
                 {/* Right area: toolbar + camera (span 2) */}
                 <div className="md:col-span-2 min-w-0 space-y-2">
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <div className="ml-auto flex items-center gap-1 text-[10px]">
-                      <span className="opacity-70">Cam</span>
-                      <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
-                      <span className={`btn ${buttonSizeClass} min-w-[2.5rem] text-center`}>{Math.round(cameraScale*100)}%</span>
-                      <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
-                      <span className="opacity-50">|</span>
-                      <button className={`btn ${buttonSizeClass}`} title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
+                  {!manualScoring ? (
+                    <>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <div className="ml-auto flex items-center gap-1 text-[10px]">
+                          <span className="opacity-70">Cam</span>
+                          <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
+                          <span className={`btn ${buttonSizeClass} min-w-[2.5rem] text-center`}>{Math.round(cameraScale*100)}%</span>
+                          <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
+                          <span className="opacity-50">|</span>
+                          <button className={`btn ${buttonSizeClass}`} title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
+                        </div>
+                      </div>
+                      <div className="flex items-stretch justify-end min-w-0">
+                        <div className={`w-full min-w-0 ${cameraAspect==='square'?'aspect-square':'aspect-video'} rounded-2xl overflow-hidden bg-black`}>
+                          <CameraTile label="Your Board" autoStart={true} />
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="card">
+                      <div className="text-sm font-semibold mb-1">Manual scoring active</div>
+                      <div className="text-xs opacity-70">Camera previews are disabled. Use the manual entry controls below to record your turn.</div>
                     </div>
-                  </div>
-                  <div className="flex items-stretch justify-end min-w-0">
-                    <div className={`w-full min-w-0 ${cameraAspect==='square'?'aspect-square':'aspect-video'} rounded-2xl overflow-hidden bg-black`}>
-                      <CameraTile label="Your Board" autoStart={true} />
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             ) : (

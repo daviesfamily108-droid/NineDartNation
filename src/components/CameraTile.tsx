@@ -20,7 +20,18 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
   const [discoveringWifi, setDiscoveringWifi] = useState<boolean>(false)
   const [usbDevices, setUsbDevices] = useState<USBDevice[]>([])
   const [discoveringUsb, setDiscoveringUsb] = useState<boolean>(false)
+  const autoscoreProvider = useUserSettings(s => s.autoscoreProvider)
   const setPreferredCameraLocked = useUserSettings(s => s.setPreferredCameraLocked)
+
+  if (autoscoreProvider === 'manual') {
+    return (
+      <div className="rounded-2xl overflow-hidden bg-black w-full mx-auto" style={{ aspectRatio: '4 / 3' }}>
+        <div className="w-full h-full flex items-center justify-center bg-slate-900 text-slate-200 text-xs p-4 text-center">
+          Manual scoring mode active — camera feeds are disabled.
+        </div>
+      </div>
+    )
+  }
   useEffect(() => {
     const h = window.location.hostname
     if (h === 'localhost' || h === '127.0.0.1') {
@@ -214,16 +225,28 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
   function ensureWS() {
     if (ws && ws.readyState === WebSocket.OPEN) return ws
     const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined
-    // Normalize env URL to ensure it targets the WS endpoint path
     const normalizedEnv = envUrl && envUrl.length > 0
       ? (envUrl.endsWith('/ws') ? envUrl : envUrl.replace(/\/$/, '') + '/ws')
       : undefined
-    // Fallbacks prefer same-origin when available; always include '/ws'
     const proto = (window.location.protocol === 'https:' ? 'wss' : 'ws')
     const sameOrigin = `${proto}://${window.location.host}/ws`
     const host = window.location.hostname
-    const fallbacks = [sameOrigin, `${proto}://${host}:8787/ws`, `${proto}://${host}:3000/ws`]
-    const url = normalizedEnv || fallbacks[0]
+    const isLocalhost = host === 'localhost' || host === '127.0.0.1'
+    const isRenderHost = host.endsWith('onrender.com')
+    // Preferred production fallback (avoids Netlify origin which lacks WS server)
+    const renderWS = `wss://ninedartnation.onrender.com/ws`
+    let url = normalizedEnv
+    if (!url) {
+      if (isLocalhost) {
+        url = `${proto}://${host}:8787/ws`
+      } else if (isRenderHost) {
+        url = sameOrigin
+      } else {
+        url = renderWS
+      }
+    }
+    // As a safety net for unusual ports, fall back to same-origin if all else fails
+    if (!url) url = sameOrigin
     const socket = new WebSocket(url)
     setWs(socket)
     return socket

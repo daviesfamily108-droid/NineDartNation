@@ -29,6 +29,15 @@ Recommendations for full confidence
 3) Consider increasing the TTL if users need more time to complete pairing.
 4) For an extra level of safety, capture and surface the generated code to the user immediately and avoid re-generating while the UI shows the pending code (client-side UX guard).
 
+## Marker-based calibration workflow (2025-10-29)
+
+- Print the marker kit directly from the Calibrator (Marker Calibration Kit → Open printable sheet). Each marker is labelled TOP/RIGHT/BOTTOM/LEFT with the ArUco ID we expect.
+- Tape the markers so the inner edge touches the outer double ring. Keep them flat and fully visible inside the camera frame.
+- Capture a still frame and click **Detect Markers**. The calibrator locates all four IDs, computes the homography, and auto-locks if the RMS error ≤ 1.2 px.
+- The detection flow uses `markerIdToMatrix` → `detectMarkersFromCanvas`, which pairs `MARKER_TARGETS` to canonical rim anchors: TOP, RIGHT, BOTTOM, LEFT.
+- A marker status panel surfaces detection results, missing IDs, and the computed error. You can clear the status to reset the panel without losing your snapshot.
+- Printable sheet generation happens client-side via `createMarkerDataUrl` (Calibrator) to avoid bundling extra static assets.
+
 If you want, I can:
 - Add a small admin UI in the Ops panel to list/inspect active camera sessions and force-expire a code.
 - Implement a server-side fallback that, when Redis is unavailable and cluster mode detected, uses a small central master (or file-based lock) to reduce collision probability.

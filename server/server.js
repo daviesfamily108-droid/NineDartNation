@@ -1617,8 +1617,15 @@ function handleSyncMessage(syncData) {
     } else if (syncData.type === 'cam-session-created') {
       // Update local camSessions cache
       if (syncData.session) {
-        camSessions.set(syncData.session.code, syncData.session);
+        camSessions.set(syncData.session.code, syncData.session).catch(()=>{})
+        try { activeCamCodes.add(syncData.session.code) } catch {}
         console.log(`[SYNC] Camera session ${syncData.session.code} synchronized across workers`);
+      }
+    } else if (syncData.type === 'cam-session-removed') {
+      if (syncData.code) {
+        camSessions.delete(syncData.code).catch(()=>{})
+        releaseCamReservation(syncData.code)
+        console.log(`[SYNC] Camera session ${syncData.code} removed across workers`)
       }
     } else if (syncData.type === 'friendship-added') {
       // Update local friendships cache
@@ -1696,6 +1703,26 @@ if ((cluster.isMaster || cluster.isPrimary) && !DEBUG_SINGLE_WORKER) {
   } else {
     console.warn('[CLUSTER] Redis not configured - workers will not communicate');
   }
+
+  cluster.on('message', (worker, message) => {
+    if (!message) return
+    try {
+      if (message.type === 'sync') {
+        for (const id in cluster.workers) {
+          const target = cluster.workers[id]
+          if (target && target.isConnected()) target.send(message)
+        }
+      } else if (message.type === 'broadcast') {
+        const payload = message.data ?? message
+        for (const id in cluster.workers) {
+          const target = cluster.workers[id]
+          if (target && target.isConnected()) target.send(payload)
+        }
+      }
+    } catch (err) {
+      console.warn('[CLUSTER] Failed to fan out worker message:', err?.message || err)
+    }
+  });
 
   // Fork workers
   for (let i = 0; i < numCPUs; i++) {
@@ -1949,6 +1976,41 @@ const CAM_TTL_MS = 2 * 60 * 1000 // 2 minutes
 // Keep a synchronous in-memory set of active camera codes so code generation
 // and validation are deterministic and do not rely on async Redis lookups.
 const activeCamCodes = new Set();
+
+function publishSyncMessage(payload) {
+  try {
+    if (redisClient) {
+      redisClient.publish('sync', JSON.stringify(payload)).catch((err) => {
+        console.warn('[SYNC] Redis publish failed:', err?.message || err)
+        if (typeof process.send === 'function') {
+          try { process.send({ type: 'sync', data: payload }) } catch (e) { console.warn('[SYNC] process.send fallback failed:', e?.message || e) }
+        }
+      })
+    } else if (typeof process.send === 'function') {
+      process.send({ type: 'sync', data: payload })
+    }
+  } catch (e) {
+    console.warn('[SYNC] publishSyncMessage error:', e?.message || e)
+  }
+}
+
+function broadcastCamSessionCreated(session) {
+  if (!session || !session.code) return
+  publishSyncMessage({ type: 'cam-session-created', session })
+}
+
+function broadcastCamSessionRemoved(code) {
+  if (!code) return
+  publishSyncMessage({ type: 'cam-session-removed', code })
+}
+
+function releaseCamReservation(code) {
+  try { activeCamCodes.delete(code) } catch {}
+  if (redisClient) {
+    try { redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch {}
+  }
+}
+
 function genCamCode() {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   let code = '';
@@ -1967,21 +2029,20 @@ setInterval(async () => {
       try {
         const sess = await camSessions.get(code)
         if (!sess) {
-          activeCamCodes.delete(code)
-          if (redisClient) try { await redisClient.del(`camReserve:${code}`) } catch {}
+          releaseCamReservation(code)
           continue
         }
         if (sess.persistent) continue
         if (sess.expiresAt && sess.expiresAt < now) {
           try { await camSessions.delete(code) } catch {}
-          activeCamCodes.delete(code)
-          if (redisClient) try { await redisClient.del(`camReserve:${code}`) } catch {}
+          releaseCamReservation(code)
+          broadcastCamSessionRemoved(code)
           continue
         }
         if (sess.ts && (now - sess.ts) > CAM_TTL_MS) {
           try { await camSessions.delete(code) } catch {}
-          activeCamCodes.delete(code)
-          if (redisClient) try { await redisClient.del(`camReserve:${code}`) } catch {}
+          releaseCamReservation(code)
+          broadcastCamSessionRemoved(code)
           continue
         }
       } catch (e) { /* ignore per-code errors */ }
@@ -2569,17 +2630,11 @@ if (wss) {
         const expiresAt = persistent ? null : (now + CAM_TTL_MS)
         const sessObj = { code, desktopId: ws._id, phoneId: null, ts: now, persistent: persistent, expiresAt }
         try {
+          await camSessions.set(code, sessObj)
           if (persistent && redisClient) {
-            // store without TTL in Redis so it won't be auto-evicted
-            try {
-              await redisClient.set(`camSessions:${code}`, JSON.stringify(sessObj))
-            } catch (e) {
-              // fallback
-              await camSessions.set(code, sessObj)
-            }
-          } else {
-            await camSessions.set(code, sessObj)
+            try { await redisClient.set(`camSessions:${code}`, JSON.stringify(sessObj)) } catch (e) { console.warn('[CAM] persistent session redis set failed:', e?.message || e) }
           }
+          broadcastCamSessionCreated(sessObj)
         } catch (e) { console.warn('[CAM] failed to persist session', e) }
         try { ws.send(JSON.stringify({ type: 'cam-code', code, expiresAt })) } catch {}
       } else if (data.type === 'cam-join') {
@@ -2593,22 +2648,25 @@ if (wss) {
         if (!isPersistent) {
           if (sess.expiresAt && sess.expiresAt < now2) {
             try { await camSessions.delete(code) } catch (e) { /* ignore */ }
-            try { activeCamCodes.delete(code) } catch (e) {}
-            try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
+            releaseCamReservation(code)
+            broadcastCamSessionRemoved(code)
             try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {};
             return
           }
           // backward-compatible TTL check in case expiresAt isn't set
           if (sess.ts && (now2 - sess.ts) > CAM_TTL_MS) {
             try { await camSessions.delete(code) } catch (e) { /* ignore */ }
-            try { activeCamCodes.delete(code) } catch (e) {}
-            try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
+            releaseCamReservation(code)
+            broadcastCamSessionRemoved(code)
             try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {};
             return
           }
         }
         sess.phoneId = ws._id
-        try { await camSessions.set(code, sess) } catch (e) { console.warn('[CAM] failed to update session', e) }
+        try {
+          await camSessions.set(code, sess)
+          broadcastCamSessionCreated(sess)
+        } catch (e) { console.warn('[CAM] failed to update session', e) }
         const desktop = clients.get(sess.desktopId)
         if (desktop && desktop.readyState === 1) desktop.send(JSON.stringify({ type: 'cam-peer-joined', code }))
         try { ws.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
@@ -2760,8 +2818,8 @@ if (wss) {
     for (const [code, sess] of Array.from(camSessions.entries())) {
       if (sess.desktopId === ws._id || sess.phoneId === ws._id) {
         try { await camSessions.delete(code) } catch (e) { /* ignore */ }
-  try { activeCamCodes.delete(code) } catch (e) {}
-  try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
+        releaseCamReservation(code)
+        broadcastCamSessionRemoved(code)
       }
     }
     if (ws._email && users.has(ws._email)) {
@@ -2788,14 +2846,6 @@ if (wss) {
     const lobbyPayload3 = JSON.stringify({ type: 'matches', matches: matchesList })
     for (const client of wss.clients) {
       if (client.readyState === 1) client.send(lobbyPayload3)
-    }
-    // Cleanup any camera sessions involving this client
-    for (const [code, sess] of Array.from(camSessions.entries())) {
-      if (sess.desktopId === ws._id || sess.phoneId === ws._id) {
-        try { await camSessions.delete(code) } catch (e) { /* ignore */ }
-  try { activeCamCodes.delete(code) } catch (e) {}
-  try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
-      }
     }
   });
 });
@@ -2830,8 +2880,8 @@ const hbTimer = setInterval(() => {
   for (const [code, sess] of camSessions.entries()) {
     if (now - (sess.ts || 0) > CAM_TTL_MS) {
       try { camSessions.delete(code).catch(()=>{}) } catch (e) {}
-  try { activeCamCodes.delete(code) } catch (e) {}
-  try { if (redisClient) redisClient.del(`camReserve:${code}`).catch(()=>{}) } catch (e) {}
+      releaseCamReservation(code)
+      broadcastCamSessionRemoved(code)
     }
   }
 }, HEARTBEAT_INTERVAL)
