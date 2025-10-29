@@ -164,13 +164,17 @@ export default function Calibrator() {
 				setPairCode(data.code)
 				if (data.expiresAt) setExpiresAt(data.expiresAt)
 			} else if (data.type === 'cam-peer-joined') {
+				// Ensure we have the latest pairing code even if messages arrive out of order
+				if (!pairCode && data.code) setPairCode(data.code)
 				setPaired(true)
 				// When a phone peer joins, proactively send current calibration (if locked)
 				try {
-					if (locked && pairCode) {
-						const payload = { H, imageSize: (imageSize || null), errorPx: (errorPx ?? null), createdAt: Date.now() }
-						socket.send(JSON.stringify({ type: 'cam-calibration', code: pairCode, payload }))
-						console.log('[Calibrator] Sent calibration to joined phone for code', pairCode)
+					const codeToUse = pairCode || data.code
+					if (locked && codeToUse) {
+						const imgSize = canvasRef.current ? { w: canvasRef.current.width, h: canvasRef.current.height } : null
+						const payload = { H, imageSize: imgSize, errorPx: (errorPx ?? null), createdAt: Date.now() }
+						socket.send(JSON.stringify({ type: 'cam-calibration', code: codeToUse, payload }))
+						console.log('[Calibrator] Sent calibration to joined phone for code', codeToUse)
 					}
 				} catch (e) {
 					console.warn('[Calibrator] Failed to send calibration on peer join', e)
@@ -242,8 +246,9 @@ export default function Calibrator() {
 			try {
 				const offer = await peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: true })
 					await peer.setLocalDescription(offer)
-					console.log('[Calibrator] Sending cam-offer for code:', pairCode)
-					if (pairCode) socket.send(JSON.stringify({ type: 'cam-offer', code: pairCode, payload: offer }))
+					const codeToUse = pairCode || data.code
+					console.log('[Calibrator] Sending cam-offer for code:', codeToUse)
+					if (codeToUse) socket.send(JSON.stringify({ type: 'cam-offer', code: codeToUse, payload: offer }))
 				} catch (err) {
 					console.error('Failed to create WebRTC offer:', err)
 					alert('Failed to establish camera connection. Please try again.')
@@ -738,11 +743,11 @@ export default function Calibrator() {
 			(async () => {
 				try {
 					if (!locked || !pairCode) return
-					const payload = { H, anchors: (H ? undefined : undefined), imageSize: (imageSize || null), errorPx: (errorPx ?? null), createdAt: Date.now() }
-					// include anchors and other calibration metadata if available from store
+					// Build a compact calibration payload including current canvas size if available
+					const imgSize = canvasRef.current ? { w: canvasRef.current.width, h: canvasRef.current.height } : null
+					const bodyStr = JSON.stringify({ H, anchors: null, imageSize: imgSize, errorPx: errorPx ?? null })
 					try {
-						const body = JSON.stringify({ H, anchors: (typeof (H) !== 'undefined' ? null : null), imageSize: imageSize || null, errorPx: errorPx || null })
-						await fetch(`/cam/calibration/${pairCode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body })
+						await fetch(`/cam/calibration/${pairCode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: bodyStr })
 						console.log('[Calibrator] Posted calibration for code', pairCode)
 					} catch (err) {
 						console.warn('[Calibrator] Upload calibration failed', err)
@@ -751,7 +756,7 @@ export default function Calibrator() {
 						try {
 							const token = localStorage.getItem('authToken')
 							if (token) {
-								await fetch('/api/user/calibration', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body })
+								await fetch('/api/user/calibration', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: bodyStr })
 								console.log('[Calibrator] Synced calibration to user account')
 							}
 						} catch (err) {

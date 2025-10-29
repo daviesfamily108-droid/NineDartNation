@@ -2618,13 +2618,13 @@ if (wss) {
         if (!sess) return
         let targetId
         if (data.type === 'cam-offer') {
-          // Phone sends offer, desktop receives (forward to desktop)
-          targetId = sess.desktopId
-          console.log(`[CAM] Forwarding cam-offer from phone to desktop (${sess.phoneId} -> ${sess.desktopId})`)
-        } else if (data.type === 'cam-answer') {
-          // Desktop sends answer, phone receives (forward to phone)
+          // Desktop sends offer, phone receives (forward to phone)
           targetId = sess.phoneId
-          console.log(`[CAM] Forwarding cam-answer from desktop to phone (${sess.desktopId} -> ${sess.phoneId})`)
+          console.log(`[CAM] Forwarding cam-offer from desktop to phone (${sess.desktopId} -> ${sess.phoneId})`)
+        } else if (data.type === 'cam-answer') {
+          // Phone sends answer, desktop receives (forward to desktop)
+          targetId = sess.desktopId
+          console.log(`[CAM] Forwarding cam-answer from phone to desktop (${sess.phoneId} -> ${sess.desktopId})`)
         } else if (data.type === 'cam-ice') {
           targetId = (ws._id === sess.desktopId) ? sess.phoneId : sess.desktopId
           console.log(`[CAM] Forwarding cam-ice candidate (from ${ws._id === sess.desktopId ? 'desktop' : 'phone'})`)
