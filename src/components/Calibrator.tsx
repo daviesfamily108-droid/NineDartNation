@@ -1155,9 +1155,13 @@ export default function Calibrator() {
 												Phone
 											</button>
 											<button
-												className="btn px-3 py-1 bg-slate-700 opacity-50 cursor-not-allowed"
-												disabled
-												title="Wifi camera mode coming soon"
+												className={`btn px-3 py-1 ${mode === 'wifi' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 hover:bg-slate-600'}`}
+												onClick={() => {
+													setMode('wifi')
+													stopCamera()
+													startWifiConnection()
+												}}
+												title="Discover wifi/USB autoscoring devices"
 											>
 												Wifi
 											</button>
