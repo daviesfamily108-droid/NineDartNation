@@ -32,7 +32,7 @@
         <button id="join">Pair</button>
       </div>
       <div class="row" id="pairToggleRow" style="margin-bottom:8px; display:none;">
-        <button id="showPairing" class="secondary" style="flex:1;">Pair with Desktop</button>
+        <!-- "Pair with Desktop" button moved below Stop/Refresh -->
       </div>
       <div id="pairHint" class="muted" style="margin-bottom:12px; display:none;"></div>
       <div id="standaloneHint" class="muted" style="margin-bottom:12px;">Tip: Start the camera to preview locally. Scan the QR from desktop when you’re ready to pair.</div>
@@ -43,15 +43,18 @@
         <button id="swap" class="secondary">Switch camera</button>
         <button id="stop" class="secondary">Stop</button>
       </div>
-      <div class="row" style="margin-top:6px;">
-        <button id="requestAccess" class="secondary">Refresh device list</button>
+      <div class="row" style="margin-top:6px; gap:6px;">
+        <button id="requestAccess" class="secondary" style="flex:1;">Refresh device list</button>
+        <button id="showPairing" class="secondary">Pair with Desktop</button>
       </div>
       <div id="msg" class="muted" style="margin-top:8px;"></div>
       <div class="row" style="margin-top:8px; gap:8px; align-items:center;">
         <div id="wsStatus" class="muted">WS: disconnected</div>
-        <button id="sendDiag" class="secondary">Send Diagnostics</button>
-        <button id="dumpDiag" class="secondary">Show Diagnostics</button>
-        <button id="downloadDiag" class="secondary">Download Diagnostics</button>
+        <button id="sendDiag" class="secondary" style="flex:1;">Send Diagnostics</button>
+      </div>
+      <div class="row" style="margin-top:6px; gap:8px;">
+        <button id="dumpDiag" class="secondary" style="flex:1;">Show Diagnostics</button>
+        <button id="downloadDiag" class="secondary" style="flex:1;">Download Diagnostics</button>
       </div>
       <pre id="diagOut" style="margin-top:8px; white-space:pre-wrap; max-height:200px; overflow:auto; background:rgba(255,255,255,0.02); padding:8px; border-radius:8px;"> </pre>
       <!-- Calibration banner: appears when a calibration is received from desktop -->
