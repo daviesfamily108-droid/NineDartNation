@@ -986,10 +986,338 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`       TIP: open http://localhost:${PORT} on this PC; phones use your LAN IP`)
   }
 });
+
+// Room management helper functions
+async function joinRoom(ws, roomId) {
+  if (!rooms.has(roomId)) rooms.set(roomId, new Set());
+  rooms.get(roomId).add(ws);
+  ws._roomId = roomId;
+  if (ws._email) {
+    // Update user status in Redis for cross-server sharing
+    const userSession = await redisHelpers.getUserSession(ws._email);
+    if (userSession) {
+      userSession.status = 'ingame';
+      userSession.lastSeen = Date.now();
+      userSession.currentRoomId = roomId;
+      await redisHelpers.setUserSession(ws._email, userSession);
+    }
+    // Also update local cache
+    if (users.has(ws._email)) {
+      const u = users.get(ws._email)
+      u.status = 'ingame'
+      u.lastSeen = Date.now()
+      users.set(ws._email, u)
+    }
+  }
+}
+
+async function leaveRoom(ws) {
+  const roomId = ws._roomId;
+  if (!roomId) return;
+  const set = rooms.get(roomId);
+  if (set) {
+    set.delete(ws);
+    if (set.size === 0) rooms.delete(roomId);
+  }
+  ws._roomId = null;
+  if (ws._email) {
+    // Update user status in Redis for cross-server sharing
+    const userSession = await redisHelpers.getUserSession(ws._email);
+    if (userSession) {
+      userSession.status = 'online';
+      userSession.lastSeen = Date.now();
+      userSession.currentRoomId = null;
+      await redisHelpers.setUserSession(ws._email, userSession);
+    }
+    // Also update local cache
+    if (users.has(ws._email)) {
+      const u = users.get(ws._email)
+      // If still connected, revert to online; otherwise close handler will set offline
+      u.status = 'online'
+      u.lastSeen = Date.now()
+      users.set(ws._email, u)
+    }
+  }
+}
+
+function broadcastToRoom(roomId, data, exceptWs=null) {
+  const set = rooms.get(roomId);
+  if (!set) return;
+  const payload = (typeof data === 'string') ? data : JSON.stringify(data)
+  for (const client of set) {
+    if (client.readyState === 1 && client !== exceptWs) {
+      client.send(payload);
+    }
+  }
+}
+
 // Constrain ws payload size for safety
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
 console.log(`[WS] WebSocket attached to same server at path /ws`);
 wsConnections.set(0)
+
+// WebSocket connection handler
+wss.on('connection', (ws, req) => {
+  try { console.log(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
+  ws._id = nanoid(8);
+  clients.set(ws._id, ws)
+  wsConnections.inc()
+  // Heartbeat
+  ws.isAlive = true
+  ws.on('pong', () => { ws.isAlive = true })
+  // Log low-level socket errors
+  ws.on('error', (err) => {
+    try { console.warn(`[WS] error id=${ws._id} message=${err?.message||err}`) } catch {}
+  })
+  // Token-bucket rate limit: 10 msg/sec, burst 20
+  ws._bucket = { tokens: 20, last: Date.now(), rate: 10, capacity: 20 }
+  function allowMessage() {
+    const now = Date.now()
+    const delta = (now - ws._bucket.last) / 1000
+    ws._bucket.last = now
+    ws._bucket.tokens = Math.min(ws._bucket.capacity, ws._bucket.tokens + delta * ws._bucket.rate)
+    if (ws._bucket.tokens >= 1) { ws._bucket.tokens -= 1; return true }
+    return false
+  }
+  // Push last announcement on connect
+  if (lastAnnouncement) {
+    try { ws.send(JSON.stringify({ type: 'announcement', message: lastAnnouncement.message })) } catch {}
+  }
+  // Push tournaments snapshot on connect
+  try { ws.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) })) } catch {}
+  // Track presence if client later identifies
+
+  ws.on('message', async (msg) => {
+    if (typeof msg?.length === 'number' && msg.length > 128 * 1024) return
+    if (!allowMessage()) return
+    try {
+      const data = JSON.parse(msg.toString());
+      if (data.type === 'join') {
+        await leaveRoom(ws);
+        await joinRoom(ws, data.roomId);
+        ws.send(JSON.stringify({ type: 'joined', roomId: data.roomId, id: ws._id }));
+        // Optionally notify others that someone joined (presence will carry details)
+        if (ws._roomId) {
+          broadcastToRoom(ws._roomId, { type: 'peer-joined', id: ws._id }, ws)
+        }
+      } else if (data.type === 'state') {
+        // Spectators cannot publish state
+        if (ws._spectator) return
+        // forward game state to others in room
+        if (ws._roomId) {
+          broadcastToRoom(ws._roomId, { type: 'state', payload: data.payload, from: ws._id }, ws);
+          // Celebration hook: if payload indicates a last visit score of 180, broadcast a celebration
+          try {
+            const p = data?.payload
+            // Expect shape similar to client match store: players -> [ { legs: [ { visits: [{ score }] } ] } ] and currentPlayerIdx
+            if (p && Array.isArray(p.players) && typeof p.currentPlayerIdx === 'number') {
+              const cur = p.players[p.currentPlayerIdx]
+              const leg = cur?.legs?.[cur.legs?.length - 1]
+              const v = leg?.visits?.[leg.visits?.length - 1]
+              if (v && Number(v.score) === 180) {
+                celebrations180Total.inc()
+                broadcastToRoom(ws._roomId, { type: 'celebration', kind: '180', by: ws._username || `user-${ws._id}`, ts: Date.now() }, null)
+              }
+              // Leg win celebration: remaining 0 right after a visit
+              if (leg && Number(leg.totalScoreRemaining) === 0 && Array.isArray(leg.visits) && leg.visits.length > 0) {
+                broadcastToRoom(ws._roomId, { type: 'celebration', kind: 'leg', by: ws._username || `user-${ws._id}`, ts: Date.now() }, null)
+              }
+            }
+          } catch { /* noop */ }
+        }
+        // mark activity
+        if (ws._email && users.has(ws._email)) {
+          const u = users.get(ws._email)
+          u.lastSeen = Date.now()
+          users.set(ws._email, u)
+        }
+      } else if (data.type === 'presence') {
+        ws._username = data.username || `user-${ws._id}`
+        ws._email = (data.email || '').toLowerCase()
+        if (ws._email) {
+          // Update user session in Redis for cross-server sharing
+          const userSession = await redisHelpers.getUserSession(ws._email) || {
+            email: ws._email,
+            username: ws._username,
+            status: 'online',
+            allowSpectate: true
+          };
+          userSession.username = ws._username;
+          userSession.status = 'online';
+          userSession.lastSeen = Date.now();
+          userSession.wsId = ws._id;
+          if (typeof data.allowSpectate === 'boolean') userSession.allowSpectate = !!data.allowSpectate;
+          await redisHelpers.setUserSession(ws._email, userSession);
+
+          // Also update local cache
+          const u = users.get(ws._email) || { email: ws._email, username: ws._username, status: 'online', allowSpectate: true }
+          u.username = ws._username
+          u.status = 'online'
+          u.wsId = ws._id
+          u.lastSeen = Date.now()
+          if (typeof data.allowSpectate === 'boolean') u.allowSpectate = !!data.allowSpectate
+          users.set(ws._email, u)
+        }
+        if (ws._roomId) {
+          broadcastToRoom(ws._roomId, { type: 'presence', id: ws._id, username: data.username }, null)
+        }
+      } else if (data.type === 'chat') {
+        // Optionally block spectator chat
+        if (ws._spectator) return
+        if (ws._roomId) {
+          let raw = String(data.message || '').slice(0, 500)
+          let cleanMsg
+          try { cleanMsg = profanityFilter.clean(raw) } catch { cleanMsg = raw }
+          broadcastToRoom(ws._roomId, { type: 'chat', message: cleanMsg, from: ws._id }, null);
+          try { chatMessagesTotal.inc() } catch {}
+        }
+      } else if (data.type === 'celebration') {
+        // Broadcast client-declared celebrations (e.g., leg win) to the room
+        if (ws._roomId) {
+          const kind = (data.kind === '180' ? '180' : (data.kind === 'leg' ? 'leg' : 'custom'))
+          broadcastToRoom(ws._roomId, { type: 'celebration', kind, by: data.by || (ws._username || `user-${ws._id}`), ts: Date.now() }, null)
+        }
+      } else if (data.type === 'cam-create') {
+        // Desktop requests a 4-letter pairing code
+        const code = genCamCode()
+        await camSessions.set(code, { code, desktopId: ws._id, phoneId: null, ts: Date.now() })
+        try { ws.send(JSON.stringify({ type: 'cam-code', code, expiresAt: Date.now() + CAM_TTL_MS })) } catch {}
+      } else if (data.type === 'cam-join') {
+        // Phone joins with code
+        const code = String(data.code || '').toUpperCase()
+        const sess = await camSessions.get(code)
+        if (!sess) { try { ws.send(JSON.stringify({ type: 'cam-error', code: 'INVALID_CODE' })) } catch {}; return }
+        // Expire stale codes
+        if (sess.ts && (Date.now() - sess.ts) > CAM_TTL_MS) { await camSessions.delete(code); try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {}; return }
+        sess.phoneId = ws._id
+        await camSessions.set(code, sess)
+        const desktop = clients.get(sess.desktopId)
+        if (desktop && desktop.readyState === 1) {
+          try { desktop.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
+        }
+        try { ws.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
+      } else if (data.type === 'cam-data') {
+        // Forward camera data between desktop and phone
+        const code = String(data.code || '').toUpperCase()
+        const sess = await camSessions.get(code)
+        if (!sess) return
+        const targetId = (ws._id === sess.desktopId) ? sess.phoneId : sess.desktopId
+        const target = clients.get(targetId)
+        if (target && target.readyState === 1) {
+          try { target.send(JSON.stringify({ type: 'cam-data', code, payload: data.payload })) } catch {}
+        }
+      } else if (data.type === 'spectate') {
+        await leaveRoom(ws);
+        await joinRoom(ws, data.roomId);
+        ws._spectator = true;
+        ws.send(JSON.stringify({ type: 'spectating', roomId: data.roomId, id: ws._id }));
+        if (ws._roomId) {
+          broadcastToRoom(ws._roomId, { type: 'peer-joined', id: ws._id, spectator: true }, ws)
+        }
+      } else if (data.type === 'start-friend-match') {
+        const toEmail = String(data.toEmail || '').toLowerCase()
+        const game = typeof data.game === 'string' ? data.game : 'X01'
+        const mode = (data.mode === 'firstto') ? 'firstto' : 'bestof'
+        const value = Number(data.value) || 1
+        const startingScore = Number(data.startingScore) || 501
+  const premiumGames = ['Around the Clock', 'Cricket', 'Halve It', 'Shanghai', 'High-Low', 'Killer']
+        // Server-side premium gating (demo-global)
+        if (premiumGames.includes(game) && !subscription.fullAccess) {
+          ws.send(JSON.stringify({ type: 'error', code: 'PREMIUM_REQUIRED', message: 'PREMIUM required to start this game.' }))
+          return
+        }
+        if (!ws._email || !toEmail) return
+        const toUser = users.get(toEmail)
+        if (!toUser || !toUser.wsId) {
+          ws.send(JSON.stringify({ type: 'error', code: 'USER_OFFLINE', message: 'Friend is offline.' }))
+          return
+        }
+        const target = clients.get(toUser.wsId)
+        if (!target || target.readyState !== 1) {
+          ws.send(JSON.stringify({ type: 'error', code: 'USER_OFFLINE', message: 'Friend is offline.' }))
+          return
+        }
+        const roomId = nanoid(10)
+        const m = {
+          id: roomId,
+          creatorId: ws._id,
+          creatorName: ws._username || `user-${ws._id}`,
+          mode,
+          value,
+          startingScore,
+          creatorAvg: 0,
+          game,
+          createdAt: Date.now(),
+        }
+        const payload = { type: 'match-start', roomId, match: m }
+        try { if (ws.readyState === 1) ws.send(JSON.stringify(payload)) } catch {}
+        try { if (target.readyState === 1) target.send(JSON.stringify(payload)) } catch {}
+        // Mark both players as in-game and store match metadata
+        try {
+          const meEmail = ws._email || ''
+          const toEmailReal = toEmail || ''
+          if (meEmail) {
+            const u = users.get(meEmail) || { email: meEmail, username: ws._username || meEmail, status: 'online' }
+            u.status = 'ingame'; u.lastSeen = Date.now();
+            u.currentRoomId = roomId; u.currentMatch = { game, mode, value, startingScore }
+            users.set(meEmail, u)
+          }
+          if (toEmailReal) {
+            const u2 = users.get(toEmailReal) || { email: toEmailReal, username: users.get(toEmailReal)?.username || toEmailReal, status: 'online' }
+            u2.status = 'ingame'; u2.lastSeen = Date.now();
+            u2.currentRoomId = roomId; u2.currentMatch = { game, mode, value, startingScore }
+            users.set(toEmailReal, u2)
+          }
+        } catch {}
+      }
+    } catch (e) {
+      try { errorsTotal.inc({ scope: 'ws_message' }) } catch {}
+      console.error('Invalid message:', e);
+    }
+  });
+
+  ws.on('close', async (code, reasonBuf) => {
+    const reason = (() => { try { return reasonBuf ? reasonBuf.toString() : '' } catch { return '' } })()
+    try { console.log(`[WS] close id=${ws._id} code=${code} reason=${reason}`) } catch {}
+    // Clean up room
+    await leaveRoom(ws);
+    try { wsConnections.dec() } catch {}
+    // Remove any matches created by this client
+    for (const [id, m] of Array.from(matches.entries())) {
+      if (m.creatorId === ws._id) matches.delete(id)
+    }
+    clients.delete(ws._id)
+    // Cleanup camera sessions involving this client
+    for (const [code, sess] of camSessions.entries()) {
+      if (sess.desktopId === ws._id || sess.phoneId === ws._id) {
+        await camSessions.delete(code)
+      }
+    }
+    if (ws._email && users.has(ws._email)) {
+      const u = users.get(ws._email)
+      if (u && u.wsId === ws._id) {
+        // Update user status in Redis for cross-server sharing
+        const userSession = await redisHelpers.getUserSession(ws._email);
+        if (userSession) {
+          userSession.status = 'offline';
+          userSession.lastSeen = Date.now();
+          userSession.wsId = undefined;
+          await redisHelpers.setUserSession(ws._email, userSession);
+        }
+        // Also update local cache
+        u.status = 'offline'
+        u.lastSeen = Date.now()
+        u.wsId = undefined
+        users.set(ws._email, u)
+      }
+    }
+    // Broadcast updated lobby
+    const lobbyPayload3 = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+    for (const client of wss.clients) {
+      if (client.readyState === 1) client.send(lobbyPayload3)
+    }
+  });
+});
 
 // Optional HTTPS server for iOS camera (requires certs)
 let httpsServer = null
@@ -1036,7 +1364,70 @@ const rooms = new Map(); // roomId -> Set(ws)
 const matches = new Map(); // matchId -> { id, creatorId, creatorName, mode, value, startingScore, game, creatorAvg, createdAt }
 const clients = new Map(); // wsId -> ws
 // WebRTC camera pairing sessions (code -> { code, desktopId, phoneId, ts })
-const camSessions = new Map();
+const camSessions = {
+  async set(key, value) {
+    if (upstashRestUrl && upstashToken) {
+      try {
+        await fetch(`${upstashRestUrl}/set/cam:${encodeURIComponent(key)}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${upstashToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: JSON.stringify(value), ex: 120 }) // 2 minutes TTL
+        });
+      } catch (err) {
+        console.warn('[UPSTASH] Failed to set camera session:', err.message);
+      }
+    }
+    // Always keep local cache
+    localCamSessions.set(key, value);
+  },
+
+  async get(key) {
+    // Check local cache first
+    if (localCamSessions.has(key)) {
+      return localCamSessions.get(key);
+    }
+    // Try Upstash
+    if (upstashRestUrl && upstashToken) {
+      try {
+        const res = await fetch(`${upstashRestUrl}/get/cam:${encodeURIComponent(key)}`, {
+          headers: { 'Authorization': `Bearer ${upstashToken}` }
+        });
+        const data = await res.json();
+        if (data.result) {
+          const value = JSON.parse(data.result);
+          localCamSessions.set(key, value);
+          return value;
+        }
+      } catch (err) {
+        console.warn('[UPSTASH] Failed to get camera session:', err.message);
+      }
+    }
+    return undefined;
+  },
+
+  async delete(key) {
+    if (upstashRestUrl && upstashToken) {
+      try {
+        await fetch(`${upstashRestUrl}/del/cam:${encodeURIComponent(key)}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${upstashToken}` }
+        });
+      } catch (err) {
+        console.warn('[UPSTASH] Failed to delete camera session:', err.message);
+      }
+    }
+    localCamSessions.delete(key);
+  },
+
+  entries() {
+    return localCamSessions.entries();
+  },
+
+  has(key) {
+    return localCamSessions.has(key);
+  }
+};
+const localCamSessions = new Map(); // Local cache for camSessions
 const CAM_TTL_MS = 2 * 60 * 1000 // 2 minutes
 function genCamCode() {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -1656,10 +2047,6 @@ app.post('/api/admin/premium/grant', (req, res) => {
     for (const client of wss.clients) {
       if (client.readyState === 1) client.send(lobbyPayload3)
     }
-    // Cleanup any camera sessions involving this client
-    for (const [code, sess] of Array.from(camSessions.entries())) {
-      if (sess.desktopId === ws._id || sess.phoneId === ws._id) camSessions.delete(code)
-    }
   });
 });
 
@@ -1676,7 +2063,7 @@ app.get('/api/friends/list', (req, res) => {
 
 // Heartbeat sweep to terminate dead sockets
 const HEARTBEAT_INTERVAL = 30000
-const hbTimer = setInterval(() => {
+const hbTimer = setInterval(async () => {
   for (const ws of wss.clients) {
     if (!ws.isAlive) {
       try { ws.terminate() } catch {}
@@ -1688,7 +2075,7 @@ const hbTimer = setInterval(() => {
   // Clean up expired camera sessions
   const now = Date.now()
   for (const [code, sess] of camSessions.entries()) {
-    if (now - (sess.ts || 0) > CAM_TTL_MS) camSessions.delete(code)
+    if (now - (sess.ts || 0) > CAM_TTL_MS) await camSessions.delete(code)
   }
 }, HEARTBEAT_INTERVAL)
 
