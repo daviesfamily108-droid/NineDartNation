@@ -618,7 +618,7 @@ app.post('/webhook/stripe', async (req, res) => {
   res.json({ ok: true })
 });
 
-// Stripe (optional): Create a Checkout Session for username change (-ú2)
+// Stripe (optional): Create a Checkout Session for username change (-ï¿½2)
 // Configure on Render with:
 //  - STRIPE_SECRET_KEY=sk_live_...
 //  - STRIPE_PRICE_ID_USERNAME_CHANGE=price_...
@@ -681,7 +681,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   }
 })
 
-// Admin management (demo; NOT secure ÔÇö no auth/signature verification)
+// Admin management (demo; NOT secure ï¿½ï¿½ï¿½ no auth/signature verification)
 app.get('/api/admins', (req, res) => {
   res.json({ admins: Array.from(adminEmails) })
 })
@@ -714,7 +714,7 @@ app.post('/api/admins/revoke', (req, res) => {
   res.json({ ok: true, admins: Array.from(adminEmails) })
 })
 
-// Admin ops (owner-only; demo ÔÇö not secure)
+// Admin ops (owner-only; demo ï¿½ï¿½ï¿½ not secure)
 app.get('/api/admin/status', (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
