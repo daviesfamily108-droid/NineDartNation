@@ -24,6 +24,7 @@ import { createShanghaiState, getRoundTarget as shanghaiTarget, applyShanghaiDar
 import { createDefaultHalveIt, getCurrentHalveTarget, applyHalveItDart, endHalveItTurn } from '../game/halveIt'
 import { createHighLow, applyHighLowDart, endHighLowTurn } from '../game/highLow'
 import { assignKillerNumbers, createKillerState, applyKillerDart, killerWinner } from '../game/killer'
+import { apiFetch } from '../utils/api'
 // Phase 2 premium games (Online support)
 import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS } from '../game/americanCricket'
 import { createBaseball, applyBaseballDart } from '../game/baseball'
@@ -210,7 +211,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
   useEffect(() => {
     const email = String(user?.email || '').toLowerCase()
     if (!email) return
-    fetch(`/api/friends/messages?email=${encodeURIComponent(email)}`).then(r=>r.json()).then(d=>{
+    apiFetch(`/api/friends/messages?email=${encodeURIComponent(email)}`).then(r=>r.json()).then(d=>{
       if (d?.ok && Array.isArray(d.messages)) msgs.load(d.messages)
     }).catch(()=>{})
   }, [user?.email])
@@ -1053,8 +1054,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       } else {
         console.log('WS not available, POSTing offer to /cam/signal')
         try {
-          const base = window.location.origin || ''
-          await fetch(`${base}/cam/signal/${code}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cam-offer', payload: offer, source: 'desktop' }) })
+          await apiFetch(`/cam/signal/${code}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cam-offer', payload: offer, source: 'desktop' }) })
         } catch (e) { console.warn('REST offer failed', e) }
       }
       // Store pc for later use

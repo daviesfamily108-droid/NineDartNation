@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { getFreeRemaining } from '../utils/quota'
 import { useIsAdmin } from '../utils/admin'
 import { DISCORD_INVITE_URL } from '../utils/config'
+import { apiFetch } from '../utils/api'
 
 export type TabKey = 'score' | 'online' | 'offline' | 'friends' | 'stats' | 'calibrate' | 'settings' | 'admin' | 'tournaments' | 'fullaccess';
 
@@ -63,8 +64,8 @@ export function Sidebar({
     const fetchNotifications = async () => {
       try {
         const [requestsRes, messagesRes] = await Promise.all([
-          fetch(`/api/friends/requests?email=${encodeURIComponent(user.email)}`),
-          fetch(`/api/friends/messages?email=${encodeURIComponent(user.email)}`)
+          apiFetch(`/api/friends/requests?email=${encodeURIComponent(user.email)}`),
+          apiFetch(`/api/friends/messages?email=${encodeURIComponent(user.email)}`)
         ]);
         
         const requests = requestsRes.ok ? await requestsRes.json() : { requests: [] };

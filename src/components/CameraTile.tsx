@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import QRCode from 'qrcode'
 import { useUserSettings } from '../store/userSettings'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice, discoverUSBDevices, requestUSBDevice, connectToUSBDevice, type USBDevice } from '../utils/networkDevices'
+import { apiFetch } from '../utils/api'
 
 type CameraTileProps = {
   label?: string
@@ -59,13 +60,13 @@ export default function CameraTile({
   useEffect(() => {
     const h = window.location.hostname
     if (h === 'localhost' || h === '127.0.0.1') {
-      fetch(`/api/hosts`).then(r => r.json()).then(j => {
+      apiFetch(`/api/hosts`).then(r => r.json()).then(j => {
         const ip = Array.isArray(j?.hosts) && j.hosts.find((x: string) => x)
         if (ip) setLanHost(ip)
       }).catch(()=>{})
     }
     // Detect HTTPS support for the phone link
-    fetch(`/api/https-info`).then(r=>r.json()).then(j=>{
+    apiFetch(`/api/https-info`).then(r=>r.json()).then(j=>{
       if (j && typeof j.https === 'boolean') setHttpsInfo({ https: !!j.https, port: Number(j.port)||8788 })
     }).catch(()=>{})
   }, [])

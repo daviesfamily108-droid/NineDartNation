@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useIsAdmin } from '../utils/admin'
+import { apiFetch } from '../utils/api'
 
 type Ready = { ok: boolean; ws?: boolean; rooms?: number; clients?: number; mem?: { rss: number; heapUsed: number } }
 
@@ -11,7 +12,7 @@ export default function OpsDashboard({ user }: { user: any }) {
 
   async function refresh() {
     try {
-      const res = await fetch('/readyz')
+      const res = await apiFetch('/readyz')
       setReady(await res.json())
     } catch {}
   }
@@ -31,7 +32,7 @@ export default function OpsDashboard({ user }: { user: any }) {
   async function toggleMaintenance(enabled: boolean) {
     setMsg('')
     try {
-      const res = await fetch('/api/admin/maintenance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled, requesterEmail: user?.email }) })
+      const res = await apiFetch('/api/admin/maintenance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled, requesterEmail: user?.email }) })
       const j = await res.json()
       if (!res.ok || !j?.ok) setMsg(j?.error || 'Failed')
       else setMsg(`Maintenance ${enabled ? 'enabled' : 'disabled'}`)
@@ -43,7 +44,7 @@ export default function OpsDashboard({ user }: { user: any }) {
     const text = ann.trim()
     if (!text) return
     try {
-      const res = await fetch('/api/admin/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, requesterEmail: user?.email }) })
+      const res = await apiFetch('/api/admin/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, requesterEmail: user?.email }) })
       const j = await res.json()
       if (!res.ok || !j?.ok) setMsg(j?.error || 'Failed')
       else setMsg('Announcement broadcasted')

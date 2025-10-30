@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { User, Settings, Volume2, Camera, Gamepad2, Eye, Mic, Save, Edit3, Shield, HelpCircle, MessageCircle, X, Send } from 'lucide-react';
 import { useUserSettings } from '../store/userSettings';
+import { apiFetch } from '../utils/api';
 
 export default function SettingsPanel({ user }: { user?: any }) {
   const {
@@ -63,7 +64,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
   useEffect(() => {
     if (!user?.email) return;
-    fetch(`/api/subscription?email=${encodeURIComponent(user.email)}`)
+    apiFetch(`/api/subscription?email=${encodeURIComponent(user.email)}`)
       .then(r => r.json())
       .then(setSubscription)
       .catch(() => {});
@@ -310,13 +311,13 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     onClick={async () => {
                       if (confirm('Are you sure you want to cancel your premium subscription? You will lose access to premium features.')) {
                         try {
-                          await fetch('/api/admin/premium/revoke', {
+                          await apiFetch('/api/admin/premium/revoke', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ email: user.email, requesterEmail: user.email })
                           });
                           // Refresh subscription
-                          const res = await fetch(`/api/subscription?email=${encodeURIComponent(user.email)}`);
+                          const res = await apiFetch(`/api/subscription?email=${encodeURIComponent(user.email)}`);
                           setSubscription(await res.json());
                         } catch (error) {
                           alert('Failed to cancel premium. Please try again.');

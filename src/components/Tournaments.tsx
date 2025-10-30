@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import ResizableModal from './ui/ResizableModal'
 import { useToast } from '../store/toast'
 import { useWS } from './WSProvider'
+import { apiFetch } from '../utils/api'
 
 type Tournament = {
   id: string
@@ -54,7 +55,7 @@ export default function Tournaments({ user }: { user: any }) {
 
   async function refresh() {
     try {
-      const res = await fetch('/api/tournaments')
+      const res = await apiFetch('/api/tournaments')
       const data = await res.json()
       setList(Array.isArray(data.tournaments) ? data.tournaments : [])
     } catch {}
@@ -83,7 +84,7 @@ export default function Tournaments({ user }: { user: any }) {
     async function check() {
       if (!email) { setCooldownUntil(null); return }
       try {
-        const res = await fetch(`/api/subscription?email=${encodeURIComponent(email)}`)
+        const res = await apiFetch(`/api/subscription?email=${encodeURIComponent(email)}`)
         const data = await res.json()
         if (!abort) {
           if (data?.source === 'tournament' && typeof data.expiresAt === 'number' && data.expiresAt > Date.now()) {
@@ -116,7 +117,7 @@ export default function Tournaments({ user }: { user: any }) {
     setLoading(true)
     try {
       // First try creator/owner shared endpoint
-      let res = await fetch('/api/tournaments/delete', {
+      let res = await apiFetch('/api/tournaments/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tournamentId: t.id, requesterEmail: email })
@@ -124,7 +125,7 @@ export default function Tournaments({ user }: { user: any }) {
 
       // If forbidden but user is the owner, try the admin endpoint as a fallback
       if (!res.ok && res.status === 403 && String(email) === 'daviesfamily108@gmail.com') {
-        res = await fetch('/api/admin/tournaments/delete', {
+        res = await apiFetch('/api/admin/tournaments/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tournamentId: t.id, requesterEmail: email })
@@ -152,7 +153,7 @@ export default function Tournaments({ user }: { user: any }) {
     if (!email) return
     setLoading(true)
     try {
-      const res = await fetch('/api/tournaments/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: t.id, email, username: user?.username }) })
+      const res = await apiFetch('/api/tournaments/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: t.id, email, username: user?.username }) })
       if (!res.ok) {
         let data: any = {}
         try { data = await res.json() } catch {}
@@ -180,7 +181,7 @@ export default function Tournaments({ user }: { user: any }) {
     if (!email) return
     setLoading(true)
     try {
-      const res = await fetch('/api/tournaments/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: t.id, email }) })
+      const res = await apiFetch('/api/tournaments/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: t.id, email }) })
       if (!res.ok) {
         let data: any = {}
         try { data = await res.json() } catch {}
@@ -204,7 +205,7 @@ export default function Tournaments({ user }: { user: any }) {
     setLoading(true)
     try {
       const start = new Date(form.startAt).getTime()
-      await fetch('/api/tournaments/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      await apiFetch('/api/tournaments/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         title: form.title,
         game: form.game,
         mode: form.mode,

@@ -8,6 +8,7 @@ import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawP
 import { detectMarkersFromCanvas, MARKER_ORDER, MARKER_TARGETS, markerIdToMatrix, type MarkerDetection } from '../utils/markerCalibration'
 import { useUserSettings } from '../store/userSettings'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice } from '../utils/networkDevices'
+import { apiFetch } from '../utils/api'
 
 type Phase = 'idle' | 'camera' | 'capture' | 'select' | 'computed'
 type CamMode = 'local' | 'phone' | 'wifi'
@@ -140,13 +141,13 @@ export default function Calibrator() {
 	useEffect(() => {
 		const h = window.location.hostname
 		if (h === 'localhost' || h === '127.0.0.1') {
-			fetch(`/api/hosts`).then(r => r.json()).then(j => {
+			apiFetch(`/api/hosts`).then(r => r.json()).then(j => {
 				const ip = Array.isArray(j?.hosts) && j.hosts.find((x: string) => x)
 				if (ip) setLanHost(ip)
 			}).catch(()=>{})
 		}
 		// Try to detect if server exposes HTTPS info
-		fetch(`/api/https-info`).then(r=>r.json()).then(j=>{
+		apiFetch(`/api/https-info`).then(r=>r.json()).then(j=>{
 			if (j && typeof j.https === 'boolean') setHttpsInfo({ https: !!j.https, port: Number(j.port)||8788 })
 		}).catch(()=>{})
 	}, [])
@@ -906,7 +907,7 @@ export default function Calibrator() {
 					const imgSize = canvasRef.current ? { w: canvasRef.current.width, h: canvasRef.current.height } : null
 					const bodyStr = JSON.stringify({ H, anchors: null, imageSize: imgSize, errorPx: errorPx ?? null })
 					try {
-						await fetch(`/cam/calibration/${pairCode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: bodyStr })
+						await apiFetch(`/cam/calibration/${pairCode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: bodyStr })
 						console.log('[Calibrator] Posted calibration for code', pairCode)
 					} catch (err) {
 						console.warn('[Calibrator] Upload calibration failed', err)
@@ -915,7 +916,7 @@ export default function Calibrator() {
 						try {
 							const token = localStorage.getItem('authToken')
 							if (token) {
-								await fetch('/api/user/calibration', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: bodyStr })
+								await apiFetch('/api/user/calibration', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: bodyStr })
 								console.log('[Calibrator] Synced calibration to user account')
 							}
 						} catch (err) {
