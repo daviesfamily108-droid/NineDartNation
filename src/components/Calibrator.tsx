@@ -29,7 +29,19 @@ export default function Calibrator() {
 	const [frameSize, setFrameSize] = useState<{ w: number, h: number } | null>(null)
 	// Zoom for pixel-perfect point picking (0.5x – 2.0x)
 	const [zoom, setZoom] = useState<number>(1)
-		const { H, setCalibration, reset, errorPx, locked } = useCalibration()
+	const [mobileLandingOverride, setMobileLandingOverride] = useState<boolean>(() => {
+		if (typeof window === 'undefined') return false
+		try {
+			return window.localStorage.getItem('ndn:cal:forceDesktop') === '1'
+		} catch {
+			return false
+		}
+	})
+	const [isMobileDevice, setIsMobileDevice] = useState<boolean>(() => {
+		if (typeof navigator === 'undefined') return false
+		return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent)
+	})
+	const { H, setCalibration, reset, errorPx, locked } = useCalibration()
 	const { calibrationGuide, setCalibrationGuide, preferredCameraId, cameraEnabled, setCameraEnabled, preferredCameraLocked, setPreferredCameraLocked, setPreferredCamera } = useUserSettings()
 		// Detected ring data (from auto-detect) in image pixels
 	const [detected, setDetected] = useState<null | {
@@ -120,6 +132,7 @@ export default function Calibrator() {
 
 	// Phone pairing state (mirrors CameraTile)
 	const [ws, setWs] = useState<WebSocket | null>(null)
+	const autoLockRef = useRef(false)
 	const [pairCode, setPairCode] = useState<string | null>(null)
 	const pairCodeRef = useRef<string | null>(null)
 	const updatePairCode = useCallback((code: string | null) => {
@@ -174,7 +187,57 @@ export default function Calibrator() {
 		return `${proto}://${host}:${port}/mobile-cam.html?code=${code}`
 	}, [pairCode, lanHost, httpsInfo])
 
+	const mobileLandingLink = useMemo(() => {
+		if (!mobileUrl) return null
+		try {
+			const url = new URL(mobileUrl)
+			url.searchParams.delete('code')
+			return url.toString().replace(/\?$/, '')
+		} catch {
+			if (typeof window !== 'undefined') {
+				const origin = window.location.origin.replace(/\/$/, '')
+				return `${origin}/mobile-cam.html`
+			}
+			return '/mobile-cam.html'
+		}
+	}, [mobileUrl])
+
 	useEffect(() => { localStorage.setItem('ndn:cal:mode', mode) }, [mode])
+
+	useEffect(() => {
+		if (typeof window === 'undefined') return
+		try {
+			if (mobileLandingOverride) {
+				window.localStorage.setItem('ndn:cal:forceDesktop', '1')
+			} else {
+				window.localStorage.removeItem('ndn:cal:forceDesktop')
+			}
+		} catch {}
+	}, [mobileLandingOverride])
+
+	useEffect(() => {
+		if (typeof window === 'undefined') return
+		const coarseQuery = window.matchMedia('(pointer: coarse)')
+		const detect = () => {
+			const uaMobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent)
+			const coarse = typeof coarseQuery.matches === 'boolean' ? coarseQuery.matches : false
+			const narrow = window.innerWidth <= 820
+			setIsMobileDevice(uaMobile || coarse || narrow)
+		}
+		detect()
+		try {
+			if (typeof coarseQuery.addEventListener === 'function') coarseQuery.addEventListener('change', detect)
+			else if (typeof coarseQuery.addListener === 'function') coarseQuery.addListener(detect)
+		} catch {}
+		window.addEventListener('resize', detect)
+		return () => {
+			try {
+				if (typeof coarseQuery.removeEventListener === 'function') coarseQuery.removeEventListener('change', detect)
+				else if (typeof coarseQuery.removeListener === 'function') coarseQuery.removeListener(detect)
+			} catch {}
+			window.removeEventListener('resize', detect)
+		}
+	}, [])
 
 	useEffect(() => {
 		if (!pairCode) { setQrDataUrl(''); return }
@@ -344,7 +407,12 @@ export default function Calibrator() {
 											setPhase('capture')
 											// Set user settings to reflect that the active camera is the phone
 											try { setPreferredCamera(undefined, 'Phone Camera', true) } catch {}
-											try { setPreferredCameraLocked(true) } catch {}
+												if (!preferredCameraLocked) {
+													try {
+														setPreferredCameraLocked(true)
+														autoLockRef.current = true
+													} catch {}
+												}
 											try { setCameraEnabled(true) } catch {}
 											// If an overlay prompt was shown earlier, hide it now
 											setVideoPlayBlocked(false)
@@ -507,8 +575,11 @@ export default function Calibrator() {
 		setExpiresAt(null)
 		setPaired(false)
 		setMarkerResult(null)
-	    // Unlock preferred camera selection when camera pairing/stops so the user can change it again
-	    try { setPreferredCameraLocked(false) } catch {}
+	    // Unlock preferred camera selection only if we auto-locked it for this session
+	    if (autoLockRef.current) {
+	    	try { setPreferredCameraLocked(false) } catch {}
+	    	autoLockRef.current = false
+	    }
 	}
 
 	function regenerateCode() {
@@ -528,7 +599,16 @@ export default function Calibrator() {
 	// This implements the user's request that the camera selection 'stay static' after
 	// generating a code. The lock can be toggled by the user in the DevicePicker UI.
 	function lockSelectionForPairing() {
-		try { setPreferredCameraLocked(true) } catch {}
+		try {
+			if (!preferredCameraLocked) {
+				setPreferredCameraLocked(true)
+				autoLockRef.current = true
+			} else if (autoLockRef.current) {
+				// already auto-locked; keep flag as-is
+			} else {
+				// Respect existing manual lock; do not mark as auto-managed
+			}
+		} catch {}
 	}
 
 	// Allow uploading a photo instead of using a live camera
@@ -998,7 +1078,15 @@ export default function Calibrator() {
 						) : (
 							<div className="text-xs text-slate-400">Camera selection unlocked</div>
 						)}
-						<button className="btn btn--ghost px-2 py-0.5 text-xs ml-2" onClick={() => setPreferredCameraLocked(!preferredCameraLocked)}>{preferredCameraLocked ? 'Unlock' : 'Lock'}</button>
+						<button
+							className="btn btn--ghost px-2 py-0.5 text-xs ml-2"
+							onClick={() => {
+								autoLockRef.current = false
+								setPreferredCameraLocked(!preferredCameraLocked)
+							}}
+						>
+							{preferredCameraLocked ? 'Unlock' : 'Lock'}
+						</button>
 					</div>
 					<div className="flex items-center gap-3 mb-3">
 						<input
@@ -1081,8 +1169,66 @@ export default function Calibrator() {
 				</div>
 			)
 		}
+		const showMobileLanding = isMobileDevice && !mobileLandingOverride
+
+		if (showMobileLanding) {
+			const linkForMobile = mobileLandingLink ?? (typeof window !== 'undefined' ? `${window.location.origin.replace(/\/$/, '')}/mobile-cam.html` : '/mobile-cam.html')
+			return (
+				<div className="mx-auto flex min-h-[calc(100vh-140px)] w-full max-w-xl flex-col justify-center gap-6 p-6">
+					<div className="space-y-5 rounded-3xl border border-indigo-400/30 bg-slate-900/70 p-6 text-slate-100 shadow-xl">
+						<div className="space-y-2">
+							<p className="text-xs font-semibold uppercase tracking-wide text-indigo-300">Mobile camera</p>
+							<h2 className="text-2xl font-semibold leading-tight text-white">This device is ready to stream as your dartboard camera</h2>
+							<p className="text-sm text-slate-200/80">
+								Open the lightweight mobile camera page to stream video to your desktop calibrator. You can still come back here if you need the full desktop tools.
+							</p>
+						</div>
+						<div className="space-y-2">
+							<a
+								href={linkForMobile}
+								className="btn w-full justify-center px-4 py-2 text-base"
+							>
+								Open mobile camera
+							</a>
+							<button
+								type="button"
+								className="btn btn--ghost w-full justify-center px-4 py-2 text-sm"
+								onClick={() => copyValue(linkForMobile, 'link')}
+							>
+								{copyFeedback === 'link' ? 'Link copied!' : 'Copy link'}
+							</button>
+						</div>
+						<p className="text-xs text-slate-300/70">
+							On a desktop, open Calibrator and generate a pairing code. Then tap <span className="font-semibold">Pair with Desktop</span> from the mobile camera page to connect this device.
+						</p>
+					</div>
+					<button
+						type="button"
+						className="self-center text-xs font-medium text-indigo-200 underline decoration-dotted decoration-indigo-300/70 transition hover:text-indigo-100"
+						onClick={() => setMobileLandingOverride(true)}
+					>
+						Continue to desktop calibrator
+					</button>
+				</div>
+			)
+		}
+
 		return (
 			<div className="space-y-6">
+				{isMobileDevice && mobileLandingOverride && (
+					<div className="rounded-2xl border border-indigo-400/30 bg-indigo-500/10 p-4 text-sm text-indigo-100">
+						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+							<p className="leading-relaxed">Using a phone? Switch back to the streamlined mobile camera interface for an easier pairing flow.</p>
+							<button
+								type="button"
+								className="btn btn--ghost px-3 py-1 text-xs"
+								onClick={() => setMobileLandingOverride(false)}
+							>
+								Open mobile camera mode
+							</button>
+						</div>
+					</div>
+				)}
 				<div className="card space-y-6 p-6">
 					<header className="flex flex-wrap items-start justify-between gap-4">
 						<div className="space-y-2">

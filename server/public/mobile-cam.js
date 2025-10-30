@@ -15,6 +15,8 @@
     const v = document.getElementById('v');
     const msg = document.getElementById('msg');
     const pairRow = document.getElementById('pairRow');
+    const pairToggleRow = document.getElementById('pairToggleRow');
+    const showPairingBtn = document.getElementById('showPairing');
     const pairHint = document.getElementById('pairHint');
     const standaloneHint = document.getElementById('standaloneHint');
     const pairLabel = document.getElementById('pairLabel');
@@ -26,6 +28,36 @@
     const launchedFromQr = !!input.value.trim();
     const isMobileView = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     const joinLabel = launchedFromQr ? (isMobileView ? 'Pair with Desktop' : 'Pair') : 'Pair';
+    let pairingCollapsed = !launchedFromQr;
+
+    const syncPairingUI = (hasCodeOverride) => {
+        const hasCode = typeof hasCodeOverride === 'boolean' ? hasCodeOverride : !!(input && input.value.trim().length > 0);
+        if (pairRow) pairRow.style.display = pairingCollapsed ? 'none' : 'flex';
+        if (pairToggleRow) pairToggleRow.style.display = pairingCollapsed ? 'flex' : 'none';
+        if (pairHint) {
+            if (pairingCollapsed) {
+                pairHint.style.display = 'none';
+            } else if (launchedFromQr) {
+                pairHint.style.display = 'block';
+                pairHint.textContent = `Pair code detected from desktop. Start your mobile camera, then tap “${joinLabel}” to stream.`;
+            } else {
+                pairHint.style.display = 'block';
+                pairHint.textContent = hasCode
+                    ? 'Ready to pair — tap “Pair” to connect.'
+                    : 'Enter the pairing code shown on desktop or paste it here when you’re ready.';
+            }
+        }
+        if (standaloneHint) {
+            if (launchedFromQr) {
+                standaloneHint.style.display = 'none';
+            } else {
+                standaloneHint.style.display = 'block';
+                standaloneHint.textContent = pairingCollapsed
+                    ? 'Start the camera to preview locally. Tap “Pair with Desktop” when you have a code ready.'
+                    : 'Enter the pairing code shown on desktop or paste it here when you’re ready to connect.';
+            }
+        }
+    };
 
     const updateJoinState = () => {
         if (!input) return;
@@ -33,12 +65,7 @@
         if (input.value !== normalized) input.value = normalized;
         const hasCode = normalized.length > 0;
         if (joinBtn) joinBtn.disabled = !hasCode;
-        if (!launchedFromQr && pairHint) {
-            pairHint.style.display = 'block';
-            pairHint.textContent = hasCode
-                ? 'Ready to pair — tap “Pair” to connect.'
-                : 'Enter the pairing code shown on desktop or scan its QR to autofill here.';
-        }
+        syncPairingUI(hasCode);
     };
 
     if (pairLabel) {
@@ -47,26 +74,20 @@
     if (joinBtn) {
         joinBtn.textContent = joinLabel;
     }
-    if (pairRow) {
-        pairRow.style.display = 'flex';
-    }
-    if (pairHint) {
-        if (launchedFromQr) {
-            pairHint.style.display = 'block';
-            pairHint.textContent = `Pair code detected from desktop. Start your mobile camera, then tap “${joinLabel}” to stream.`;
-        } else {
-            pairHint.style.display = 'block';
-            pairHint.textContent = 'Enter the pairing code shown on desktop or scan its QR to autofill here.';
-        }
-    }
-    if (standaloneHint) {
-        standaloneHint.style.display = launchedFromQr ? 'none' : 'block';
-    }
     if (startRow) {
         startRow.style.display = 'flex';
     }
     if (input) {
         input.addEventListener('input', updateJoinState);
+    }
+    syncPairingUI();
+    if (showPairingBtn) {
+        showPairingBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            pairingCollapsed = false;
+            updateJoinState();
+            setTimeout(() => { try { if (input) input.focus(); } catch {} }, 0);
+        });
     }
     updateJoinState();
 
