@@ -6,10 +6,15 @@ export default defineConfig({
   plugins: [react()],
   build: {
     sourcemap: true,
-  },
-  test: {
-    globals: true,
-    environment: 'node',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          ui: ['lucide-react'],
+          utils: ['nanoid', 'bad-words'],
+        },
+      },
+    },
   },
   server: {
     // Bind to all interfaces so Render (and other PaaS) can detect the open port
