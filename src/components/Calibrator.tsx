@@ -120,16 +120,23 @@ export default function Calibrator() {
 	// Phone pairing state (mirrors CameraTile)
 	const [ws, setWs] = useState<WebSocket | null>(null)
 	const [pairCode, setPairCode] = useState<string | null>(null)
+	const pairCodeRef = useRef<string | null>(null)
+	const updatePairCode = useCallback((code: string | null) => {
+		pairCodeRef.current = code
+		setPairCode(code)
+	}, [setPairCode])
 	const [expiresAt, setExpiresAt] = useState<number | null>(null)
 	const [now, setNow] = useState<number>(Date.now())
 	const [paired, setPaired] = useState<boolean>(false)
-	const [pc, setPc] = useState<RTCPeerConnection | null>(null)
+	const pcRef = useRef<RTCPeerConnection | null>(null)
 	const [qrDataUrl, setQrDataUrl] = useState<string>('')
 	const [lanHost, setLanHost] = useState<string | null>(null)
 	const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null)
 	const [showTips, setShowTips] = useState<boolean>(true)
 	const [wifiDevices, setWifiDevices] = useState<NetworkDevice[]>([])
 	const [discoveringWifi, setDiscoveringWifi] = useState<boolean>(false)
+	const [copyFeedback, setCopyFeedback] = useState<'link' | 'code' | null>(null)
+	const copyTimeoutRef = useRef<number | null>(null)
 	useEffect(() => {
 		const h = window.location.hostname
 		if (h === 'localhost' || h === '127.0.0.1') {
@@ -181,6 +188,36 @@ export default function Calibrator() {
 		return () => clearInterval(t)
 	}, [expiresAt])
 	const ttl = useMemo(() => expiresAt ? Math.max(0, Math.ceil((expiresAt - now)/1000)) : null, [expiresAt, now])
+	useEffect(() => {
+		return () => {
+			if (copyTimeoutRef.current) window.clearTimeout(copyTimeoutRef.current)
+		}
+	}, [])
+
+	const copyValue = useCallback(async (value: string | null | undefined, type: 'link' | 'code') => {
+		if (!value) return
+		try {
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				await navigator.clipboard.writeText(value)
+			} else {
+				const textarea = document.createElement('textarea')
+				textarea.value = value
+				textarea.style.position = 'fixed'
+				textarea.style.opacity = '0'
+				document.body.appendChild(textarea)
+				textarea.focus()
+				textarea.select()
+				document.execCommand('copy')
+				document.body.removeChild(textarea)
+			}
+			setCopyFeedback(type)
+			if (copyTimeoutRef.current) window.clearTimeout(copyTimeoutRef.current)
+			copyTimeoutRef.current = window.setTimeout(() => setCopyFeedback(null), 1500)
+		} catch (err) {
+			console.warn('[Calibrator] Copy failed:', err)
+			setCopyFeedback(null)
+		}
+	}, [])
 	// Removed automatic regeneration of code when ttl expires. Only regenerate on explicit user action.
 
 	useEffect(() => {
@@ -228,10 +265,11 @@ export default function Calibrator() {
 		}
 		socket.onclose = (event) => {
 			console.log('WebSocket closed:', event.code, event.reason)
-			if (pc) {
-				pc.close()
-				setPc(null)
+			if (pcRef.current) {
+				try { pcRef.current.close() } catch {}
+				pcRef.current = null
 			}
+			updatePairCode(null)
 			// Only show alert if it wasn't a clean close
 			if (event.code !== 1000) {
 				alert('Camera pairing connection lost. Please try pairing again.')
@@ -240,20 +278,21 @@ export default function Calibrator() {
 		socket.onmessage = async (ev) => {
 			const data = JSON.parse(ev.data)
 			if (data.type === 'cam-code') {
-				setPairCode(data.code)
+				updatePairCode(data.code)
 				if (data.expiresAt) setExpiresAt(data.expiresAt)
 			} else if (data.type === 'cam-peer-joined') {
 				// Ensure we have the latest pairing code even if messages arrive out of order
-				if (!pairCode && data.code) setPairCode(data.code)
+				if (!pairCodeRef.current && data.code) updatePairCode(data.code)
 				setPaired(true)
 				// When a phone peer joins, proactively send current calibration (if locked)
+				const codeForSession = pairCodeRef.current || data.code || null
+				if (codeForSession) pairCodeRef.current = codeForSession
 				try {
-					const codeToUse = pairCode || data.code
-					if (locked && codeToUse) {
+					if (locked && codeForSession) {
 						const imgSize = canvasRef.current ? { w: canvasRef.current.width, h: canvasRef.current.height } : null
 						const payload = { H, imageSize: imgSize, errorPx: (errorPx ?? null), createdAt: Date.now() }
-						socket.send(JSON.stringify({ type: 'cam-calibration', code: codeToUse, payload }))
-						console.log('[Calibrator] Sent calibration to joined phone for code', codeToUse)
+						socket.send(JSON.stringify({ type: 'cam-calibration', code: codeForSession, payload }))
+						console.log('[Calibrator] Sent calibration to joined phone for code', codeForSession)
 					}
 				} catch (e) {
 					console.warn('[Calibrator] Failed to send calibration on peer join', e)
@@ -262,7 +301,7 @@ export default function Calibrator() {
 					iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 					iceCandidatePoolSize: 10
 				})
-				setPc(peer)
+				pcRef.current = peer
 				
 				// Add connection state monitoring
 				peer.onconnectionstatechange = () => {
@@ -277,7 +316,9 @@ export default function Calibrator() {
 				}
 				
 				peer.onicecandidate = (e) => {
-					if (e.candidate && pairCode) socket.send(JSON.stringify({ type: 'cam-ice', code: pairCode, payload: e.candidate }))
+					if (e.candidate && codeForSession) {
+						socket.send(JSON.stringify({ type: 'cam-ice', code: codeForSession, payload: e.candidate }))
+					}
 				}
 				
 			peer.ontrack = (ev) => {
@@ -325,36 +366,42 @@ export default function Calibrator() {
 			try {
 				const offer = await peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: true })
 					await peer.setLocalDescription(offer)
-					const codeToUse = pairCode || data.code
-					console.log('[Calibrator] Sending cam-offer for code:', codeToUse)
-					if (codeToUse) socket.send(JSON.stringify({ type: 'cam-offer', code: codeToUse, payload: offer }))
-				} catch (err) {
+					console.log('[Calibrator] Sending cam-offer for code:', codeForSession)
+					if (codeForSession) socket.send(JSON.stringify({ type: 'cam-offer', code: codeForSession, payload: offer }))
+					else console.warn('[Calibrator] Missing pairing code when sending offer')
+			} catch (err) {
 					console.error('Failed to create WebRTC offer:', err)
 					alert('Failed to establish camera connection. Please try again.')
 					stopCamera()
 				}
 			} else if (data.type === 'cam-answer') {
 				console.log('[Calibrator] Received cam-answer')
-				if (pc) {
+				const peer = pcRef.current
+				if (peer) {
 					try {
-						await pc.setRemoteDescription(new RTCSessionDescription(data.payload))
+						await peer.setRemoteDescription(new RTCSessionDescription(data.payload))
 						console.log('[Calibrator] Remote description set (answer)')
 					} catch (err) {
 						console.error('Failed to set remote description:', err)
 						alert('Camera pairing failed. Please try again.')
 						stopCamera()
 					}
+				} else {
+					console.warn('[Calibrator] Received cam-answer but no peer connection exists')
 				}
 			} else if (data.type === 'cam-ice') {
 				console.log('[Calibrator] Received cam-ice')
-				if (pc) {
+				const peer = pcRef.current
+				if (peer) {
 					try {
-						await pc.addIceCandidate(data.payload)
+						await peer.addIceCandidate(data.payload)
 						console.log('[Calibrator] ICE candidate added')
 					} catch (err) {
 						console.error('Failed to add ICE candidate:', err)
 						// Don't alert for ICE candidate errors as they're often non-critical
 					}
+				} else {
+					console.warn('[Calibrator] Received ICE candidate but no peer connection exists')
 				}
 			} else if (data.type === 'cam-error') {
 				console.error('Camera pairing error:', data.code)
@@ -454,8 +501,8 @@ export default function Calibrator() {
 			videoRef.current.srcObject = null
 			setStreaming(false)
 		}
-		if (pc) { try { pc.close() } catch {}; setPc(null) }
-		setPairCode(null)
+		if (pcRef.current) { try { pcRef.current.close() } catch {}; pcRef.current = null }
+		updatePairCode(null)
 		setExpiresAt(null)
 		setPaired(false)
 		setMarkerResult(null)
@@ -1307,11 +1354,34 @@ export default function Calibrator() {
 					{mode === 'phone' && !streaming && (
 						<div className="space-y-2 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
 							<div className="font-semibold">Phone pairing</div>
-							<div className="font-mono break-all">{mobileUrl}</div>
+							<button
+								type="button"
+								className="w-full text-left px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition flex items-center gap-2"
+								onClick={() => copyValue(mobileUrl, 'link')}
+								title="Copy mobile camera link"
+							>
+								<span className="flex-1 min-w-0 font-mono break-all text-[11px]">{mobileUrl}</span>
+								<span className="text-[10px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'link' ? 'Copied!' : 'Copy link'}</span>
+							</button>
+							<div className="flex items-center gap-2 text-[11px]">
+								<a href={mobileUrl} target="_blank" rel="noreferrer" className="underline decoration-dotted text-indigo-200 hover:text-indigo-100 transition">
+									Open link in new tab
+								</a>
+							</div>
 							<div className="opacity-80">
 								WS: {ws ? (ws.readyState === 1 ? 'open' : ws.readyState === 0 ? 'connecting' : ws.readyState === 2 ? 'closing' : 'closed') : 'not started'} · {httpsInfo?.https ? 'HTTPS on' : 'HTTP only'}
 							</div>
-							{pairCode && <div>Code: <span className="font-mono">{pairCode}</span></div>}
+							{pairCode && (
+								<button
+									type="button"
+									className="w-full text-left px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition flex items-center justify-between gap-2"
+									onClick={() => copyValue(pairCode, 'code')}
+									title="Copy pairing code"
+								>
+									<span className="font-mono tracking-[0.3em] text-sm">{pairCode}</span>
+									<span className="text-[10px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'code' ? 'Copied!' : 'Copy code'}</span>
+								</button>
+							)}
 							{qrDataUrl && <img className="mt-1 h-40 w-40 rounded bg-white" alt="Scan to open" src={qrDataUrl} />}
 							<div className="flex items-center gap-2">
 								{ttl !== null && <span>Expires in {ttl}s</span>}

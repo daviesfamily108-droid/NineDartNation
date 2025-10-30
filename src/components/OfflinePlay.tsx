@@ -1286,10 +1286,14 @@ export default function OfflinePlay({ user }: { user: any }) {
                           <button className={`btn ${buttonSizeClass}`} title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
                         </div>
                       </div>
-                      <div className="flex items-stretch justify-end min-w-0">
-                        <div className={`w-full min-w-0 ${cameraAspect==='square'?'aspect-square':'aspect-video'} rounded-2xl overflow-hidden bg-black`}>
-                          <CameraTile label="Your Board" autoStart={true} />
-                        </div>
+                      <div className="flex items-stretch justify-end min-w-0 md:min-h-[45vh]">
+                        <CameraTile
+                          label="Your Board"
+                          autoStart={true}
+                          className="min-w-0 h-full"
+                          style={{ minHeight: '45vh' }}
+                          fill
+                        />
                       </div>
                     </>
                   ) : (
@@ -1341,10 +1345,14 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
               </div>
               {/* Center camera preview: right-aligned and square when selected */}
-              <div className="flex items-stretch justify-end md:px-3 min-w-0">
-                <div className={`w-full max-w-xl min-w-0 rounded-2xl overflow-hidden bg-black ${ cameraAspect === 'square' ? 'aspect-square' : 'aspect-video' }`}>
-                  <CameraTile label="Your Board" autoStart={true} />
-                </div>
+              <div className="flex items-stretch justify-end md:px-3 min-w-0 md:min-h-[45vh]">
+                <CameraTile
+                  label="Your Board"
+                  autoStart={true}
+                  className="min-w-0 h-full"
+                  style={{ minHeight: '45vh' }}
+                  fill
+                />
               </div>
               {/* Match summary (offline) */}
               <div className={`mt-2 ${boxSize === 'small' ? 'p-2' : boxSize === 'large' ? 'p-4' : 'p-3'} rounded-2xl bg-slate-900/40 border border-white/10 text-white ${textSize === 'small' ? 'text-xs' : textSize === 'large' ? 'text-base' : 'text-sm'}`}>

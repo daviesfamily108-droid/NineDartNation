@@ -1,9 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import QRCode from 'qrcode'
 import { useUserSettings } from '../store/userSettings'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice, discoverUSBDevices, requestUSBDevice, connectToUSBDevice, type USBDevice } from '../utils/networkDevices'
 
-export default function CameraTile({ label, autoStart = false, scale: scaleOverride }: { label?: string; autoStart?: boolean; scale?: number }) {
+type CameraTileProps = {
+  label?: string
+  autoStart?: boolean
+  scale?: number
+  className?: string
+  aspect?: 'inherit' | 'wide' | 'square' | 'portrait' | 'classic' | 'free'
+  style?: CSSProperties
+  fill?: boolean
+}
+
+export default function CameraTile({
+  label,
+  autoStart = false,
+  scale: scaleOverride,
+  className,
+  aspect = 'inherit',
+  style,
+  fill = false,
+}: CameraTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [streaming, setStreaming] = useState(false)
   const [ws, setWs] = useState<WebSocket | null>(null)
@@ -24,9 +42,15 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
   const setPreferredCameraLocked = useUserSettings(s => s.setPreferredCameraLocked)
 
   if (autoscoreProvider === 'manual') {
+    const fallbackBase = fill ? 'rounded-2xl overflow-hidden bg-black w-full flex flex-col' : 'rounded-2xl overflow-hidden bg-black w-full mx-auto'
+    const fallbackClass = [fallbackBase, className].filter(Boolean).join(' ').trim()
+    const fallbackStyle: CSSProperties = { ...(style || {}) }
+    if (!fill && fallbackStyle.aspectRatio === undefined && fallbackStyle.height === undefined && fallbackStyle.minHeight === undefined) {
+      fallbackStyle.aspectRatio = '4 / 3'
+    }
     return (
-      <div className="rounded-2xl overflow-hidden bg-black w-full mx-auto" style={{ aspectRatio: '4 / 3' }}>
-        <div className="w-full h-full flex items-center justify-center bg-slate-900 text-slate-200 text-xs p-4 text-center">
+      <div className={fallbackClass} style={fallbackStyle}>
+        <div className="flex-1 w-full h-full flex items-center justify-center bg-slate-900 text-slate-200 text-xs p-4 text-center">
           Manual scoring mode active — camera feeds are disabled.
         </div>
       </div>
@@ -340,17 +364,136 @@ export default function CameraTile({ label, autoStart = false, scale: scaleOverr
       discoveringWifi={discoveringWifi}
       discoveringUsb={discoveringUsb}
       scaleOverride={scaleOverride} 
+      className={className}
+      aspect={aspect}
+      style={style}
+      fill={fill}
     />
   )
 }
 
 function CameraFrame(props: any) {
-  const { cameraScale } = useUserSettings()
+  const { cameraScale, cameraAspect: storedAspect } = useUserSettings()
   const scale = Math.max(0.5, Math.min(1.25, Number(props.scaleOverride ?? cameraScale ?? 1)))
-  const { label, start, stopAll, startPhonePairing, startWifiConnection, startUsbConnection, connectToWifiDevice, connectToUsbDevice, videoRef, streaming, mode, setMode, pairCode, mobileUrl, ttl, qrDataUrl, regenerateCode, httpsInfo, showTips, setShowTips, wifiDevices, usbDevices, discoveringWifi, discoveringUsb } = props
+  const {
+    label,
+    start,
+    stopAll,
+    startPhonePairing,
+    startWifiConnection,
+    startUsbConnection,
+    connectToWifiDevice,
+    connectToUsbDevice,
+    videoRef,
+    streaming,
+    mode,
+    setMode,
+    pairCode,
+    mobileUrl,
+    ttl,
+    qrDataUrl,
+    regenerateCode,
+    httpsInfo,
+    showTips,
+    setShowTips,
+    wifiDevices,
+    usbDevices,
+    discoveringWifi,
+    discoveringUsb,
+    className,
+    aspect,
+    style,
+    fill,
+  } = props
+
+  const [copyFeedback, setCopyFeedback] = useState<'link' | 'code' | null>(null)
+  const copyTimeoutRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) window.clearTimeout(copyTimeoutRef.current)
+    }
+  }, [])
+
+  const aspectChoice: 'wide' | 'square' | 'portrait' | 'classic' | 'free' = aspect && aspect !== 'inherit'
+    ? aspect
+    : (storedAspect as any) || 'wide'
+
+  const shouldMaintainAspect = aspectChoice !== 'free'
+  const aspectClass = shouldMaintainAspect
+    ? aspectChoice === 'square'
+      ? 'aspect-square'
+      : aspectChoice === 'portrait'
+        ? 'aspect-[3/4]'
+        : aspectChoice === 'classic'
+          ? 'aspect-[4/3]'
+          : 'aspect-video'
+    : ''
+
+  const containerBase = fill
+    ? 'rounded-2xl overflow-hidden bg-black w-full flex flex-col'
+    : 'rounded-2xl overflow-hidden bg-black w-full mx-auto flex flex-col'
+  const containerClass = [containerBase, className].filter(Boolean).join(' ').trim()
+  const containerStyle: CSSProperties = { ...(style || {}) }
+
+  const viewportClass = fill ? 'relative flex-1 min-h-[220px] bg-black' : 'relative w-full bg-black'
+
+  const commonVideoProps = {
+    style: { transform: `scale(${scale})`, transformOrigin: 'center' as const },
+  }
+
+  const videoElement = (() => {
+    const videoClass = 'absolute inset-0 w-full h-full object-contain object-center bg-black'
+    if (fill) {
+      if (shouldMaintainAspect) {
+        return (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className={`relative w-full max-w-full max-h-full ${aspectClass}`}>
+              <video ref={videoRef} className={videoClass} {...commonVideoProps} />
+            </div>
+          </div>
+        )
+      }
+      return <video ref={videoRef} className={videoClass} {...commonVideoProps} />
+    }
+    if (shouldMaintainAspect) {
+      return (
+        <div className={`relative w-full ${aspectClass}`}>
+          <video ref={videoRef} className={videoClass} {...commonVideoProps} />
+        </div>
+      )
+    }
+    return <video ref={videoRef} className="w-full h-full object-contain object-center bg-black" {...commonVideoProps} />
+  })()
+
+  async function copyValue(value: string | null | undefined, type: 'link' | 'code') {
+    if (!value) return
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(value)
+      } else {
+        const textarea = document.createElement('textarea')
+        textarea.value = value
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        document.body.appendChild(textarea)
+        textarea.focus()
+        textarea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textarea)
+      }
+      setCopyFeedback(type)
+      if (copyTimeoutRef.current) window.clearTimeout(copyTimeoutRef.current)
+      copyTimeoutRef.current = window.setTimeout(() => setCopyFeedback(null), 1500)
+    } catch (err) {
+      console.warn('Copy to clipboard failed:', err)
+      setCopyFeedback(null)
+    }
+  }
+
   return (
-    <div className="rounded-2xl overflow-hidden bg-black w-full mx-auto" style={{ aspectRatio: '4 / 3' }}>
-      <video ref={videoRef} className="w-full h-full object-contain object-center bg-black" style={{ transform: `scale(${scale})`, transformOrigin: 'center' }} />
+    <div className={containerClass} style={containerStyle}>
+      <div className={viewportClass}>{videoElement}</div>
       <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
         <span className="truncate">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : mode==='wifi' ? 'WIFI LIVE' : 'LIVE') : 'Camera')}</span>
         <div className="flex items-center gap-1">
@@ -369,9 +512,35 @@ function CameraFrame(props: any) {
       </div>
       {mode==='phone' && pairCode && !streaming && (
         <div className="p-2 text-white text-[10px] bg-black/50">
-          <div>Open on your phone:</div>
-          <div className="font-mono">{mobileUrl}</div>
-          <div>Code: <span className="font-mono">{pairCode}</span></div>
+          <div className="text-xs opacity-80">Launch on your mobile:</div>
+          <button
+            type="button"
+            className="mt-1 w-full text-left px-2 py-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition flex items-center gap-2"
+            onClick={() => copyValue(mobileUrl, 'link')}
+            title="Copy mobile camera link"
+          >
+            <span className="flex-1 min-w-0 font-mono break-all">{mobileUrl}</span>
+            <span className="text-[9px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'link' ? 'Copied!' : 'Copy'}</span>
+          </button>
+          <div className="mt-1 flex items-center gap-2">
+            <a
+              href={mobileUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="px-2 py-1 rounded border border-indigo-500/30 text-indigo-100 hover:bg-indigo-500/20 transition"
+            >
+              Open link
+            </a>
+            <button
+              type="button"
+              className="flex-1 text-left px-2 py-1 rounded bg-white/5 border border-white/10 hover:bg-white/10 transition flex items-center justify-between gap-2"
+              onClick={() => copyValue(pairCode, 'code')}
+              title="Copy pairing code"
+            >
+              <span className="font-mono tracking-[0.3em] text-sm">{pairCode}</span>
+              <span className="text-[9px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'code' ? 'Copied!' : 'Copy'}</span>
+            </button>
+          </div>
           {qrDataUrl && <img className="mt-1 w-[160px] h-[160px] bg-white rounded" alt="Scan to open" src={qrDataUrl} />}
           <div className="mt-1 flex items-center gap-2">
             {ttl !== null && <span>Expires in {ttl}s</span>}

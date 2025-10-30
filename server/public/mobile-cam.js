@@ -7,13 +7,68 @@
     const params = new URLSearchParams(location.search);
     const input = document.getElementById('code');
     const joinBtn = document.getElementById('join');
-    const enableBtn = document.getElementById('enable');
+    const startBtn = document.getElementById('startCamera');
+    const requestBtn = document.getElementById('requestAccess');
     const swapBtn = document.getElementById('swap');
     const stopBtn = document.getElementById('stop');
     const deviceSelect = document.getElementById('deviceSelect');
     const v = document.getElementById('v');
     const msg = document.getElementById('msg');
-    input.value = (params.get('code') || '').toUpperCase().slice(0, 8);
+    const pairRow = document.getElementById('pairRow');
+    const pairHint = document.getElementById('pairHint');
+    const standaloneHint = document.getElementById('standaloneHint');
+    const pairLabel = document.getElementById('pairLabel');
+    const startRow = document.getElementById('startRow');
+
+    const sanitizeCode = (value) => (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    input.value = sanitizeCode(params.get('code') || '');
+
+    const launchedFromQr = !!input.value.trim();
+    const isMobileView = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    const joinLabel = launchedFromQr ? (isMobileView ? 'Pair with Desktop' : 'Pair') : 'Pair';
+
+    const updateJoinState = () => {
+        if (!input) return;
+        const normalized = sanitizeCode(input.value);
+        if (input.value !== normalized) input.value = normalized;
+        const hasCode = normalized.length > 0;
+        if (joinBtn) joinBtn.disabled = !hasCode;
+        if (!launchedFromQr && pairHint) {
+            pairHint.style.display = 'block';
+            pairHint.textContent = hasCode
+                ? 'Ready to pair — tap “Pair” to connect.'
+                : 'Enter the pairing code shown on desktop or scan its QR to autofill here.';
+        }
+    };
+
+    if (pairLabel) {
+        pairLabel.textContent = launchedFromQr ? 'Desktop viewer code' : 'Pair code';
+    }
+    if (joinBtn) {
+        joinBtn.textContent = joinLabel;
+    }
+    if (pairRow) {
+        pairRow.style.display = 'flex';
+    }
+    if (pairHint) {
+        if (launchedFromQr) {
+            pairHint.style.display = 'block';
+            pairHint.textContent = `Pair code detected from desktop. Start your mobile camera, then tap “${joinLabel}” to stream.`;
+        } else {
+            pairHint.style.display = 'block';
+            pairHint.textContent = 'Enter the pairing code shown on desktop or scan its QR to autofill here.';
+        }
+    }
+    if (standaloneHint) {
+        standaloneHint.style.display = launchedFromQr ? 'none' : 'block';
+    }
+    if (startRow) {
+        startRow.style.display = 'flex';
+    }
+    if (input) {
+        input.addEventListener('input', updateJoinState);
+    }
+    updateJoinState();
 
     let stream = null;
     let pc = null;
@@ -136,7 +191,7 @@
                     await pc.setLocalDescription(answer);
                     console.log('[Mobile] Sending cam-answer back to desktop');
                     await postSignal('cam-answer', answer);
-                    log('Streaming to desktop (REST)');
+                    log('Streaming to desktop viewer (REST)');
                     console.log('[Mobile] WebRTC handshake complete, streaming started');
                 } catch (e) { 
                     console.error('[Mobile] cam-offer handler failed:', e);
@@ -328,21 +383,32 @@
         }
     }
 
-    deviceSelect.addEventListener('change', function(e) {
+    deviceSelect.addEventListener('change', function() {
         deviceId = this.value;
         startCam();
     });
 
-    enableBtn.addEventListener('click', async (e) => { e.preventDefault();
-        log('Requesting camera permission...');
-        const list = await enumerateDevices();
-        if (list.length > 0) {
-            deviceId = list[0].deviceId;
-            startCam();
-        } else {
-            log('No camera devices found or permission denied');
-        }
-    });
+    if (startBtn) {
+        startBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            log('Starting mobile camera...');
+            const list = await enumerateDevices();
+            if (list.length > 0) {
+                deviceId = deviceId || list[0].deviceId;
+                startCam();
+            } else {
+                log('No camera devices found or permission denied');
+            }
+        });
+    }
+
+    if (requestBtn) {
+        requestBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            log('Refreshing device list...');
+            await enumerateDevices();
+        });
+    }
 
     swapBtn.addEventListener('click', async (e) => {
         e.preventDefault();
@@ -436,7 +502,7 @@
     }
 
     async function join() {
-        const code = (input.value || '').trim().toUpperCase();
+        const code = sanitizeCode(input.value);
         if (!code) { log('Enter a code'); return; }
         log('Connecting...');
         console.log('[Mobile] Joining with code:', code);
@@ -484,7 +550,7 @@
                         await pc.setLocalDescription(answer);
                         console.log('[Mobile WS] Sending answer back to desktop');
                         await sendSignal('cam-answer', answer);
-                        log('Streaming to desktop...');
+                        log('Streaming to desktop viewer...');
                         console.log('[Mobile WS] WebRTC handshake complete');
                     } catch (e) {
                         console.error('[Mobile WS] cam-offer handler failed:', e);
@@ -526,9 +592,15 @@
         }
     }
 
-    joinBtn.addEventListener('click', (e) => { e.preventDefault(); join(); });
+    joinBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (joinBtn.disabled) {
+            log('Enter the pairing code from your desktop or scan its QR first.');
+            return;
+        }
+        join();
+    });
     stopBtn.addEventListener('click', (e) => { e.preventDefault(); try { if (pc) pc.close(); if (ws) ws.close(); if (stream) stream.getTracks().forEach(t=>t.stop()); } catch {}; log('Stopped.'); });
-    swapBtn.addEventListener('click', async (e) => { e.preventDefault(); lastFacing = (lastFacing === 'environment' ? 'user' : 'environment'); await startCam(lastFacing); });
 
     sendDiagBtn.addEventListener('click', (e) => { e.preventDefault(); try { if (ws && ws.readyState === WebSocket.OPEN) flushPendingDiagnostics(); log('Diagnostics sent'); } catch (e) { console.warn(e); log('Send failed'); } });
     dumpDiagBtn.addEventListener('click', (e) => { e.preventDefault(); try { diagOut.textContent = JSON.stringify(window.__ndn_pending_diag || [], null, 2); } catch (e) { diagOut.textContent = String(e); } });
