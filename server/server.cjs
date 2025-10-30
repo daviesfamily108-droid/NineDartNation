@@ -1224,7 +1224,8 @@ wss.on('connection', (ws, req) => {
       } else if (data.type === 'cam-create') {
         // Desktop requests a 4-letter pairing code
         const code = genCamCode()
-        await camSessions.set(code, { code, desktopId: ws._id, phoneId: null, ts: Date.now() })
+        const camSession = { code, desktopId: ws._id, desktopWs: ws, phoneId: null, phoneWs: null, ts: Date.now() }
+        await camSessions.set(code, camSession)
         try { ws.send(JSON.stringify({ type: 'cam-code', code, expiresAt: Date.now() + CAM_TTL_MS })) } catch {}
       } else if (data.type === 'cam-join') {
         // Phone joins with code
@@ -1234,21 +1235,31 @@ wss.on('connection', (ws, req) => {
         // Expire stale codes
         if (sess.ts && (Date.now() - sess.ts) > CAM_TTL_MS) { await camSessions.delete(code); try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {}; return }
         sess.phoneId = ws._id
-        await camSessions.set(code, sess)
+        sess.phoneWs = ws
+        // Get fresh desktop WebSocket
         const desktop = clients.get(sess.desktopId)
         if (desktop && desktop.readyState === 1) {
-          try { desktop.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
+          sess.desktopWs = desktop
         }
-        try { ws.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
+        await camSessions.set(code, sess)
+        if (desktop && desktop.readyState === 1) {
+          try { desktop.send(JSON.stringify({ type: 'cam-paired', code })) } catch {}
+        }
+        try { ws.send(JSON.stringify({ type: 'cam-paired', code })) } catch {}
       } else if (data.type === 'cam-data') {
         // Forward camera data between desktop and phone
         const code = String(data.code || '').toUpperCase()
         const sess = await camSessions.get(code)
         if (!sess) return
-        const targetId = (ws._id === sess.desktopId) ? sess.phoneId : sess.desktopId
-        const target = clients.get(targetId)
-        if (target && target.readyState === 1) {
-          try { target.send(JSON.stringify({ type: 'cam-data', code, payload: data.payload })) } catch {}
+        // Determine target
+        let targetWs = null
+        if (ws._id === sess.desktopId && sess.phoneWs) {
+          targetWs = sess.phoneWs
+        } else if (ws._id === sess.phoneId && sess.desktopWs) {
+          targetWs = sess.desktopWs
+        }
+        if (targetWs && targetWs.readyState === 1) {
+          try { targetWs.send(JSON.stringify({ type: 'cam-data', code, payload: data.payload })) } catch {}
         }
       } else if (data.type === 'spectate') {
         await leaveRoom(ws);
@@ -1410,27 +1421,35 @@ const clients = new Map(); // wsId -> ws
 // WebRTC camera pairing sessions (code -> { code, desktopId, phoneId, ts })
 const camSessions = {
   async set(key, value) {
+    // Store serializable data in Upstash (without WebSocket references)
+    const upstashData = {
+      code: value.code,
+      desktopId: value.desktopId,
+      phoneId: value.phoneId,
+      ts: value.ts
+    };
+    
     if (upstashRestUrl && upstashToken) {
       try {
         await fetch(`${upstashRestUrl}/set/cam:${encodeURIComponent(key)}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${upstashToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ value: JSON.stringify(value), ex: 120 }) // 2 minutes TTL
+          body: JSON.stringify({ value: JSON.stringify(upstashData), ex: 120 }) // 2 minutes TTL
         });
       } catch (err) {
         console.warn('[UPSTASH] Failed to set camera session:', err.message);
       }
     }
-    // Always keep local cache
+    // Always keep full local cache with WebSocket references
     localCamSessions.set(key, value);
   },
 
   async get(key) {
-    // Check local cache first
+    // Check local cache first (has WebSocket refs)
     if (localCamSessions.has(key)) {
       return localCamSessions.get(key);
     }
-    // Try Upstash
+    // Try Upstash (fetch serializable data)
     if (upstashRestUrl && upstashToken) {
       try {
         const res = await fetch(`${upstashRestUrl}/get/cam:${encodeURIComponent(key)}`, {
@@ -1438,9 +1457,15 @@ const camSessions = {
         });
         const data = await res.json();
         if (data.result) {
-          const value = JSON.parse(data.result);
-          localCamSessions.set(key, value);
-          return value;
+          const upstashData = JSON.parse(data.result);
+          // Reconstruct with WebSocket refs from clients
+          const fullData = {
+            ...upstashData,
+            desktopWs: clients.get(upstashData.desktopId),
+            phoneWs: clients.get(upstashData.phoneId)
+          };
+          localCamSessions.set(key, fullData);
+          return fullData;
         }
       } catch (err) {
         console.warn('[UPSTASH] Failed to get camera session:', err.message);
@@ -1471,7 +1496,7 @@ const camSessions = {
     return localCamSessions.has(key);
   }
 };
-const localCamSessions = new Map(); // Local cache for camSessions
+const localCamSessions = new Map(); // Local cache for camSessions with WebSocket refs
 const CAM_TTL_MS = 2 * 60 * 1000 // 2 minutes
 function genCamCode() {
   const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
