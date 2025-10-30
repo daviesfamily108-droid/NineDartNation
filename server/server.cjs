@@ -29,11 +29,6 @@ let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
 const app = express();
 
-// DEBUG: Check Redis configuration
-console.log('?? DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
-console.log('?? DEBUG: UPSTASH_REDIS_REST_URL exists:', !!process.env.UPSTASH_REDIS_REST_URL);
-console.log('?? DEBUG: UPSTASH_REDIS_REST_TOKEN exists:', !!process.env.UPSTASH_REDIS_REST_TOKEN);
-
 // Global error handlers
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
@@ -180,9 +175,27 @@ if (redisUrl) {
     console.warn('[REDIS] Falling back to in-memory storage for sessions');
   });
 } else if (upstashRestUrl && upstashToken) {
-  console.log('[REDIS] Using Upstash REST API for storage');
+  console.log('[UPSTASH] Redis REST API configured');
+  // Test Upstash connection on startup (non-blocking)
+  (async () => {
+    try {
+      const testRes = await fetch(`${upstashRestUrl}/ping`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${upstashToken}` },
+        signal: AbortSignal.timeout(5000)
+      });
+      const testData = await testRes.json();
+      if (testData.result === 'PONG') {
+        console.log('[UPSTASH] ✓ Connection verified');
+      } else {
+        console.warn('[UPSTASH] Unexpected response:', testData);
+      }
+    } catch (err) {
+      console.warn('[UPSTASH] Connection test warning:', err.message);
+    }
+  })();
 } else {
-  console.warn('[REDIS] Not configured - using in-memory storage for sessions');
+  console.log('[STORAGE] No persistence configured - using in-memory storage only');
 }
 // Observability: metrics registry
 const register = new client.Registry()
@@ -960,12 +973,32 @@ app.post('/api/auth/confirm-reset', async (req, res) => {
 // Friends API routes
 app.get('/api/friends/requests', (req, res) => {
   // For now, return empty array. In a real app, fetch pending friend requests for the user.
-  res.json([]);
+  res.json({ requests: [] });
 });
 
 app.get('/api/friends/messages', (req, res) => {
   // For now, return empty array. In a real app, fetch chat messages for the user.
-  res.json([]);
+  res.json({ messages: [] });
+});
+
+app.get('/api/friends/list', (req, res) => {
+  // For now, return empty array. In a real app, fetch friends list for the user.
+  res.json({ friends: [] });
+});
+
+app.get('/api/friends/suggested', (req, res) => {
+  // For now, return empty array. In a real app, fetch suggested friends for the user.
+  res.json({ suggestions: [] });
+});
+
+app.get('/api/friends/outgoing', (req, res) => {
+  // For now, return empty array. In a real app, fetch outgoing friend requests.
+  res.json({ requests: [] });
+});
+
+app.get('/api/friends/search', (req, res) => {
+  // For now, return empty array. In a real app, search for friends by query.
+  res.json({ results: [] });
 });
 
 // SPA fallback: serve index.html for any non-API, non-static route when a dist exists
