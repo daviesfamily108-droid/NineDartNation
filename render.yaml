@@ -16,6 +16,14 @@ services:
     envVars:
       - key: LOG_LEVEL
         value: info
+      - key: REDIS_FORCE_TLS
+        value: 1
+      - key: REDIS_TLS_REJECT_UNAUTHORIZED
+        value: false
+      - key: UPSTASH_REDIS_REST_URL
+        value: https://settling-lamb-23630.upstash.io
+      - key: UPSTASH_REDIS_REST_TOKEN
+        value: AVxOAAIncDIzMzk5NGM3YTZmZjg0Mzg4OTJhNWNjMWYyN2ZiOTNhOHAyMjM2MzA
       # Add these in the Render dashboard or here if you prefer
       # - key: SMTP_HOST
       #   sync: false

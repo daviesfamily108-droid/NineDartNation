@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
+const upstashRestUrl = process.env.UPSTASH_REDIS_REST_URL;
+const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
 const express = require('express');
@@ -48,76 +50,242 @@ if (!supabase) {
   console.warn('[DB] Supabase not configured - using in-memory storage only');
 }
 
-// Initialize Redis for cross-server session management
-const redis = require('redis');
+// Initialize Redis for cross-server session management (removed, using Upstash REST)
+// const redis = require('redis');
 
-// DEBUG: Check if REDIS_URL is set
-console.log('?? DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
-if (process.env.REDIS_URL) {
-  console.log('?? DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
-  console.log('?? DEBUG: REDIS_URL length:', process.env.REDIS_URL.length);
+let redisUrl = process.env.REDIS_TLS_URL || process.env.REDIS_URL;
+const redisHost = process.env.REDIS_HOST;
+const redisPort = process.env.REDIS_PORT;
+const redisPassword = process.env.REDIS_PASSWORD;
+const redisUsername = process.env.REDIS_USERNAME || process.env.REDIS_USER || 'default';
 
-  // Handle Redis URL - prefer REDIS_URL; if not present, attempt to build one from
-// Upstash REST variables (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN) so
-// Render users who set those don't need to re-paste credentials.
-let redisUrl = process.env.REDIS_URL;
+const maskRedisUrl = (url) => url ? url.replace(/\/\/([^:@]+):[^@]+@/, '//$1:***@') : url;
+
+const forceProtocol = (url, protocol) => {
+  if (!url) return url;
+  try {
+    const parsed = new URL(url);
+    parsed.protocol = protocol;
+    return parsed.toString();
+  } catch (err) {
+    if (url.startsWith('rediss://') && protocol === 'redis:') {
+      return 'redis://' + url.slice('rediss://'.length);
+    }
+    if (url.startsWith('redis://') && protocol === 'rediss:') {
+      return 'rediss://' + url.slice('redis://'.length);
+    }
+  }
+  return url;
+};
+
+const shouldForceTls = () => process.env.REDIS_FORCE_TLS === '1';
+
+// Allow building a connection string from discrete host/port credentials
+if (!redisUrl && redisHost) {
+  const protocol = shouldForceTls() ? 'rediss://' : 'redis://';
+  const authSegment = redisPassword ? `${encodeURIComponent(redisUsername)}:${encodeURIComponent(redisPassword)}@` : '';
+  const portSegment = redisPort ? `:${redisPort}` : '';
+  redisUrl = `${protocol}${authSegment}${redisHost}${portSegment}`;
+  console.log('[REDIS] Built URL from REDIS_HOST/PORT credentials');
+}
+
+// Handle Redis URL - prefer redisUrl; if not present, attempt to build one from
+// Upstash REST variables (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN)
 if (!redisUrl && process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
   try {
-    // UPSTASH_REDIS_REST_URL looks like: https://<id>.upstash.io
-    // We build a redis URI of the form: rediss://default:<TOKEN>@<host>
     const restUrl = String(process.env.UPSTASH_REDIS_REST_URL).trim();
     const token = String(process.env.UPSTASH_REDIS_REST_TOKEN).trim();
-    // Remove protocol
-    const host = restUrl.replace(/^https?:\/\//, '')
-    // Construct rediss URI (Upstash accepts 'default' as username in some variants)
-    redisUrl = `rediss://default:${encodeURIComponent(token)}@${host}`
-    console.log('[REDIS] Built REDIS_URL from UPSTASH_REDIS_REST_URL+TOKEN')
+    const host = restUrl.replace(/^https?:\/\//, '');
+    redisUrl = `rediss://default:${encodeURIComponent(token)}@${host}`;
+    console.log('[REDIS] Built REDIS_URL from UPSTASH_REDIS_REST_URL+TOKEN');
   } catch (e) {
-    console.warn('[REDIS] Failed to build REDIS_URL from Upstash env vars', e?.message || e)
+    console.warn('[REDIS] Failed to build REDIS_URL from Upstash env vars', e?.message || e);
   }
 }
+
 if (redisUrl) {
-  // Convert https:// to rediss:// for TLS connections (Upstash, etc.)
+  redisUrl = redisUrl.trim();
   if (redisUrl.startsWith('https://')) {
     redisUrl = redisUrl.replace('https://', 'rediss://');
     console.log('[REDIS] Converted https:// to rediss:// for TLS');
-  } else if (!redisUrl.startsWith('redis://') && !redisUrl.startsWith('rediss://')) {
-    redisUrl = 'redis://' + redisUrl;
-    console.log('[REDIS] Added redis:// protocol to URL');
+  } else if (!redisUrl.includes('://')) {
+    const defaultProtocol = shouldForceTls() ? 'rediss://' : 'redis://';
+    redisUrl = defaultProtocol + redisUrl;
+    console.log(`[REDIS] Added ${defaultProtocol.replace('://', '')} protocol to URL`);
+  } else if (!shouldForceTls() && redisUrl.startsWith('rediss://')) {
+    redisUrl = redisUrl.replace('rediss://', 'redis://');
+    console.log('[REDIS] Forced redis:// protocol (TLS disabled)');
   }
-  console.log('[REDIS] Final Redis URL starts with:', redisUrl.substring(0, 20) + '...');
 }
 
-const redisClient = redisUrl ? redis.createClient({ url: redisUrl }) : null;
+let redisClient = null;
 
-if (redisClient) {
-  redisClient.on('error', (err) => {
-    console.error('[REDIS] Connection error:', err.message);
-    if (err.message.includes('Invalid protocol')) {
-      console.error('[REDIS] Check that REDIS_URL starts with redis:// or rediss://');
+const buildRedisConnectionOptions = (url) => {
+  const options = { url };
+  let parsed = null;
+  try {
+    parsed = new URL(url);
+  } catch (err) {
+    console.warn('[REDIS] Invalid Redis URL provided:', url);
+  }
+
+  if (parsed && !parsed.password && redisPassword) {
+    parsed.username = redisUsername;
+    parsed.password = redisPassword;
+    options.url = parsed.toString();
+    if (options.url !== url) {
+      console.log('[REDIS] Injected password into Redis URL from env');
+    }
+  }
+
+  const tlsEnabled = parsed ? parsed.protocol === 'rediss:' : shouldForceTls();
+  if (tlsEnabled) {
+    const socket = {
+      tls: true,
+      servername: parsed ? parsed.hostname : undefined,
+      secureProtocol: 'TLSv1_2_method'
+    };
+    if (process.env.REDIS_TLS_REJECT_UNAUTHORIZED === 'false') {
+      socket.rejectUnauthorized = false;
+    }
+    options.socket = socket;
+  }
+
+  return { options, tlsEnabled };
+};
+
+const shouldDowngradeTls = (err, tlsEnabled) => {
+  if (!tlsEnabled) return false;
+  const code = err?.code || '';
+  const message = err?.message || '';
+  return code === 'ERR_SSL_PACKET_LENGTH_TOO_LONG' || message.includes('ERR_SSL_PACKET_LENGTH_TOO_LONG');
+};
+
+const runRedisHealthChecks = async (client) => {
+  try {
+    const pong = await client.ping();
+    console.log('[REDIS] ping:', pong);
+    const testKey = `ndn_startup_test_${Date.now()}`;
+    let setRes = null;
+    try {
+      setRes = await client.set(testKey, '1', { PX: 5000, NX: true });
+      try { await client.del(testKey); } catch (e) {}
+    } catch (e) {
+      setRes = String(e?.message || e);
+    }
+    console.log('[REDIS] reservation test:', setRes);
+  } catch (err) {
+    console.warn('[REDIS] connectivity test failed:', err?.message || err);
+  }
+};
+
+const initializeRedisClient = async (url, allowDowngrade = true) => {
+  const { options, tlsEnabled } = buildRedisConnectionOptions(url);
+  const masked = maskRedisUrl(options.url);
+  console.log(`[REDIS] Connecting (${tlsEnabled ? 'TLS' : 'plain'}) to ${masked?.substring(0, 60) || 'unknown'}...`);
+
+  const connectionResult = await new Promise(async (resolve) => {
+    const client = redis.createClient(options);
+    let settled = false;
+    let downgradeRequested = false;
+
+    const finish = async (result) => {
+      if (settled) return;
+      settled = true;
+      client.removeListener('error', onError);
+      client.removeListener('ready', onReady);
+      client.removeListener('end', onEnd);
+      resolve(result);
+    };
+
+    const handleQuit = async () => {
+      try {
+        await client.quit();
+      } catch (quitErr) {
+        // ignore
+      }
+    };
+
+    const onError = async (err) => {
+      const msg = err?.message || err;
+      console.error('[REDIS] Connection error:', msg);
+      if (String(msg).includes('Invalid protocol')) {
+        console.error('[REDIS] Check that REDIS_URL starts with redis:// or rediss://');
+      }
+
+      if (!settled && allowDowngrade && shouldDowngradeTls(err, tlsEnabled)) {
+        downgradeRequested = true;
+        await handleQuit();
+        finish({ retryPlain: true });
+        return;
+      }
+
+      if (!settled && !downgradeRequested) {
+        await handleQuit();
+        finish({ success: false, error: err });
+      }
+    };
+
+    const onReady = async () => {
+      redisClient = client;
+      if (typeof RedisMap !== 'undefined' && typeof RedisMap.updateRedisClientRefs === 'function') {
+        RedisMap.updateRedisClientRefs(client);
+      }
+      await runRedisHealthChecks(client);
+      console.log(`[REDIS] Connected (${tlsEnabled ? 'TLS' : 'plain'})`);
+      finish({ success: true });
+    };
+
+    const onEnd = async () => {
+      if (!settled && !downgradeRequested) {
+        await handleQuit();
+        finish({ success: false, error: new Error('Connection ended before ready') });
+      }
+    };
+
+    client.on('error', onError);
+    client.once('ready', onReady);
+    client.once('end', onEnd);
+
+    try {
+      await client.connect();
+    } catch (err) {
+      await onError(err);
     }
   });
-  redisClient.on('connect', () => console.log('[REDIS] Connected successfully'));
-  redisClient.connect().then(async () => {
+
+  if (connectionResult?.success) {
+    return true;
+  }
+
+  if (connectionResult?.retryPlain) {
+    let plainUrl = forceProtocol(options.url, 'redis:');
+    // If downgrading from TLS, change port to standard Redis port 6379
     try {
-      // Quick connectivity check (ping) and atomic reservation test so startup logs
-      const pong = await redisClient.ping();
-      console.log('[REDIS] ping:', pong);
-      const testKey = `ndn_startup_test_${Date.now()}`;
-      let setRes = null;
-      try {
-        setRes = await redisClient.set(testKey, '1', { PX: 5000, NX: true });
-        // cleanup
-        try { await redisClient.del(testKey) } catch (e) {}
-      } catch (e) {
-        setRes = String(e?.message || e);
+      const parsed = new URL(plainUrl);
+      if (parsed.port && parsed.port !== '6379') {
+        parsed.port = '6379';
+        plainUrl = parsed.toString();
+        console.warn('[REDIS] Changed port to 6379 for non-TLS connection');
       }
-      console.log('[REDIS] reservation test:', setRes);
-    } catch (err) {
-      console.warn('[REDIS] connectivity test failed:', err?.message || err);
+    } catch (e) {
+      // ignore URL parse errors
     }
-  }).catch(err => {
-    console.warn('[REDIS] Failed to connect:', err.message || err);
+    const maskedPlain = maskRedisUrl(plainUrl);
+    console.warn('[REDIS] TLS handshake failed; retrying without TLS using', maskedPlain?.substring(0, 60) + '...');
+    return initializeRedisClient(plainUrl, false);
+  }
+
+  redisClient = null;
+  const errMsg = connectionResult?.error ? (connectionResult.error.message || connectionResult.error) : 'Unknown error';
+  console.warn('[REDIS] Unable to establish Redis connection:', errMsg);
+  console.warn('[REDIS] Falling back to in-memory storage for sessions');
+  return false;
+};
+
+if (redisUrl) {
+  initializeRedisClient(redisUrl).catch(err => {
+    console.warn('[REDIS] Unexpected error while initializing Redis:', err?.message || err);
     console.warn('[REDIS] Falling back to in-memory storage for sessions');
   });
 } else {
@@ -131,13 +299,24 @@ class RedisMap {
     this.prefix = keyPrefix;
     this.ttl = ttlSeconds;
     this.localCache = new Map();
+    RedisMap._instances.add(this);
   }
 
   _key(k) { return `${this.prefix}:${k}`; }
 
   async set(key, value) {
     this.localCache.set(key, value);
-    if (this.redis) {
+    if (upstashRestUrl && upstashToken) {
+      try {
+        await fetch(`${upstashRestUrl}/set/${encodeURIComponent(this._key(key))}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${upstashToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: JSON.stringify(value), ex: this.ttl })
+        });
+      } catch (err) {
+        console.warn(`[UPSTASH] Failed to set ${this.prefix}:${key}:`, err.message);
+      }
+    } else if (this.redis) {
       try {
         await this.redis.setEx(this._key(key), this.ttl, JSON.stringify(value));
       } catch (err) {
@@ -152,8 +331,24 @@ class RedisMap {
     if (this.localCache.has(key)) {
       return this.localCache.get(key);
     }
+    // Try Upstash
+    if (upstashRestUrl && upstashToken) {
+      try {
+        const res = await fetch(`${upstashRestUrl}/get/${encodeURIComponent(this._key(key))}`, {
+          headers: { 'Authorization': `Bearer ${upstashToken}` }
+        });
+        const data = await res.json();
+        if (data.result) {
+          const value = JSON.parse(data.result);
+          this.localCache.set(key, value);
+          return value;
+        }
+      } catch (err) {
+        console.warn(`[UPSTASH] Failed to get ${this.prefix}:${key}:`, err.message);
+      }
+    }
     // Try Redis
-    if (this.redis) {
+    else if (this.redis) {
       try {
         const data = await this.redis.get(this._key(key));
         if (data) {
@@ -170,7 +365,17 @@ class RedisMap {
 
   async has(key) {
     if (this.localCache.has(key)) return true;
-    if (this.redis) {
+    if (upstashRestUrl && upstashToken) {
+      try {
+        const res = await fetch(`${upstashRestUrl}/exists/${encodeURIComponent(this._key(key))}`, {
+          headers: { 'Authorization': `Bearer ${upstashToken}` }
+        });
+        const data = await res.json();
+        return data.result === 1;
+      } catch (err) {
+        console.warn(`[UPSTASH] Failed to check ${this.prefix}:${key}:`, err.message);
+      }
+    } else if (this.redis) {
       try {
         const exists = await this.redis.exists(this._key(key));
         return exists === 1;
@@ -183,7 +388,16 @@ class RedisMap {
 
   async delete(key) {
     this.localCache.delete(key);
-    if (this.redis) {
+    if (upstashRestUrl && upstashToken) {
+      try {
+        await fetch(`${upstashRestUrl}/del/${encodeURIComponent(this._key(key))}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${upstashToken}` }
+        });
+      } catch (err) {
+        console.warn(`[UPSTASH] Failed to delete ${this.prefix}:${key}:`, err.message);
+      }
+    } else if (this.redis) {
       try {
         await this.redis.del(this._key(key));
       } catch (err) {
@@ -195,7 +409,23 @@ class RedisMap {
 
   async clear() {
     this.localCache.clear();
-    if (this.redis) {
+    if (upstashRestUrl && upstashToken) {
+      try {
+        const res = await fetch(`${upstashRestUrl}/keys/${encodeURIComponent(this.prefix)}:*`, {
+          headers: { 'Authorization': `Bearer ${upstashToken}` }
+        });
+        const data = await res.json();
+        if (data.result && data.result.length > 0) {
+          await fetch(`${upstashRestUrl}/del`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${upstashToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(data.result)
+          });
+        }
+      } catch (err) {
+        console.warn(`[UPSTASH] Failed to clear ${this.prefix}:`, err.message);
+      }
+    } else if (this.redis) {
       try {
         const keys = await this.redis.keys(`${this.prefix}:*`);
         if (keys.length > 0) {
@@ -226,7 +456,15 @@ class RedisMap {
   entries() {
     return this.localCache.entries();
   }
+
+  static updateRedisClientRefs(newClient) {
+    for (const instance of RedisMap._instances) {
+      instance.redis = newClient;
+    }
+  }
 }
+
+RedisMap._instances = new Set();
 
 // Synchronization helpers for cross-worker communication
 const syncHelpers = {
@@ -1585,6 +1823,17 @@ app.get('/legal', (req, res) => {
   if (fs.existsSync(p)) return res.sendFile(p)
   res.status(404).send('Legal information not available')
 })
+
+// Friends API routes
+app.get('/api/friends/requests', (req, res) => {
+  // For now, return empty array. In a real app, fetch pending friend requests for the user.
+  res.json([]);
+});
+
+app.get('/api/friends/messages', (req, res) => {
+  // For now, return empty array. In a real app, fetch chat messages for the user.
+  res.json([]);
+});
 
 // SPA fallback: serve index.html for any non-API, non-static route when a dist exists
 if (staticBase) {
@@ -3563,5 +3812,4 @@ function getNextFridayAt1945(nowMs) {
 (async () => {
   // Removed ensureOfficialWeekly - only allow manually created tournaments
 })();
-}
 }
