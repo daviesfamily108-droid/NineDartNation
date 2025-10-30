@@ -957,6 +957,17 @@ app.post('/api/auth/confirm-reset', async (req, res) => {
   }
 })
 
+// Friends API routes
+app.get('/api/friends/requests', (req, res) => {
+  // For now, return empty array. In a real app, fetch pending friend requests for the user.
+  res.json([]);
+});
+
+app.get('/api/friends/messages', (req, res) => {
+  // For now, return empty array. In a real app, fetch chat messages for the user.
+  res.json([]);
+});
+
 // SPA fallback: serve index.html for any non-API, non-static route when a dist exists
 if (staticBase) {
   app.get('*', (req, res, next) => {

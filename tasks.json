@@ -46,7 +46,7 @@
 		{
 			"label": "Run server to smoke-test endpoints",
 			"type": "shell",
-			"command": "cd server; node server.js",
+			"command": "cd server; node server.cjs",
 			"isBackground": true,
 			"group": "build"
 		},
