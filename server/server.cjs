@@ -1,5 +1,7 @@
 ﻿const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
+const upstashRestUrl = process.env.UPSTASH_REDIS_REST_URL;
+const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
 const express = require('express');
@@ -26,6 +28,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-producti
 let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
 const app = express();
+
+// DEBUG: Check Redis configuration
+console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
+console.log('🔍 DEBUG: UPSTASH_REDIS_REST_URL exists:', !!process.env.UPSTASH_REDIS_REST_URL);
+console.log('🔍 DEBUG: UPSTASH_REDIS_REST_TOKEN exists:', !!process.env.UPSTASH_REDIS_REST_TOKEN);
 
 // Global error handlers
 process.on('uncaughtException', (err) => {
@@ -57,31 +64,123 @@ if (!supabase) {
 // Initialize Redis for cross-server session management
 const redis = require('redis');
 
-// DEBUG: Check if REDIS_URL is set
-console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
-let redisUrl = process.env.REDIS_URL;
-if (process.env.REDIS_URL) {
-  console.log('🔍 DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
-  // Convert https:// URLs to rediss:// for TLS connections (Upstash Redis)
-  if (redisUrl.startsWith('https://')) {
-    redisUrl = redisUrl.replace('https://', 'rediss://');
-    console.log('🔍 DEBUG: Converted REDIS_URL to:', redisUrl.substring(0, 20) + '...');
-  }
-}
+const maskRedisUrl = (url) => url ? url.replace(/\/\/([^:@]+):[^@]+@/, '//$1:***@') : url;
+const requiresTlsDowngrade = (err) => {
+  if (!err) return false;
+  const needle = 'ERR_SSL_PACKET_LENGTH_TOO_LONG';
+  return err.code === needle || String(err.message || err).includes(needle);
+};
 
-const redisClient = redisUrl ? (() => {
+const resolveRedisUrl = () => {
+  const direct = process.env.REDIS_TLS_URL || process.env.REDIS_URL;
+  if (direct && direct.trim()) return direct.trim();
+  if (!process.env.REDIS_HOST) return null;
+  const auth = process.env.REDIS_PASSWORD
+    ? `${encodeURIComponent(process.env.REDIS_USERNAME || process.env.REDIS_USER || 'default')}:${encodeURIComponent(process.env.REDIS_PASSWORD)}@`
+    : '';
+  const protocol = process.env.REDIS_FORCE_TLS === '1' ? 'rediss://' : 'redis://';
+  const port = process.env.REDIS_PORT ? `:${process.env.REDIS_PORT}` : '';
+  return `${protocol}${auth}${process.env.REDIS_HOST}${port}`;
+};
+
+const buildRedisOptions = (rawUrl) => {
+  const url = rawUrl.startsWith('https://') ? rawUrl.replace('https://', 'rediss://') : rawUrl;
+  const parsed = new URL(url.includes('://') ? url : `redis://${url}`);
+
+  if (!parsed.password && process.env.REDIS_PASSWORD) {
+    parsed.username = process.env.REDIS_USERNAME || process.env.REDIS_USER || 'default';
+    parsed.password = process.env.REDIS_PASSWORD;
+  }
+
+  const tlsEnabled = parsed.protocol === 'rediss:' || process.env.REDIS_FORCE_TLS === '1';
+  const options = { url: parsed.toString() };
+  if (tlsEnabled) {
+    options.socket = {
+      tls: true,
+      servername: parsed.hostname,
+      rejectUnauthorized: process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== 'false'
+    };
+  }
+
+  return { options, tlsEnabled };
+};
+
+let redisClient = null;
+
+const attemptConnection = (options) => new Promise((resolve, reject) => {
+  const client = redis.createClient(options);
+  const cleanup = () => {
+    client.removeAllListeners('ready');
+    client.removeAllListeners('error');
+    client.removeAllListeners('end');
+  };
+
+  client.once('ready', () => {
+    cleanup();
+    resolve(client);
+  });
+
+  const fail = (err) => {
+    cleanup();
+    err.client = client;
+    reject(err);
+  };
+
+  client.once('error', fail);
+  client.once('end', () => fail(new Error('Connection ended before ready')));
+
+  client.connect().catch(fail);
+});
+
+const connectRedis = async (rawUrl, allowDowngrade = true) => {
+  const { options, tlsEnabled } = buildRedisOptions(rawUrl);
+  const masked = maskRedisUrl(options.url);
+  console.log(`[REDIS] Connecting (${tlsEnabled ? 'TLS' : 'plain'}) to ${masked?.slice(0, 60)}...`);
+
   try {
-    return redis.createClient({ url: redisUrl });
-  } catch (err) {
-    console.error('[REDIS] Failed to create client:', err.message);
-    return null;
-  }
-})() : null;
+    const client = await attemptConnection(options);
+    client.on('error', (err) => console.error('[REDIS] Connection error:', err.message || err));
 
-if (redisClient) {
-  redisClient.on('error', (err) => console.error('[REDIS] Error:', err));
-  redisClient.on('connect', () => console.log('[REDIS] Connected'));
-  redisClient.connect().catch(err => console.warn('[REDIS] Failed to connect:', err));
+    try {
+      console.log('[REDIS] ping:', await client.ping());
+    } catch (err) {
+      console.warn('[REDIS] ping failed:', err.message || err);
+    }
+
+    console.log(`[REDIS] Connected (${tlsEnabled ? 'TLS' : 'plain'})`);
+    redisClient = client;
+    return client;
+  } catch (err) {
+    console.error('[REDIS] Connection attempt failed:', err.message || err);
+    if (err && err.code) {
+      console.error('[REDIS] Failure code:', err.code);
+    }
+
+    if (allowDowngrade && tlsEnabled && requiresTlsDowngrade(err)) {
+      const plainUrl = options.url.replace(/^rediss:/, 'redis:');
+      console.warn(`[REDIS] TLS handshake failed; retrying without TLS using ${maskRedisUrl(plainUrl)}`);
+      if (err.client) {
+        await err.client.quit().catch(() => {});
+      }
+      return connectRedis(plainUrl, false);
+    }
+
+    if (err.client) {
+      await err.client.quit().catch(() => {});
+    }
+
+    throw err;
+  }
+};
+
+const redisUrl = resolveRedisUrl();
+if (redisUrl) {
+  connectRedis(redisUrl).catch((err) => {
+    console.warn('[REDIS] Unable to connect:', err.message || err);
+    console.warn('[REDIS] Falling back to in-memory storage for sessions');
+  });
+} else if (upstashRestUrl && upstashToken) {
+  console.log('[REDIS] Using Upstash REST API for storage');
 } else {
   console.warn('[REDIS] Not configured - using in-memory storage for sessions');
 }
@@ -105,19 +204,53 @@ register.registerMetric(celebrations180Total)
 const redisHelpers = {
   // User sessions (shared across servers)
   async setUserSession(email, sessionData) {
-    if (!redisClient) return;
-    await redisClient.set(`user:${email}`, JSON.stringify(sessionData), { EX: 3600 }); // 1 hour expiry
+    if (upstashRestUrl && upstashToken) {
+      try {
+        await fetch(`${upstashRestUrl}/set/user:${encodeURIComponent(email)}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${upstashToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: JSON.stringify(sessionData), ex: 3600 })
+        });
+      } catch (err) {
+        console.warn('[UPSTASH] Failed to set user session:', err.message);
+      }
+    } else if (redisClient) {
+      await redisClient.set(`user:${email}`, JSON.stringify(sessionData), { EX: 3600 }); // 1 hour expiry
+    }
   },
 
   async getUserSession(email) {
-    if (!redisClient) return null;
-    const data = await redisClient.get(`user:${email}`);
-    return data ? JSON.parse(data) : null;
+    if (upstashRestUrl && upstashToken) {
+      try {
+        const res = await fetch(`${upstashRestUrl}/get/user:${encodeURIComponent(email)}`, {
+          headers: { 'Authorization': `Bearer ${upstashToken}` }
+        });
+        const data = await res.json();
+        return data.result ? JSON.parse(data.result) : null;
+      } catch (err) {
+        console.warn('[UPSTASH] Failed to get user session:', err.message);
+        return null;
+      }
+    } else if (redisClient) {
+      const data = await redisClient.get(`user:${email}`);
+      return data ? JSON.parse(data) : null;
+    }
+    return null;
   },
 
   async deleteUserSession(email) {
-    if (!redisClient) return;
-    await redisClient.del(`user:${email}`);
+    if (upstashRestUrl && upstashToken) {
+      try {
+        await fetch(`${upstashRestUrl}/del/user:${encodeURIComponent(email)}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${upstashToken}` }
+        });
+      } catch (err) {
+        console.warn('[UPSTASH] Failed to delete user session:', err.message);
+      }
+    } else if (redisClient) {
+      await redisClient.del(`user:${email}`);
+    }
   },
 
   // Room memberships (shared across servers)
@@ -976,549 +1109,549 @@ if (!users.has('daviesfamily108@gmail.com')) {
 const friendships = new Map();
 // simple messages store: recipientEmail -> [{ id, from, message, ts }]
 const messages = new Map();
-// In-memory wallets: email -> { email, balances: { [currency]: cents } }
-const wallets = new Map();
-// In-memory withdrawals: id -> { id, email, currency, amountCents, status: 'pending'|'paid'|'rejected', requestedAt, decidedAt?, notes? }
-const withdrawals = new Map();
-// In-memory payout methods: email -> { brand, last4, addedAt }
-const payoutMethods = new Map();
-
-function creditWallet(email, currency, amountCents) {
-  const addr = String(email||'').toLowerCase()
-  if (!addr || !currency || !Number.isFinite(amountCents) || amountCents <= 0) return
-  const code = String(currency).toUpperCase()
-  const w = wallets.get(addr) || { email: addr, balances: {} }
-  w.balances[code] = (w.balances[code] || 0) + Math.floor(amountCents)
-  wallets.set(addr, w)
-}
-
-function debitWallet(email, currency, amountCents) {
-  const addr = String(email||'').toLowerCase()
-  const code = String(currency).toUpperCase()
-  const w = wallets.get(addr)
-  if (!w) return false
-  const bal = w.balances[code] || 0
-  if (amountCents > bal) return false
-  w.balances[code] = bal - Math.floor(amountCents)
-  wallets.set(addr, w)
-  return true
-}
-
-// Persistence helpers (demo)
-const FRIENDS_FILE = './friends.json'
-function saveFriendships() {
+// Friend requests persistence
+const friendRequests = [];
+const FRIEND_REQUESTS_FILE = './friend-requests.json'
+function saveFriendRequests() {
   try {
-    const obj = {}
-    for (const [k, v] of friendships.entries()) obj[k] = Array.from(v)
-    fs.writeFileSync(FRIENDS_FILE, JSON.stringify({ friendships: obj }, null, 2))
+    fs.writeFileSync(FRIEND_REQUESTS_FILE, JSON.stringify({ requests: friendRequests }, null, 2))
   } catch {}
 }
-function loadFriendships() {
+function loadFriendRequests() {
   try {
-    if (!fs.existsSync(FRIENDS_FILE)) return
-    const j = JSON.parse(fs.readFileSync(FRIENDS_FILE, 'utf8'))
-    if (j && j.friendships) {
-      for (const [k, arr] of Object.entries(j.friendships)) {
-        friendships.set(k, new Set(arr))
-      }
+    if (!fs.existsSync(FRIEND_REQUESTS_FILE)) return
+    const j = JSON.parse(fs.readFileSync(FRIEND_REQUESTS_FILE, 'utf8'))
+    if (j && j.requests) {
+      friendRequests.splice(0, friendRequests.length, ...j.requests)
     }
   } catch {}
 }
-loadFriendships()
+loadFriendRequests()
 
-function broadcastAll(data) {
-  const payload = (typeof data === 'string') ? data : JSON.stringify(data)
-  for (const client of wss.clients) {
-    if (client.readyState === 1) client.send(payload)
-  }
-}
+// Admin-configurable demo users (for quick setup)
+// NOTE: In production, use real user signup with email verification!
+const demoUsers = [
+  // email, username, password, admin?
+  ['alice@example.com', 'Alice', 'Password123', false],
+  ['bob@example.com', 'Bob', 'Password123', false],
+  ['carol@example.com', 'Carol', 'Password123', false],
+  ['dave@example.com', 'Dave', 'Password123', true],
+  ['eve@example.com', 'Eve', 'Password123', false],
+  ['mallory@example.com', 'Mallory', 'Password123', false],
+  ['admin@example.com', 'Admin', 'Password123', true],
+]
 
-function broadcastTournaments() {
-  const list = Array.from(tournaments.values())
-  broadcastAll({ type: 'tournaments', tournaments: list })
-}
+// Optional: auto-create demo users on startup (for development)
+// (async () => {
+//   for (const [email, username, password, isAdmin] of demoUsers) {
+//     const lowerEmail = email.toLowerCase()
+//     if (!users.has(lowerEmail)) {
+//       const user = { email: lowerEmail, username, password, admin: !!isAdmin, subscription: { fullAccess: false } }
+//       users.set(lowerEmail, user)
+//       console.log(`[DEV] Created demo user: ${username} <${lowerEmail}>`)
+//       // In a real app, you'd save to DB here
+//     }
+//   }
+// })();
 
-async function joinRoom(ws, roomId) {
-  if (!rooms.has(roomId)) rooms.set(roomId, new Set());
-  rooms.get(roomId).add(ws);
-  ws._roomId = roomId;
-  if (ws._email) {
-    // Update user status in Redis for cross-server sharing
-    const userSession = await redisHelpers.getUserSession(ws._email);
-    if (userSession) {
-      userSession.status = 'ingame';
-      userSession.lastSeen = Date.now();
-      userSession.currentRoomId = roomId;
-      await redisHelpers.setUserSession(ws._email, userSession);
-    }
-    // Also update local cache
-    if (users.has(ws._email)) {
-      const u = users.get(ws._email)
-      u.status = 'ingame'
-      u.lastSeen = Date.now()
-      users.set(ws._email, u)
-    }
-  }
-}
-
-async function leaveRoom(ws) {
-  const roomId = ws._roomId;
-  if (!roomId) return;
-  const set = rooms.get(roomId);
-  if (set) {
-    set.delete(ws);
-    if (set.size === 0) rooms.delete(roomId);
-  }
-  ws._roomId = null;
-  if (ws._email) {
-    // Update user status in Redis for cross-server sharing
-    const userSession = await redisHelpers.getUserSession(ws._email);
-    if (userSession) {
-      userSession.status = 'online';
-      userSession.lastSeen = Date.now();
-      userSession.currentRoomId = null;
-      await redisHelpers.setUserSession(ws._email, userSession);
-    }
-    // Also update local cache
-    if (users.has(ws._email)) {
-      const u = users.get(ws._email)
-      // If still connected, revert to online; otherwise close handler will set offline
-      u.status = 'online'
-      u.lastSeen = Date.now()
-      users.set(ws._email, u)
-    }
-  }
-}
-
-function broadcastToRoom(roomId, data, exceptWs=null) {
-  const set = rooms.get(roomId);
-  if (!set) return;
-  const payload = (typeof data === 'string') ? data : JSON.stringify(data)
-  for (const client of set) {
-    if (client.readyState === 1 && client !== exceptWs) {
-      client.send(payload);
-    }
-  }
-}
-
-wss.on('connection', (ws, req) => {
-  try { console.log(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
-  ws._id = nanoid(8);
-  clients.set(ws._id, ws)
-  wsConnections.inc()
-  // Heartbeat
-  ws.isAlive = true
-  ws.on('pong', () => { ws.isAlive = true })
-  // Log low-level socket errors
-  ws.on('error', (err) => {
-    try { console.warn(`[WS] error id=${ws._id} message=${err?.message||err}`) } catch {}
+// Security & performance
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
+app.use(cors())
+app.use(compression())
+const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
+app.use(limiter)
+// Logging
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
+app.use(pinoHttp({ logger, genReqId: (req) => req.headers['x-request-id'] || nanoid(12) }))
+// HTTP metrics middleware (after logging so route is known)
+app.use((req, res, next) => {
+  const start = Date.now()
+  res.on('finish', () => {
+    const route = (req.route && req.route.path) || req.path || 'unknown'
+    try { httpRequestsTotal.inc({ method: req.method, route, status: String(res.statusCode) }) } catch {}
   })
-  // Token-bucket rate limit: 10 msg/sec, burst 20
-  ws._bucket = { tokens: 20, last: Date.now(), rate: 10, capacity: 20 }
-  function allowMessage() {
+  next()
+})
+// Guard JSON body size to avoid excessive memory
+app.use(express.json({ limit: '100kb' }));
+// Serve static assets (mobile camera page)
+app.use(express.static('./public'))
+// In production, also serve the built client app. Prefer root ../dist, fallback to ../app/dist, then server/dist.
+const rootDistPath = path.resolve(process.cwd(), '..', 'dist')
+const appDistPath = path.resolve(process.cwd(), '..', 'app', 'dist')
+const serverDistPath = path.resolve(process.cwd(), 'dist')
+let staticBase = null
+if (fs.existsSync(rootDistPath)) {
+  staticBase = rootDistPath
+  app.use(express.static(rootDistPath))
+} else if (fs.existsSync(appDistPath)) {
+  staticBase = appDistPath
+  app.use(express.static(appDistPath))
+} else if (fs.existsSync(serverDistPath)) {
+  staticBase = serverDistPath
+  app.use(express.static(serverDistPath))
+}
+// Log whether we found a built SPA to serve
+if (staticBase) {
+  console.log(`[SPA] Serving static frontend from ${staticBase}`)
+} else {
+  console.warn('[SPA] No built frontend found at ../dist, ../app/dist, or ./dist; "/" will 404 (API+WS OK).')
+}
+
+
+// Signup endpoint
+app.post('/api/auth/signup', async (req, res) => {
+  const { email, username, password } = req.body
+  if (!email || !username || !password) {
+    return res.status(400).json({ error: 'Email, username, and password required.' })
+  }
+
+  try {
+    // Check if username exists in memory
+    for (const u of users.values()) {
+      if (u.username === username) {
+        return res.status(409).json({ error: 'Username already exists.' })
+      }
+      if (u.email === email) {
+        return res.status(409).json({ error: 'Email already exists.' })
+      }
+    }
+
+    // Check if user exists in Supabase
+    if (supabase) {
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('email, username')
+        .or(`email.eq.${email},username.eq.${username}`)
+        .single();
+
+      if (existingUser) {
+        if (existingUser.email === email) {
+          return res.status(409).json({ error: 'Email already exists.' })
+        }
+        if (existingUser.username === username) {
+          return res.status(409).json({ error: 'Username already exists.' })
+        }
+      }
+    }
+
+    const user = { email, username, password, admin: false, subscription: { fullAccess: false } }
+
+    // Save to Supabase if available
+    if (supabase) {
+      const { error } = await supabase
+        .from('users')
+        .insert([{
+          email: user.email,
+          username: user.username,
+          password: user.password, // Note: In production, hash passwords!
+          admin: user.admin,
+          subscription: user.subscription,
+          created_at: new Date().toISOString()
+        }]);
+
+      if (error) {
+        console.error('[DB] Failed to save user to Supabase:', error);
+        return res.status(500).json({ error: 'Failed to create account.' });
+      }
+    }
+
+    // Also store in memory for current session
+    users.set(email, user)
+
+    // Create JWT token
+    const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+    return res.json({ user, token })
+  } catch (error) {
+    console.error('[SIGNUP] Error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+})
+
+// Login endpoint
+app.post('/api/auth/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required.' });
+  }
+
+  try {
+    let user = null;
+
+    // First check in-memory users
+    for (const u of users.values()) {
+      if (u.username === username && u.password === password) {
+        user = u;
+        break;
+      }
+    }
+
+    // If not found in memory, check Supabase
+    if (!user && supabase) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        console.error('[DB] Supabase login error:', error);
+      } else if (data && data.password === password) {
+        user = {
+          email: data.email,
+          username: data.username,
+          password: data.password,
+          admin: data.admin || false
+        };
+        // Cache in memory for current session
+        users.set(data.email, user);
+      }
+    }
+
+    if (user) {
+      // Create JWT token
+      const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+      return res.json({ user, token });
+    } else {
+      return res.status(401).json({ error: 'Invalid username or password.' });
+    }
+  } catch (error) {
+    console.error('[LOGIN] Error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Route to verify token and get user info
+app.get('/api/auth/me', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    // Find user by username
+    for (const u of users.values()) {
+      if (u.username === decoded.username) {
+        return res.json({ user: u });
+      }
+    }
+    return res.status(404).json({ error: 'User not found.' });
+  } catch {
+    return res.status(401).json({ error: 'Invalid token.' });
+  }
+});
+
+
+// In-memory subscription store (demo)
+let subscription = { fullAccess: false };
+// Winner-based per-email premium grants (demo) email -> expiry (ms since epoch)
+const premiumWinners = new Map();
+// In-memory admin store (demo)
+const OWNER_EMAIL = 'daviesfamily108@gmail.com'
+const adminEmails = new Set([OWNER_EMAIL])
+// In-memory ops flags (demo)
+let maintenanceMode = false
+let lastAnnouncement = null
+// Profanity filter and reports store (demo)
+const profanityFilter = new Filter()
+const reports = []
+// Admin-configurable email copy (in-memory demo)
+const emailCopy = {
+  reset: { title: '', intro: '', buttonLabel: '' },
+  reminder: { title: '', intro: '', buttonLabel: '' },
+  username: { title: '', intro: '', buttonLabel: '' },
+  confirmEmail: { title: '', intro: '', buttonLabel: '' },
+  changed: { title: '', intro: '', buttonLabel: '' },
+}
+
+app.get('/api/subscription', async (req, res) => {
+  const email = String(req.query.email || '').toLowerCase()
+  if (!email) {
+    return res.json({ fullAccess: false });
+  }
+
+  // Owner/admins always have premium in this demo
+  if (adminEmails.has(email)) {
+    return res.json({ fullAccess: true, source: 'admin' })
+  }
+  if (premiumWinners.has(email)) {
+    const exp = premiumWinners.get(email)
     const now = Date.now()
-    const delta = (now - ws._bucket.last) / 1000
-    ws._bucket.last = now
-    ws._bucket.tokens = Math.min(ws._bucket.capacity, ws._bucket.tokens + delta * ws._bucket.rate)
-    if (ws._bucket.tokens >= 1) { ws._bucket.tokens -= 1; return true }
-    return false
+    if (exp && exp > now) {
+      return res.json({ fullAccess: true, source: 'tournament', expiresAt: exp })
+    }
   }
-  // Push last announcement on connect
-  if (lastAnnouncement) {
-    try { ws.send(JSON.stringify({ type: 'announcement', message: lastAnnouncement.message })) } catch {}
-  }
-  // Push tournaments snapshot on connect
-  try { ws.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) })) } catch {}
-  // Track presence if client later identifies
 
-  ws.on('message', async (msg) => {
-    if (typeof msg?.length === 'number' && msg.length > 128 * 1024) return
-    if (!allowMessage()) return
+  // Check user's subscription from memory
+  const user = users.get(email);
+  if (user?.subscription) {
+    return res.json(user.subscription);
+  }
+
+  // Fallback: check Supabase if not in memory
+  if (supabase) {
     try {
-      const data = JSON.parse(msg.toString());
-      if (data.type === 'join') {
-        await leaveRoom(ws);
-        await joinRoom(ws, data.roomId);
-        ws.send(JSON.stringify({ type: 'joined', roomId: data.roomId, id: ws._id }));
-        // Optionally notify others that someone joined (presence will carry details)
-        if (ws._roomId) {
-          broadcastToRoom(ws._roomId, { type: 'peer-joined', id: ws._id }, ws)
-        }
-      } else if (data.type === 'state') {
-        // Spectators cannot publish state
-        if (ws._spectator) return
-        // forward game state to others in room
-        if (ws._roomId) {
-          broadcastToRoom(ws._roomId, { type: 'state', payload: data.payload, from: ws._id }, ws);
-          // Celebration hook: if payload indicates a last visit score of 180, broadcast a celebration
-          try {
-            const p = data?.payload
-            // Expect shape similar to client match store: players -> [ { legs: [ { visits: [{ score }] } ] } ] and currentPlayerIdx
-            if (p && Array.isArray(p.players) && typeof p.currentPlayerIdx === 'number') {
-              const cur = p.players[p.currentPlayerIdx]
-              const leg = cur?.legs?.[cur.legs?.length - 1]
-              const v = leg?.visits?.[leg.visits?.length - 1]
-              if (v && Number(v.score) === 180) {
-                celebrations180Total.inc()
-                broadcastToRoom(ws._roomId, { type: 'celebration', kind: '180', by: ws._username || `user-${ws._id}`, ts: Date.now() }, null)
-              }
-              // Leg win celebration: remaining 0 right after a visit
-              if (leg && Number(leg.totalScoreRemaining) === 0 && Array.isArray(leg.visits) && leg.visits.length > 0) {
-                broadcastToRoom(ws._roomId, { type: 'celebration', kind: 'leg', by: ws._username || `user-${ws._id}`, ts: Date.now() }, null)
-              }
-            }
-          } catch { /* noop */ }
-        }
-        // mark activity
-        if (ws._email && users.has(ws._email)) {
-          const u = users.get(ws._email)
-          u.lastSeen = Date.now()
-          users.set(ws._email, u)
-        }
-      } else if (data.type === 'presence') {
-        ws._username = data.username || `user-${ws._id}`
-        ws._email = (data.email || '').toLowerCase()
-        if (ws._email) {
-          // Update user session in Redis for cross-server sharing
-          const userSession = await redisHelpers.getUserSession(ws._email) || {
-            email: ws._email,
-            username: ws._username,
-            status: 'online',
-            allowSpectate: true
-          };
-          userSession.username = ws._username;
-          userSession.status = 'online';
-          userSession.lastSeen = Date.now();
-          userSession.wsId = ws._id;
-          if (typeof data.allowSpectate === 'boolean') userSession.allowSpectate = !!data.allowSpectate;
-          await redisHelpers.setUserSession(ws._email, userSession);
+      const { data, error } = await supabase
+        .from('users')
+        .select('subscription')
+        .eq('email', email)
+        .single();
 
-          // Also update local cache
-          const u = users.get(ws._email) || { email: ws._email, username: ws._username, status: 'online', allowSpectate: true }
-          u.username = ws._username
-          u.status = 'online'
-          u.wsId = ws._id
-          u.lastSeen = Date.now()
-          if (typeof data.allowSpectate === 'boolean') u.allowSpectate = !!data.allowSpectate
-          users.set(ws._email, u)
-        }
-        if (ws._roomId) {
-          broadcastToRoom(ws._roomId, { type: 'presence', id: ws._id, username: data.username }, null)
-        }
-      } else if (data.type === 'chat') {
-        // Optionally block spectator chat
-        if (ws._spectator) return
-        if (ws._roomId) {
-          let raw = String(data.message || '').slice(0, 500)
-          let cleanMsg
-          try { cleanMsg = profanityFilter.clean(raw) } catch { cleanMsg = raw }
-          broadcastToRoom(ws._roomId, { type: 'chat', message: cleanMsg, from: ws._id }, null);
-          try { chatMessagesTotal.inc() } catch {}
-        }
-      } else if (data.type === 'celebration') {
-        // Broadcast client-declared celebrations (e.g., leg win) to the room
-        if (ws._roomId) {
-          const kind = (data.kind === '180' ? '180' : (data.kind === 'leg' ? 'leg' : 'custom'))
-          broadcastToRoom(ws._roomId, { type: 'celebration', kind, by: data.by || (ws._username || `user-${ws._id}`), ts: Date.now() }, null)
-        }
-      } else if (data.type === 'report') {
-        // Abuse report from a client for an in-room message or behavior
-        const offenderId = typeof data.offenderId === 'string' ? data.offenderId : null
-        const reason = String(data.reason || '').slice(0, 300)
-        const original = String(data.message || '').slice(0, 500)
-        if (!reason) { try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'Reason required.' })) } catch {}; return }
-        const rep = {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-          reporter: (ws._email || ws._username || `user-${ws._id}`).toLowerCase?.() || (ws._username || `user-${ws._id}`),
-          offender: offenderId || null,
-          reason,
-          messageId: null,
-          message: original,
-          roomId: ws._roomId || null,
-          ts: Date.now(),
-          status: 'open',
-        }
-        reports.push(rep)
-        // Notify online admins
-        for (const s of clients.values()) {
-          try {
-            const em = (s._email || '').toLowerCase()
-            if (adminEmails.has(em)) s.send(JSON.stringify({ type: 'admin-report', report: rep }))
-          } catch {}
-        }
-        try { ws.send(JSON.stringify({ type: 'report-received', id: rep.id })) } catch {}
-      } else if (data.type === 'spectate') {
-        // Join a room as a spectator (read-only)
-        const roomId = String(data.roomId || '')
-        if (!roomId) return
-        // Check whether any active player in the room disallows spectating
-        const set = rooms.get(roomId)
-        if (!set || set.size === 0) { try { ws.send(JSON.stringify({ type: 'error', code: 'NOT_FOUND', message: 'Room not found.' })) } catch {}; return }
-        let allowed = true
-        for (const peer of set) {
-          try {
-            if (!peer || peer._spectator) continue
-            const em = (peer._email || '').toLowerCase()
-            if (em && users.has(em)) {
-              const u = users.get(em)
-              if (u && u.allowSpectate === false) { allowed = false; break }
-            }
-          } catch {}
-        }
-        if (!allowed) { try { ws.send(JSON.stringify({ type: 'error', code: 'SPECTATE_NOT_ALLOWED', message: 'Spectating is disabled by the player.' })) } catch {}; return }
-        await leaveRoom(ws)
-        await joinRoom(ws, roomId)
-        ws._spectator = true
-        try { ws.send(JSON.stringify({ type: 'joined', roomId, id: ws._id, spectator: true })) } catch {}
-        if (ws._roomId) {
-          broadcastToRoom(ws._roomId, { type: 'peer-joined', id: ws._id, spectator: true }, ws)
-        }
-        // mark activity
-        if (ws._email && users.has(ws._email)) {
-          const u = users.get(ws._email)
-          u.lastSeen = Date.now()
-          users.set(ws._email, u)
-        }
-      } else if (data.type === 'create-match') {
-        // mode: 'bestof'|'firstto', value: number, startingScore?: number
-        const premiumGames = ['Around the Clock', 'Cricket', 'Halve It', 'Shanghai', 'High-Low', 'Killer']
-        const game = typeof data.game === 'string' ? data.game : 'X01'
-        // Server-side premium gating
-        if (premiumGames.includes(game) && !subscription.fullAccess) {
-          ws.send(JSON.stringify({ type: 'error', code: 'PREMIUM_REQUIRED', message: 'PREMIUM required to create this game.' }))
-          return
-        }
-        const id = nanoid(10)
-        const m = {
-          id,
-          creatorId: ws._id,
-          creatorName: ws._username || `user-${ws._id}`,
-          mode: data.mode === 'firstto' ? 'firstto' : 'bestof',
-          value: Number(data.value) || 1,
-          startingScore: Number(data.startingScore) || 501,
-          creatorAvg: Number(data.creatorAvg) || 0,
-          game,
-          requireCalibration: !!data.requireCalibration,
-          createdAt: Date.now(),
-        }
-        matches.set(id, m)
-        // Broadcast lobby list to all (pre-stringified)
-        const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
-        for (const client of wss.clients) {
-          if (client.readyState === 1) client.send(lobbyPayload)
-        }
-      } else if (data.type === 'list-matches') {
-        ws.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
-      } else if (data.type === 'list-tournaments') {
-        ws.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) }))
-      } else if (data.type === 'join-match') {
-        const m = matches.get(data.matchId)
-        if (!m) {
-          try { ws.send(JSON.stringify({ type: 'error', code: 'NOT_FOUND', message: 'Match not available.' })) } catch {}
-          return
-        }
-        const premiumGames = ['Around the Clock', 'Cricket', 'Halve It', 'Shanghai', 'High-Low', 'Killer']
-        if (premiumGames.includes(m.game) && !subscription.fullAccess) {
-          ws.send(JSON.stringify({ type: 'error', code: 'PREMIUM_REQUIRED', message: 'PREMIUM required to join this game.' }))
-          return
-        }
-        // Enforce calibration when required
-        if (m.requireCalibration && !data.calibrated) {
-          ws.send(JSON.stringify({ type: 'error', code: 'CALIBRATION_REQUIRED', message: 'Calibration required to join this match.' }))
-          return
-        }
-        const creator = clients.get(m.creatorId)
-        if (creator && creator.readyState === 1) {
-          creator.send(JSON.stringify({
-            type: 'invite',
-            matchId: m.id,
-            fromId: ws._id,
-            fromName: ws._username || `user-${ws._id}`,
-            calibrated: !!data.calibrated,
-            boardPreview: (typeof data.boardPreview === 'string' && data.boardPreview.startsWith('data:image')) ? data.boardPreview : null,
-            game: m.game,
-            mode: m.mode,
-            value: m.value,
-            startingScore: m.startingScore,
-          }))
-        }
-      } else if (data.type === 'invite-response') {
-        const { matchId, accept, toId } = data
-        const m = matches.get(matchId)
-        if (!m) return
-        const requester = clients.get(toId)
-        if (accept) {
-          // Start a room using matchId and notify both sides
-          const roomId = matchId
-          // tell both clients to join this room
-          const creator = clients.get(m.creatorId)
-          const payload = { type: 'match-start', roomId, match: m }
-          if (creator && creator.readyState === 1) creator.send(JSON.stringify(payload))
-          if (requester && requester.readyState === 1) requester.send(JSON.stringify(payload))
-          matches.delete(matchId)
-          // Mark both players as in-game and store match metadata for friends list
-          try {
-            const creatorEmail = creator?._email || ''
-            const requesterEmail = requester?._email || ''
-            if (creatorEmail) {
-              const u = users.get(creatorEmail) || { email: creatorEmail, username: creator?._username || creatorEmail, status: 'online' }
-              u.status = 'ingame'; u.lastSeen = Date.now();
-              u.currentRoomId = roomId; u.currentMatch = { game: m.game, mode: m.mode, value: m.value, startingScore: m.startingScore }
-              users.set(creatorEmail, u)
-            }
-            if (requesterEmail) {
-              const u2 = users.get(requesterEmail) || { email: requesterEmail, username: requester?._username || requesterEmail, status: 'online' }
-              u2.status = 'ingame'; u2.lastSeen = Date.now();
-              u2.currentRoomId = roomId; u2.currentMatch = { game: m.game, mode: m.mode, value: m.value, startingScore: m.startingScore }
-              users.set(requesterEmail, u2)
-            }
-          } catch {}
-        } else {
-          if (requester && requester.readyState === 1) requester.send(JSON.stringify({ type: 'declined', matchId }))
-          matches.delete(matchId)
-        }
-        // Broadcast updated lobby
-        const lobbyPayload2 = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
-        for (const client of wss.clients) {
-          if (client.readyState === 1) client.send(lobbyPayload2)
-        }
-      } else if (data.type === 'cancel-match') {
-        const id = String(data.matchId || '')
-        const m = matches.get(id)
-        if (!m) return
-        // Only the creator may cancel
-        if (m.creatorId !== ws._id) {
-          try { ws.send(JSON.stringify({ type: 'error', code: 'FORBIDDEN', message: 'Only the creator can cancel this match.' })) } catch {}
-          return
-        }
-        matches.delete(id)
-        const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
-        for (const client of wss.clients) {
-          if (client.readyState === 1) client.send(lobbyPayload)
-        }
-      } else if (data.type === 'cam-create') {
-        // Desktop requests a 4-letter pairing code
-        const code = genCamCode()
-        camSessions.set(code, { code, desktopId: ws._id, phoneId: null, ts: Date.now() })
-        try { ws.send(JSON.stringify({ type: 'cam-code', code, expiresAt: Date.now() + CAM_TTL_MS })) } catch {}
-      } else if (data.type === 'cam-join') {
-        // Phone joins with code
-        const code = String(data.code || '').toUpperCase()
-        const sess = camSessions.get(code)
-        if (!sess) { try { ws.send(JSON.stringify({ type: 'cam-error', code: 'INVALID_CODE' })) } catch {}; return }
-        // Expire stale codes
-        if (sess.ts && (Date.now() - sess.ts) > CAM_TTL_MS) { camSessions.delete(code); try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {}; return }
-        sess.phoneId = ws._id
-        camSessions.set(code, sess)
-        const desktop = clients.get(sess.desktopId)
-        if (desktop && desktop.readyState === 1) desktop.send(JSON.stringify({ type: 'cam-peer-joined', code }))
-        try { ws.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
-      } else if (data.type === 'cam-offer' || data.type === 'cam-answer' || data.type === 'cam-ice') {
-        const code = String(data.code || '').toUpperCase()
-        const sess = camSessions.get(code)
-        if (!sess) return
-        const targetId = (data.type === 'cam-offer') ? sess.desktopId : sess.phoneId
-        const target = clients.get(targetId)
-        if (target && target.readyState === 1) {
-          target.send(JSON.stringify({ type: data.type, code, payload: data.payload }))
-        }
-      } else if (data.type === 'start-friend-match') {
-        const toEmail = String(data.toEmail || '').toLowerCase()
-        const game = typeof data.game === 'string' ? data.game : 'X01'
-        const mode = (data.mode === 'firstto') ? 'firstto' : 'bestof'
-        const value = Number(data.value) || 1
-        const startingScore = Number(data.startingScore) || 501
-  const premiumGames = ['Around the Clock', 'Cricket', 'Halve It', 'Shanghai', 'High-Low', 'Killer']
-        // Server-side premium gating (demo-global)
-        if (premiumGames.includes(game) && !subscription.fullAccess) {
-          ws.send(JSON.stringify({ type: 'error', code: 'PREMIUM_REQUIRED', message: 'PREMIUM required to start this game.' }))
-          return
-        }
-        if (!ws._email || !toEmail) return
-        const toUser = users.get(toEmail)
-        if (!toUser || !toUser.wsId) {
-          ws.send(JSON.stringify({ type: 'error', code: 'USER_OFFLINE', message: 'Friend is offline.' }))
-          return
-        }
-        const target = clients.get(toUser.wsId)
-        if (!target || target.readyState !== 1) {
-          ws.send(JSON.stringify({ type: 'error', code: 'USER_OFFLINE', message: 'Friend is offline.' }))
-          return
-        }
-        const roomId = nanoid(10)
-        const m = {
-          id: roomId,
-          creatorId: ws._id,
-          creatorName: ws._username || `user-${ws._id}`,
-          mode,
-          value,
-          startingScore,
-          creatorAvg: 0,
-          game,
-          createdAt: Date.now(),
-        }
-        const payload = { type: 'match-start', roomId, match: m }
-        try { if (ws.readyState === 1) ws.send(JSON.stringify(payload)) } catch {}
-        try { if (target.readyState === 1) target.send(JSON.stringify(payload)) } catch {}
-        // Mark both players as in-game and store match metadata
-        try {
-          const meEmail = ws._email || ''
-          const toEmailReal = toEmail || ''
-          if (meEmail) {
-            const u = users.get(meEmail) || { email: meEmail, username: ws._username || meEmail, status: 'online' }
-            u.status = 'ingame'; u.lastSeen = Date.now();
-            u.currentRoomId = roomId; u.currentMatch = { game, mode, value, startingScore }
-            users.set(meEmail, u)
-          }
-          if (toEmailReal) {
-            const u2 = users.get(toEmailReal) || { email: toEmailReal, username: users.get(toEmailReal)?.username || toEmailReal, status: 'online' }
-            u2.status = 'ingame'; u2.lastSeen = Date.now();
-            u2.currentRoomId = roomId; u2.currentMatch = { game, mode, value, startingScore }
-            users.set(toEmailReal, u2)
-          }
-        } catch {}
+      if (!error && data?.subscription) {
+        return res.json(data.subscription);
       }
-    } catch (e) {
-      try { errorsTotal.inc({ scope: 'ws_message' }) } catch {}
-      console.error('Invalid message:', e);
+    } catch (err) {
+      console.error('[DB] Error fetching subscription:', err);
     }
+  }
+
+  res.json({ fullAccess: false });
+});
+
+// Debug endpoint to check Supabase status
+app.get('/api/debug/supabase', (req, res) => {
+  res.json({
+    supabaseConfigured: !!supabase,
+    userCount: users.size,
+    supabaseUrl: supabase ? 'configured' : 'not configured'
   });
+});
+app.get('/metrics', async (req, res) => {
+  try {
+    res.setHeader('Content-Type', register.contentType)
+    // Update gauges just-in-time
+    try { wsRooms.set(rooms.size) } catch {}
+    try { wsConnections.set(clients.size) } catch {}
+    const out = await register.metrics()
+    res.end(out)
+  } catch (e) {
+    res.status(500).end('metrics_error')
+  }
+})
 
-  ws.on('close', async (code, reasonBuf) => {
-    const reason = (() => { try { return reasonBuf ? reasonBuf.toString() : '' } catch { return '' } })()
-    try { console.log(`[WS] close id=${ws._id} code=${code} reason=${reason}`) } catch {}
-    // Clean up room
-    await leaveRoom(ws);
-    try { wsConnections.dec() } catch {}
-    // Remove any matches created by this client
-    for (const [id, m] of Array.from(matches.entries())) {
-      if (m.creatorId === ws._id) matches.delete(id)
-    }
-    clients.delete(ws._id)
-    // Cleanup camera sessions involving this client
-    for (const [code, sess] of Array.from(camSessions.entries())) {
-      if (sess.desktopId === ws._id || sess.phoneId === ws._id) camSessions.delete(code)
-    }
-    if (ws._email && users.has(ws._email)) {
-      const u = users.get(ws._email)
-      if (u && u.wsId === ws._id) {
-        // Update user status in Redis for cross-server sharing
-        const userSession = await redisHelpers.getUserSession(ws._email);
-        if (userSession) {
-          userSession.status = 'offline';
-          userSession.lastSeen = Date.now();
-          userSession.wsId = undefined;
-          userSession.currentRoomId = null;
-          await redisHelpers.setUserSession(ws._email, userSession);
-        }
-        // Also update local cache
-        u.status = 'offline'
-        u.lastSeen = Date.now()
-        u.wsId = undefined
-        users.set(ws._email, u)
+// Liveness and readiness
+app.get('/healthz', (req, res) => res.json({ ok: true }))
+app.get('/readyz', (req, res) => {
+  // Basic readiness: HTTP up and WS server initialized; optionally include memory snapshot
+  try {
+    const mem = process.memoryUsage()
+    const ready = !!wss
+    res.json({ ok: ready, ws: ready, rooms: rooms?.size || 0, clients: clients?.size || 0, mem: { rss: mem.rss, heapUsed: mem.heapUsed } })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'UNEXPECTED' })
+  }
+})
+
+// Report LAN IPv4 addresses for phone pairing convenience
+app.get('/api/hosts', (req, res) => {
+  try {
+    const nets = os.networkInterfaces() || {}
+    const hosts = []
+    for (const name of Object.keys(nets)) {
+      for (const ni of nets[name] || []) {
+        if (!ni) continue
+        if (ni.family === 'IPv4' && !ni.internal) hosts.push(ni.address)
       }
     }
-    // Broadcast updated lobby
+    res.json({ hosts })
+  } catch (e) {
+    res.json({ hosts: [] })
+  }
+})
+
+// Placeholder webhook (accepts JSON; in production use Stripe raw body & verify signature)
+app.post('/webhook/stripe', async (req, res) => {
+  const { type, data } = req.body || {};
+  if (type === 'checkout.session.completed') {
+    const session = data?.object;
+    const email = session?.customer_email || session?.metadata?.email;
+    const purpose = session?.metadata?.purpose;
+    if (email && purpose === 'subscription') {
+      // Update user's subscription in memory and Supabase
+      const user = users.get(email);
+      if (user) {
+        user.subscription = { fullAccess: true, source: 'stripe', purchasedAt: new Date().toISOString() };
+      }
+      if (supabase) {
+        try {
+          await supabase
+            .from('users')
+            .update({ subscription: { fullAccess: true, source: 'stripe', purchasedAt: new Date().toISOString() } })
+            .eq('email', email);
+        } catch (err) {
+          console.error('[DB] Failed to update subscription:', err);
+        }
+      }
+    }
+  }
+  // Demo: toggle fullAccess true and credit owner's wallet with premium revenue if provided
+  subscription.fullAccess = true;
+  try {
+    const { amountCents, currency } = req.body || {}
+    const cents = Math.max(0, Number(amountCents) || 0)
+    const cur = String(currency || 'GBP').toUpperCase()
+    if (cents > 0) creditWallet(OWNER_EMAIL, cur, cents)
+  } catch {}
+  res.json({ ok: true })
+});
+
+// Stripe (optional): Create a Checkout Session for username change (┬ú2)
+// Configure on Render with:
+//  - STRIPE_SECRET_KEY=sk_live_...
+//  - STRIPE_PRICE_ID_USERNAME_CHANGE=price_...
+// Optional (if you later secure webhook verification): STRIPE_WEBHOOK_SECRET=whsec_...
+let stripe = null
+try {
+  if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_SECRET_KEY !== 'YOUR_STRIPE_SECRET_KEY_HERE') {
+    stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
+  }
+} catch (e) {
+  console.warn('[Stripe] init failed:', e?.message || e)
+}
+
+app.post('/api/stripe/create-session', async (req, res) => {
+  try {
+    if (!stripe || !process.env.STRIPE_PRICE_ID_USERNAME_CHANGE) {
+      return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
+    }
+    const { email, successUrl, cancelUrl } = req.body || {}
+    // Derive sensible defaults for success/cancel
+    const host = req.headers['x-forwarded-host'] || req.headers.host
+    const proto = (req.headers['x-forwarded-proto'] || 'https')
+    const base = `https://${host}`
+    const sUrl = (typeof successUrl === 'string' && successUrl.startsWith('http')) ? successUrl : `${base}/?paid=1`
+    const cUrl = (typeof cancelUrl === 'string' && cancelUrl.startsWith('http')) ? cancelUrl : `${base}/?paid=0`
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [{ price: process.env.STRIPE_PRICE_ID_USERNAME_CHANGE, quantity: 1 }],
+      customer_email: (typeof email === 'string' && email.includes('@')) ? email : undefined,
+      metadata: { purpose: 'username-change', email: String(email||'') },
+      success_url: sUrl,
+      cancel_url: cUrl,
+    })
+    return res.json({ ok: true, url: session.url })
+  } catch (e) {
+    console.error('[Stripe] create-session failed:', e?.message || e)
+    return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
+  }
+})
+
+app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  try {
+    // Use payment link instead of API to avoid exposing keys
+    const premiumPaymentLink = process.env.STRIPE_PREMIUM_PAYMENT_LINK || 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE';
+    
+    if (premiumPaymentLink === 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE') {
+      return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
+    }
+    
+    const { email } = req.body || {}
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+    }
+    
+    // Return the payment link directly
+    return res.json({ ok: true, url: premiumPaymentLink })
+  } catch (e) {
+    console.error('[Stripe] create-checkout-session failed:', e?.message || e)
+    return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
+  }
+})
+
+// Admin management (demo; NOT secure ÔÇö no auth/signature verification)
+app.get('/api/admins', (req, res) => {
+  res.json({ admins: Array.from(adminEmails) })
+})
+
+app.get('/api/admins/check', (req, res) => {
+  const email = String(req.query.email || '').toLowerCase()
+  res.json({ isAdmin: adminEmails.has(email) })
+})
+
+app.post('/api/admins/grant', (req, res) => {
+  const { email, requesterEmail } = req.body || {}
+  if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
+  const target = String(email || '').toLowerCase()
+  if (!target) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+  adminEmails.add(target)
+  res.json({ ok: true, admins: Array.from(adminEmails) })
+})
+
+app.post('/api/admins/revoke', (req, res) => {
+  const { email, requesterEmail } = req.body || {}
+  if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
+  const target = String(email || '').toLowerCase()
+  if (!target) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+  if (target === OWNER_EMAIL) return res.status(400).json({ ok: false, error: 'CANNOT_REVOKE_OWNER' })
+  adminEmails.delete(target)
+  res.json({ ok: true, admins: Array.from(adminEmails) })
+})
+
+// Admin ops (owner-only; demo ÔÇö not secure)
+app.get('/api/admin/status', (req, res) => {
+  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
+  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  res.json({
+    ok: true,
+    server: {
+      clients: clients.size,
+      rooms: rooms.size,
+      matches: matches.size,
+      premium: !!subscription.fullAccess,
+      maintenance: !!maintenanceMode,
+      lastAnnouncement,
+    },
+    matches: Array.from(matches.values()),
+  })
+})
+
+app.post('/api/admin/maintenance', (req, res) => {
+  const { enabled, requesterEmail } = req.body || {}
+  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
+  maintenanceMode = !!enabled
+  // Optionally notify clients
+  broadcastAll({ type: 'maintenance', enabled: maintenanceMode })
+  res.json({ ok: true, maintenance: maintenanceMode })
+})
+
+app.post('/api/admin/announce', (req, res) => {
+  const { message, requesterEmail } = req.body || {}
+  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
+  const msg = String(message || '').trim()
+  if (!msg) return res.status(400).json({ ok: false, error: 'MESSAGE_REQUIRED' })
+  lastAnnouncement = { message: msg, ts: Date.now() }
+  broadcastAll({ type: 'announcement', message: msg })
+  res.json({ ok: true, announcement: lastAnnouncement })
+})
+
+app.post('/api/admin/subscription', (req, res) => {
+  const { fullAccess, requesterEmail } = req.body || {}
+  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
+  subscription.fullAccess = !!fullAccess
+  res.json({ ok: true, subscription })
+})
+
+// Admin: list/grant/revoke per-email premium overrides (demo)
+app.get('/api/admin/premium-winners', (req, res) => {
+  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
+  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const now = Date.now()
+  const list = Array.from(premiumWinners.entries()).map(([email, exp]) => ({ email, expiresAt: exp, expired: exp <= now }))
+  res.json({ ok: true, winners: list })
+})
+
+app.post('/api/admin/premium/grant', (req, res) => {
+  const { email, days, requesterEmail } = req.body || {}
+  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
     const lobbyPayload3 = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
     for (const client of wss.clients) {
       if (client.readyState === 1) client.send(lobbyPayload3)
