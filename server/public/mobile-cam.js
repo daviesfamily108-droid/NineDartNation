@@ -1,8 +1,10 @@
 // --- NDN Mobile Camera external JS ---
 (function(){
     // Show current date in the visible test message
-    document.getElementById('date-now').textContent = new Date().toLocaleString();
-    document.getElementById('fatal-error').textContent = 'Diagnostics: JS loaded at ' + new Date().toLocaleString();
+    const dateElem = document.getElementById('date-now');
+    if (dateElem) dateElem.textContent = new Date().toLocaleString();
+    const fatalElem = document.getElementById('fatal-error');
+    if (fatalElem) fatalElem.textContent = 'Diagnostics: JS loaded at ' + new Date().toLocaleString();
 
     const params = new URLSearchParams(location.search);
     const input = document.getElementById('code');
