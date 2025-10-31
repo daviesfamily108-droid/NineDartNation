@@ -41,7 +41,7 @@ export default function CameraView({
   const [streaming, setStreaming] = useState(false)
   const [cameraStarting, setCameraStarting] = useState(false)
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null)
-  const { H, imageSize, reset: resetCalibration } = useCalibration()
+  const { H, imageSize, reset: resetCalibration, _hydrated } = useCalibration()
   const [lastAutoScore, setLastAutoScore] = useState<string>('')
   const [manualScore, setManualScore] = useState<string>('')
   const [lastAutoValue, setLastAutoValue] = useState<number>(0)

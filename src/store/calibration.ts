@@ -9,7 +9,8 @@ type CalibrationState = {
   imageSize: { w: number; h: number } | null
   anchors: { src: Point[]; dst: Point[] } | null
   locked: boolean
-  setCalibration: (c: Partial<Omit<CalibrationState, 'setCalibration' | 'reset'>>) => void
+  _hydrated: boolean // Track hydration state
+  setCalibration: (c: Partial<Omit<CalibrationState, 'setCalibration' | 'reset' | '_hydrated'>>) => void
   reset: () => void
 }
 
@@ -20,6 +21,7 @@ export const useCalibration = create<CalibrationState>()(persist((set, get) => (
   imageSize: null,
   anchors: null,
   locked: false,
+  _hydrated: false,
   setCalibration: (c) => set((s) => ({ ...s, ...c })),
   reset: () => set({ H: null, createdAt: null, errorPx: null, imageSize: null, anchors: null, locked: false }),
 }), {
@@ -28,7 +30,7 @@ export const useCalibration = create<CalibrationState>()(persist((set, get) => (
   // If we ever had alternate keys (legacy), gently import once after hydration
   onRehydrateStorage: () => (state, error) => {
     // No-op on error; best-effort fallback
-    if (error) return
+    if (error || !state) return
     try {
       if (state && !state.H) {
         const legacy = localStorage.getItem('ndn:calibration:v1')
@@ -46,6 +48,8 @@ export const useCalibration = create<CalibrationState>()(persist((set, get) => (
           }
         }
       }
+      // Mark as hydrated
+      state._hydrated = true
     } catch {}
   },
 }))

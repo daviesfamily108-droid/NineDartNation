@@ -1001,52 +1001,6 @@ app.get('/api/friends/search', (req, res) => {
   res.json({ results: [] });
 });
 
-// Camera pairing: handle REST signaling for mobile clients without WebSocket
-app.post('/cam/signal/:code', async (req, res) => {
-  try {
-    const code = String(req.params.code || '').toUpperCase();
-    const { type, payload, source } = req.body || {};
-    
-    if (!type || !payload) {
-      return res.status(400).json({ error: 'Missing type or payload' });
-    }
-    
-    // Validate message type
-    if (!['cam-offer', 'cam-answer', 'cam-ice'].includes(type)) {
-      return res.status(400).json({ error: 'Invalid message type' });
-    }
-    
-    // Look up session
-    const sess = await camSessions.get(code);
-    if (!sess) {
-      return res.status(404).json({ error: 'Session not found' });
-    }
-    
-    // Route to appropriate peer
-    let targetWs = null;
-    if (source === 'phone' && sess.desktopWs) {
-      targetWs = sess.desktopWs;
-    } else if (source === 'desktop' && sess.phoneWs) {
-      targetWs = sess.phoneWs;
-    }
-    
-    if (targetWs && targetWs.readyState === 1) {
-      try {
-        targetWs.send(JSON.stringify({ type, code, payload }));
-        res.json({ ok: true });
-      } catch (e) {
-        console.error('[Cam Signal] Failed to forward message:', e.message);
-        res.status(500).json({ error: 'Failed to forward message' });
-      }
-    } else {
-      res.status(503).json({ error: 'Target peer not available' });
-    }
-  } catch (e) {
-    console.error('[Cam Signal] Error:', e.message);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 // SPA fallback: serve index.html for any non-API, non-static route when a dist exists
 if (staticBase) {
   app.get('*', (req, res, next) => {
@@ -1292,21 +1246,6 @@ wss.on('connection', (ws, req) => {
           try { desktop.send(JSON.stringify({ type: 'cam-peer-joined', code })) } catch {}
         }
         try { ws.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
-      } else if (data.type === 'cam-offer' || data.type === 'cam-answer' || data.type === 'cam-ice') {
-        // Forward WebRTC signaling messages between desktop and phone
-        const code = String(data.code || '').toUpperCase()
-        const sess = await camSessions.get(code)
-        if (!sess) return
-        // Determine target
-        let targetWs = null
-        if (ws._id === sess.desktopId && sess.phoneWs) {
-          targetWs = sess.phoneWs
-        } else if (ws._id === sess.phoneId && sess.desktopWs) {
-          targetWs = sess.desktopWs
-        }
-        if (targetWs && targetWs.readyState === 1) {
-          try { targetWs.send(JSON.stringify({ type: data.type, code, payload: data.payload })) } catch {}
-        }
       } else if (data.type === 'cam-data') {
         // Forward camera data between desktop and phone
         const code = String(data.code || '').toUpperCase()
