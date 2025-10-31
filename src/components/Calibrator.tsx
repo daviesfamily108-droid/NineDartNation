@@ -516,6 +516,24 @@ export default function Calibrator() {
 				console.error('Camera pairing error:', data.code)
 				alert(data.code === 'EXPIRED' ? 'Code expired. Generate a new code.' : `Camera error: ${data.code || 'Unknown error'}`)
 				stopCamera()
+			} else if (data.type === 'cam-calibration') {
+				// Desktop receives calibration from phone (via server) or phone receives from desktop
+				console.log('[Calibrator] Received calibration from peer:', data.payload)
+				try {
+					if (data.payload && data.payload.H && Array.isArray(data.payload.H)) {
+						// Apply the received calibration
+						setCalibration({
+							H: data.payload.H as Homography,
+							createdAt: data.payload.createdAt || Date.now(),
+							errorPx: data.payload.errorPx,
+							imageSize: data.payload.imageSize,
+							locked: true // Assume locked since peer sent it
+						})
+						console.log('[Calibrator] Applied received calibration')
+					}
+				} catch (e) {
+					console.error('[Calibrator] Failed to apply received calibration', e)
+				}
 			}
 		}
 	}
