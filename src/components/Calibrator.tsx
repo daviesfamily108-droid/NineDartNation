@@ -321,6 +321,26 @@ export default function Calibrator() {
 		}
 	}, [])	// Remove automatic camera restart on preferredCameraId change to prevent flicker
 
+	// Listen for reconnect requests from PhoneCameraOverlay
+	useEffect(() => {
+		const handleReconnectRequest = (event: any) => {
+			console.log('[Calibrator] Received reconnect request from PhoneCameraOverlay')
+			// If we're in phone mode and already paired, restart the pairing
+			if (mode === 'phone' && paired) {
+				stopCamera(false)
+				// Give a moment for cleanup, then restart pairing
+				setTimeout(() => {
+					startPhonePairing()
+				}, 500)
+			}
+		}
+
+		window.addEventListener('ndn:phone-camera-reconnect', handleReconnectRequest as EventListener)
+		return () => {
+			window.removeEventListener('ndn:phone-camera-reconnect', handleReconnectRequest as EventListener)
+		}
+	}, [mode, paired])
+
 	// Sync video element to camera session so other components can access it
 	useEffect(() => {
 		if (videoRef.current) {

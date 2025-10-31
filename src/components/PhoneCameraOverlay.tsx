@@ -6,6 +6,7 @@ import { useCameraSession } from '../store/cameraSession'
  * when user has paired phone camera and is navigated to Online/Offline/Tournament modes
  * 
  * Shows a draggable, resizable canvas that mirrors frames from the Calibrator's video element
+ * Includes refresh button to force canvas redraw and reconnect button to restart camera
  */
 export default function PhoneCameraOverlay() {
 	const cameraSession = useCameraSession()
@@ -13,6 +14,9 @@ export default function PhoneCameraOverlay() {
 	const [dragging, setDragging] = useState(false)
 	const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
 	const [minimized, setMinimized] = useState(false)
+	const [showControls, setShowControls] = useState(false)
+	const [isRefreshing, setIsRefreshing] = useState(false)
+	const [isReconnecting, setIsReconnecting] = useState(false)
 	const containerRef = useRef<HTMLDivElement>(null)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const animationFrameRef = useRef<number | null>(null)
@@ -99,6 +103,51 @@ export default function PhoneCameraOverlay() {
 		setDragging(false)
 	}
 
+	const handleRefresh = async () => {
+		setIsRefreshing(true)
+		try {
+			// Force canvas redraw by clearing and requesting new frame
+			if (canvasRef.current) {
+				const ctx = canvasRef.current.getContext('2d')
+				if (ctx) {
+					// Clear canvas
+					ctx.fillStyle = '#000000'
+					ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+					// Draw current frame immediately
+					const sourceVideo = cameraSession.videoElementRef
+					if (sourceVideo && canvasRef.current.width > 0) {
+						ctx.drawImage(sourceVideo, 0, 0, canvasRef.current.width, canvasRef.current.height)
+					}
+				}
+			}
+			console.log('[PhoneCameraOverlay] Camera refreshed')
+		} catch (e) {
+			console.error('[PhoneCameraOverlay] Refresh failed:', e)
+		} finally {
+			setIsRefreshing(false)
+		}
+	}
+
+	const handleReconnect = () => {
+		setIsReconnecting(true)
+		try {
+			// Signal Calibrator to restart phone pairing
+			// Dispatch event that Calibrator can listen to
+			window.dispatchEvent(new CustomEvent('ndn:phone-camera-reconnect', { 
+				detail: { timestamp: Date.now() } 
+			}))
+			console.log('[PhoneCameraOverlay] Reconnect requested')
+			
+			// After a moment, stop the refreshing state
+			setTimeout(() => {
+				setIsReconnecting(false)
+			}, 1000)
+		} catch (e) {
+			console.error('[PhoneCameraOverlay] Reconnect failed:', e)
+			setIsReconnecting(false)
+		}
+	}
+
 	return (
 		<div
 			ref={containerRef}
@@ -124,14 +173,53 @@ export default function PhoneCameraOverlay() {
 					<div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
 					<span className="text-xs font-semibold text-white">Phone Camera</span>
 				</div>
-				<button
-					onClick={() => setMinimized(!minimized)}
-					className="text-white hover:bg-blue-800 px-2 py-0.5 rounded text-xs font-bold transition-colors"
-					title={minimized ? 'Expand' : 'Minimize'}
-				>
-					{minimized ? '▶' : '▼'}
-				</button>
+				<div className="flex items-center gap-1">
+					<button
+						onClick={() => setShowControls(!showControls)}
+						className="text-white hover:bg-blue-800 px-1.5 py-0.5 rounded text-xs font-bold transition-colors"
+						title="Show controls"
+					>
+						⚙
+					</button>
+					<button
+						onClick={() => setMinimized(!minimized)}
+						className="text-white hover:bg-blue-800 px-2 py-0.5 rounded text-xs font-bold transition-colors"
+						title={minimized ? 'Expand' : 'Minimize'}
+					>
+						{minimized ? '▶' : '▼'}
+					</button>
+				</div>
 			</div>
+
+			{/* Control buttons - shown when showControls is true and not minimized */}
+			{!minimized && showControls && (
+				<div className="bg-slate-800 border-t border-blue-500 px-2 py-2 flex gap-1">
+					<button
+						onClick={handleRefresh}
+						disabled={isRefreshing}
+						className={`flex-1 text-xs py-1 px-2 rounded font-semibold transition-colors ${
+							isRefreshing
+								? 'bg-blue-500/50 text-white cursor-wait'
+								: 'bg-blue-600 hover:bg-blue-700 text-white'
+						}`}
+						title="Refresh camera feed"
+					>
+						{isRefreshing ? '🔄 Refreshing...' : '🔄 Refresh'}
+					</button>
+					<button
+						onClick={handleReconnect}
+						disabled={isReconnecting}
+						className={`flex-1 text-xs py-1 px-2 rounded font-semibold transition-colors ${
+							isReconnecting
+								? 'bg-amber-500/50 text-white cursor-wait'
+								: 'bg-amber-600 hover:bg-amber-700 text-white'
+						}`}
+						title="Reconnect phone camera"
+					>
+						{isReconnecting ? '⟳ Reconnecting...' : '⟳ Reconnect'}
+					</button>
+				</div>
+			)}
 
 			{/* Canvas content - hidden when minimized */}
 			{!minimized && (
