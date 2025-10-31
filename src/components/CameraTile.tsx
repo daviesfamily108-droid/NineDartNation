@@ -93,6 +93,17 @@ export default function CameraTile({
     return `${proto}://${host}:${port}/mobile-cam.html?code=${code}`
   }, [pairCode, lanHost, httpsInfo])
   useEffect(() => { localStorage.setItem('ndn:camera:mode', mode) }, [mode])
+  
+  // Sync phone camera selection from Calibrator into CameraTile mode state
+  // When user locks in phone camera in Calibrator, it updates preferredCameraLabel
+  // This effect ensures CameraTile's UI reflects that selection
+  useEffect(() => {
+    if (preferredCameraLabel === 'Phone Camera' && mode !== 'phone') {
+      console.log('[CAMERATILE] Syncing mode to phone from Calibrator selection')
+      setMode('phone')
+    }
+  }, [preferredCameraLabel, mode])
+  
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
   useEffect(() => {
     if (!pairCode) { setQrDataUrl(''); return }
