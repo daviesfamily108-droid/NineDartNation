@@ -48,6 +48,7 @@ export function Sidebar({
     if (idx >= 0) tabs.splice(idx, 0, adminTab as any); else tabs.push(adminTab as any)
   }
   const [showDiscord, setShowDiscord] = useState(false);
+  const [showNDNDiscord, setShowNDNDiscord] = useState(false);
   const freeLeft = user?.username && !user?.fullAccess ? getFreeRemaining(user.username) : Infinity
   
   // Notification counts
@@ -143,6 +144,16 @@ export function Sidebar({
         <MessageCircle className="w-6 h-6" />
         <span className="truncate">BullseyeDartsLeague</span>
       </button>
+      {/* NineDartNation Discord tab */}
+      <button
+        className="tab tab--compact whitespace-nowrap flex items-center justify-start gap-3 bg-[#5865F2] text-white mt-1"
+        onClick={() => setShowNDNDiscord(true)}
+        title="NineDartNation"
+        style={{ fontWeight: 700, fontSize: '1.1rem', letterSpacing: '0.02em' }}
+      >
+        <MessageCircle className="w-6 h-6" />
+        <span className="truncate">NineDartNation</span>
+      </button>
       {/* Discord about dialog via portal */}
       {showDiscord && createPortal(
         <div className="fixed inset-0 z-[1000]">
@@ -156,6 +167,30 @@ export function Sidebar({
               <div className="mb-4 text-lg font-semibold">Join this fantastic Online Darts League with divisions and other cool stuff included</div>
         <a
           href={DISCORD_INVITE_URL}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="btn bg-[#5865F2] text-white w-full font-bold text-lg"
+              >
+                Join Discord
+              </a>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      {/* NineDartNation Discord about dialog via portal */}
+      {showNDNDiscord && createPortal(
+        <div className="fixed inset-0 z-[1000]">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowNDNDiscord(false)} onTouchStart={() => setShowNDNDiscord(false)} />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div role="dialog" aria-modal="true" className="card max-w-md w-full relative text-left p-6 rounded-xl">
+              <button className="absolute -top-3 -right-3 btn px-3 py-1" aria-label="Close" onClick={() => setShowNDNDiscord(false)}>✕</button>
+              <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-[#8ea1e1]">
+                <MessageCircle className="w-6 h-6" /> NineDartNation
+              </h3>
+              <div className="mb-4 text-lg font-semibold">Join the NineDartNation Discord community</div>
+        <a
+          href="https://discord.gg/Q33J5FTVve"
                 target="_blank"
                 rel="noopener noreferrer nofollow"
                 className="btn bg-[#5865F2] text-white w-full font-bold text-lg"
