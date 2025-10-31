@@ -548,6 +548,39 @@ app.post('/api/user/calibration', (req, res) => {
   }
 });
 
+// Camera pairing session calibration storage (temporary, code-based)
+app.post('/cam/calibration/:code', async (req, res) => {
+  const code = String(req.params.code || '').toUpperCase();
+  if (!code) return res.status(400).json({ error: 'Code required.' });
+  
+  try {
+    const { H, anchors, imageSize, errorPx } = req.body;
+    if (!H) return res.status(400).json({ error: 'Calibration data (H) required.' });
+    
+    // Get the camera session
+    const sess = await camSessions.get(code);
+    if (!sess) return res.status(404).json({ error: 'Pairing session not found.' });
+    
+    // Store calibration in the session
+    sess.calibration = {
+      H,
+      anchors: anchors || null,
+      imageSize: imageSize || null,
+      errorPx: errorPx || null,
+      savedAt: Date.now()
+    };
+    
+    // Update the session in storage
+    await camSessions.set(code, sess);
+    
+    console.log('[Camera] Saved calibration for pairing code:', code);
+    return res.json({ success: true, calibration: sess.calibration });
+  } catch (error) {
+    console.error('[Camera] Calibration error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 
 // In-memory subscription store (demo)
 let subscription = { fullAccess: false };
