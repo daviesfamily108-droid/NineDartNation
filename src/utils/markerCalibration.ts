@@ -62,7 +62,9 @@ export function detectMarkersFromImage(image: ImageData): MarkerDetection {
       }
     }
     const dst = [assignments.top!.center, assignments.right!.center, assignments.bottom!.center, assignments.left!.center]
-    const src = canonicalRimTargets()
+    // Use only the first 4 canonical rim targets (TOP, RIGHT, BOTTOM, LEFT) to match the 4 marker points
+    const allTargets = canonicalRimTargets()
+    const src = allTargets.slice(0, 4)
     const H = computeHomographyDLT(src, dst)
     const error = rmsError(H, src, dst)
     return {
