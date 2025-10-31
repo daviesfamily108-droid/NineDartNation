@@ -41,6 +41,7 @@ export default function CameraTile({
   const [discoveringUsb, setDiscoveringUsb] = useState<boolean>(false)
   const autoscoreProvider = useUserSettings(s => s.autoscoreProvider)
   const setPreferredCameraLocked = useUserSettings(s => s.setPreferredCameraLocked)
+  const preferredCameraLabel = useUserSettings(s => s.preferredCameraLabel)
 
   if (autoscoreProvider === 'manual') {
     const fallbackBase = fill ? 'rounded-2xl overflow-hidden bg-black w-full flex flex-col' : 'rounded-2xl overflow-hidden bg-black w-full mx-auto'
@@ -115,11 +116,19 @@ export default function CameraTile({
     } else {
       stop()
     }
-  }, [autoStart])
+  }, [autoStart, preferredCameraLabel])
 
   async function start() {
     if (mode === 'wifi') {
       return startWifiConnection()
+    }
+
+    // If phone camera is selected and paired, don't try to start local camera
+    // The phone camera is displayed via PhoneCameraOverlay
+    if (preferredCameraLabel === 'Phone Camera') {
+      console.log('[CAMERATILE] Phone camera is selected - skipping local camera startup')
+      console.log('[CAMERATILE] Phone camera feed shown via overlay')
+      return
     }
 
     try {
