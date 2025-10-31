@@ -1337,26 +1337,6 @@ export default function Calibrator() {
 						</div>
 					</header>
 
-					<section className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-5">
-						<div className="flex flex-wrap items-start justify-between gap-4">
-							<div>
-								<h3 className="text-sm font-semibold uppercase tracking-wide text-indigo-200">Marker kit</h3>
-								<p className="mt-1 text-sm opacity-80">
-									Print the fiducials, tape them flush with the outer double ring, then capture a clear frame before running detection.
-								</p>
-							</div>
-							<div className="flex flex-wrap gap-2">
-								<button className="btn px-3 py-1.5" onClick={openMarkerSheet}>Open printable sheet</button>
-								<button className="btn btn--ghost px-3 py-1.5" onClick={() => setMarkerResult(null)}>Clear marker status</button>
-							</div>
-						</div>
-						<ol className="mt-3 list-decimal list-inside space-y-2 text-sm opacity-75">
-							<li>Print and cut out the four markers. Place them on the top, right, bottom, and left edges of the double ring.</li>
-							<li>Start your camera or upload a still frame with the full board visible and the markers unobstructed.</li>
-							<li>Run <strong>Auto detect</strong> for circle fitting or <strong>Detect markers</strong> for fiducials, then lock calibration when error ≤ 1.2px.</li>
-						</ol>
-					</section>
-
 					<div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
 						<section className="space-y-4">
 							<div className="space-y-4 rounded-2xl border border-white/10 bg-black/40 p-4">
