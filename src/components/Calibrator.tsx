@@ -1482,6 +1482,58 @@ export default function Calibrator() {
 						<aside className="space-y-4">
 							<DevicePicker />
 
+							{mode === 'phone' && (
+								<section className="space-y-3 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
+									<div className="font-semibold">Phone pairing</div>
+									<button
+										type="button"
+										className="w-full text-left px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition flex items-center gap-2"
+										onClick={() => copyValue(mobileUrl, 'link')}
+										title="Copy mobile camera link"
+									>
+										<span className="flex-1 min-w-0 font-mono break-all text-[11px]">{mobileUrl}</span>
+										<span className="text-[10px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'link' ? 'Copied!' : 'Copy link'}</span>
+									</button>
+									<div className="flex items-center gap-2 text-[11px]">
+										<a href={mobileUrl} target="_blank" rel="noreferrer" className="underline decoration-dotted text-indigo-200 hover:text-indigo-100 transition">
+											Open link in new tab
+										</a>
+									</div>
+									<div className="opacity-80">
+										WS: {ws ? (ws.readyState === 1 ? 'open' : ws.readyState === 0 ? 'connecting' : ws.readyState === 2 ? 'closing' : 'closed') : 'not started'} · {httpsInfo?.https ? 'HTTPS on' : 'HTTP only'}
+									</div>
+									{pairCode && (
+										<button
+											type="button"
+											className="w-full text-left px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition flex items-center justify-between gap-2"
+											onClick={() => copyValue(pairCode, 'code')}
+											title="Copy pairing code"
+										>
+											<span className="font-mono tracking-[0.3em] text-sm">{pairCode}</span>
+											<span className="text-[10px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'code' ? 'Copied!' : 'Copy code'}</span>
+										</button>
+									)}
+									{qrDataUrl && <img className="mt-1 h-40 w-40 rounded bg-white" alt="Scan to open" src={qrDataUrl} />}
+									<div className="flex items-center gap-2">
+										{ttl !== null && <span>Expires in {ttl}s</span>}
+										<button className="btn px-2 py-1 text-xs" onClick={regenerateCode}>Regenerate</button>
+									</div>
+									{showTips && (
+										<div className="space-y-2 rounded-lg border border-slate-700/50 bg-slate-900/60 p-3 text-slate-200">
+											<div className="font-semibold">Troubleshooting</div>
+											<ul className="list-disc space-y-1 pl-4">
+												<li>Phone and desktop must be on the same Wi‑Fi network.</li>
+												<li>Allow the server through your firewall (ports 8787 and {httpsInfo?.https ? httpsInfo.port : 8788}).</li>
+												<li>On iPhone, use HTTPS links (QR will prefer HTTPS when enabled).</li>
+											</ul>
+											<div className="text-right">
+												<button className="btn btn--ghost px-2 py-1 text-xs" onClick={() => setShowTips(false)}>Hide tips</button>
+											</div>
+										</div>
+									)}
+								</section>
+							)}
+
 							<section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
 								<div>
 									<h3 className="text-sm font-semibold">Step 1 · Capture image</h3>
@@ -1594,58 +1646,6 @@ export default function Calibrator() {
 							</section>
 						</aside>
 					</div>
-
-					{mode === 'phone' && !streaming && (
-						<div className="space-y-2 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
-							<div className="font-semibold">Phone pairing</div>
-							<button
-								type="button"
-								className="w-full text-left px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition flex items-center gap-2"
-								onClick={() => copyValue(mobileUrl, 'link')}
-								title="Copy mobile camera link"
-							>
-								<span className="flex-1 min-w-0 font-mono break-all text-[11px]">{mobileUrl}</span>
-								<span className="text-[10px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'link' ? 'Copied!' : 'Copy link'}</span>
-							</button>
-							<div className="flex items-center gap-2 text-[11px]">
-								<a href={mobileUrl} target="_blank" rel="noreferrer" className="underline decoration-dotted text-indigo-200 hover:text-indigo-100 transition">
-									Open link in new tab
-								</a>
-							</div>
-							<div className="opacity-80">
-								WS: {ws ? (ws.readyState === 1 ? 'open' : ws.readyState === 0 ? 'connecting' : ws.readyState === 2 ? 'closing' : 'closed') : 'not started'} · {httpsInfo?.https ? 'HTTPS on' : 'HTTP only'}
-							</div>
-							{pairCode && (
-								<button
-									type="button"
-									className="w-full text-left px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition flex items-center justify-between gap-2"
-									onClick={() => copyValue(pairCode, 'code')}
-									title="Copy pairing code"
-								>
-									<span className="font-mono tracking-[0.3em] text-sm">{pairCode}</span>
-									<span className="text-[10px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'code' ? 'Copied!' : 'Copy code'}</span>
-								</button>
-							)}
-							{qrDataUrl && <img className="mt-1 h-40 w-40 rounded bg-white" alt="Scan to open" src={qrDataUrl} />}
-							<div className="flex items-center gap-2">
-								{ttl !== null && <span>Expires in {ttl}s</span>}
-								<button className="btn px-2 py-1 text-xs" onClick={regenerateCode}>Regenerate</button>
-							</div>
-							{showTips && (
-								<div className="space-y-2 rounded-lg border border-slate-700/50 bg-slate-900/60 p-3 text-slate-200">
-									<div className="font-semibold">Troubleshooting</div>
-									<ul className="list-disc space-y-1 pl-4">
-										<li>Phone and desktop must be on the same Wi‑Fi network.</li>
-										<li>Allow the server through your firewall (ports 8787 and {httpsInfo?.https ? httpsInfo.port : 8788}).</li>
-										<li>On iPhone, use HTTPS links (QR will prefer HTTPS when enabled).</li>
-									</ul>
-									<div className="text-right">
-										<button className="btn btn--ghost px-2 py-1 text-xs" onClick={() => setShowTips(false)}>Hide tips</button>
-									</div>
-								</div>
-							)}
-						</div>
-					)}
 
 					{mode === 'wifi' && !streaming && (
 						<div className="space-y-3 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
