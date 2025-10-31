@@ -33,7 +33,7 @@ export default function CameraView({
   onGenericReplace?: (value: number, ring: Ring, meta: { label: string }) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const { preferredCameraId, setPreferredCamera, autoscoreProvider, autoscoreWsUrl } = useUserSettings()
+  const { preferredCameraId, preferredCameraLabel, setPreferredCamera, autoscoreProvider, autoscoreWsUrl } = useUserSettings()
   const manualOnly = autoscoreProvider === 'manual'
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -139,6 +139,16 @@ export default function CameraView({
 
   async function startCamera() {
     if (cameraStarting || streaming) return
+    
+    // If phone camera is selected, don't try to start a local camera
+    // The phone camera is displayed via PhoneCameraOverlay in the game tabs
+    if (preferredCameraLabel === 'Phone Camera') {
+      console.log('[CAMERA] Phone camera is selected - skipping local camera startup')
+      console.log('[CAMERA] Phone camera feed shown via overlay in game tabs')
+      setCameraStarting(false)
+      return
+    }
+    
     setCameraStarting(true)
     console.log('[CAMERA] Starting camera...')
     try {
@@ -850,16 +860,37 @@ export default function CameraView({
                 <h2 className="text-lg font-semibold mb-3">Camera</h2>
                 <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={320} minHeight={240} maxWidth={1600} maxHeight={900}>
                   <CameraSelector />
-                  <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
-                  <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                  {preferredCameraLabel === 'Phone Camera' ? (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
+                      <div className="text-center">
+                        <div className="text-4xl mb-4">📱</div>
+                        <div className="text-lg font-semibold text-blue-100 mb-2">Phone Camera Active</div>
+                        <div className="text-sm text-slate-300 mb-4">Your phone camera feed is shown in the floating overlay</div>
+                        <div className="text-xs text-slate-400">Camera controls available in Calibrator tab</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
+                      <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                    </>
+                  )}
                 </ResizablePanel>
                 <div className="flex gap-2 mt-3">
-                  {!streaming ? (
-                    <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={startCamera}>Connect Camera</button>
+                  {preferredCameraLabel === 'Phone Camera' ? (
+                    <div className="text-sm text-blue-200 px-3 py-2 rounded bg-blue-900/30 flex-1">
+                      📱 Using phone camera from overlay
+                    </div>
                   ) : (
-                    <button className="btn bg-gradient-to-r from-rose-600 to-rose-700 text-white font-bold" onClick={stopCamera}>Stop Camera</button>
+                    <>
+                      {!streaming ? (
+                        <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={startCamera}>Connect Camera</button>
+                      ) : (
+                        <button className="btn bg-gradient-to-r from-rose-600 to-rose-700 text-white font-bold" onClick={stopCamera}>Stop Camera</button>
+                      )}
+                      <button className="btn bg-gradient-to-r from-indigo-500 to-indigo-700 text-white font-bold" onClick={capture} disabled={!streaming}>Capture Still</button>
+                    </>
                   )}
-                  <button className="btn bg-gradient-to-r from-indigo-500 to-indigo-700 text-white font-bold" onClick={capture} disabled={!streaming}>Capture Still</button>
                   <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
                 </div>
               </div>
