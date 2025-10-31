@@ -4,7 +4,7 @@ import DartLoader from './DartLoader'
 
 import QRCode from 'qrcode'
 import { useCalibration } from '../store/calibration'
-import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, type Homography, type Point } from '../utils/vision'
+import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, applyHomography, type Homography, type Point } from '../utils/vision'
 import { detectMarkersFromCanvas, MARKER_ORDER, MARKER_TARGETS, markerIdToMatrix, type MarkerDetection } from '../utils/markerCalibration'
 import { useUserSettings } from '../store/userSettings'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice } from '../utils/networkDevices'
@@ -23,7 +23,7 @@ export default function Calibrator() {
 	const [phase, setPhase] = useState<Phase>('camera')
 	// Default to local or last-used mode, but allow user to freely change
 	const [mode, setMode] = useState<CamMode>(() => (localStorage.getItem('ndn:cal:mode') as CamMode) || 'local')
-	const [dstPoints, setDstPoints] = useState<Point[]>([]) // image points clicked in order TOP, RIGHT, BOTTOM, LEFT
+	const [dstPoints, setDstPoints] = useState<Point[]>([]) // image points clicked in order TOP, RIGHT, BOTTOM, LEFT, CENTER (bullseye), OUTER_BULL_TOP
 	const [snapshotSet, setSnapshotSet] = useState(false)
 	// Track current frame (video/snapshot) size to preserve aspect ratio in the preview container
 	const [frameSize, setFrameSize] = useState<{ w: number, h: number } | null>(null)
@@ -725,16 +725,6 @@ export default function Calibrator() {
 		const ctx = o.getContext('2d')!
 		ctx.clearRect(0, 0, o.width, o.height)
 
-		// Draw clicked points (with order labels to guide TOP, RIGHT, BOTTOM, LEFT)
-		currentPoints.forEach((p, i) => {
-			drawCross(ctx, p, '#f472b6')
-			ctx.save()
-			ctx.fillStyle = '#f472b6'
-			ctx.font = '14px sans-serif'
-			ctx.fillText(String(i + 1), p.x + 6, p.y - 6)
-			ctx.restore()
-		})
-
 		// If we have a homography, draw rings (precise, perspective-correct)
 		const Huse = HH || H
 		if (Huse) {
@@ -760,6 +750,35 @@ export default function Calibrator() {
 			drawCircle(detected.bullOuter, '#34d399', 2)
 			drawCircle(detected.bullInner, '#10b981', 3)
 		}
+
+		// Show calibration guide circles when < 6 points and homography exists
+		if (currentPoints.length < 6 && Huse) {
+			ctx.save()
+			ctx.strokeStyle = 'rgba(255,193,7,0.4)'
+			ctx.lineWidth = 2
+			ctx.setLineDash([4,4])
+			// Show the 6 expected click positions
+			const targets = canonicalRimTargets()
+			for (let i = currentPoints.length; i < 6 && i < targets.length; i++) {
+				try {
+					const p = applyHomography(Huse, targets[i])
+					ctx.beginPath()
+					ctx.arc(p.x, p.y, 12, 0, Math.PI * 2)
+					ctx.stroke()
+				} catch {}
+			}
+			ctx.restore()
+		}
+
+		// Draw clicked points (with order labels to guide TOP, RIGHT, BOTTOM, LEFT, CENTER, BULL_TOP)
+		currentPoints.forEach((p, i) => {
+			drawCross(ctx, p, '#f472b6')
+			ctx.save()
+			ctx.fillStyle = '#f472b6'
+			ctx.font = '14px sans-serif'
+			ctx.fillText(String(i + 1), p.x + 6, p.y - 6)
+			ctx.restore()
+		})
 
 		// Preferred-view framing guide (if enabled and not yet calibrated)
 		if (calibrationGuide && !locked) {
@@ -806,7 +825,7 @@ export default function Calibrator() {
 		const x = cssX * scaleX
 		const y = cssY * scaleY
 		const pts = [...dstPoints, { x, y }]
-		if (pts.length <= 4) {
+		if (pts.length <= 6) {
 			setDstPoints(pts)
 			drawOverlay(pts)
 		}
@@ -827,7 +846,8 @@ export default function Calibrator() {
 
 	function compute() {
 		if (!canvasRef.current) return
-		if (dstPoints.length !== 4) return alert('Please click 4 points: TOP, RIGHT, BOTTOM, LEFT corners of the double rim.')
+		if (dstPoints.length < 4) return alert('Please click at least 4 points on the board.')
+		if (dstPoints.length < 6) return alert('For best accuracy, click all 6 calibration points: TOP, RIGHT, BOTTOM, LEFT of double rim, plus BULLSEYE center and OUTER BULL top.')
 		const src = canonicalRimTargets() // board space mm
 		const Hcalc = computeHomographyDLT(src, dstPoints)
 		drawOverlay(dstPoints, Hcalc)
@@ -1450,7 +1470,7 @@ export default function Calibrator() {
 								</div>
 								<div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
 									<div className="uppercase tracking-wide opacity-60">Points selected</div>
-									<div className="text-sm font-semibold">{dstPoints.length} / 4</div>
+									<div className="text-sm font-semibold">{dstPoints.length} / 6</div>
 								</div>
 								<div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
 									<div className="uppercase tracking-wide opacity-60">Fit error</div>
@@ -1553,10 +1573,10 @@ export default function Calibrator() {
 							<section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
 								<div>
 									<h3 className="text-sm font-semibold">Step 3 · Align & lock</h3>
-									<p className="text-xs opacity-70">Click points in TOP → RIGHT → BOTTOM → LEFT order, refine edges, then lock the calibration.</p>
+									<p className="text-xs opacity-70">Click 6 points in order: ① TOP ② RIGHT ③ BOTTOM ④ LEFT of double rim, then ⑤ BULLSEYE center ⑥ outer bull top. Refine edges, then lock.</p>
 								</div>
 								<div className="flex flex-wrap gap-2">
-									<button className="btn" disabled={dstPoints.length !== 4} onClick={compute}>Compute</button>
+									<button className="btn" disabled={dstPoints.length < 4} onClick={compute}>Compute</button>
 									<button className={`btn ${locked ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`} onClick={() => setCalibration({ locked: !locked })}>
 										{locked ? 'Unlock' : 'Lock in'}
 									</button>

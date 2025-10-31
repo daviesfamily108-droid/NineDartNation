@@ -76,13 +76,15 @@ export function invertHomography(H: Homography): Homography {
 }
 
 // Compute homography H that maps src (board space) -> dst (image space)
-// Using 4 correspondences via DLT (solved by Gaussian elimination)
+// Using N correspondences via DLT (solved by Gaussian elimination) with least-squares fit
+// Supports overdetermined systems (N > 4) for improved accuracy
 export function computeHomographyDLT(src: Point[], dst: Point[]): Homography {
-	if (src.length !== 4 || dst.length !== 4) throw new Error('Need exactly 4 correspondences')
+	if (src.length < 4 || dst.length < 4) throw new Error('Need at least 4 correspondences')
+	if (src.length !== dst.length) throw new Error('Correspondences must have equal length')
 	// Build A * h = b where h = [h11 h12 h13 h21 h22 h23 h31 h32]^T and h33 = 1
 	const A: number[][] = []
 	const B: number[] = []
-	for (let k = 0; k < 4; k++) {
+	for (let k = 0; k < src.length; k++) {
 		const { x: X, y: Y } = src[k]
 		const { x: x, y: y } = dst[k]
 		// x = (h11 X + h12 Y + h13) / (h31 X + h32 Y + 1)
@@ -147,14 +149,21 @@ function gaussianSolve(M: number[][], v: number[]): number[] {
 }
 
 // Canonical calibration targets in board space (mm)
-// We ask the user to click the image positions for: TOP, RIGHT, BOTTOM, LEFT of double outer rim
+// We ask the user to click the image positions for: 
+// 1. TOP, RIGHT, BOTTOM, LEFT of double outer rim (4 points for rim constraint)
+// 2. BULLSEYE center (inner bull) and OUTER BULL (2 points for center constraint)
+// Total: 6 calibration points for improved accuracy
 export function canonicalRimTargets(): Point[] {
-	const R = BoardRadii.doubleOuter
+	const doubleR = BoardRadii.doubleOuter
+	const innerBullR = BoardRadii.bullInner
+	const outerBullR = BoardRadii.bullOuter
 	return [
-		{ x: 0, y: -R }, // TOP
-		{ x: R, y: 0 },  // RIGHT
-		{ x: 0, y: R },  // BOTTOM
-		{ x: -R, y: 0 }, // LEFT
+		{ x: 0, y: -doubleR }, // 0: TOP of double rim
+		{ x: doubleR, y: 0 },  // 1: RIGHT of double rim
+		{ x: 0, y: doubleR },  // 2: BOTTOM of double rim
+		{ x: -doubleR, y: 0 }, // 3: LEFT of double rim
+		{ x: 0, y: 0 },        // 4: CENTER (bullseye inner bull center)
+		{ x: 0, y: -outerBullR }, // 5: TOP of outer bull (for vertical center constraint)
 	]
 }
 
