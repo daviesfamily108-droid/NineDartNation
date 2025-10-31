@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type CameraStreamMode = 'local' | 'phone' | 'wifi'
 
@@ -40,15 +41,9 @@ type CameraSessionState = {
   clearSession: () => void
 }
 
-export const useCameraSession = create<CameraSessionState>((set, get) => ({
+export const useCameraSession = create<CameraSessionState>()(persist((set, get) => ({
   isStreaming: false,
-  mode: (() => {
-    try {
-      return (localStorage.getItem('ndn:cal:mode') as CameraStreamMode) || 'local'
-    } catch {
-      return 'local'
-    }
-  })(),
+  mode: 'local',
   pairingCode: null,
   expiresAt: null,
   isPaired: false,
@@ -57,11 +52,12 @@ export const useCameraSession = create<CameraSessionState>((set, get) => ({
   pcRef: null,
   wsRef: null,
   
-  setStreaming: (streaming) => set({ isStreaming: streaming }),
+  setStreaming: (streaming) => {
+    console.log('[CAMERA_SESSION] setStreaming:', streaming)
+    set({ isStreaming: streaming })
+  },
   setMode: (mode) => {
-    try {
-      localStorage.setItem('ndn:cal:mode', mode)
-    } catch {}
+    console.log('[CAMERA_SESSION] setMode:', mode)
     set({ mode })
   },
   setPairingCode: (code) => set({ pairingCode: code }),
@@ -91,4 +87,16 @@ export const useCameraSession = create<CameraSessionState>((set, get) => ({
       wsRef: null,
     })
   },
+}), {
+  name: 'ndn-camera-session',
+  storage: createJSONStorage(() => localStorage),
+  // Only persist the serializable parts (not mediaStream or pcRef)
+  partialize: (state) => ({
+    isStreaming: state.isStreaming,
+    mode: state.mode,
+    pairingCode: state.pairingCode,
+    expiresAt: state.expiresAt,
+    isPaired: state.isPaired,
+    mobileUrl: state.mobileUrl,
+  }),
 }))
