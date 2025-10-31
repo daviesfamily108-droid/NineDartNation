@@ -1013,19 +1013,32 @@ export default function Calibrator() {
 				totalEdge(bInner) / maxMag     // Bull inner
 			))
 			setConfidence(Math.round(adjustedConf * 100))
-		// Seed the four calibration points and compute
+		// Seed the six calibration points for accurate alignment
+		// Points: TOP, RIGHT, BOTTOM, LEFT of double rim, plus bullseye center and outer bull top
 		const pts: Point[] = [
-			{ x: OCX,       y: OCY - dOuter },
-			{ x: OCX + dOuter,  y: OCY      },
-			{ x: OCX,       y: OCY + dOuter },
-			{ x: OCX - dOuter,  y: OCY      },
+			{ x: OCX,       y: OCY - dOuter }, // TOP of double rim
+			{ x: OCX + dOuter,  y: OCY      }, // RIGHT of double rim
+			{ x: OCX,       y: OCY + dOuter }, // BOTTOM of double rim
+			{ x: OCX - dOuter,  y: OCY      }, // LEFT of double rim
+			{ x: OCX,       y: OCY          }, // CENTER (bullseye inner bull center)
+			{ x: OCX,       y: OCY - bOuter }, // TOP of outer bull (for vertical center constraint)
 		]
 		setDstPoints(pts)
 		drawOverlay(pts)
-			try { compute() } catch {}
-			// Auto-lock if confidence high and error small
-			const autoLock = adjustedConf >= 0.95 // Use adjusted confidence for near-perfect calibration
-			setCalibration({ locked: autoLock })
+		// Compute homography with the 6 points
+		try {
+			const src = canonicalRimTargets() // board space mm
+			const Hcalc = computeHomographyDLT(src, pts)
+			drawOverlay(pts, Hcalc)
+			const err = rmsError(Hcalc, src, pts)
+			setCalibration({ H: Hcalc as Homography, createdAt: Date.now(), errorPx: err, imageSize: { w: canvasRef.current.width, h: canvasRef.current.height }, anchors: { src, dst: pts } })
+			setPhase('computed')
+		} catch (e) {
+			console.error('[Calibrator] Auto-detect compute failed:', e)
+		}
+		// Auto-lock if confidence high and error small
+		const autoLock = adjustedConf >= 0.95 // Use adjusted confidence for near-perfect calibration
+		setCalibration({ locked: autoLock })
 	}
 
 			function detectMarkers() {
