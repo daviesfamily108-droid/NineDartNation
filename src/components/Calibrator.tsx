@@ -343,15 +343,21 @@ export default function Calibrator() {
 	}, [mode, paired])
 
 	// Sync video element to camera session so other components can access it
+	// CRITICAL: This needs to run whenever streaming state changes so videoRef stays synced
 	useEffect(() => {
+		console.log('[Calibrator] videoRef useEffect: streaming=', streaming, 'videoRef.current=', !!videoRef.current)
 		if (videoRef.current) {
+			console.log('[Calibrator] Setting videoElementRef to current video element')
 			cameraSession.setVideoElementRef(videoRef.current)
 			// Also capture media stream when available
 			if (videoRef.current.srcObject instanceof MediaStream) {
+				console.log('[Calibrator] Setting mediaStream from video element')
 				cameraSession.setMediaStream(videoRef.current.srcObject)
 			}
+		} else {
+			console.log('[Calibrator] WARNING: videoRef.current is null!')
 		}
-	}, [])
+	}, [streaming, videoRef, cameraSession])
 
 	function ensureWS() {
 		// Return existing WebSocket if it's open or connecting

@@ -10,6 +10,7 @@ import { useCameraSession } from '../store/cameraSession'
  */
 export default function PhoneCameraOverlay() {
 	const cameraSession = useCameraSession()
+	const [hasHydrated, setHasHydrated] = useState(false)
 	const [position, setPosition] = useState({ x: 20, y: 20 })
 	const [dragging, setDragging] = useState(false)
 	const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
@@ -21,12 +22,45 @@ export default function PhoneCameraOverlay() {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const animationFrameRef = useRef<number | null>(null)
 
+	// Wait for Zustand hydration before checking conditions
+	useEffect(() => {
+		const unsubscribe = useCameraSession.persist?.onFinishHydration?.(() => {
+			console.log('[PhoneCameraOverlay] Zustand hydration complete')
+			setHasHydrated(true)
+		})
+		setHasHydrated(true) // Also set immediately in case hydration already happened
+		return () => {
+			if (unsubscribe && typeof unsubscribe === 'function') {
+				unsubscribe()
+			}
+		}
+	}, [])
+
 	// Don't show preview if:
 	// - Camera session not streaming
 	// - Or no video element available
 	// - Or mode is not 'phone'
 	const videoElement = cameraSession.getVideoElementRef()
 	const shouldShow = cameraSession.isStreaming && cameraSession.mode === 'phone' && videoElement
+
+	// Log to help debug black screen issue
+	useEffect(() => {
+		console.log('[PhoneCameraOverlay] Render check:', {
+			hasHydrated,
+			isStreaming: cameraSession.isStreaming,
+			mode: cameraSession.mode,
+			hasVideoElement: !!videoElement,
+			videoElementType: videoElement?.constructor?.name,
+			shouldShow,
+			minimized
+		})
+		
+		if (!shouldShow) {
+			console.warn('[PhoneCameraOverlay] NOT SHOWING - At least one condition failed')
+		} else {
+			console.log('[PhoneCameraOverlay] ✓ ALL CONDITIONS MET - Should display camera overlay')
+		}
+	}, [shouldShow, cameraSession.isStreaming, cameraSession.mode, videoElement, hasHydrated])
 
 	// Render video frames to canvas
 	useEffect(() => {

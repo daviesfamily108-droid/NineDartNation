@@ -53,12 +53,30 @@ export const useCameraSession = create<CameraSessionState>()(persist((set, get) 
   wsRef: null,
   
   setStreaming: (streaming) => {
-    console.log('[CAMERA_SESSION] setStreaming:', streaming)
+    console.log('[CAMERA_SESSION] setStreaming:', streaming, 'current mode:', get().mode)
     set({ isStreaming: streaming })
   },
   setMode: (mode) => {
-    console.log('[CAMERA_SESSION] setMode:', mode)
+    console.log('[CAMERA_SESSION] setMode:', mode, 'will persist to localStorage')
     set({ mode })
+    // Force persist immediately
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        const currentState = get()
+        const toStore = {
+          isStreaming: currentState.isStreaming,
+          mode: currentState.mode,
+          pairingCode: currentState.pairingCode,
+          expiresAt: currentState.expiresAt,
+          isPaired: currentState.isPaired,
+          mobileUrl: currentState.mobileUrl,
+        }
+        window.localStorage.setItem('ndn-camera-session', JSON.stringify({ state: toStore }))
+        console.log('[CAMERA_SESSION] Forced localStorage update:', toStore)
+      } catch (e) {
+        console.error('[CAMERA_SESSION] Failed to force persist:', e)
+      }
+    }
   },
   setPairingCode: (code) => set({ pairingCode: code }),
   setExpiresAt: (time) => set({ expiresAt: time }),
@@ -99,4 +117,15 @@ export const useCameraSession = create<CameraSessionState>()(persist((set, get) 
     isPaired: state.isPaired,
     mobileUrl: state.mobileUrl,
   }),
+  onRehydrateStorage: () => (state, error) => {
+    if (error) {
+      console.error('[CAMERA_SESSION] Rehydration error:', error)
+    } else if (state) {
+      console.log('[CAMERA_SESSION] Rehydrated from localStorage:', {
+        isStreaming: state.isStreaming,
+        mode: state.mode,
+        isPaired: state.isPaired,
+      })
+    }
+  },
 }))
