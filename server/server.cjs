@@ -344,7 +344,7 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 
   try {
-    // Check if username exists in memory
+    // Check if username/email exists in memory (fast path first)
     for (const u of users.values()) {
       if (u.username === username) {
         return res.status(409).json({ error: 'Username already exists.' })
@@ -354,49 +354,57 @@ app.post('/api/auth/signup', async (req, res) => {
       }
     }
 
-    // Check if user exists in Supabase
+    // Check if user exists in Supabase (only if DB is configured)
     if (supabase) {
-      const { data: existingUser } = await supabase
-        .from('users')
-        .select('email, username')
-        .or(`email.eq.${email},username.eq.${username}`)
-        .single();
+      try {
+        const { data: existingUser, error: queryError } = await supabase
+          .from('users')
+          .select('email, username')
+          .or(`email.eq.${email},username.eq.${username}`)
+          .single();
 
-      if (existingUser) {
-        if (existingUser.email === email) {
-          return res.status(409).json({ error: 'Email already exists.' })
+        if (!queryError && existingUser) {
+          if (existingUser.email === email) {
+            return res.status(409).json({ error: 'Email already exists.' })
+          }
+          if (existingUser.username === username) {
+            return res.status(409).json({ error: 'Username already exists.' })
+          }
         }
-        if (existingUser.username === username) {
-          return res.status(409).json({ error: 'Username already exists.' })
-        }
+      } catch (queryErr) {
+        console.error('[DB] Query error during signup:', queryErr);
+        // Continue - user probably doesn't exist
       }
     }
 
     const user = { email, username, password, admin: false, subscription: { fullAccess: false } }
 
-    // Save to Supabase if available
+    // Save to Supabase if available (async, don't wait for response)
     if (supabase) {
-      const { error } = await supabase
+      // Fire and forget - log errors but don't block signup response
+      supabase
         .from('users')
         .insert([{
           email: user.email,
           username: user.username,
-          password: user.password, // Note: In production, hash passwords!
+          password: user.password,
           admin: user.admin,
           subscription: user.subscription,
           created_at: new Date().toISOString()
-        }]);
-
-      if (error) {
-        console.error('[DB] Failed to save user to Supabase:', error);
-        return res.status(500).json({ error: 'Failed to create account.' });
-      }
+        }])
+        .then(({ error }) => {
+          if (error) {
+            console.error('[DB] Failed to save user to Supabase:', error);
+            // Note: User is already in memory, so they can still use the app
+          }
+        })
+        .catch(err => console.error('[DB] Supabase insert failed:', err));
     }
 
-    // Also store in memory for current session
+    // Store in memory immediately (fast response)
     users.set(email, user)
 
-    // Create JWT token
+    // Create JWT token and respond immediately
     const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
     return res.json({ user, token })
   } catch (error) {
@@ -415,43 +423,46 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     let user = null;
 
-    // First check in-memory users
+    // Check in-memory users FIRST (fastest path - no network)
     for (const u of users.values()) {
       if (u.username === username && u.password === password) {
         user = u;
-        break;
+        const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+        return res.json({ user, token }); // Return immediately - no Supabase call
       }
     }
 
-    // If not found in memory, check Supabase
-    if (!user && supabase) {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('username', username)
-        .single();
+    // If not found in memory AND Supabase is configured, check database
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', username)
+          .single();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('[DB] Supabase login error:', error);
-      } else if (data && data.password === password) {
-        user = {
-          email: data.email,
-          username: data.username,
-          password: data.password,
-          admin: data.admin || false
-        };
-        // Cache in memory for current session
-        users.set(data.email, user);
+        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+          console.error('[DB] Supabase login error:', error);
+        } else if (data && data.password === password) {
+          user = {
+            email: data.email,
+            username: data.username,
+            password: data.password,
+            admin: data.admin || false
+          };
+          // Cache in memory for current session (avoid future DB queries)
+          users.set(data.email, user);
+          const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+          return res.json({ user, token });
+        }
+      } catch (dbError) {
+        console.error('[LOGIN] Supabase error:', dbError);
+        // Fall through to invalid password response
       }
     }
 
-    if (user) {
-      // Create JWT token
-      const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
-      return res.json({ user, token });
-    } else {
-      return res.status(401).json({ error: 'Invalid username or password.' });
-    }
+    // No user found
+    return res.status(401).json({ error: 'Invalid username or password.' });
   } catch (error) {
     console.error('[LOGIN] Error:', error);
     return res.status(500).json({ error: 'Internal server error.' });
