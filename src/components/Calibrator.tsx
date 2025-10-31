@@ -4,6 +4,7 @@ import DartLoader from './DartLoader'
 
 import QRCode from 'qrcode'
 import { useCalibration } from '../store/calibration'
+import { useCameraSession } from '../store/cameraSession'
 import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, applyHomography, type Homography, type Point } from '../utils/vision'
 import { detectMarkersFromCanvas, MARKER_ORDER, MARKER_TARGETS, markerIdToMatrix, type MarkerDetection } from '../utils/markerCalibration'
 import { useUserSettings } from '../store/userSettings'
@@ -42,6 +43,7 @@ export default function Calibrator() {
 		return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent)
 	})
 	const { H, setCalibration, reset, errorPx, locked } = useCalibration()
+	const cameraSession = useCameraSession()
 	const { calibrationGuide, setCalibrationGuide, preferredCameraId, cameraEnabled, setCameraEnabled, preferredCameraLocked, setPreferredCameraLocked, setPreferredCamera } = useUserSettings()
 		// Detected ring data (from auto-detect) in image pixels
 	const [detected, setDetected] = useState<null | {
@@ -311,9 +313,24 @@ export default function Calibrator() {
 		requestCameraPermission()
 	}, [])
 
-			useEffect(() => {
-		return () => stopCamera(false)
+		useEffect(() => {
+		return () => {
+			// DON'T call stopCamera() on unmount - we want phone camera to persist!
+			// Just clean up local refs
+			// The camera stream stays alive so user can see it in Online/Offline/Tournaments
+		}
 	}, [])	// Remove automatic camera restart on preferredCameraId change to prevent flicker
+
+	// Sync video element to camera session so other components can access it
+	useEffect(() => {
+		if (videoRef.current) {
+			cameraSession.setVideoElementRef(videoRef.current)
+			// Also capture media stream when available
+			if (videoRef.current.srcObject instanceof MediaStream) {
+				cameraSession.setMediaStream(videoRef.current.srcObject)
+			}
+		}
+	}, [videoRef, cameraSession])
 
 	function ensureWS() {
 		// Return existing WebSocket if it's open or connecting
@@ -457,6 +474,10 @@ export default function Calibrator() {
 											// Mark that we're streaming from the phone and transition to capture
 											setStreaming(true)
 											setPhase('capture')
+											// Update camera session so other components can see the stream
+											cameraSession.setStreaming(true)
+											cameraSession.setMode('phone')
+											cameraSession.setMediaStream(inbound)
 											// Set user settings to reflect that the active camera is the phone
 											try { setPreferredCamera(undefined, 'Phone Camera', true) } catch {}
 												if (!preferredCameraLocked) {
@@ -658,6 +679,9 @@ export default function Calibrator() {
 		setExpiresAt(null)
 		setPaired(false)
 		setMarkerResult(null)
+		// Clear camera session when stopping camera
+		cameraSession.setStreaming(false)
+		cameraSession.setMediaStream(null)
 	    // Unlock preferred camera selection only if we auto-locked it for this session
 	    if (autoLockRef.current) {
 	    	try { setPreferredCameraLocked(false) } catch {}

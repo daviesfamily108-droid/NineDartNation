@@ -2,6 +2,7 @@
 import { useMatch } from '../store/match'
 import CameraView from './CameraView'
 import CameraTile from './CameraTile'
+import PhoneCameraOverlay from './PhoneCameraOverlay'
 import { suggestCheckouts, sayScore } from '../utils/checkout'
 import { addSample, getAllTimeAvg } from '../store/profileStats'
 import { getFreeRemaining, incOnlineUsage } from '../utils/quota'
@@ -2352,6 +2353,9 @@ function ChatList({ items, onDelete, onReport, onBlock }: { items: { key: string
           </div>
         )
       })}
+      
+      {/* Phone camera overlay when paired */}
+      <PhoneCameraOverlay />
     </div>
   )
 }

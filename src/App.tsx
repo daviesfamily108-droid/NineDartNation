@@ -438,11 +438,12 @@ export default function App() {
                 <OfflinePlay user={user} />
               </ScrollFade>
             )}
-            {tab === 'calibrate' && (
+            {/* Always keep Calibrator mounted to preserve phone camera stream, but hide when not active */}
+            <div className={tab === 'calibrate' ? '' : 'hidden'}>
               <ScrollFade>
                 <Calibrator />
               </ScrollFade>
-            )}
+            </div>
             {tab === 'friends' && (
               <ScrollFade>
                 <Friends user={user} />
