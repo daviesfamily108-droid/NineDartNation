@@ -145,6 +145,7 @@ export default function Calibrator() {
 	const [now, setNow] = useState<number>(Date.now())
 	const [paired, setPaired] = useState<boolean>(false)
 	const pcRef = useRef<RTCPeerConnection | null>(null)
+	const pendingIceCandidatesRef = useRef<RTCIceCandidate[]>([])
 	const [qrDataUrl, setQrDataUrl] = useState<string>('')
 	const [lanHost, setLanHost] = useState<string | null>(null)
 	const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null)
@@ -543,6 +544,19 @@ export default function Calibrator() {
 					try {
 						await peer.setRemoteDescription(new RTCSessionDescription(data.payload))
 						console.log('[Calibrator] Remote description set (answer)')
+						
+						// Process any pending ICE candidates that arrived before the answer
+						const pending = pendingIceCandidatesRef.current
+						console.log(`[Calibrator] Processing ${pending.length} pending ICE candidates`)
+						for (const candidate of pending) {
+							try {
+								await peer.addIceCandidate(candidate)
+								console.log('[Calibrator] Queued ICE candidate added')
+							} catch (err) {
+								console.error('Failed to add queued ICE candidate:', err)
+							}
+						}
+						pendingIceCandidatesRef.current = []
 					} catch (err) {
 						console.error('Failed to set remote description:', err)
 						alert('Camera pairing failed. Please try again.')
@@ -555,12 +569,18 @@ export default function Calibrator() {
 				console.log('[Calibrator] Received cam-ice')
 				const peer = pcRef.current
 				if (peer) {
-					try {
-						await peer.addIceCandidate(data.payload)
-						console.log('[Calibrator] ICE candidate added')
-					} catch (err) {
-						console.error('Failed to add ICE candidate:', err)
-						// Don't alert for ICE candidate errors as they're often non-critical
+					// Only add ICE candidate if remote description is already set
+					// Otherwise, queue it for later processing
+					if (peer.remoteDescription) {
+						try {
+							await peer.addIceCandidate(data.payload)
+							console.log('[Calibrator] ICE candidate added')
+						} catch (err) {
+							console.error('Failed to add ICE candidate:', err)
+						}
+					} else {
+						console.log('[Calibrator] Remote description not set yet, queuing ICE candidate')
+						pendingIceCandidatesRef.current.push(data.payload)
 					}
 				} else {
 					console.warn('[Calibrator] Received ICE candidate but no peer connection exists')
@@ -695,6 +715,7 @@ export default function Calibrator() {
 			setStreaming(false)
 		}
 		if (pcRef.current) { try { pcRef.current.close() } catch {}; pcRef.current = null }
+		pendingIceCandidatesRef.current = []
 		updatePairCode(null)
 		setExpiresAt(null)
 		setPaired(false)
