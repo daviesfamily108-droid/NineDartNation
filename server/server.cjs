@@ -549,6 +549,25 @@ app.post('/api/user/calibration', (req, res) => {
 });
 
 // Camera pairing session calibration storage (temporary, code-based)
+app.get('/cam/calibration/:code', async (req, res) => {
+  const code = String(req.params.code || '').toUpperCase();
+  if (!code) return res.status(400).json({ error: 'Code required.' });
+  
+  try {
+    const sess = await camSessions.get(code);
+    if (!sess) return res.status(404).json({ error: 'Pairing session not found.' });
+    
+    if (sess.calibration) {
+      return res.json({ ok: true, calibration: sess.calibration });
+    } else {
+      return res.json({ ok: false, message: 'No calibration stored yet.' });
+    }
+  } catch (error) {
+    console.error('[Camera] Calibration fetch error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 app.post('/cam/calibration/:code', async (req, res) => {
   const code = String(req.params.code || '').toUpperCase();
   if (!code) return res.status(400).json({ error: 'Code required.' });
@@ -577,6 +596,73 @@ app.post('/cam/calibration/:code', async (req, res) => {
     return res.json({ success: true, calibration: sess.calibration });
   } catch (error) {
     console.error('[Camera] Calibration error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+// Camera signal relay via REST polling (fallback when WebSocket unavailable)
+app.get('/cam/signal/:code', async (req, res) => {
+  const code = String(req.params.code || '').toUpperCase();
+  if (!code) return res.status(400).json({ error: 'Code required.' });
+  
+  try {
+    const sess = await camSessions.get(code);
+    if (!sess) return res.status(404).json({ error: 'Pairing session not found.' });
+    
+    // Get any pending messages and clear them
+    const messages = sess.pendingMessages || [];
+    sess.pendingMessages = [];
+    await camSessions.set(code, sess);
+    
+    console.log('[Camera] Returning', messages.length, 'pending signals for code', code);
+    return res.json({ messages });
+  } catch (error) {
+    console.error('[Camera] Signal fetch error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
+app.post('/cam/signal/:code', async (req, res) => {
+  const code = String(req.params.code || '').toUpperCase();
+  if (!code) return res.status(400).json({ error: 'Code required.' });
+  
+  try {
+    const { type, payload, source } = req.body;
+    if (!type) return res.status(400).json({ error: 'Signal type required.' });
+    
+    const sess = await camSessions.get(code);
+    if (!sess) return res.status(404).json({ error: 'Pairing session not found.' });
+    
+    // Initialize pending messages array if needed
+    if (!sess.pendingMessages) sess.pendingMessages = [];
+    
+    // Store the signal as a pending message for the other peer
+    sess.pendingMessages.push({ type, payload, source });
+    
+    // If both peers connected via WebSocket, relay immediately to the other peer
+    if (source === 'phone' && sess.desktopWs && sess.desktopWs.readyState === WebSocket.OPEN) {
+      try {
+        sess.desktopWs.send(JSON.stringify({ type, code, payload }));
+        console.log('[Camera] Relayed signal from phone to desktop:', type);
+      } catch (e) {
+        console.warn('[Camera] Failed to relay to desktop WS:', e);
+      }
+    } else if (source === 'desktop' && sess.phoneWs && sess.phoneWs.readyState === WebSocket.OPEN) {
+      try {
+        sess.phoneWs.send(JSON.stringify({ type, code, payload }));
+        console.log('[Camera] Relayed signal from desktop to phone:', type);
+      } catch (e) {
+        console.warn('[Camera] Failed to relay to phone WS:', e);
+      }
+    }
+    
+    // Save updated session
+    await camSessions.set(code, sess);
+    
+    console.log('[Camera] Stored signal from', source, 'for code', code, ':', type);
+    return res.json({ ok: true, stored: true });
+  } catch (error) {
+    console.error('[Camera] Signal post error:', error);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -1364,6 +1450,28 @@ wss.on('connection', (ws, req) => {
         }
         if (targetWs && targetWs.readyState === 1) {
           try { targetWs.send(JSON.stringify({ type: 'cam-data', code, payload: data.payload })) } catch {}
+        }
+      } else if (data.type === 'cam-offer' || data.type === 'cam-answer' || data.type === 'cam-ice' || data.type === 'cam-calibration') {
+        // Forward WebRTC signals and calibration between desktop and phone
+        const code = String(data.code || '').toUpperCase()
+        const sess = await camSessions.get(code)
+        if (!sess) return
+        // Determine target
+        const targetId = (data.type === 'cam-offer') ? sess.phoneId : (data.type === 'cam-calibration') ? sess.phoneId : sess.desktopId
+        let targetWs = null
+        if (targetId === sess.phoneId && sess.phoneWs) {
+          targetWs = sess.phoneWs
+        } else if (targetId === sess.desktopId && sess.desktopWs) {
+          targetWs = sess.desktopWs
+        }
+        // Try to send via WebSocket, store as pending if not connected
+        if (targetWs && targetWs.readyState === 1) {
+          try { targetWs.send(JSON.stringify({ type: data.type, code, payload: data.payload })) } catch {}
+        } else {
+          // Store as pending message for REST polling fallback
+          if (!sess.pendingMessages) sess.pendingMessages = []
+          sess.pendingMessages.push({ type: data.type, payload: data.payload })
+          await camSessions.set(code, sess)
         }
       } else if (data.type === 'spectate') {
         await leaveRoom(ws);
