@@ -533,10 +533,9 @@
         try {
             await ensureWS();
             log('Joining session...');
-            // Inform server we intend to join (prefer WS)
-            console.log('[Mobile] Sending cam-join signal');
-            await sendSignal('cam-join', null);
-            // Set up WS message handler
+            // Set up WS message handler BEFORE sending join to avoid race condition
+            // (desktop may send offer before handler is attached if we set up after sendSignal)
+            console.log('[Mobile] Setting up WebSocket message handler');
             ws.onmessage = async (ev) => {
                 const data = JSON.parse(ev.data);
                 console.log('[Mobile WS] Received:', data.type, 'code:', code);
@@ -588,6 +587,9 @@
                     sendDiagnostic('cam-error-received', data);
                 }
             };
+            // NOW that handler is set up, inform server we intend to join
+            console.log('[Mobile] Sending cam-join signal (handler ready)');
+            await sendSignal('cam-join', null);
         } catch (e) {
             // WS failed — fall back to polling REST endpoint
             console.warn('WS connect failed, falling back to polling:', e);
