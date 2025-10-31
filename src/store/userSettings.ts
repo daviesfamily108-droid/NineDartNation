@@ -130,11 +130,14 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
   setPreferredCamera: (id, label, force = false) => {
     try {
       const state = get()
+      console.log('[USERSETTINGS] setPreferredCamera called:', { id, label, force, locked: state.preferredCameraLocked })
       if (state.preferredCameraLocked && !force) {
         // Locked: ignore programmatic updates unless explicitly forced by user action
+        console.log('[USERSETTINGS] Camera selection locked and force=false, ignoring update')
         return
       }
     } catch {}
+    console.log('[USERSETTINGS] Saving preferred camera:', { id, label })
     save({ preferredCameraId: id, preferredCameraLabel: label });
     set({ preferredCameraId: id, preferredCameraLabel: label })
   },

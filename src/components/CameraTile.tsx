@@ -28,7 +28,21 @@ export default function CameraTile({
   const [ws, setWs] = useState<WebSocket | null>(null)
   const [pairCode, setPairCode] = useState<string | null>(null)
   const [pc, setPc] = useState<RTCPeerConnection | null>(null)
-  const [mode, setMode] = useState<'local'|'phone'|'wifi'>(() => (localStorage.getItem('ndn:camera:mode') as any) || 'local')
+  
+  // Initialize mode: prioritize phone camera if preferred, otherwise use localStorage
+  const preferredCameraLabel = useUserSettings(s => s.preferredCameraLabel)
+  const [mode, setMode] = useState<'local'|'phone'|'wifi'>(() => {
+    // If phone camera is selected, start in phone mode
+    if (preferredCameraLabel === 'Phone Camera') {
+      console.log('[CAMERATILE] Initializing mode to phone (from preferred camera selection)')
+      return 'phone'
+    }
+    // Otherwise use saved mode or default to local
+    const saved = localStorage.getItem('ndn:camera:mode') as any
+    console.log('[CAMERATILE] Initializing mode to', saved || 'local', '(from localStorage)')
+    return saved || 'local'
+  })
+  
   const [expiresAt, setExpiresAt] = useState<number | null>(null)
   const [now, setNow] = useState<number>(Date.now())
   const [paired, setPaired] = useState<boolean>(false)
@@ -41,7 +55,6 @@ export default function CameraTile({
   const [discoveringUsb, setDiscoveringUsb] = useState<boolean>(false)
   const autoscoreProvider = useUserSettings(s => s.autoscoreProvider)
   const setPreferredCameraLocked = useUserSettings(s => s.setPreferredCameraLocked)
-  const preferredCameraLabel = useUserSettings(s => s.preferredCameraLabel)
 
   if (autoscoreProvider === 'manual') {
     const fallbackBase = fill ? 'rounded-2xl overflow-hidden bg-black w-full flex flex-col' : 'rounded-2xl overflow-hidden bg-black w-full mx-auto'
@@ -92,12 +105,16 @@ export default function CameraTile({
     const proto = useHttps ? 'https' : 'http'
     return `${proto}://${host}:${port}/mobile-cam.html?code=${code}`
   }, [pairCode, lanHost, httpsInfo])
-  useEffect(() => { localStorage.setItem('ndn:camera:mode', mode) }, [mode])
+  useEffect(() => { 
+    console.log('[CAMERATILE] Mode changed to:', mode, '- persisting to localStorage')
+    localStorage.setItem('ndn:camera:mode', mode) 
+  }, [mode])
   
   // Sync phone camera selection from Calibrator into CameraTile mode state
   // When user locks in phone camera in Calibrator, it updates preferredCameraLabel
   // This effect ensures CameraTile's UI reflects that selection
   useEffect(() => {
+    console.log('[CAMERATILE] Checking camera selection sync: preferredCameraLabel=', preferredCameraLabel, 'mode=', mode)
     if (preferredCameraLabel === 'Phone Camera' && mode !== 'phone') {
       console.log('[CAMERATILE] Syncing mode to phone from Calibrator selection')
       setMode('phone')
