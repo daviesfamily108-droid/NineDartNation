@@ -175,9 +175,6 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
             <button type="button" className="underline" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')} disabled={loading}>{mode === 'signin' ? 'Need an account? Sign Up' : 'Already have an account? Sign In'}</button>
             <button type="button" className="underline" onClick={() => setMode('reset')} disabled={loading}>Forgot password?</button>
           </div>
-          <div className="text-xs text-slate-200/80">
-            Tip: Use the admin demo credentials to explore admin features.
-          </div>
         </form>
 
         {/* Hints / Teaser Panel */}
@@ -216,6 +213,14 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
             className="btn mt-4 flex items-center justify-center gap-2"
           >
             <MessageCircle className="w-5 h-5" /> Join BullseyeDartsLeague
+          </a>
+          <a
+            href="https://discord.gg/NineDartNation"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn mt-2 flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20"
+          >
+            <MessageCircle className="w-5 h-5" /> Join NineDartNation
           </a>
         </aside>
       </div>

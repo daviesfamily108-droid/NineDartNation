@@ -311,11 +311,9 @@ export default function Calibrator() {
 		requestCameraPermission()
 	}, [])
 
-	useEffect(() => {
-		return () => stopCamera()
-	}, [])
-
-	// Remove automatic camera restart on preferredCameraId change to prevent flicker
+			useEffect(() => {
+		return () => stopCamera(false)
+	}, [])	// Remove automatic camera restart on preferredCameraId change to prevent flicker
 
 	function ensureWS() {
 		// Return existing WebSocket if it's open or connecting
@@ -422,7 +420,7 @@ export default function Calibrator() {
 					if (peer.connectionState === 'failed' || peer.connectionState === 'disconnected') {
 						console.error('WebRTC connection failed')
 						alert('Camera connection lost. Please try pairing again.')
-						stopCamera()
+						stopCamera(false)
 					} else if (peer.connectionState === 'connected') {
 						console.log('WebRTC connection established')
 					}
@@ -495,7 +493,7 @@ export default function Calibrator() {
 			} catch (err) {
 					console.error('Failed to create WebRTC offer:', err)
 					alert('Failed to establish camera connection. Please try again.')
-					stopCamera()
+					stopCamera(false)
 				}
 			} else if (data.type === 'cam-answer') {
 				console.log('[Calibrator] Received cam-answer')
@@ -507,7 +505,7 @@ export default function Calibrator() {
 					} catch (err) {
 						console.error('Failed to set remote description:', err)
 						alert('Camera pairing failed. Please try again.')
-						stopCamera()
+						stopCamera(false)
 					}
 				} else {
 					console.warn('[Calibrator] Received cam-answer but no peer connection exists')
@@ -529,7 +527,7 @@ export default function Calibrator() {
 			} else if (data.type === 'cam-error') {
 				console.error('Camera pairing error:', data.code)
 				alert(data.code === 'EXPIRED' ? 'Code expired. Generate a new code.' : `Camera error: ${data.code || 'Unknown error'}`)
-				stopCamera()
+				stopCamera(false)
 			} else if (data.type === 'cam-calibration') {
 				// Desktop receives calibration from phone (via server) or phone receives from desktop
 				console.log('[Calibrator] Received calibration from peer:', data.payload)
@@ -648,7 +646,7 @@ export default function Calibrator() {
 		}
 	}
 
-	function stopCamera(autoRevert: boolean = true) {
+	function stopCamera(autoRevert: boolean = false) {
 		if (videoRef.current && videoRef.current.srcObject) {
 			const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
 			tracks.forEach(t => t.stop())
@@ -665,7 +663,8 @@ export default function Calibrator() {
 	    	try { setPreferredCameraLocked(false) } catch {}
 	    	autoLockRef.current = false
 	    }
-	    // If we're stopping camera from phone/wifi mode AND not explicitly choosing a mode, revert to local mode so user can restart camera
+	    // Only revert to local mode if EXPLICITLY requested (user clicked Stop button)
+	    // Otherwise preserve the selected mode so user can go to OfflinePlay and come back
 	    if (autoRevert && (mode === 'phone' || mode === 'wifi')) {
 	    	setMode('local')
 	    }
@@ -723,7 +722,7 @@ export default function Calibrator() {
 				setDstPoints([])
 				setMarkerResult(null)
 				// Clear any previous video stream
-				stopCamera()
+				stopCamera(false)
 			} catch {}
 		}
 		img.onerror = () => { alert('Could not load image. Please try a different photo.') }
@@ -1381,6 +1380,32 @@ export default function Calibrator() {
 							)}
 						</div>
 					</header>
+
+					{locked && H && (
+						<section className="space-y-3 rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm">
+							<div className="flex items-center justify-between gap-2">
+								<div className="flex items-center gap-3">
+									<div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20">
+										<span className="text-lg">✓</span>
+									</div>
+									<div>
+										<h4 className="font-semibold text-emerald-100">Calibration active</h4>
+										<p className="text-xs opacity-80">Your calibration is saved and active across all game modes. It will be used in Online, Offline, and Tournaments.</p>
+									</div>
+								</div>
+								<button
+									className="btn btn--ghost px-2 py-1 text-xs whitespace-nowrap"
+									onClick={() => setCalibration({ locked: false })}
+									title="Unlock to recalibrate"
+								>
+									Unlock
+								</button>
+							</div>
+							{errorPx != null && (
+								<div className="text-xs opacity-75">Precision: {errorPx.toFixed(2)} px RMS error</div>
+							)}
+						</section>
+					)}
 
 					<div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
 						<section className="space-y-4">

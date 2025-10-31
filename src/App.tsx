@@ -14,6 +14,7 @@ import { useWS } from './components/WSProvider'
 import StatusDot from './components/ui/StatusDot'
 import { getRollingAvg, getAllTimeAvg } from './store/profileStats'
 import { useUserSettings } from './store/userSettings'
+import { useCalibration } from './store/calibration'
 import './styles/premium.css'
 import Scoreboard from './components/Scoreboard'
 import CameraView from './components/CameraView'
@@ -40,6 +41,7 @@ export default function App() {
   const [user, setUser] = useState<any>(null)
   const [allTimeAvg, setAllTimeAvg] = useState<number>(0)
   const { avgMode } = useUserSettings()
+  const { H: calibH, locked: calibLocked, errorPx } = useCalibration()
 
 
   // Restore user from token on mount
@@ -361,6 +363,16 @@ export default function App() {
                   >☰ Menu</button>
                 )}
               </div>
+              {/* Calibration Status - visible across all tabs */}
+              {calibLocked && calibH && (
+                <button
+                  onClick={() => setTab('calibrate')}
+                  className="order-4 sm:order-4 md:order-3 px-3 py-1 text-xs sm:text-sm rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 border border-emerald-400/50 transition-colors"
+                  title="Click to adjust calibration"
+                >
+                  ✓ Calibration Active {errorPx != null && `• ${errorPx.toFixed(1)}px`}
+                </button>
+              )}
               {/* Right: Status + Actions */}
               <div className="order-2 md:order-3 ml-0 md:ml-auto flex items-center gap-2 flex-wrap">
                 <button
