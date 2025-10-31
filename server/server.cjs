@@ -477,6 +477,66 @@ app.get('/api/auth/me', (req, res) => {
   }
 });
 
+// User calibration storage (persists calibration matrix to account)
+app.get('/api/user/calibration', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    // Find user by username
+    let user = null;
+    for (const u of users.values()) {
+      if (u.username === decoded.username) {
+        user = u;
+        break;
+      }
+    }
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    
+    const calibration = user.calibration || null;
+    return res.json({ calibration });
+  } catch {
+    return res.status(401).json({ error: 'Invalid token.' });
+  }
+});
+
+app.post('/api/user/calibration', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    // Find user by username
+    let user = null;
+    for (const u of users.values()) {
+      if (u.username === decoded.username) {
+        user = u;
+        break;
+      }
+    }
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    
+    const { H, anchors, imageSize, errorPx } = req.body;
+    if (!H) return res.status(400).json({ error: 'Calibration data (H) required.' });
+    
+    // Store calibration on user object
+    user.calibration = {
+      H,
+      anchors: anchors || null,
+      imageSize: imageSize || null,
+      errorPx: errorPx || null,
+      savedAt: Date.now()
+    };
+    
+    console.log('[Calibration] Saved calibration for user:', user.username);
+    return res.json({ success: true, calibration: user.calibration });
+  } catch (error) {
+    console.error('[Calibration] Error:', error);
+    return res.status(500).json({ error: 'Internal server error.' });
+  }
+});
+
 
 // In-memory subscription store (demo)
 let subscription = { fullAccess: false };
