@@ -421,47 +421,39 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   try {
-    let user = null;
-
-    // Check in-memory users FIRST (fastest path - no network)
+    // Check in-memory users FIRST (fastest path - no network, <1ms)
     for (const u of users.values()) {
       if (u.username === username && u.password === password) {
-        user = u;
-        const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
-        return res.json({ user, token }); // Return immediately - no Supabase call
+        const token = jwt.sign({ username: u.username, email: u.email }, JWT_SECRET, { expiresIn: '100y' });
+        return res.json({ user: u, token }); // Return immediately - no Supabase call
       }
     }
 
-    // If not found in memory AND Supabase is configured, check database
+    // User not in memory - fetch from Supabase ASYNC (don't block login)
+    // Return error immediately, then cache in background for future logins
     if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('username', username)
-          .single();
-
-        if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-          console.error('[DB] Supabase login error:', error);
-        } else if (data && data.password === password) {
-          user = {
-            email: data.email,
-            username: data.username,
-            password: data.password,
-            admin: data.admin || false
-          };
-          // Cache in memory for current session (avoid future DB queries)
-          users.set(data.email, user);
-          const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
-          return res.json({ user, token });
-        }
-      } catch (dbError) {
-        console.error('[LOGIN] Supabase error:', dbError);
-        // Fall through to invalid password response
-      }
+      // Async fetch - doesn't block the response
+      supabase
+        .from('users')
+        .select('*')
+        .eq('username', username)
+        .single()
+        .then(({ data, error }) => {
+          if (!error && data && data.password === password) {
+            // Cache this user for future logins (synchronously)
+            users.set(data.email, {
+              email: data.email,
+              username: data.username,
+              password: data.password,
+              admin: data.admin || false
+            });
+            console.log('[LOGIN] Cached user from Supabase:', username);
+          }
+        })
+        .catch(err => console.warn('[LOGIN] Background Supabase sync failed:', err));
     }
 
-    // No user found
+    // Return invalid immediately (user not in cache, and we don't wait for DB)
     return res.status(401).json({ error: 'Invalid username or password.' });
   } catch (error) {
     console.error('[LOGIN] Error:', error);
