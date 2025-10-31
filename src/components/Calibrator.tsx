@@ -345,29 +345,42 @@ export default function Calibrator() {
 	// Sync video element to camera session so other components can access it
 	// CRITICAL: Run whenever streaming state changes to keep videoRef synced
 	useEffect(() => {
-		console.log('[Calibrator] videoRef useEffect: streaming=', streaming, 'videoRef.current=', !!videoRef.current)
+		console.log('[Calibrator] 🔄 STREAMING CHANGED:', { streaming, videoRefAvailable: !!videoRef.current })
 		if (videoRef.current) {
-			console.log('[Calibrator] Setting videoElementRef to current video element')
+			console.log('[Calibrator] ✅ Syncing videoElementRef on streaming change')
 			cameraSession.setVideoElementRef(videoRef.current)
 			// Also capture media stream when available
 			if (videoRef.current.srcObject instanceof MediaStream) {
-				console.log('[Calibrator] Setting mediaStream from video element')
+				console.log('[Calibrator] ✅ Setting mediaStream from video element')
 				cameraSession.setMediaStream(videoRef.current.srcObject)
 			}
 		} else {
-			console.log('[Calibrator] WARNING: videoRef.current is null!')
+			console.warn('[Calibrator] ⚠️ videoRef.current is null on streaming change!')
 		}
 	}, [streaming])
 
 	// Also sync on mount to capture initial videoRef
 	useEffect(() => {
-		console.log('[Calibrator] Initial mount - syncing videoRef')
+		console.log('[Calibrator] 🚀 MOUNT: Initial mount - syncing videoRef')
+		console.log('[Calibrator] videoRef.current available:', !!videoRef.current)
+		console.log('[Calibrator] videoRef.current type:', videoRef.current?.constructor?.name)
+		
 		if (videoRef.current) {
-			console.log('[Calibrator] Setting videoElementRef on mount')
+			console.log('[Calibrator] ✅ Setting videoElementRef on mount')
+			console.log('[Calibrator] Video element:', {
+				tagName: videoRef.current.tagName,
+				srcObject: !!videoRef.current.srcObject,
+				videoWidth: videoRef.current.videoWidth,
+				videoHeight: videoRef.current.videoHeight,
+			})
 			cameraSession.setVideoElementRef(videoRef.current)
+			console.log('[Calibrator] ✅ videoElementRef set successfully')
+		} else {
+			console.error('[Calibrator] ❌ CRITICAL: videoRef.current is NULL at mount!')
 		}
+		
 		return () => {
-			console.log('[Calibrator] Unmounting - clearing videoElementRef')
+			console.log('[Calibrator] 🛑 UNMOUNT: Clearing videoElementRef')
 			cameraSession.setVideoElementRef(null)
 		}
 	}, [])

@@ -82,11 +82,21 @@ export const useCameraSession = create<CameraSessionState>()(persist((set, get) 
   
   // Keep video element ref outside of state to avoid serialization issues
   getVideoElementRef: () => {
-    console.log('[cameraSession] getVideoElementRef called - ref exists:', !!videoElementRefHolder)
-    return videoElementRefHolder
+    const ref = videoElementRefHolder
+    if (!ref) {
+      console.warn('[cameraSession] ⚠️ getVideoElementRef called but ref is NULL')
+    }
+    return ref
   },
   setVideoElementRef: (ref) => {
-    console.log('[cameraSession] setVideoElementRef called with:', ref ? 'HTMLVideoElement' : 'null')
+    if (ref) {
+      console.log('[cameraSession] ✅ setVideoElementRef called - storing HTMLVideoElement', {
+        tagName: ref.tagName,
+        hasStream: !!ref.srcObject,
+      })
+    } else {
+      console.log('[cameraSession] 🛑 setVideoElementRef called - clearing ref')
+    }
     videoElementRefHolder = ref
   },
   

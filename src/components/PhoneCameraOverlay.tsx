@@ -114,7 +114,35 @@ export default function PhoneCameraOverlay() {
 	}, [shouldShow, minimized])
 
 	if (!shouldShow) {
-		return null
+		// DEBUG: Show why we're not displaying
+		console.warn('[PhoneCameraOverlay] DEBUG: Not showing. State:', {
+			isStreaming: cameraSession.isStreaming,
+			mode: cameraSession.mode,
+			videoElement: !!videoElement,
+			hasHydrated,
+		})
+		// TEMPORARILY: Always render so we can see what's happening
+		return (
+			<div
+				className="fixed z-40 bg-red-900 rounded-lg shadow-xl overflow-hidden border-2 border-red-500"
+				style={{
+					left: '20px',
+					top: '20px',
+					width: '300px',
+					padding: '16px',
+					backgroundColor: 'rgba(127, 29, 29, 0.9)',
+				}}
+			>
+				<div className="text-xs font-mono text-red-200 space-y-1">
+					<div>❌ PhoneCameraOverlay DEBUG</div>
+					<div>isStreaming: {String(cameraSession.isStreaming)}</div>
+					<div>mode: {cameraSession.mode}</div>
+					<div>hasVideoElement: {String(!!videoElement)}</div>
+					<div>hasHydrated: {String(hasHydrated)}</div>
+					<div className="text-[10px] text-red-300 mt-2">Check console for detailed logs</div>
+				</div>
+			</div>
+		)
 	}
 
 	const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
