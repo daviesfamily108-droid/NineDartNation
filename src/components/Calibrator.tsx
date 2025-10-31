@@ -318,7 +318,11 @@ export default function Calibrator() {
 	// Remove automatic camera restart on preferredCameraId change to prevent flicker
 
 	function ensureWS() {
-		if (ws && ws.readyState === WebSocket.OPEN) return ws
+		// Return existing WebSocket if it's open or connecting
+		if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+			console.log('[Calibrator] ensureWS: Reusing existing WebSocket (state:', ws.readyState, ')')
+			return ws
+		}
 		// Prefer configured WS endpoint; normalize to include '/ws'. Fallback to same-origin '/ws'.
 			const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined
 			const normalizedEnv = envUrl && envUrl.length > 0
@@ -331,8 +335,32 @@ export default function Calibrator() {
 			// prefer the known Render service as a fallback instead of Netlify same-origin.
 			const renderWS = `wss://ninedartnation.onrender.com/ws`
 			const url = normalizedEnv || (host.endsWith('onrender.com') ? sameOrigin : renderWS)
-			console.log('[Calibrator] Connecting WebSocket to:', url)
+			console.log('[Calibrator] ensureWS: Creating new WebSocket to:', url)
 			let socket: WebSocket = new WebSocket(url)
+		
+		// Set up handlers BEFORE storing the socket to avoid race conditions
+		socket.onerror = (error) => {
+			console.error('[Calibrator] WebSocket connection error:', error)
+			alert('Failed to connect to camera pairing service. Please check your internet connection and try again.')
+		}
+		socket.onclose = (event) => {
+			console.log('[Calibrator] WebSocket closed:', event.code, event.reason)
+			if (pcRef.current) {
+				try { pcRef.current.close() } catch {}
+				pcRef.current = null
+			}
+			updatePairCode(null)
+			setExpiresAt(null)
+			setPaired(false)
+			// Only show alert if it wasn't a clean close
+			if (event.code !== 1000) {
+				alert('Camera pairing connection lost. Please try pairing again.')
+				// Also revert to local mode on disconnect so user can restart camera
+				if (mode === 'phone') setMode('local')
+			}
+		}
+		
+		// Store socket BEFORE setting message handler to ensure it's available for message sending
 		setWs(socket)
 		return socket
 	}
@@ -349,29 +377,15 @@ export default function Calibrator() {
 		lockSelectionForPairing()
 		try { setCameraEnabled(true) } catch {}
 		const socket = ensureWS()
+		// Send cam-create when socket is ready
 		if (socket.readyState === WebSocket.OPEN) {
+			console.log('[Calibrator] WebSocket open, sending cam-create')
 			socket.send(JSON.stringify({ type: 'cam-create' }))
 		} else {
-			socket.onopen = () => socket.send(JSON.stringify({ type: 'cam-create' }))
-		}
-		socket.onerror = (error) => {
-			console.error('WebSocket connection error:', error)
-			alert('Failed to connect to camera pairing service. Please check your internet connection and try again.')
-		}
-		socket.onclose = (event) => {
-			console.log('WebSocket closed:', event.code, event.reason)
-			if (pcRef.current) {
-				try { pcRef.current.close() } catch {}
-				pcRef.current = null
-			}
-			updatePairCode(null)
-			setExpiresAt(null)
-			setPaired(false)
-			// Only show alert if it wasn't a clean close
-			if (event.code !== 1000) {
-				alert('Camera pairing connection lost. Please try pairing again.')
-				// Also revert to local mode on disconnect so user can restart camera
-				if (mode === 'phone') setMode('local')
+			console.log('[Calibrator] WebSocket connecting, will send cam-create on open')
+			socket.onopen = () => {
+				console.log('[Calibrator] WebSocket now open, sending cam-create')
+				socket.send(JSON.stringify({ type: 'cam-create' }))
 			}
 		}
 		socket.onmessage = async (ev) => {
