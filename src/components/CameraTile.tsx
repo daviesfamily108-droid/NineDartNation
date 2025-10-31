@@ -531,7 +531,20 @@ function CameraFrame(props: any) {
 
   return (
     <div className={containerClass} style={containerStyle}>
-      <div className={viewportClass}>{videoElement}</div>
+      <div className={viewportClass}>
+        {mode === 'phone' && streaming ? (
+          // When phone camera is active, display a placeholder since feed shows in overlay
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-slate-900 to-slate-950 text-slate-300 text-sm">
+            <div className="text-center">
+              <div className="text-2xl mb-2">📱</div>
+              <div className="font-semibold">Phone Camera Active</div>
+              <div className="text-xs opacity-75 mt-1">Feed displayed above in floating overlay</div>
+            </div>
+          </div>
+        ) : (
+          videoElement
+        )}
+      </div>
       <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
         <span className="truncate">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : mode==='wifi' ? 'WIFI LIVE' : 'LIVE') : 'Camera')}</span>
         <div className="flex items-center gap-1">

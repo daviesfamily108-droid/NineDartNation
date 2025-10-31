@@ -81,8 +81,12 @@ export const useCameraSession = create<CameraSessionState>()(persist((set, get) 
   getWsRef: () => wsRefHolder,
   
   // Keep video element ref outside of state to avoid serialization issues
-  getVideoElementRef: () => videoElementRefHolder,
+  getVideoElementRef: () => {
+    console.log('[cameraSession] getVideoElementRef called - ref exists:', !!videoElementRefHolder)
+    return videoElementRefHolder
+  },
   setVideoElementRef: (ref) => {
+    console.log('[cameraSession] setVideoElementRef called with:', ref ? 'HTMLVideoElement' : 'null')
     videoElementRefHolder = ref
   },
   
