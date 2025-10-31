@@ -25,7 +25,8 @@ export default function PhoneCameraOverlay() {
 	// - Camera session not streaming
 	// - Or no video element available
 	// - Or mode is not 'phone'
-	const shouldShow = cameraSession.isStreaming && cameraSession.mode === 'phone' && cameraSession.videoElementRef
+	const videoElement = cameraSession.getVideoElementRef()
+	const shouldShow = cameraSession.isStreaming && cameraSession.mode === 'phone' && videoElement
 
 	// Render video frames to canvas
 	useEffect(() => {
@@ -41,7 +42,7 @@ export default function PhoneCameraOverlay() {
 		const ctx = canvas.getContext('2d')
 		if (!ctx) return
 
-		const sourceVideo = cameraSession.videoElementRef
+		const sourceVideo = cameraSession.getVideoElementRef()
 
 		const renderFrame = () => {
 			if (sourceVideo && ctx) {
@@ -76,7 +77,7 @@ export default function PhoneCameraOverlay() {
 				animationFrameRef.current = null
 			}
 		}
-	}, [shouldShow, minimized, cameraSession.videoElementRef])
+	}, [shouldShow, minimized])
 
 	if (!shouldShow) {
 		return null
@@ -114,7 +115,7 @@ export default function PhoneCameraOverlay() {
 					ctx.fillStyle = '#000000'
 					ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height)
 					// Draw current frame immediately
-					const sourceVideo = cameraSession.videoElementRef
+					const sourceVideo = cameraSession.getVideoElementRef()
 					if (sourceVideo && canvasRef.current.width > 0) {
 						ctx.drawImage(sourceVideo, 0, 0, canvasRef.current.width, canvasRef.current.height)
 					}

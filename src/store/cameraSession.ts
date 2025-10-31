@@ -2,6 +2,9 @@ import { create } from 'zustand'
 
 export type CameraStreamMode = 'local' | 'phone' | 'wifi'
 
+// Separate ref holder (not in Zustand state) to avoid serialization issues
+let videoElementRefHolder: HTMLVideoElement | null = null
+
 type CameraSessionState = {
   // Stream state - persists across navigation
   isStreaming: boolean
@@ -11,8 +14,7 @@ type CameraSessionState = {
   isPaired: boolean
   mobileUrl: string | null
   
-  // Shared video element - Calibrator renders video, other components read srcObject
-  videoElementRef: HTMLVideoElement | null
+  // Shared media stream reference (DOM element kept in separate ref to avoid Zustand serialization)
   mediaStream: MediaStream | null
   
   // WebRTC connection reference
@@ -26,16 +28,19 @@ type CameraSessionState = {
   setExpiresAt: (time: number | null) => void
   setPaired: (paired: boolean) => void
   setMobileUrl: (url: string | null) => void
-  setVideoElementRef: (ref: HTMLVideoElement | null) => void
   setMediaStream: (stream: MediaStream | null) => void
   setPcRef: (pc: RTCPeerConnection | null) => void
   setWsRef: (ws: WebSocket | null) => void
+  
+  // Get video element ref (not stored in state to avoid serialization)
+  getVideoElementRef: () => HTMLVideoElement | null
+  setVideoElementRef: (ref: HTMLVideoElement | null) => void
   
   // Clear session when user stops camera
   clearSession: () => void
 }
 
-export const useCameraSession = create<CameraSessionState>((set) => ({
+export const useCameraSession = create<CameraSessionState>((set, get) => ({
   isStreaming: false,
   mode: (() => {
     try {
@@ -48,7 +53,6 @@ export const useCameraSession = create<CameraSessionState>((set) => ({
   expiresAt: null,
   isPaired: false,
   mobileUrl: null,
-  videoElementRef: null,
   mediaStream: null,
   pcRef: null,
   wsRef: null,
@@ -64,20 +68,27 @@ export const useCameraSession = create<CameraSessionState>((set) => ({
   setExpiresAt: (time) => set({ expiresAt: time }),
   setPaired: (paired) => set({ isPaired: paired }),
   setMobileUrl: (url) => set({ mobileUrl: url }),
-  setVideoElementRef: (ref) => set({ videoElementRef: ref }),
   setMediaStream: (stream) => set({ mediaStream: stream }),
   setPcRef: (pc) => set({ pcRef: pc }),
   setWsRef: (ws) => set({ wsRef: ws }),
   
-  clearSession: () => set({
-    isStreaming: false,
-    pairingCode: null,
-    expiresAt: null,
-    isPaired: false,
-    mobileUrl: null,
-    videoElementRef: null,
-    mediaStream: null,
-    pcRef: null,
-    wsRef: null,
-  }),
+  // Keep video element ref outside of state to avoid serialization issues
+  getVideoElementRef: () => videoElementRefHolder,
+  setVideoElementRef: (ref) => {
+    videoElementRefHolder = ref
+  },
+  
+  clearSession: () => {
+    videoElementRefHolder = null
+    set({
+      isStreaming: false,
+      pairingCode: null,
+      expiresAt: null,
+      isPaired: false,
+      mobileUrl: null,
+      mediaStream: null,
+      pcRef: null,
+      wsRef: null,
+    })
+  },
 }))

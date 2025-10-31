@@ -350,7 +350,7 @@ export default function Calibrator() {
 				cameraSession.setMediaStream(videoRef.current.srcObject)
 			}
 		}
-	}, [videoRef, cameraSession])
+	}, [])
 
 	function ensureWS() {
 		// Return existing WebSocket if it's open or connecting
