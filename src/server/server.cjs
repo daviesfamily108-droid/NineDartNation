@@ -1383,15 +1383,9 @@ wss.on('connection', (ws, req) => {
         const code = String(data.code || '').toUpperCase()
         const sess = camSessions.get(code)
         if (!sess) { try { ws.send(JSON.stringify({ type: 'cam-error', code: 'INVALID_CODE' })) } catch {}; return }
-        // Expire stale codes ONLY if phone hasn't joined yet (once paired, keep alive)
-        if (!sess.phoneId && sess.ts && (Date.now() - sess.ts) > CAM_TTL_MS) { 
-          camSessions.delete(code)
-          try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {}
-          return 
-        }
+        // Expire stale codes
+        if (sess.ts && (Date.now() - sess.ts) > CAM_TTL_MS) { camSessions.delete(code); try { ws.send(JSON.stringify({ type: 'cam-error', code: 'EXPIRED' })) } catch {}; return }
         sess.phoneId = ws._id
-        // Reset timestamp when phone joins successfully so the session stays alive while streaming
-        sess.ts = Date.now()
         camSessions.set(code, sess)
         const desktop = clients.get(sess.desktopId)
         if (desktop && desktop.readyState === 1) desktop.send(JSON.stringify({ type: 'cam-peer-joined', code }))
