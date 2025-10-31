@@ -284,6 +284,33 @@ export default function Calibrator() {
 	}, [])
 	// Removed automatic regeneration of code when ttl expires. Only regenerate on explicit user action.
 
+	// Request camera permission on component load
+	useEffect(() => {
+		async function requestCameraPermission() {
+			try {
+				console.log('[Calibrator] Requesting camera permission on load...')
+				// This will prompt the user for permission if not already granted
+				await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+				console.log('[Calibrator] Camera permission granted')
+				// Stop the stream we just started for permission check
+				if (navigator.mediaDevices) {
+					const devices = await navigator.mediaDevices.enumerateDevices()
+					console.log('[Calibrator] Found devices:', devices.filter(d => d.kind === 'videoinput').length, 'cameras')
+				}
+			} catch (err: any) {
+				const name = (err && (err.name || err.code)) || ''
+				if (name === 'NotAllowedError') {
+					console.warn('[Calibrator] Camera permission denied by user')
+				} else if (name === 'NotFoundError' || name === 'NotAvailable') {
+					console.warn('[Calibrator] No camera device found')
+				} else {
+					console.warn('[Calibrator] Camera permission request failed:', err)
+				}
+			}
+		}
+		requestCameraPermission()
+	}, [])
+
 	useEffect(() => {
 		return () => stopCamera()
 	}, [])
@@ -1443,7 +1470,23 @@ export default function Calibrator() {
 								<div className="flex flex-wrap gap-2">
 									{!streaming ? (
 										<>
-											{mode === 'local' && <button className="btn" onClick={startCamera}>Start camera</button>}
+											{mode === 'local' && (
+												<>
+													<button className="btn" onClick={startCamera} title="Click to enable camera (will request permission if needed)">
+														Enable camera
+													</button>
+													<button className="btn btn--ghost text-xs" onClick={async () => {
+														try {
+															await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+															console.log('[Calibrator] Camera permission granted via button')
+														} catch (err) {
+															alert('Camera permission denied. Please enable camera access in your browser settings.')
+														}
+													}}>
+														Request permission
+													</button>
+												</>
+											)}
 											{mode === 'phone' && <button className="btn" onClick={startPhonePairing}>Pair phone camera</button>}
 											{mode === 'wifi' && <button className="btn" onClick={startWifiConnection}>Connect wifi camera</button>}
 										</>
