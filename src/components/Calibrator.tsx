@@ -314,6 +314,10 @@ export default function Calibrator() {
 		// Do not reset paired/streaming/phase state here to keep UI static
 		// Switch UI into phone pairing mode so the calibrator shows phone-specific hints
 		setMode('phone')
+		// Stop any existing camera streams before switching to phone mode
+		// This ensures clean transition and no resource conflicts
+		// Use true for autoRevert since we're explicitly switching modes, but we already set mode above
+		stopCamera(false)
 		// Lock selection and ensure camera UI is enabled while pairing is active
 		lockSelectionForPairing()
 		try { setCameraEnabled(true) } catch {}
@@ -334,9 +338,13 @@ export default function Calibrator() {
 				pcRef.current = null
 			}
 			updatePairCode(null)
+			setExpiresAt(null)
+			setPaired(false)
 			// Only show alert if it wasn't a clean close
 			if (event.code !== 1000) {
 				alert('Camera pairing connection lost. Please try pairing again.')
+				// Also revert to local mode on disconnect so user can restart camera
+				if (mode === 'phone') setMode('local')
 			}
 		}
 		socket.onmessage = async (ev) => {
@@ -397,6 +405,11 @@ export default function Calibrator() {
 						setTimeout(() => {
 							if (videoRef.current) {
 										console.log('[Calibrator] Setting srcObject and attempting play')
+										// Clean up any existing stream before assigning new one
+										if (videoRef.current.srcObject) {
+											const existingTracks = (videoRef.current.srcObject as MediaStream).getTracks()
+											existingTracks.forEach(t => t.stop())
+										}
 										videoRef.current.srcObject = inbound
 										videoRef.current.muted = true // Ensure muted for autoplay policy
 										videoRef.current.playsInline = true // Mobile/iOS support
@@ -505,6 +518,11 @@ export default function Calibrator() {
 
 			const stream = await connectToNetworkDevice(device)
 			if (stream && videoRef.current) {
+				// Clean up any existing stream before assigning new one
+				if (videoRef.current.srcObject) {
+					const existingTracks = (videoRef.current.srcObject as MediaStream).getTracks()
+					existingTracks.forEach(t => t.stop())
+				}
 				videoRef.current.srcObject = stream
 				await videoRef.current.play()
 				setStreaming(true)
@@ -549,21 +567,29 @@ export default function Calibrator() {
 				}
 			}
 			if (videoRef.current) {
+				// Clean up any existing stream before assigning new one
+				if (videoRef.current.srcObject) {
+					const existingTracks = (videoRef.current.srcObject as MediaStream).getTracks()
+					existingTracks.forEach(t => t.stop())
+				}
 				videoRef.current.srcObject = stream
 				await videoRef.current.play()
 				console.log('[Calibrator] Video playback started')
+				setStreaming(true)
+				setPhase('capture')
 			} else {
-				console.warn('[Calibrator] videoRef.current is null')
+				console.warn('[Calibrator] videoRef.current is null - cannot display camera')
+				// Clean up the stream if we can't use it
+				stream.getTracks().forEach(t => t.stop())
+				throw new Error('Camera element not available')
 			}
-			setStreaming(true)
-			setPhase('capture')
 		} catch (e) {
 			console.error('[Calibrator] Camera access failed:', e)
 			alert(`Camera access failed: ${e instanceof Error ? e.message : 'Unknown error'}. Try refreshing the page or check camera permissions.`)
 		}
 	}
 
-	function stopCamera() {
+	function stopCamera(autoRevert: boolean = true) {
 		if (videoRef.current && videoRef.current.srcObject) {
 			const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
 			tracks.forEach(t => t.stop())
@@ -579,6 +605,10 @@ export default function Calibrator() {
 	    if (autoLockRef.current) {
 	    	try { setPreferredCameraLocked(false) } catch {}
 	    	autoLockRef.current = false
+	    }
+	    // If we're stopping camera from phone/wifi mode AND not explicitly choosing a mode, revert to local mode so user can restart camera
+	    if (autoRevert && (mode === 'phone' || mode === 'wifi')) {
+	    	setMode('local')
 	    }
 	}
 
@@ -1289,14 +1319,14 @@ export default function Calibrator() {
 										<div className="flex items-center gap-1">
 											<button
 												className={`btn px-3 py-1 ${mode === 'local' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 hover:bg-slate-600'}`}
-												onClick={() => { setMode('local'); stopCamera() }}
+												onClick={() => { setMode('local'); stopCamera(false) }}
 												title="Use local camera"
 											>
 												Local
 											</button>
 											<button
 												className={`btn px-3 py-1 ${mode === 'phone' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 hover:bg-slate-600'}`}
-												onClick={() => { setMode('phone'); stopCamera() }}
+												onClick={() => { setMode('phone'); stopCamera(false) }}
 												title="Pair phone camera"
 											>
 												Phone
@@ -1305,7 +1335,7 @@ export default function Calibrator() {
 												className={`btn px-3 py-1 ${mode === 'wifi' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 hover:bg-slate-600'}`}
 												onClick={() => {
 													setMode('wifi')
-													stopCamera()
+													stopCamera(false)
 													startWifiConnection()
 												}}
 												title="Discover wifi/USB autoscoring devices"
@@ -1419,7 +1449,7 @@ export default function Calibrator() {
 										</>
 									) : (
 										<>
-											<button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop camera</button>
+											<button className="btn bg-rose-600 hover:bg-rose-700" onClick={() => stopCamera(true)}>Stop camera</button>
 											<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture frame</button>
 										</>
 									)}
