@@ -1245,7 +1245,7 @@ wss.on('connection', (ws, req) => {
         if (desktop && desktop.readyState === 1) {
           try { desktop.send(JSON.stringify({ type: 'cam-peer-joined', code })) } catch {}
         }
-        try { ws.send(JSON.stringify({ type: 'cam-peer-joined', code })) } catch {}
+        try { ws.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
       } else if (data.type === 'cam-data') {
         // Forward camera data between desktop and phone
         const code = String(data.code || '').toUpperCase()
