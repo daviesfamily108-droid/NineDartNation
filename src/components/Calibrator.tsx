@@ -14,6 +14,57 @@ import { apiFetch } from '../utils/api'
 type Phase = 'idle' | 'camera' | 'capture' | 'select' | 'computed'
 type CamMode = 'local' | 'phone' | 'wifi'
 
+// --- QR helpers: compose a center logo on the QR image and keep scan reliability ---
+async function loadImage(src: string): Promise<HTMLImageElement> {
+	return new Promise((resolve, reject) => {
+		const img = new Image()
+		img.onload = () => resolve(img)
+		img.onerror = (e) => reject(e)
+		img.src = src
+	})
+}
+
+async function composeQrWithLogo(qrDataUrl: string, logoUrl: string): Promise<string> {
+	const [qrImg, logoImg] = await Promise.all([
+		loadImage(qrDataUrl),
+		loadImage(logoUrl),
+	])
+	// Use the QR image dimensions directly to preserve sharpness
+	const w = Math.max(160, qrImg.width || 160)
+	const h = Math.max(160, qrImg.height || 160)
+	const canvas = document.createElement('canvas')
+	canvas.width = w
+	canvas.height = h
+	const ctx = canvas.getContext('2d')!
+	// Base white background (quiet zone is already baked into QR, this is just safety)
+	ctx.fillStyle = '#ffffff'
+	ctx.fillRect(0, 0, w, h)
+	// Draw the QR
+	ctx.imageSmoothingEnabled = false
+	ctx.drawImage(qrImg, 0, 0, w, h)
+	// Center logo composition with a white round bumper for readability
+	const cx = w / 2
+	const cy = h / 2
+	const logoSize = Math.round(Math.min(w, h) * 0.26) // ~26% of side
+	const r = logoSize / 2
+	// White bumper circle (slightly larger than logo) to keep scan paths clean
+	ctx.save()
+	ctx.beginPath()
+	ctx.arc(cx, cy, r * 1.12, 0, Math.PI * 2)
+	ctx.closePath()
+	ctx.fillStyle = '#ffffff'
+	ctx.fill()
+	// Clip to a perfect circle for the logo to appear round
+	ctx.beginPath()
+	ctx.arc(cx, cy, r, 0, Math.PI * 2)
+	ctx.closePath()
+	ctx.clip()
+	// Draw the logo centered
+	ctx.drawImage(logoImg, cx - r, cy - r, logoSize, logoSize)
+	ctx.restore()
+	return canvas.toDataURL('image/png')
+}
+
 export default function Calibrator() {
 	const videoRef = useRef<HTMLVideoElement>(null)
 	const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -244,8 +295,17 @@ export default function Calibrator() {
 
 	useEffect(() => {
 		if (!pairCode) { setQrDataUrl(''); return }
-		QRCode.toDataURL(mobileUrl, { width: 160, margin: 1, color: { dark: '#000000', light: '#ffffff' } })
-			.then(setQrDataUrl)
+		// Generate a crisp QR, then composite the center logo
+		QRCode.toDataURL(mobileUrl, { width: 256, margin: 2, color: { dark: '#000000', light: '#ffffff' } })
+			.then(async (base) => {
+				try {
+					const composed = await composeQrWithLogo(base, '/dart-thrower.svg')
+					setQrDataUrl(composed)
+				} catch (e) {
+					// Fallback to plain QR if logo fails to load
+					setQrDataUrl(base)
+				}
+			})
 			.catch(() => setQrDataUrl(''))
 	}, [mobileUrl, pairCode])
 
@@ -1660,7 +1720,11 @@ export default function Calibrator() {
 											<span className="text-[10px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'code' ? 'Copied!' : 'Copy code'}</span>
 										</button>
 									)}
-									{qrDataUrl && <img className="mt-1 h-40 w-40 rounded bg-white" alt="Scan to open" src={qrDataUrl} />}
+									{qrDataUrl && (
+										<div className="mt-1 inline-flex h-40 w-40 items-center justify-center rounded-full bg-white p-3 shadow-inner ring-1 ring-white/40">
+											<img className="h-full w-full rounded" alt="Scan to open" src={qrDataUrl} />
+										</div>
+									)}
 									<div className="flex items-center gap-2">
 										{ttl !== null && <span>Expires in {ttl}s</span>}
 										<button className="btn px-2 py-1 text-xs" onClick={regenerateCode}>Regenerate</button>
