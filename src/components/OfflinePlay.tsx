@@ -5,7 +5,6 @@ import { useUserSettings } from '../store/userSettings';
 import { useToast } from '../store/toast';
 import CameraTile from './CameraTile'
 import CameraView from './CameraView'
-import PhoneCameraOverlay from './PhoneCameraOverlay'
 import HeatMap from './HeatMap'
 import { getUserCurrency, formatPriceInCurrency } from '../utils/config';
 import { bumpGameMode } from '../store/profileStats'
@@ -2007,8 +2006,7 @@ export default function OfflinePlay({ user }: { user: any }) {
         </div>
       )}
       
-      {/* Phone camera overlay when paired */}
-      <PhoneCameraOverlay />
+  {/* Phone camera overlay removed per UX preference; use header badge preview only */}
     </div>
   );
 }

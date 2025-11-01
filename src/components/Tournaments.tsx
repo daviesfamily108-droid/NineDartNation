@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import ResizableModal from './ui/ResizableModal'
 import { useToast } from '../store/toast'
-import PhoneCameraOverlay from './PhoneCameraOverlay'
 import { useWS } from './WSProvider'
 import { apiFetch } from '../utils/api'
 
@@ -514,8 +513,7 @@ export default function Tournaments({ user }: { user: any }) {
         </div>
       )}
       
-      {/* Phone camera overlay when paired */}
-      <PhoneCameraOverlay />
+  {/* Phone camera overlay removed per UX preference; header badge preview only */}
     </div>
   )
 }

@@ -30,7 +30,6 @@ import OpsDashboard from './components/OpsDashboard'
 import HelpAssistant from './components/HelpAssistant'
 import GlobalCameraLogger from './components/GlobalCameraLogger'
 import GlobalPhoneVideoSink from './components/GlobalPhoneVideoSink'
-import PhoneCameraOverlay from './components/PhoneCameraOverlay'
 import CameraStatusBadge from './components/CameraStatusBadge'
 
 export default function App() {
@@ -490,7 +489,6 @@ export default function App() {
       {/* Global phone camera overlay - visibility controlled by store */}
   {/* Keep a hidden global video element alive across navigation */}
   <GlobalPhoneVideoSink />
-  <PhoneCameraOverlay />
     </ThemeProvider>
   )
 }

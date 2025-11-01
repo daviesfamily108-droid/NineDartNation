@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import QRCode from 'qrcode'
 import { useUserSettings } from '../store/userSettings'
+import { useCameraSession } from '../store/cameraSession'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice, discoverUSBDevices, requestUSBDevice, connectToUSBDevice, type USBDevice } from '../utils/networkDevices'
 import { apiFetch } from '../utils/api'
 
@@ -24,6 +25,7 @@ export default function CameraTile({
   fill = false,
 }: CameraTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const cameraSession = useCameraSession()
   const [streaming, setStreaming] = useState(false)
   const [ws, setWs] = useState<WebSocket | null>(null)
   const [pairCode, setPairCode] = useState<string | null>(null)
@@ -146,17 +148,46 @@ export default function CameraTile({
     }
   }, [autoStart, preferredCameraLabel])
 
+  // If the user selected Phone Camera, bind the global stream into this tile
+  useEffect(() => {
+    const apply = async () => {
+      try {
+        if (preferredCameraLabel !== 'Phone Camera' && mode !== 'phone') return
+        const s = cameraSession.getMediaStream()
+        const v = videoRef.current
+        if (!v || !s) return
+        if (v.srcObject !== s) {
+          v.srcObject = s
+        }
+        v.muted = true
+        ;(v as any).playsInline = true
+        try { await v.play() } catch {}
+        setStreaming(true)
+      } catch {}
+    }
+    // Try immediately and poll briefly to catch late-arriving stream
+    apply()
+    const t = setInterval(apply, 800)
+    return () => clearInterval(t)
+  }, [preferredCameraLabel, mode, cameraSession, cameraSession.isStreaming])
+
   async function start() {
     if (mode === 'wifi') {
       return startWifiConnection()
     }
 
     // If phone camera is selected and paired, don't try to start local camera
-    // The phone camera is displayed via PhoneCameraOverlay
-    if (preferredCameraLabel === 'Phone Camera') {
-      console.log('[CAMERATILE] Phone camera is selected - skipping local camera startup')
-      console.log('[CAMERATILE] Phone camera feed shown via overlay')
-      return
+    if (preferredCameraLabel === 'Phone Camera' || mode === 'phone') {
+      const s = cameraSession.getMediaStream()
+      if (s && videoRef.current) {
+        try {
+          videoRef.current.srcObject = s
+          await videoRef.current.play()
+          setStreaming(true)
+          return
+        } catch {}
+      }
+      // If no global stream yet, fall through to default behavior
     }
 
     try {
