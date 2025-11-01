@@ -41,7 +41,7 @@ export default function PhoneCameraOverlay() {
 	// - Or no video element available
 	// - Or mode is not 'phone'
 	const videoElement = cameraSession.getVideoElementRef()
-	const shouldShow = cameraSession.isStreaming && cameraSession.mode === 'phone' && videoElement
+	const shouldShow = cameraSession.showOverlay && cameraSession.isStreaming && cameraSession.mode === 'phone' && videoElement
 
 	// Log to help debug black screen issue
 	useEffect(() => {
@@ -60,7 +60,7 @@ export default function PhoneCameraOverlay() {
 		} else {
 			console.log('[PhoneCameraOverlay] ✓ ALL CONDITIONS MET - Should display camera overlay')
 		}
-	}, [shouldShow, cameraSession.isStreaming, cameraSession.mode, videoElement, hasHydrated])
+	}, [shouldShow, cameraSession.isStreaming, cameraSession.mode, cameraSession.showOverlay, videoElement, hasHydrated])
 
 	// Render video frames to canvas
 	useEffect(() => {
@@ -122,27 +122,7 @@ export default function PhoneCameraOverlay() {
 			hasHydrated,
 		})
 		// TEMPORARILY: Always render so we can see what's happening
-		return (
-			<div
-				className="fixed z-40 bg-red-900 rounded-lg shadow-xl overflow-hidden border-2 border-red-500"
-				style={{
-					left: '20px',
-					top: '20px',
-					width: '300px',
-					padding: '16px',
-					backgroundColor: 'rgba(127, 29, 29, 0.9)',
-				}}
-			>
-				<div className="text-xs font-mono text-red-200 space-y-1">
-					<div>❌ PhoneCameraOverlay DEBUG</div>
-					<div>isStreaming: {String(cameraSession.isStreaming)}</div>
-					<div>mode: {cameraSession.mode}</div>
-					<div>hasVideoElement: {String(!!videoElement)}</div>
-					<div>hasHydrated: {String(hasHydrated)}</div>
-					<div className="text-[10px] text-red-300 mt-2">Check console for detailed logs</div>
-				</div>
-			</div>
-		)
+		return null
 	}
 
 	const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -210,6 +190,15 @@ export default function PhoneCameraOverlay() {
 			setIsReconnecting(false)
 		}
 	}
+
+	// Listen for global toggle event from header badge
+	useEffect(() => {
+		const handler = () => {
+			try { cameraSession.setShowOverlay(!cameraSession.showOverlay) } catch {}
+		}
+		window.addEventListener('ndn:toggle-phone-overlay', handler)
+		return () => { window.removeEventListener('ndn:toggle-phone-overlay', handler) }
+	}, [cameraSession.showOverlay])
 
 	return (
 		<div

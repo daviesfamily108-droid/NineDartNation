@@ -18,6 +18,8 @@ type CameraSessionState = {
   expiresAt: number | null
   isPaired: boolean
   mobileUrl: string | null
+  // UI: whether the floating phone overlay is visible
+  showOverlay: boolean
   
   // Actions
   setStreaming: (streaming: boolean) => void
@@ -26,6 +28,7 @@ type CameraSessionState = {
   setExpiresAt: (time: number | null) => void
   setPaired: (paired: boolean) => void
   setMobileUrl: (url: string | null) => void
+  setShowOverlay: (v: boolean) => void
   
   // Methods for managing non-serializable refs (not in state)
   setMediaStream: (stream: MediaStream | null) => void
@@ -50,6 +53,7 @@ export const useCameraSession = create<CameraSessionState>()(persist((set, get) 
   expiresAt: null,
   isPaired: false,
   mobileUrl: null,
+  showOverlay: true,
   
   setStreaming: (streaming) => {
     console.log('[CAMERA_SESSION] setStreaming:', streaming)
@@ -63,6 +67,7 @@ export const useCameraSession = create<CameraSessionState>()(persist((set, get) 
   setExpiresAt: (time) => set({ expiresAt: time }),
   setPaired: (paired) => set({ isPaired: paired }),
   setMobileUrl: (url) => set({ mobileUrl: url }),
+  setShowOverlay: (v) => set({ showOverlay: !!v }),
   
   // Non-serializable refs stored outside state
   setMediaStream: (stream) => {
@@ -111,6 +116,7 @@ export const useCameraSession = create<CameraSessionState>()(persist((set, get) 
       expiresAt: null,
       isPaired: false,
       mobileUrl: null,
+      // Keep overlay state; do not forcibly hide on clear so user choice persists
     })
   },
 }), {
@@ -124,5 +130,6 @@ export const useCameraSession = create<CameraSessionState>()(persist((set, get) 
     expiresAt: state.expiresAt,
     isPaired: state.isPaired,
     mobileUrl: state.mobileUrl,
+    showOverlay: state.showOverlay,
   }),
 }))

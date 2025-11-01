@@ -28,6 +28,9 @@ import Drawer from './components/ui/Drawer'
 import { getDominantColorFromImage, stringToColor } from './utils/color'
 import OpsDashboard from './components/OpsDashboard'
 import HelpAssistant from './components/HelpAssistant'
+import GlobalCameraLogger from './components/GlobalCameraLogger'
+import PhoneCameraOverlay from './components/PhoneCameraOverlay'
+import CameraStatusBadge from './components/CameraStatusBadge'
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -396,6 +399,8 @@ export default function App() {
                     }}
                   >ONLINE DEMO</button>
                 )}
+                {/* Camera status badge */}
+                <CameraStatusBadge />
                 {ws ? (
                   <span className="ml-0 md:ml-2"><StatusDot status={ws.status} /></span>
                 ) : null}
@@ -477,8 +482,12 @@ export default function App() {
         </div>
       </div>
 
-      {/* Floating Help Assistant - Always visible */}
-      <HelpAssistant />
+  {/* Floating Help Assistant - Always visible */}
+  <HelpAssistant />
+  {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
+  <GlobalCameraLogger />
+      {/* Global phone camera overlay - visibility controlled by store */}
+      <PhoneCameraOverlay />
     </ThemeProvider>
   )
 }
