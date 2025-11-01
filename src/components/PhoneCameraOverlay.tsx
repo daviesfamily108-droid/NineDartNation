@@ -41,7 +41,10 @@ export default function PhoneCameraOverlay() {
 	// - Or no video element available
 	// - Or mode is not 'phone'
 	const videoElement = cameraSession.getVideoElementRef()
-	const shouldShow = cameraSession.showOverlay && cameraSession.isStreaming && cameraSession.mode === 'phone' && videoElement
+	// Consider the stream "available" if we have a video element with a srcObject or readyState indicates data
+	const hasLiveVideo = !!(videoElement && ((videoElement as any).srcObject || (videoElement as any).readyState >= 2))
+	// Be resilient: show when user wants overlay, in phone mode, and we either think streaming is on OR we detect a live video element
+	const shouldShow = cameraSession.showOverlay && cameraSession.mode === 'phone' && (cameraSession.isStreaming || hasLiveVideo) && !!videoElement
 
 	// Log to help debug black screen issue
 	useEffect(() => {
@@ -50,6 +53,7 @@ export default function PhoneCameraOverlay() {
 			isStreaming: cameraSession.isStreaming,
 			mode: cameraSession.mode,
 			hasVideoElement: !!videoElement,
+			hasLiveVideo,
 			videoElementType: videoElement?.constructor?.name,
 			shouldShow,
 			minimized

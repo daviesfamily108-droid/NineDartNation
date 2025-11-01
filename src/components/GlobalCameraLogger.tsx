@@ -74,14 +74,29 @@ export default function GlobalCameraLogger() {
         if (prev && prev.el) {
           try { prev.el.removeEventListener('loadedmetadata', prev.loadedmetadata) } catch {}
           try { prev.el.removeEventListener('playing', prev.playing) } catch {}
+          try { prev.el.removeEventListener('pause', prev.pause) } catch {}
+          try { prev.el.removeEventListener('ended', prev.ended) } catch {}
         }
         listenersRef.current.video = null
         if (v) {
           const loadedmetadata = () => console.log('[GlobalCamera] video loadedmetadata', { videoWidth: v.videoWidth, videoHeight: v.videoHeight })
-          const playing = () => console.log('[GlobalCamera] video playing', { paused: v.paused })
+          const playing = () => {
+            console.log('[GlobalCamera] video playing', { paused: v.paused })
+            try { camera.setStreaming(true) } catch {}
+          }
+          const pause = () => {
+            console.log('[GlobalCamera] video pause')
+            try { camera.setStreaming(false) } catch {}
+          }
+          const ended = () => {
+            console.log('[GlobalCamera] video ended')
+            try { camera.setStreaming(false) } catch {}
+          }
           v.addEventListener('loadedmetadata', loadedmetadata)
           v.addEventListener('playing', playing)
-          listenersRef.current.video = { el: v, loadedmetadata, playing }
+          v.addEventListener('pause', pause)
+          v.addEventListener('ended', ended)
+          listenersRef.current.video = { el: v, loadedmetadata, playing, pause, ended }
         }
       } catch (e) { console.warn('[GlobalCamera] attachVideoListeners failed', e) }
     }
