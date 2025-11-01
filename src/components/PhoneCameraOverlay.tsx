@@ -113,6 +113,15 @@ export default function PhoneCameraOverlay() {
 		}
 	}, [shouldShow, minimized])
 
+	// Listen for global toggle event from header badge (must be before any early returns)
+	useEffect(() => {
+		const handler = () => {
+			try { cameraSession.setShowOverlay(!cameraSession.showOverlay) } catch {}
+		}
+		window.addEventListener('ndn:toggle-phone-overlay', handler)
+		return () => { window.removeEventListener('ndn:toggle-phone-overlay', handler) }
+	}, [cameraSession.showOverlay])
+
 	if (!shouldShow) {
 		// DEBUG: Show why we're not displaying
 		console.warn('[PhoneCameraOverlay] DEBUG: Not showing. State:', {
@@ -121,7 +130,7 @@ export default function PhoneCameraOverlay() {
 			videoElement: !!videoElement,
 			hasHydrated,
 		})
-		// TEMPORARILY: Always render so we can see what's happening
+		// Hide overlay when not eligible
 		return null
 	}
 
@@ -191,14 +200,7 @@ export default function PhoneCameraOverlay() {
 		}
 	}
 
-	// Listen for global toggle event from header badge
-	useEffect(() => {
-		const handler = () => {
-			try { cameraSession.setShowOverlay(!cameraSession.showOverlay) } catch {}
-		}
-		window.addEventListener('ndn:toggle-phone-overlay', handler)
-		return () => { window.removeEventListener('ndn:toggle-phone-overlay', handler) }
-	}, [cameraSession.showOverlay])
+
 
 	return (
 		<div
