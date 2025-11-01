@@ -36,32 +36,17 @@ async function composeQrWithLogo(qrDataUrl: string, logoUrl: string): Promise<st
 	canvas.width = w
 	canvas.height = h
 	const ctx = canvas.getContext('2d')!
-	// Base white background (quiet zone is already baked into QR, this is just safety)
+	// Base white background (quiet zone is already baked into QR)
 	ctx.fillStyle = '#ffffff'
 	ctx.fillRect(0, 0, w, h)
 	// Draw the QR
 	ctx.imageSmoothingEnabled = false
 	ctx.drawImage(qrImg, 0, 0, w, h)
-	// Center logo composition with a white round bumper for readability
+	// Center logo composition without masking so the exact logo artwork is preserved
 	const cx = w / 2
 	const cy = h / 2
-	const logoSize = Math.round(Math.min(w, h) * 0.26) // ~26% of side
-	const r = logoSize / 2
-	// White bumper circle (slightly larger than logo) to keep scan paths clean
-	ctx.save()
-	ctx.beginPath()
-	ctx.arc(cx, cy, r * 1.12, 0, Math.PI * 2)
-	ctx.closePath()
-	ctx.fillStyle = '#ffffff'
-	ctx.fill()
-	// Clip to a perfect circle for the logo to appear round
-	ctx.beginPath()
-	ctx.arc(cx, cy, r, 0, Math.PI * 2)
-	ctx.closePath()
-	ctx.clip()
-	// Draw the logo centered
-	ctx.drawImage(logoImg, cx - r, cy - r, logoSize, logoSize)
-	ctx.restore()
+	const logoSize = Math.round(Math.min(w, h) * 0.24) // slightly smaller to preserve scanning, exact art kept
+	ctx.drawImage(logoImg, Math.round(cx - logoSize / 2), Math.round(cy - logoSize / 2), logoSize, logoSize)
 	return canvas.toDataURL('image/png')
 }
 
@@ -299,7 +284,8 @@ export default function Calibrator() {
 		QRCode.toDataURL(mobileUrl, { width: 256, margin: 2, color: { dark: '#000000', light: '#ffffff' } })
 			.then(async (base) => {
 				try {
-					const composed = await composeQrWithLogo(base, '/dart-thrower.svg')
+					const logoPath = (import.meta as any).env?.VITE_QR_LOGO_URL || '/dart-thrower.svg'
+					const composed = await composeQrWithLogo(base, logoPath)
 					setQrDataUrl(composed)
 				} catch (e) {
 					// Fallback to plain QR if logo fails to load
@@ -1720,11 +1706,7 @@ export default function Calibrator() {
 											<span className="text-[10px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'code' ? 'Copied!' : 'Copy code'}</span>
 										</button>
 									)}
-									{qrDataUrl && (
-										<div className="mt-1 inline-flex h-40 w-40 items-center justify-center rounded-full bg-white p-3 shadow-inner ring-1 ring-white/40">
-											<img className="h-full w-full rounded" alt="Scan to open" src={qrDataUrl} />
-										</div>
-									)}
+									{qrDataUrl && <img className="mt-1 h-40 w-40 bg-white" alt="Scan to open" src={qrDataUrl} />}
 									<div className="flex items-center gap-2">
 										{ttl !== null && <span>Expires in {ttl}s</span>}
 										<button className="btn px-2 py-1 text-xs" onClick={regenerateCode}>Regenerate</button>
