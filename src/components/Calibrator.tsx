@@ -424,11 +424,8 @@ export default function Calibrator() {
 		} else {
 			console.error('[Calibrator] ❌ CRITICAL: videoRef.current is NULL at mount!')
 		}
-		
-		return () => {
-			console.log('[Calibrator] 🛑 UNMOUNT: Clearing videoElementRef')
-			cameraSession.setVideoElementRef(null)
-		}
+		// Do NOT clear the videoElementRef on unmount; we want the stream to persist globally
+		return () => { /* keep global video element ref for overlay */ }
 	}, [])
 
 	function ensureWS() {

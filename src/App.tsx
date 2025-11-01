@@ -29,6 +29,7 @@ import { getDominantColorFromImage, stringToColor } from './utils/color'
 import OpsDashboard from './components/OpsDashboard'
 import HelpAssistant from './components/HelpAssistant'
 import GlobalCameraLogger from './components/GlobalCameraLogger'
+import GlobalPhoneVideoSink from './components/GlobalPhoneVideoSink'
 import PhoneCameraOverlay from './components/PhoneCameraOverlay'
 import CameraStatusBadge from './components/CameraStatusBadge'
 
@@ -487,7 +488,9 @@ export default function App() {
   {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
   <GlobalCameraLogger />
       {/* Global phone camera overlay - visibility controlled by store */}
-      <PhoneCameraOverlay />
+  {/* Keep a hidden global video element alive across navigation */}
+  <GlobalPhoneVideoSink />
+  <PhoneCameraOverlay />
     </ThemeProvider>
   )
 }
