@@ -10,6 +10,10 @@ export default function GlobalPhoneVideoSink() {
   const camera = useCameraSession()
   const vref = useRef<HTMLVideoElement | null>(null)
   const lastStreamRef = useRef<MediaStream | null>(null)
+  const lastTimeRef = useRef<number>(0)
+  const stallSecondsRef = useRef<number>(0)
+  const lastReconnectAtRef = useRef<number>(0)
+  const attemptRef = useRef<number>(0)
 
   // Ensure the global ref is registered for others to use
   useEffect(() => {
@@ -42,6 +46,43 @@ export default function GlobalPhoneVideoSink() {
     apply()
     const t = setInterval(apply, 750)
     return () => { mounted = false; clearInterval(t) }
+  }, [camera])
+
+  // Watchdog: if the video currentTime doesn't advance for >3s while streaming, request a reconnect with backoff
+  useEffect(() => {
+    const tick = () => {
+      const v = vref.current
+      const now = Date.now()
+      if (!v || !camera.isStreaming || camera.mode !== 'phone' || !v.srcObject) {
+        stallSecondsRef.current = 0
+        return
+      }
+      const ct = (v as HTMLVideoElement).currentTime || 0
+      if (!Number.isFinite(ct)) return
+      if (ct === lastTimeRef.current) {
+        stallSecondsRef.current += 1
+      } else {
+        stallSecondsRef.current = 0
+      }
+      lastTimeRef.current = ct
+      if (stallSecondsRef.current >= 3) {
+        const minBackoff = [3000, 6000, 10000][Math.min(attemptRef.current, 2)]
+        if (now - lastReconnectAtRef.current >= minBackoff) {
+          lastReconnectAtRef.current = now
+          attemptRef.current = Math.min(attemptRef.current + 1, 3)
+          try {
+            window.dispatchEvent(new CustomEvent('ndn:phone-camera-reconnect', { detail: { reason: 'stall', ts: now } }))
+            // Try to nudge playback locally as well
+            v.play().catch(()=>{})
+          } catch {}
+        }
+      } else if (stallSecondsRef.current === 0) {
+        // Reset attempts on healthy playback
+        attemptRef.current = 0
+      }
+    }
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
   }, [camera])
 
   // Keep dimensions tiny but visible so playback isn't throttled by display:none in some browsers

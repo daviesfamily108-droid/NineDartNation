@@ -442,6 +442,7 @@ export default function CameraTile({
 }
 
 function CameraFrame(props: any) {
+  const cameraSession = useCameraSession()
   const { cameraScale, cameraAspect: storedAspect } = useUserSettings()
   const scale = Math.max(0.5, Math.min(1.25, Number(props.scaleOverride ?? cameraScale ?? 1)))
   const {
@@ -563,17 +564,12 @@ function CameraFrame(props: any) {
   return (
     <div className={containerClass} style={containerStyle}>
       <div className={viewportClass}>
-        {mode === 'phone' && streaming ? (
-          // When phone camera is active, display a placeholder since feed shows in overlay
-          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-slate-900 to-slate-950 text-slate-300 text-sm">
-            <div className="text-center">
-              <div className="text-2xl mb-2">📱</div>
-              <div className="font-semibold">Phone Camera Active</div>
-              <div className="text-xs opacity-75 mt-1">Feed displayed above in floating overlay</div>
-            </div>
+        {videoElement}
+        {(cameraSession.isStreaming && (mode==='phone')) && (
+          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 border border-rose-500/50 text-[10px] text-rose-200">
+            <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            <span className="font-semibold">REC</span>
           </div>
-        ) : (
-          videoElement
         )}
       </div>
       <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
