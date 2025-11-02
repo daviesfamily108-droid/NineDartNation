@@ -11,6 +11,7 @@ import ResizablePanel from './ui/ResizablePanel'
 import ResizableModal from './ui/ResizableModal'
 import useHeatmapStore from '../store/heatmap'
 import { usePendingVisit } from '../store/pendingVisit'
+import { useCameraSession } from '../store/cameraSession'
 import { useMatchControl } from '../store/matchControl'
 
 // Shared ring type across autoscore/manual flows
@@ -399,11 +400,15 @@ export default function CameraView({
   useEffect(() => {
     if (manualOnly) return
     if (autoscoreProvider !== 'built-in') return
-    if (!streaming || !videoRef.current) return
+    // Choose source: local video element, or paired phone camera element
+    const cameraSession = useCameraSession.getState()
+    const isPhone = (useUserSettings.getState().preferredCameraLabel === 'Phone Camera')
+    const sourceVideo: HTMLVideoElement | null = isPhone ? (cameraSession.getVideoElementRef?.() || null) : (videoRef.current)
+    if (!sourceVideo) return
     if (!H || !imageSize) return
 
     let canceled = false
-    const v = videoRef.current
+  const v = sourceVideo
     const proc = canvasRef.current
     if (!proc) return
 
@@ -413,8 +418,8 @@ export default function CameraView({
     const tick = () => {
       if (canceled) return
       try {
-        const vw = v.videoWidth || 0
-        const vh = v.videoHeight || 0
+  const vw = v.videoWidth || 0
+  const vh = v.videoHeight || 0
         if (!vw || !vh) { rafRef.current = requestAnimationFrame(tick); return }
         if (proc.width !== vw) proc.width = vw
         if (proc.height !== vh) proc.height = vh

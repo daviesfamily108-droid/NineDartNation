@@ -546,6 +546,59 @@ export default function OfflinePlay({ user }: { user: any }) {
     applyDartValue(dart)
   }
 
+  // Optional: Add a full-visit total (0–180) input for quick entry like "93"
+  const [visitTotalInput, setVisitTotalInput] = useState<string>("")
+  function addVisitTotal() {
+    const raw = Math.round(Number(visitTotalInput) || 0)
+    const total = clamp(raw, 0, 180)
+    if (total === 0 && raw !== 0) { alert('Enter a number 0–180 for visit total'); return }
+    const remaining = playerScore - total
+    // Track three darts for a full visit entry
+    setPlayerDartsThrown(d => d + 3)
+    setTotalPlayerDarts(d => d + 3)
+    setPlayerVisitDarts(3)
+    setPlayerVisitSum(total)
+    // Power score classification
+    if (total === 180) setPlayer180s(n => n + 1)
+    else if (total >= 140) setPlayer140s(n => n + 1)
+    else if (total >= 100) setPlayer100s(n => n + 1)
+    // Handle bust
+    if (remaining < 0) {
+      // bust: revert to visit start and end turn
+      if (callerEnabled) {
+        try { sayScore(user?.username || 'Player', 0, Math.max(playerVisitStart, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
+      }
+      setPlayerScore(playerVisitStart)
+      endTurn(playerVisitStart)
+      setPlayerVisitSum(0)
+      setPlayerVisitDarts(0)
+      setPlayerVisitDartsAtDouble(0)
+      setVisitTotalInput("")
+      return
+    }
+    // Normal reduce
+    setPlayerScore(remaining)
+    // Announce visit
+    if (callerEnabled) {
+      try { sayScore(user?.username || 'Player', total, Math.max(remaining, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
+    }
+    // Checkout if exactly zero; we cannot infer doubles from a visit total, so we won't alter doubles stats
+    if (remaining === 0) {
+      const checkout = playerVisitStart
+      if (checkout <= 170) setPlayerHighestCheckout(h => Math.max(h, checkout))
+      setPendingLegWinner('player')
+      setShowWinPopup(true)
+      setVisitTotalInput("")
+      return
+    }
+    // Otherwise end turn
+    endTurn(remaining)
+    setPlayerVisitSum(0)
+    setPlayerVisitDarts(0)
+    setPlayerVisitDartsAtDouble(0)
+    setVisitTotalInput("")
+  }
+
   // --- Double Practice helpers ---
   function addDpValue(val: number) {
     const dart = clamp(Math.round(val || 0), 0, 60)
@@ -1912,7 +1965,21 @@ export default function OfflinePlay({ user }: { user: any }) {
                       onChange={e => setPlayerDartPoints(Number(e.target.value||0))}
                       onKeyDown={e => { if (e.key==='Enter') (e.shiftKey? replaceLast() : addDartNumeric()) }}
                     />
-                    <button className="btn px-3 py-1 text-sm" onClick={addDartNumeric}>Add Dart</button>
+                    <button className="btn px-3 py-1 text-sm" onClick={addDartNumeric} title="Add a single dart (0–60)">Add Dart</button>
+                  </div>
+                  {/* Visit total entry */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      className="input w-28"
+                      type="number"
+                      min={0}
+                      max={180}
+                      placeholder="Visit total (0–180)"
+                      value={visitTotalInput}
+                      onChange={e=>setVisitTotalInput(e.target.value)}
+                      onKeyDown={e => { if (e.key==='Enter') addVisitTotal() }}
+                    />
+                    <button className="btn px-3 py-1 text-sm" onClick={addVisitTotal} title="Commit a full 3-dart total like 93">Commit Visit</button>
                   </div>
                   <div className="flex items-center gap-2">
                     <input
