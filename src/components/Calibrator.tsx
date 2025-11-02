@@ -1783,7 +1783,9 @@ export default function Calibrator() {
 								<div className="flex flex-wrap gap-2">
 									<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Auto detect</button>
 									<button className="btn" disabled={!snapshotSet} onClick={detectMarkers}>Detect markers</button>
+									<button className="btn btn--ghost" onClick={openMarkerSheet} title="Print 4 markers (TOP/RIGHT/BOTTOM/LEFT)">Open marker sheet</button>
 								</div>
+								<p className="text-[11px] opacity-70">Tip: Use the 4 printed ArUco markers (IDs 0–3) at the double rim’s TOP, RIGHT, BOTTOM, and LEFT. Print at 100% on white paper, avoid glare, and fill the frame when capturing.</p>
 								{markerResult && (
 									<div
 										className={`rounded-lg border px-3 py-2 text-xs ${markerResult.success ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-100' : 'bg-rose-500/10 border-rose-500/30 text-rose-100'}`}

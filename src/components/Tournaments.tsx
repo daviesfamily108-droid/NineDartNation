@@ -3,6 +3,7 @@ import ResizableModal from './ui/ResizableModal'
 import { useToast } from '../store/toast'
 import { useWS } from './WSProvider'
 import { apiFetch } from '../utils/api'
+import { useUserSettings } from '../store/userSettings'
 
 type Tournament = {
   id: string
@@ -31,6 +32,8 @@ type Tournament = {
 export default function Tournaments({ user }: { user: any }) {
   const toast = useToast()
   const wsGlobal = (() => { try { return useWS() } catch { return null } })()
+  // Persisted match preferences (used when creating or joining)
+  const { matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName } = useUserSettings()
   const [list, setList] = useState<Tournament[]>([])
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
@@ -78,6 +81,20 @@ export default function Tournaments({ user }: { user: any }) {
   }, [wsGlobal?.connected])
 
   const email = String(user?.email || '').toLowerCase()
+  
+  // Simple, persistent match preference UI
+  const MatchPrefs = () => (
+    <div className="mb-3 p-2 rounded-lg bg-slate-900/40 border border-white/10 text-white text-xs flex items-center gap-2 flex-wrap">
+      <span className="opacity-70">Default match</span>
+      <select className="btn py-1 px-2" value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
+        <option value="singles">Singles</option>
+        <option value="doubles">Doubles</option>
+      </select>
+      <input className="input py-1 px-2 w-[8rem]" value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
+      <span className="opacity-50">vs</span>
+      <input className="input py-1 px-2 w-[8rem]" value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
+    </div>
+  )
   // Fetch subscription to detect if user is a recent tournament winner (cooldown)
   useEffect(() => {
     let abort = false
@@ -255,7 +272,9 @@ export default function Tournaments({ user }: { user: any }) {
       <div className="mb-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-end">
         <button className="btn" onClick={()=>setShowCreate(true)}>Create Tournament +</button>
       </div>
-      <div className="mb-2 text-sm font-semibold text-slate-300">World Lobby</div>
+  {/* Default match preferences */}
+  <MatchPrefs />
+  <div className="mb-2 text-sm font-semibold text-slate-300">World Lobby</div>
       {/* Persistent banner for next official weekly tournament */}
       {nextOfficial && (
         <div className="mb-4 p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">

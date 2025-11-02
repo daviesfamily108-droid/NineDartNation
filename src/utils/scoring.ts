@@ -68,6 +68,35 @@ export type ExternalSub = { close: () => void }
 export function subscribeExternalWS(url: string, onDart: (d: ParsedDart) => void): ExternalSub {
   let socket: WebSocket | null = null
   let alive = true
+  // Lightweight duplicate suppression: ignore exact repeat within a short window
+  let lastSig: string | null = null
+  let lastSigAt = 0
+  const DEDUP_WINDOW_MS = 400
+  // Optional ID-based dedup if provider sends unique ids
+  const seenIds: string[] = []
+  const seenSet = new Set<string>()
+
+  function considerForward(payload: any, parsed: ParsedDart) {
+    // If payload has a stable id, drop if seen
+    const pid = typeof payload?.id === 'string' || typeof payload?.id === 'number' ? String(payload.id) : null
+    if (pid) {
+      if (seenSet.has(pid)) return
+      seenSet.add(pid)
+      seenIds.push(pid)
+      if (seenIds.length > 200) {
+        const old = seenIds.shift()
+        if (old) seenSet.delete(old)
+      }
+    }
+    // Time-based dedup by signature (safe; darts cannot occur within <400ms)
+    const sig = `${parsed.value}|${parsed.ring}|${parsed.sector ?? ''}|${parsed.mult ?? ''}`
+    const now = Date.now()
+    if (sig === lastSig && now - lastSigAt < DEDUP_WINDOW_MS) return
+    lastSig = sig
+    lastSigAt = now
+    onDart(parsed)
+  }
+
   function connect() {
     if (!alive) return
     try {
@@ -76,7 +105,7 @@ export function subscribeExternalWS(url: string, onDart: (d: ParsedDart) => void
         try {
           const payload = JSON.parse(ev.data)
           const parsed = parseExternalDart(payload)
-          if (parsed) onDart(parsed)
+          if (parsed) considerForward(payload, parsed)
         } catch {}
       }
       socket.onclose = () => { socket = null; setTimeout(connect, 1500) }

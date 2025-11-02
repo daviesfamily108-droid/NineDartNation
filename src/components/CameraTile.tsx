@@ -444,7 +444,6 @@ export default function CameraTile({
 function CameraFrame(props: any) {
   const cameraSession = useCameraSession()
   const { cameraScale, cameraAspect: storedAspect } = useUserSettings()
-  const scale = Math.max(0.5, Math.min(1.25, Number(props.scaleOverride ?? cameraScale ?? 1)))
   const {
     label,
     start,
@@ -485,9 +484,21 @@ function CameraFrame(props: any) {
     }
   }, [])
 
-  const aspectChoice: 'wide' | 'square' | 'portrait' | 'classic' | 'free' = aspect && aspect !== 'inherit'
-    ? aspect
-    : (storedAspect as any) || 'wide'
+  // Respect stored aspect unless we're explicitly in full-bleed fill mode,
+  // in which case drop the aspect box so the video can truly cover the area.
+  const { cameraFitMode: globalFitMode } = useUserSettings()
+  const effectiveFitMode: 'fit' | 'fill' = fill ? 'fill' : (globalFitMode || 'fill')
+  // In fill mode we guarantee no black bars: never allow downscaling below 1.0
+  const scale = (() => {
+    const raw = Number(props.scaleOverride ?? cameraScale ?? 1)
+    const clamped = Math.max(0.5, Math.min(1.25, raw))
+    return effectiveFitMode === 'fill' ? Math.max(1, clamped) : clamped
+  })()
+  const aspectChoice: 'wide' | 'square' | 'portrait' | 'classic' | 'free' = (fill && effectiveFitMode === 'fill')
+    ? 'free'
+    : (aspect && aspect !== 'inherit')
+      ? aspect
+      : ((storedAspect as any) || 'wide')
 
   const shouldMaintainAspect = aspectChoice !== 'free'
   const aspectClass = shouldMaintainAspect
@@ -513,27 +524,33 @@ function CameraFrame(props: any) {
   }
 
   const videoElement = (() => {
-    const videoClass = 'absolute inset-0 w-full h-full object-contain object-center bg-black'
+    // Apply Fit/Fill preference (fill prop hard-overrides to full-bleed)
+    const isFit = effectiveFitMode === 'fit'
+    const baseVideoClass = isFit
+      // Fit: preserve entire frame (may letterbox)
+      ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
+      // Fill: guarantee full coverage with classic min-w/min-h center trick
+      : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black'
     if (fill) {
       if (shouldMaintainAspect) {
         return (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className={`relative w-full max-w-full max-h-full ${aspectClass}`}>
-              <video ref={videoRef} className={videoClass} {...commonVideoProps} />
+              <video ref={videoRef} className={baseVideoClass} {...commonVideoProps} />
             </div>
           </div>
         )
       }
-      return <video ref={videoRef} className={videoClass} {...commonVideoProps} />
+      return <video ref={videoRef} className={baseVideoClass} {...commonVideoProps} />
     }
     if (shouldMaintainAspect) {
       return (
         <div className={`relative w-full ${aspectClass}`}>
-          <video ref={videoRef} className={videoClass} {...commonVideoProps} />
+          <video ref={videoRef} className={baseVideoClass} {...commonVideoProps} />
         </div>
       )
     }
-    return <video ref={videoRef} className="w-full h-full object-contain object-center bg-black" {...commonVideoProps} />
+    return <video ref={videoRef} className={baseVideoClass} {...commonVideoProps} />
   })()
 
   async function copyValue(value: string | null | undefined, type: 'link' | 'code') {

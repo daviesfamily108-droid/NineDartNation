@@ -284,7 +284,8 @@ export default function PhoneCameraOverlay() {
 				<div className="bg-black w-full relative overflow-hidden" style={{ aspectRatio: '16/9' }}>
 					<canvas
 						ref={canvasRef}
-						className="w-full h-full object-contain bg-black"
+						// Use object-cover to eliminate any letterboxing in the floating preview
+						className="w-full h-full object-cover bg-black"
 					/>
 				</div>
 			)}

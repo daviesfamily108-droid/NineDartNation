@@ -20,6 +20,7 @@ import { createGolf, applyGolfDart } from '../game/golf'
 import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
 import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS, hasClosedAllAm } from '../game/americanCricket'
 import ResizableModal from './ui/ResizableModal'
+import ResizablePanel from './ui/ResizablePanel'
 
 const freeGames = ['X01', 'Double Practice'];
 const premiumGames = [
@@ -164,6 +165,8 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [trebleTarget, setTrebleTarget] = useState<number>(20)
   const [trebleHits, setTrebleHits] = useState<number>(0)
   const [trebleDarts, setTrebleDarts] = useState<number>(0)
+  const [trebleMaxDarts, setTrebleMaxDarts] = useState<number>(30)
+  const [trebleFinished, setTrebleFinished] = useState<boolean>(false)
   // Phase 2 states
   const [baseball, setBaseball] = useState(createBaseball())
   const [golf, setGolf] = useState(createGolf())
@@ -218,7 +221,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [manualBox, setManualBox] = useState<string>('')
   const [manualTextarea, setManualTextarea] = useState<string>('')
   // Settings: favourite double and caller
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect, cameraEnabled, textSize, boxSize, autoscoreProvider } = useUserSettings()
+  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect, cameraFitMode = 'fill', setCameraFitMode, cameraEnabled, textSize, boxSize, autoscoreProvider, matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName } = useUserSettings()
   const manualScoring = autoscoreProvider === 'manual'
 
   // Button size classes for toolbar buttons
@@ -418,6 +421,8 @@ export default function OfflinePlay({ user }: { user: any }) {
   setPlayerLegs(0)
   setAiLegs(0)
     setLegStats([])
+  // Reset Treble Practice session state when starting a new match
+  setTrebleHits(0); setTrebleDarts(0); setTrebleFinished(false)
     // Reset match-long totals
     setTotalPlayerDarts(0); setTotalAiDarts(0)
     setTotalPlayerPoints(0); setTotalAiPoints(0)
@@ -471,6 +476,10 @@ export default function OfflinePlay({ user }: { user: any }) {
     if (remaining < 0) {
       // bust: revert to visit start, end turn
       setPlayerScore(playerVisitStart)
+      // Announce visit total on bust (0 for the visit)
+      if (callerEnabled) {
+        try { sayScore(user?.username || 'Player', 0, Math.max(playerVisitStart, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
+      }
       endTurn(playerVisitStart)
       setPlayerDartPoints(0)
       setPlayerVisitSum(0)
@@ -478,7 +487,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       return
     }
     setPlayerScore(remaining)
-  if (callerEnabled) sayScore(user?.username || 'Player', dart, Math.max(remaining, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly })
+    // Do not announce per-dart; we announce once per visit when it ends or on checkout
     setPlayerVisitDarts(newVisitDarts)
     setPlayerVisitSum(s => s + dart)
     setTotalPlayerPoints(p => p + dart)
@@ -507,6 +516,11 @@ export default function OfflinePlay({ user }: { user: any }) {
         setPlayerDoublesAtt(a => a + (playerVisitDartsAtDouble > 0 ? playerVisitDartsAtDouble : 1))
         setPlayerDoublesHit(h => h + 1)
       }
+      // Announce total of the visit on checkout
+      if (callerEnabled) {
+        const visitTotal = playerVisitSum + dart
+        try { sayScore(user?.username || 'Player', visitTotal, 0, callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
+      }
       setPendingLegWinner('player')
       setShowWinPopup(true)
       return
@@ -516,6 +530,11 @@ export default function OfflinePlay({ user }: { user: any }) {
       if (playerVisitSum + dart === 180) setPlayer180s(n => n + 1)
       else if (playerVisitSum + dart >= 140) setPlayer140s(n => n + 1)
       else if (playerVisitSum + dart >= 100) setPlayer100s(n => n + 1)
+      // Announce visit total after third dart
+      if (callerEnabled) {
+        const visitTotal = playerVisitSum + dart
+        try { sayScore(user?.username || 'Player', visitTotal, Math.max(remaining, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
+      }
       endTurn(remaining)
       setPlayerVisitSum(0)
       setPlayerVisitDartsAtDouble(0)
@@ -614,8 +633,25 @@ export default function OfflinePlay({ user }: { user: any }) {
   function resetCo121() { setCo121Rem(121); setCo121Darts(0); setCo121Attempts(0); setCo121Successes(0) }
 
   // Treble practice
-  function addTrebleAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) { if (ring==='TRIPLE' && sector===trebleTarget) setTrebleHits(h=>h+1); else if(!ring && value===trebleTarget*3) setTrebleHits(h=>h+1); setTrebleDarts(d=>d+1) }
-  function resetTreble() { setTrebleHits(0); setTrebleDarts(0) }
+  function addTrebleAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    if (trebleFinished) return
+    const isHit = (ring==='TRIPLE' && sector===trebleTarget) || (!ring && value===trebleTarget*3)
+    if (isHit) setTrebleHits(h=>h+1)
+    setTrebleDarts(d => {
+      const nd = d + 1
+      // Auto-rotate target every 3 darts among T20→T19→T18
+      if (nd % 3 === 0 && [20,19,18].includes(trebleTarget)) {
+        const cycle = [20, 19, 18]
+        const idx = cycle.indexOf(trebleTarget)
+        const next = cycle[(idx + 1) % cycle.length]
+        setTrebleTarget(next)
+      }
+      // End session at configured throws
+      if (trebleMaxDarts > 0 && nd >= trebleMaxDarts) setTrebleFinished(true)
+      return nd
+    })
+  }
+  function resetTreble() { setTrebleHits(0); setTrebleDarts(0); setTrebleFinished(false) }
 
   // Baseball
   function addBaseballAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE', sector?: number | null) {
@@ -856,6 +892,15 @@ export default function OfflinePlay({ user }: { user: any }) {
             <option key={mode} value={mode} disabled={!(user?.fullAccess || user?.admin)}>{mode} {(user?.fullAccess || user?.admin) ? '' : '(Premium)'}</option>
           ))}
         </select>
+        {selectedMode === 'Treble Practice' && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+            <div className="sm:col-span-1">
+              <label className="font-semibold">Throws per game</label>
+              <input className="input w-full" type="number" min={3} step={3} value={trebleMaxDarts} onChange={e=>setTrebleMaxDarts(Math.max(3, Math.floor(Number(e.target.value)||30)))} />
+            </div>
+            <div className="sm:col-span-2 text-xs text-slate-300">Target cycles T20→T19→T18 every 3 darts. Game ends after the selected number of throws.</div>
+          </div>
+        )}
         {!user?.fullAccess && (
           <div className="mt-2 p-2 rounded-lg bg-slate-800/40 border border-slate-700/40 text-slate-200 text-sm flex items-center gap-2">
             <span>🔒</span>
@@ -1276,24 +1321,47 @@ export default function OfflinePlay({ user }: { user: any }) {
                 <div className="md:col-span-2 min-w-0 space-y-2">
                   {!manualScoring ? (
                     <>
-                      <div className="flex items-center gap-1.5 mt-1">
+                      <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                        {/* Match type and names */}
+                        <div className="flex items-center gap-1 text-[10px] mr-auto">
+                          <span className="opacity-70">Match</span>
+                          <select className={`btn ${buttonSizeClass}`} value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
+                            <option value="singles">Singles</option>
+                            <option value="doubles">Doubles</option>
+                          </select>
+                          <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
+                          <span className="opacity-50">vs</span>
+                          <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
+                        </div>
                         <div className="ml-auto flex items-center gap-1 text-[10px]">
                           <span className="opacity-70">Cam</span>
                           <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
                           <span className={`btn ${buttonSizeClass} min-w-[2.5rem] text-center`}>{Math.round(cameraScale*100)}%</span>
                           <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
                           <span className="opacity-50">|</span>
+                          <button className={`btn ${buttonSizeClass}`} title="Toggle fit/fill" onClick={()=>setCameraFitMode(cameraFitMode==='fill'?'fit':'fill')}>{cameraFitMode==='fill'?'Fill':'Fit'}</button>
+                          <span className="opacity-50">|</span>
                           <button className={`btn ${buttonSizeClass}`} title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
                         </div>
                       </div>
-                      <div className="flex items-stretch justify-end min-w-0 md:min-h-[45vh]">
-                        <CameraTile
-                          label="Your Board"
-                          autoStart={true}
-                          className="min-w-0 h-full"
-                          style={{ minHeight: '45vh' }}
-                          fill
-                        />
+                      <div className="flex items-stretch justify-end min-w-0">
+                        <ResizablePanel
+                          storageKey="ndn:camera:tile:offline:primary"
+                          className="relative rounded-2xl overflow-hidden bg-black"
+                          defaultWidth={720}
+                          defaultHeight={420}
+                          minWidth={320}
+                          minHeight={220}
+                          maxWidth={1600}
+                          maxHeight={900}
+                        >
+                          <CameraTile
+                            label="Your Board"
+                            autoStart={true}
+                            className="min-w-0 h-full"
+                            fill
+                          />
+                        </ResizablePanel>
                       </div>
                     </>
                   ) : (
@@ -1345,14 +1413,24 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
               </div>
               {/* Center camera preview: right-aligned and square when selected */}
-              <div className="flex items-stretch justify-end md:px-3 min-w-0 md:min-h-[45vh]">
-                <CameraTile
-                  label="Your Board"
-                  autoStart={true}
-                  className="min-w-0 h-full"
-                  style={{ minHeight: '45vh' }}
-                  fill
-                />
+              <div className="flex items-stretch justify-end md:px-3 min-w-0">
+                <ResizablePanel
+                  storageKey="ndn:camera:tile:offline:center"
+                  className="relative rounded-2xl overflow-hidden bg-black"
+                  defaultWidth={720}
+                  defaultHeight={420}
+                  minWidth={320}
+                  minHeight={220}
+                  maxWidth={1600}
+                  maxHeight={900}
+                >
+                  <CameraTile
+                    label="Your Board"
+                    autoStart={true}
+                    className="min-w-0 h-full"
+                    fill
+                  />
+                </ResizablePanel>
               </div>
               {/* Match summary (offline) */}
               <div className={`mt-2 ${boxSize === 'small' ? 'p-2' : boxSize === 'large' ? 'p-4' : 'p-3'} rounded-2xl bg-slate-900/40 border border-white/10 text-white ${textSize === 'small' ? 'text-xs' : textSize === 'large' ? 'text-base' : 'text-sm'}`}>
@@ -1586,8 +1664,15 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Treble Practice' && (
                   <>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <label className="text-sm">Target</label>
+                      {/* Quick picks for common practice: T20/T19/T18 */}
+                      <div className="inline-flex items-center gap-1">
+                        {[20,19,18].map(n => (
+                          <button key={`tpick-${n}`} className={`btn px-2 py-0.5 text-xs ${trebleTarget===n?'bg-emerald-600/30 border border-emerald-400/30':''}`} onClick={()=>setTrebleTarget(n)}>T{n}</button>
+                        ))}
+                      </div>
+                      <span className="opacity-60 text-xs">or</span>
                       <select className="input w-24" value={trebleTarget} onChange={e=> setTrebleTarget(parseInt(e.target.value,10))}>
                         {Array.from({length:20},(_,i)=>i+1).map(n=> <option key={n} value={n}>{n}</option>)}
                       </select>
@@ -1600,7 +1685,10 @@ export default function OfflinePlay({ user }: { user: any }) {
                       <input className="input w-24" type="text" placeholder="Manual (T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') { const v = parseManualDart(manualBox); if (v!=null) addTrebleAuto(v, undefined, undefined); setManualBox('') } }} />
                       <button className="btn px-3 py-1 text-sm" onClick={()=>{ const v = parseManualDart(manualBox); if (v!=null) addTrebleAuto(v, undefined, undefined); setManualBox('') }}>Add Dart</button>
                     </div>
-                    <div className="text-xs text-slate-400">Hits: {trebleHits} · Darts: {trebleDarts}</div>
+                    <div className="text-xs text-slate-400">Hits: {trebleHits} · Misses: {Math.max(0, trebleDarts - trebleHits)} · Darts: {trebleDarts}{trebleMaxDarts>0?`/${trebleMaxDarts}`:''}</div>
+                    {trebleFinished && (
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={resetTreble}>Reset</button></div>
+                    )}
                   </>
                 )}
                 {selectedMode === 'Baseball' && (

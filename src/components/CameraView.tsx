@@ -9,6 +9,8 @@ import { subscribeExternalWS } from '../utils/scoring'
 import ResizablePanel from './ui/ResizablePanel'
 import ResizableModal from './ui/ResizableModal'
 import useHeatmapStore from '../store/heatmap'
+import { usePendingVisit } from '../store/pendingVisit'
+import { useMatchControl } from '../store/matchControl'
 
 // Shared ring type across autoscore/manual flows
 type Ring = 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'
@@ -22,6 +24,7 @@ export default function CameraView({
   scoringMode = 'x01',
   onGenericDart,
   onGenericReplace,
+  x01DoubleInOverride,
 }: {
   onVisitCommitted?: (score: number, darts: number, finished: boolean) => void
   showToolbar?: boolean
@@ -31,6 +34,7 @@ export default function CameraView({
   scoringMode?: 'x01' | 'custom'
   onGenericDart?: (value: number, ring: Ring, meta: { label: string }) => void
   onGenericReplace?: (value: number, ring: Ring, meta: { label: string }) => void
+  x01DoubleInOverride?: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const { preferredCameraId, preferredCameraLabel, setPreferredCamera, autoscoreProvider, autoscoreWsUrl } = useUserSettings()
@@ -49,6 +53,20 @@ export default function CameraView({
   const [pendingDarts, setPendingDarts] = useState<number>(0)
   const [pendingScore, setPendingScore] = useState<number>(0)
   const [pendingEntries, setPendingEntries] = useState<{ label: string; value: number; ring: Ring }[]>([])
+  // X01 Double-In handling: per-player opened state in this session
+  const x01DoubleInSetting = useUserSettings(s => s.x01DoubleIn)
+  const x01DoubleIn = (typeof x01DoubleInOverride === 'boolean') ? !!x01DoubleInOverride : !!x01DoubleInSetting
+  const [openedById, setOpenedById] = useState<Record<string, boolean>>({})
+  const currentPlayerId = matchState.players[matchState.currentPlayerIdx]?.id
+  const isOpened = !!(currentPlayerId && openedById[currentPlayerId])
+  const setOpened = (v: boolean) => { if (!currentPlayerId) return; setOpenedById(m => ({ ...m, [currentPlayerId]: v })) }
+  // Broadcast pending visit to global store so Scoreboard can visualize dots
+  const setVisit = usePendingVisit(s => s.setVisit)
+  const resetPendingVisit = usePendingVisit(s => s.reset)
+  useEffect(() => {
+    try { setVisit(pendingEntries as any, pendingDarts, pendingScore) } catch {}
+  }, [pendingEntries, pendingDarts, pendingScore, setVisit])
+  useEffect(() => () => { try { resetPendingVisit() } catch {} }, [resetPendingVisit])
   const addVisit = useMatch(s => s.addVisit)
   const endLeg = useMatch(s => s.endLeg)
   const matchState = useMatch(s => s)
@@ -64,6 +82,12 @@ export default function CameraView({
   const [showAutoModal, setShowAutoModal] = useState(false)
   const [showScoringModal, setShowScoringModal] = useState(false)
   const manualPreviewRef = useRef<HTMLCanvasElement | null>(null)
+  // Dart timer
+  const dartTimerEnabled = useUserSettings(s => s.dartTimerEnabled)
+  const dartTimerSeconds = useUserSettings(s => s.dartTimerSeconds) || 10
+  const [dartTimeLeft, setDartTimeLeft] = useState<number | null>(null)
+  const timerRef = useRef<number | null>(null)
+  const paused = useMatchControl(s => s.paused)
   // Open Autoscore modal from parent via global event
   useEffect(() => {
     const onOpen = () => { if (!manualOnly) setShowAutoModal(true) }
@@ -96,6 +120,47 @@ export default function CameraView({
       setShowAutoModal(false)
     }
   }, [manualOnly])
+
+  // Reset open state at the start of a leg (no darts thrown yet), keep across visits within leg
+  useEffect(() => {
+    try {
+      const p = matchState.players[matchState.currentPlayerIdx]
+      const leg = p?.legs?.[p.legs.length - 1]
+      if (!p) return
+      if (!leg || leg.dartsThrown === 0) {
+        setOpenedById(m => ({ ...m, [p.id]: false }))
+      }
+    } catch {}
+  }, [matchState.currentPlayerIdx, matchState.players?.[matchState.currentPlayerIdx]?.legs?.length])
+
+  // Manage per-dart timer lifecycle
+  useEffect(() => {
+  const inProgress = (matchState as any)?.inProgress
+  const shouldRun = !!dartTimerEnabled && inProgress && !paused && pendingDarts < 3
+    // Clear any existing interval
+    if (timerRef.current) {
+      clearInterval(timerRef.current as any)
+      timerRef.current = null
+    }
+    if (!shouldRun) { setDartTimeLeft(null); return }
+    // Reset timer each time dependencies change (new dart, player change, setting change)
+    setDartTimeLeft(dartTimerSeconds)
+    timerRef.current = window.setInterval(() => {
+      setDartTimeLeft(prev => {
+        const next = (prev ?? dartTimerSeconds) - 1
+        if (next <= 0) {
+          // Time expired: record a MISS and reset will occur via pendingEntries change
+          try { addDart(0, 'MISS 0', 'MISS') } catch {}
+          // Stop interval until effect re-initializes on state change
+          if (timerRef.current) { clearInterval(timerRef.current as any); timerRef.current = null }
+          return 0
+        }
+        return next
+      })
+    }, 1000) as any
+    return () => { if (timerRef.current) { clearInterval(timerRef.current as any); timerRef.current = null } }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dartTimerEnabled, dartTimerSeconds, pendingDarts, matchState.currentPlayerIdx, (matchState as any)?.inProgress, paused])
 
   // Drive a lightweight live preview inside the manual modal from the main video element
   useEffect(() => {
@@ -398,7 +463,13 @@ export default function CameraView({
     if (scoringMode === 'custom') {
       if (onGenericDart) try { onGenericDart(value, ring, { label }) } catch {}
       // Maintain a lightweight pending list for UI only
-      if (pendingDarts >= 3) return
+      if (pendingDarts >= 3) {
+        // Rotate to next visit locally so we don't drop darts visually
+        setPendingDarts(1)
+        setPendingScore(value)
+        setPendingEntries([{ label, value, ring }])
+        return
+      }
       const newDarts = pendingDarts + 1
       setPendingDarts(newDarts)
       setPendingScore(s => s + value)
@@ -406,9 +477,28 @@ export default function CameraView({
       return
     }
 
-    if (pendingDarts >= 3) return
+    // If a new dart arrives while 3 are pending, auto-commit previous visit and start a new one
+    if (pendingDarts >= 3) {
+      addVisit(pendingScore, pendingDarts)
+      try {
+        const name = matchState.players[matchState.currentPlayerIdx]?.name
+        if (name) addSample(name, pendingDarts, pendingScore)
+      } catch {}
+      // Start next visit with this dart
+      setPendingDarts(1)
+      setPendingScore(value)
+      setPendingEntries([{ label, value, ring }])
+      if (onVisitCommitted) onVisitCommitted(pendingScore, pendingDarts, false)
+      return
+    }
     const newDarts = pendingDarts + 1
-    const newScore = pendingScore + value
+    // Apply X01 Double-In rule before scoring if enabled and not opened yet
+    const countsForScore = !x01DoubleIn || isOpened || ring === 'DOUBLE' || ring === 'INNER_BULL'
+    const appliedValue = countsForScore ? value : 0
+    if (x01DoubleIn && !isOpened && (ring === 'DOUBLE' || ring === 'INNER_BULL')) {
+      setOpened(true)
+    }
+    const newScore = pendingScore + appliedValue
     const remaining = getCurrentRemaining()
     const after = remaining - newScore
 
@@ -424,10 +514,10 @@ export default function CameraView({
       return
     }
 
-    // Normal add
-    setPendingDarts(newDarts)
-    setPendingScore(newScore)
-    setPendingEntries(e => [...e, { label, value, ring }])
+  // Normal add (value may be zero if not opened yet)
+  setPendingDarts(newDarts)
+  setPendingScore(newScore)
+  setPendingEntries(e => [...e, { label, value: appliedValue, ring }])
 
     if (isFinish) {
       // Commit visit with current total and end leg
@@ -464,7 +554,7 @@ export default function CameraView({
     if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
       const c = nonRegCount + 1
       setNonRegCount(c)
-      if (c >= 3) setShowRecalModal(true)
+  if (c >= 5) setShowRecalModal(true)
     } else {
       setNonRegCount(0)
     }
@@ -486,7 +576,7 @@ export default function CameraView({
       if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
         const c = nonRegCount + 1
         setNonRegCount(c)
-        if (c >= 3) setShowRecalModal(true)
+  if (c >= 5) setShowRecalModal(true)
       } else setNonRegCount(0)
 
       // Update local pending UI
@@ -499,7 +589,7 @@ export default function CameraView({
     if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
       const c = nonRegCount + 1
       setNonRegCount(c)
-      if (c >= 3) setShowRecalModal(true)
+  if (c >= 5) setShowRecalModal(true)
     } else setNonRegCount(0)
 
     const last = pendingEntries[pendingEntries.length-1]
@@ -578,7 +668,7 @@ export default function CameraView({
     if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
       const c = nonRegCount + 1
       setNonRegCount(c)
-      if (c >= 3) setShowRecalModal(true)
+  if (c >= 5) setShowRecalModal(true)
     } else {
       setNonRegCount(0)
     }
@@ -651,6 +741,23 @@ export default function CameraView({
               <>
                 <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
                 <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                {/* Visit status dots: green=counts, red=not counted/miss, gray=not yet thrown */}
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
+                  aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
+                >
+                  {[0,1,2].map(i => {
+                    const e = pendingEntries[i] as any
+                    const isPending = !e
+                    const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
+                    const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+                    return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
+                  })}
+                  {dartTimerEnabled && dartTimeLeft !== null && (
+                    <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
+                      {Math.max(0, dartTimeLeft)}s
+                    </span>
+                  )}
+                </div>
               </>
             )}
           </ResizablePanel>
@@ -725,7 +832,7 @@ export default function CameraView({
                     if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
                       const c = nonRegCount + 1
                       setNonRegCount(c)
-                      if (c >= 3) setShowRecalModal(true)
+                      if (c >= 5) setShowRecalModal(true)
                     } else setNonRegCount(0)
                     addDart(25, 'BULL 25', 'BULL'); setHadRecentAuto(false)
                   }}>25</button>
@@ -733,7 +840,7 @@ export default function CameraView({
                     if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
                       const c = nonRegCount + 1
                       setNonRegCount(c)
-                      if (c >= 3) setShowRecalModal(true)
+                      if (c >= 5) setShowRecalModal(true)
                     } else setNonRegCount(0)
                     addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
                   }}>50</button>
@@ -821,7 +928,7 @@ export default function CameraView({
                         if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
                           const c = nonRegCount + 1
                           setNonRegCount(c)
-                          if (c >= 3) setShowRecalModal(true)
+                          if (c >= 5) setShowRecalModal(true)
                         } else setNonRegCount(0)
                         addDart(25, 'BULL 25', 'BULL'); setHadRecentAuto(false)
                       }}>25</button>
@@ -829,7 +936,7 @@ export default function CameraView({
                         if (!hadRecentAuto || !lastAutoScore || lastAutoRing === 'MISS' || lastAutoValue === 0) {
                           const c = nonRegCount + 1
                           setNonRegCount(c)
-                          if (c >= 3) setShowRecalModal(true)
+                          if (c >= 5) setShowRecalModal(true)
                         } else setNonRegCount(0)
                         addDart(50, 'INNER_BULL 50', 'INNER_BULL'); setHadRecentAuto(false)
                       }}>50</button>
@@ -894,6 +1001,23 @@ export default function CameraView({
                     <>
                       <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
                       <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                      {/* Visit status dots: green=counts, red=not counted/miss, gray=not yet thrown */}
+                      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
+                        aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
+                      >
+                        {[0,1,2].map(i => {
+                          const e = pendingEntries[i] as any
+                          const isPending = !e
+                          const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
+                          const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+                          return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
+                        })}
+                        {dartTimerEnabled && dartTimeLeft !== null && (
+                          <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
+                            {Math.max(0, dartTimeLeft)}s
+                          </span>
+                        )}
+                      </div>
                     </>
                   )}
                 </ResizablePanel>
@@ -919,6 +1043,18 @@ export default function CameraView({
               <div className="bg-black/30 rounded-2xl p-4">
                 <h2 className="text-lg font-semibold mb-3">Pending Visit</h2>
                 <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
+                <div className="flex items-center gap-2 mb-2">
+                  {[0,1,2].map(i => {
+                    const e = pendingEntries[i] as any
+                    const isPending = !e
+                    const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
+                    const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+                    return <span key={i} className={`w-2.5 h-2.5 rounded-full shadow ${color}`} />
+                  })}
+                  {dartTimerEnabled && dartTimeLeft !== null && (
+                    <span className="ml-2 px-2 py-0.5 rounded bg-black/40 text-white text-xs font-semibold">{Math.max(0, dartTimeLeft)}s</span>
+                  )}
+                </div>
                 <ul className="text-sm mb-2 list-disc pl-5">
                   {pendingEntries.length === 0 ? <li className="opacity-60">No darts yet</li> : pendingEntries.map((e,i) => <li key={i}>{e.label}</li>)}
                 </ul>
@@ -954,6 +1090,18 @@ export default function CameraView({
   <div className="card">
         <h2 className="text-xl font-semibold mb-3">Pending Visit</h2>
         <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
+        <div className="flex items-center gap-2 mb-2">
+          {[0,1,2].map(i => {
+            const e = pendingEntries[i] as any
+            const isPending = !e
+            const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
+            const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+            return <span key={i} className={`w-2.5 h-2.5 rounded-full shadow ${color}`} />
+          })}
+          {dartTimerEnabled && dartTimeLeft !== null && (
+            <span className="ml-2 px-2 py-0.5 rounded bg-black/40 text-white text-xs font-semibold">{Math.max(0, dartTimeLeft)}s</span>
+          )}
+        </div>
         <ul className="text-sm mb-2 list-disc pl-5">
           {pendingEntries.length === 0 ? <li className="opacity-60">No darts yet</li> : pendingEntries.map((e,i) => <li key={i}>{e.label}</li>)}
         </ul>

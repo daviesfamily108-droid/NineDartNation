@@ -3,11 +3,13 @@ import { formatAvg } from '../utils/stats'
 import { Undo2 } from 'lucide-react'
 import { useState } from 'react'
 import { addMatchToAllTime } from '../store/profileStats'
+import { usePendingVisit } from '../store/pendingVisit'
 
 export default function Scoreboard() {
   const [score, setScore] = useState<number>(0)
   const [darts, setDarts] = useState<number>(3)
   const { players, currentPlayerIdx, addVisit, undoVisit, endLeg, nextPlayer, endGame, inProgress, startingScore, bestLegThisMatch } = useMatch()
+  const pendingEntries = usePendingVisit(s => s.entries)
 
   const current = players[currentPlayerIdx]
 
@@ -75,6 +77,17 @@ export default function Scoreboard() {
                 <div className="mt-3 grid grid-cols-3 gap-2 text-center">
                   <div className="p-3 rounded-xl bg-white/10 border border-white/10">
                     <div className="text-xs text-slate-500">Remaining</div>
+                    {idx === currentPlayerIdx && (
+                      <div className="flex items-center justify-center gap-2 mt-1" aria-label={`Visit status for current player`}>
+                        {[0,1,2].map(i => {
+                          const e = pendingEntries[i] as any
+                          const isPending = !e
+                          const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
+                          const color = isPending ? 'bg-gray-400/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+                          return <span key={i} className={`w-2.5 h-2.5 rounded-full shadow ${color}`} />
+                        })}
+                      </div>
+                    )}
                     <div className="text-2xl font-bold">{remaining}</div>
                     <div className="h-1 w-full bg-white/10 rounded-full mt-2 overflow-hidden">
                       <div className="h-full bg-emerald-400/70" style={{ width: `${Math.max(0, Math.min(100, (1 - (remaining / startingScore)) * 100))}%` }} />

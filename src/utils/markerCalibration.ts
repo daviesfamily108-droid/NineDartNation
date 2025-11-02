@@ -104,8 +104,60 @@ export function detectMarkersFromCanvas(canvas: HTMLCanvasElement): MarkerDetect
       message: 'Canvas context unavailable for marker detection.',
     }
   }
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  return detectMarkersFromImage(imageData)
+  const tryDetect = (img: ImageData): MarkerDetection => detectMarkersFromImage(img)
+
+  // Pass 1: raw image
+  let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  let result = tryDetect(imageData)
+  if (result.success || (result.markersFound?.length||0) > 0) return result
+
+  // Pass 2: scale up 1.75x (helps low-resolution streams)
+  try {
+    const scale = 1.75
+    const off = document.createElement('canvas')
+    off.width = Math.round(canvas.width * scale)
+    off.height = Math.round(canvas.height * scale)
+    const octx = off.getContext('2d')!
+    octx.imageSmoothingEnabled = false
+    octx.drawImage(canvas, 0, 0, off.width, off.height)
+    imageData = octx.getImageData(0, 0, off.width, off.height)
+    result = tryDetect(imageData)
+    if (result.success || (result.markersFound?.length||0) > 0) return result
+  } catch {}
+
+  // Pass 3: contrast boost (simple linear stretch)
+  try {
+    const w = canvas.width, h = canvas.height
+    const id = ctx.getImageData(0, 0, w, h)
+    const data = id.data
+    let min = 255, max = 0
+    // Compute luminance min/max
+    for (let i = 0; i < data.length; i += 4) {
+      const y = (0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2])
+      if (y < min) min = y
+      if (y > max) max = y
+    }
+    const range = Math.max(1, max - min)
+    for (let i = 0; i < data.length; i += 4) {
+      const y = (0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2])
+      const yn = Math.max(0, Math.min(255, ((y - min) * 255) / range))
+      data[i] = data[i+1] = data[i+2] = yn
+    }
+    result = tryDetect(id)
+    if (result.success || (result.markersFound?.length||0) > 0) return result
+  } catch {}
+
+  // If still nothing, return the last result (with message)
+  return {
+    success: false,
+    points: [],
+    missing: (Object.keys(MARKER_TARGETS) as MarkerKey[]),
+    markersFound: [],
+    assignments: {},
+    homography: null,
+    errorPx: null,
+    message: result.message || 'No calibration markers detected. Ensure you are using the provided TOP/RIGHT/BOTTOM/LEFT ArUco markers printed at 100% on white paper.',
+  }
 }
 
 const ROW_PATTERNS: Record<string, number[]> = {

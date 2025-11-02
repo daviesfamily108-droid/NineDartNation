@@ -7,12 +7,14 @@ export default function SettingsPanel({ user }: { user?: any }) {
   const {
     favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, avgMode,
     autoStartOffline, rememberLastOffline, reducedMotion, compactHeader, allowSpectate,
-    cameraScale, cameraAspect, autoscoreProvider, autoscoreWsUrl, calibrationGuide,
+    cameraScale, cameraAspect, cameraFitMode, autoscoreProvider, autoscoreWsUrl, calibrationGuide,
     preferredCameraId, preferredCameraLabel, cameraEnabled, offlineLayout, textSize, boxSize,
     setFavoriteDouble, setCallerEnabled, setCallerVoice, setCallerVolume, setSpeakCheckoutOnly,
     setAvgMode, setAutoStartOffline, setRememberLastOffline, setReducedMotion, setCompactHeader,
-    setAllowSpectate, setCameraScale, setCameraAspect, setAutoscoreProvider, setAutoscoreWsUrl,
-    setCalibrationGuide, setPreferredCamera, setCameraEnabled, setOfflineLayout, setTextSize, setBoxSize
+    setAllowSpectate, setCameraScale, setCameraAspect, setCameraFitMode, setAutoscoreProvider, setAutoscoreWsUrl,
+    setCalibrationGuide, setPreferredCamera, setCameraEnabled, setOfflineLayout, setTextSize, setBoxSize,
+    dartTimerEnabled, dartTimerSeconds, setDartTimerEnabled, setDartTimerSeconds,
+    x01DoubleIn, setX01DoubleIn
   } = useUserSettings();
 
   // Achievements state
@@ -481,6 +483,33 @@ export default function SettingsPanel({ user }: { user?: any }) {
           </div>
 
           <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="dartTimerEnabled"
+                checked={!!dartTimerEnabled}
+                onChange={e => setDartTimerEnabled(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="dartTimerEnabled" className="text-sm">Enable per-dart throw timer</label>
+            </div>
+
+            {dartTimerEnabled && (
+              <div>
+                <label className="block mb-2 text-sm font-medium">Time per throw: {dartTimerSeconds ? Math.round(dartTimerSeconds) : 0}s</label>
+                <input
+                  type="range"
+                  min="3"
+                  max="60"
+                  step="1"
+                  value={dartTimerSeconds || 10}
+                  onChange={e => setDartTimerSeconds(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <div className="text-xs opacity-70 mt-1">When the timer reaches zero, the dart is recorded as a miss and advances to the next throw.</div>
+              </div>
+            )}
+
             <div>
               <label className="block mb-2 text-sm font-medium">Favourite Double:</label>
               <select
@@ -523,6 +552,17 @@ export default function SettingsPanel({ user }: { user?: any }) {
                 <option value="all-time">All Time Average</option>
                 <option value="24h">24 Hour Average</option>
               </select>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="x01DoubleIn"
+                checked={!!x01DoubleIn}
+                onChange={e => setX01DoubleIn(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="x01DoubleIn" className="text-sm">Require Double-In for X01</label>
             </div>
 
             <div className="flex items-center gap-3">
@@ -584,6 +624,33 @@ export default function SettingsPanel({ user }: { user?: any }) {
             {callerEnabled && (
               <>
                 <div>
+                  <label className="block mb-2 text-sm font-medium">Caller mode:</label>
+                  <select
+                    className="input w-full"
+                    value={!callerEnabled ? 'off' : (speakCheckoutOnly ? 'checkout' : 'visit')}
+                    onChange={e => {
+                      const v = e.target.value
+                      if (v === 'off') {
+                        setCallerEnabled(false)
+                      } else if (v === 'checkout') {
+                        setCallerEnabled(true)
+                        setSpeakCheckoutOnly(true)
+                      } else {
+                        setCallerEnabled(true)
+                        setSpeakCheckoutOnly(false)
+                      }
+                    }}
+                  >
+                    <option value="visit">Visit totals only</option>
+                    <option value="checkout">Checkouts only</option>
+                    <option value="off">Off</option>
+                  </select>
+                  <div className="text-xs opacity-70 mt-1">
+                    Choose when the caller speaks: at the end of each 3-dart visit, only on finishes, or disable entirely.
+                  </div>
+                </div>
+
+                <div>
                   <label className="block mb-2 text-sm font-medium">Voice:</label>
                   <select
                     className="input w-full"
@@ -622,16 +689,18 @@ export default function SettingsPanel({ user }: { user?: any }) {
                   />
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="speakCheckoutOnly"
-                    checked={speakCheckoutOnly}
-                    onChange={e => setSpeakCheckoutOnly(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  <label htmlFor="speakCheckoutOnly" className="text-sm">Only announce checkouts</label>
-                </div>
+                {false && (
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="speakCheckoutOnly"
+                      checked={speakCheckoutOnly}
+                      onChange={e => setSpeakCheckoutOnly(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <label htmlFor="speakCheckoutOnly" className="text-sm">Only announce checkouts</label>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -680,6 +749,21 @@ export default function SettingsPanel({ user }: { user?: any }) {
                 <option value="wide">Wide (16:9)</option>
                 <option value="square">Square (1:1)</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block mb-2 text-sm font-medium">Camera Display:</label>
+              <select
+                className="input w-full"
+                value={cameraFitMode || 'fill'}
+                onChange={e => setCameraFitMode((e.target.value as 'fit' | 'fill'))}
+              >
+                <option value="fit">Fit (show entire frame)</option>
+                <option value="fill">Fill (full-bleed)</option>
+              </select>
+              <div className="text-xs opacity-70 mt-1">
+                Fit shows the whole camera with possible letterboxing. Fill covers the panel edge-to-edge and may crop.
+              </div>
             </div>
 
             <div>
@@ -873,6 +957,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       autoscoreProvider,
                       autoscoreWsUrl,
                       calibrationGuide,
+                      cameraFitMode,
                       callerEnabled,
                       callerVoice,
                       callerVolume,

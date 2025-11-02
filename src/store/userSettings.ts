@@ -18,6 +18,7 @@ type SettingsState = {
   // UI tuning
   cameraScale: number // 0.5 .. 1.25
   cameraAspect?: 'wide' | 'square'
+  cameraFitMode?: 'fit' | 'fill'
   // External autoscore provider
   autoscoreProvider?: 'built-in' | 'external-ws' | 'manual'
   autoscoreWsUrl?: string
@@ -34,6 +35,10 @@ type SettingsState = {
   textSize: 'small' | 'medium' | 'large'
   // Box size
   boxSize: 'small' | 'medium' | 'large'
+  // Match configuration
+  matchType?: 'singles' | 'doubles'
+  teamAName?: string
+  teamBName?: string
   setFavoriteDouble: (d: string) => void
   setCallerEnabled: (v: boolean) => void
   setCallerVoice: (name: string) => void
@@ -48,6 +53,7 @@ type SettingsState = {
   setAllowSpectate: (v: boolean) => void
   setCameraScale: (n: number) => void
   setCameraAspect: (a: 'wide' | 'square') => void
+  setCameraFitMode: (m: 'fit' | 'fill') => void
   setCalibrationGuide: (v: boolean) => void
   setPreferredCamera: (id: string|undefined, label?: string, force?: boolean) => void
   setPreferredCameraLocked: (v: boolean) => void
@@ -57,13 +63,24 @@ type SettingsState = {
   setAutoscoreWsUrl: (u: string) => void
   setTextSize: (size: 'small' | 'medium' | 'large') => void
   setBoxSize: (size: 'small' | 'medium' | 'large') => void
+  setMatchType: (t: 'singles' | 'doubles') => void
+  setTeamAName: (name: string) => void
+  setTeamBName: (name: string) => void
+  // Throw timer per dart
+  dartTimerEnabled?: boolean
+  dartTimerSeconds?: number
+  setDartTimerEnabled: (v: boolean) => void
+  setDartTimerSeconds: (n: number) => void
+  // X01 rules
+  x01DoubleIn?: boolean
+  setX01DoubleIn: (v: boolean) => void
 }
 const KEY = 'ndn_user_settings'
 
-function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'callerVoice' | 'avgMode' | 'callerVolume' | 'speakCheckoutOnly' | 'autoStartOffline' | 'rememberLastOffline' | 'lastOffline' | 'reducedMotion' | 'compactHeader' | 'allowSpectate' | 'cameraScale' | 'cameraAspect' | 'calibrationGuide' | 'preferredCameraId' | 'preferredCameraLabel' | 'preferredCameraLocked' | 'cameraEnabled' | 'offlineLayout' | 'autoscoreProvider' | 'autoscoreWsUrl' | 'textSize' | 'boxSize'> {
+function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'callerVoice' | 'avgMode' | 'callerVolume' | 'speakCheckoutOnly' | 'autoStartOffline' | 'rememberLastOffline' | 'lastOffline' | 'reducedMotion' | 'compactHeader' | 'allowSpectate' | 'cameraScale' | 'cameraAspect' | 'cameraFitMode' | 'calibrationGuide' | 'preferredCameraId' | 'preferredCameraLabel' | 'preferredCameraLocked' | 'cameraEnabled' | 'offlineLayout' | 'autoscoreProvider' | 'autoscoreWsUrl' | 'textSize' | 'boxSize' | 'matchType' | 'teamAName' | 'teamBName' | 'dartTimerEnabled' | 'dartTimerSeconds' | 'x01DoubleIn'> {
   try {
     const raw = localStorage.getItem(KEY)
-  if (!raw) return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, cameraEnabled: true, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '', textSize: 'medium', boxSize: 'medium' }
+  if (!raw) return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', cameraFitMode: 'fill', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, cameraEnabled: true, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '', textSize: 'medium', boxSize: 'medium', matchType: 'singles', teamAName: 'Team A', teamBName: 'Team B', dartTimerEnabled: false, dartTimerSeconds: 10, x01DoubleIn: false }
     const j = JSON.parse(raw)
     return {
       favoriteDouble: j.favoriteDouble || 'D16',
@@ -85,6 +102,7 @@ function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'calle
       allowSpectate: (typeof j.allowSpectate === 'boolean') ? j.allowSpectate : true,
   cameraScale: (typeof j.cameraScale === 'number' && isFinite(j.cameraScale)) ? Math.max(0.5, Math.min(1.25, j.cameraScale)) : 1.0,
   cameraAspect: j.cameraAspect === 'square' ? 'square' : 'wide',
+  cameraFitMode: (j.cameraFitMode === 'fit' || j.cameraFitMode === 'fill') ? j.cameraFitMode : 'fill',
   autoscoreProvider: (j.autoscoreProvider === 'external-ws') ? 'external-ws' : (j.autoscoreProvider === 'manual' ? 'manual' : 'built-in'),
   autoscoreWsUrl: typeof j.autoscoreWsUrl === 'string' ? j.autoscoreWsUrl : '',
       calibrationGuide: (typeof j.calibrationGuide === 'boolean') ? j.calibrationGuide : true,
@@ -95,9 +113,15 @@ function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'calle
       offlineLayout: j.offlineLayout === 'classic' ? 'classic' : 'modern',
       textSize: (j.textSize === 'small' || j.textSize === 'large') ? j.textSize : 'medium',
       boxSize: (j.boxSize === 'small' || j.boxSize === 'large') ? j.boxSize : 'medium',
+      matchType: (j.matchType === 'doubles') ? 'doubles' : 'singles',
+      teamAName: typeof j.teamAName === 'string' ? j.teamAName : 'Team A',
+      teamBName: typeof j.teamBName === 'string' ? j.teamBName : 'Team B',
+      dartTimerEnabled: (typeof j.dartTimerEnabled === 'boolean') ? j.dartTimerEnabled : false,
+      dartTimerSeconds: (typeof j.dartTimerSeconds === 'number' && isFinite(j.dartTimerSeconds)) ? Math.max(3, Math.min(60, j.dartTimerSeconds)) : 10,
+      x01DoubleIn: (typeof j.x01DoubleIn === 'boolean') ? j.x01DoubleIn : false,
     }
   } catch {
-  return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, preferredCameraLocked: false, cameraEnabled: true, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '', textSize: 'medium', boxSize: 'medium' }
+  return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', cameraFitMode: 'fill', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, preferredCameraLocked: false, cameraEnabled: true, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '', textSize: 'medium', boxSize: 'medium', matchType: 'singles', teamAName: 'Team A', teamBName: 'Team B', dartTimerEnabled: false, dartTimerSeconds: 10, x01DoubleIn: false }
   }
 }
 
@@ -124,6 +148,7 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
   setAllowSpectate: (v) => { save({ allowSpectate: v }); set({ allowSpectate: v }) },
   setCameraScale: (n) => { const s = Math.max(0.5, Math.min(1.25, n)); save({ cameraScale: s }); set({ cameraScale: s }) },
   setCameraAspect: (a) => { const v = (a === 'square') ? 'square' : 'wide'; save({ cameraAspect: v }); set({ cameraAspect: v }) },
+  setCameraFitMode: (m) => { const v = (m === 'fit') ? 'fit' : 'fill'; save({ cameraFitMode: v }); set({ cameraFitMode: v }) },
   setAutoscoreProvider: (p) => { save({ autoscoreProvider: p }); set({ autoscoreProvider: p }) },
   setAutoscoreWsUrl: (u) => { save({ autoscoreWsUrl: u }); set({ autoscoreWsUrl: u }) },
   setCalibrationGuide: (v) => { save({ calibrationGuide: v }); set({ calibrationGuide: v }) },
@@ -146,4 +171,10 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
   setOfflineLayout: (mode) => { save({ offlineLayout: mode }); set({ offlineLayout: mode }) },
   setTextSize: (size) => { save({ textSize: size }); set({ textSize: size }) },
   setBoxSize: (size) => { save({ boxSize: size }); set({ boxSize: size }) },
+  setMatchType: (t) => { const v = (t === 'doubles') ? 'doubles' : 'singles'; save({ matchType: v }); set({ matchType: v }) },
+  setTeamAName: (name) => { const v = name?.trim() || 'Team A'; save({ teamAName: v }); set({ teamAName: v }) },
+  setTeamBName: (name) => { const v = name?.trim() || 'Team B'; save({ teamBName: v }); set({ teamBName: v }) },
+  setDartTimerEnabled: (v) => { save({ dartTimerEnabled: v }); set({ dartTimerEnabled: v }) },
+  setDartTimerSeconds: (n) => { const s = Math.max(3, Math.min(60, Math.round(n))); save({ dartTimerSeconds: s }); set({ dartTimerSeconds: s }) },
+  setX01DoubleIn: (v) => { save({ x01DoubleIn: v }); set({ x01DoubleIn: v }) },
 }))
