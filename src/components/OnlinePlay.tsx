@@ -1497,6 +1497,26 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 title={compactView ? 'Switch to full multi-player view' : 'Switch to compact player-by-player view'}
               >{compactView ? 'Full view' : 'Compact view'}</button>
             </div>
+            {/* Header row: Legs chip on the left, Match controls on the right */}
+            {(() => {
+              const a = match.players?.[0]?.legsWon || 0
+              const b = match.players?.[1]?.legsWon || 0
+              return (
+                <div className="mb-2 flex items-center gap-2 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10 text-white">Legs: {a}–{b}</span>
+                  <div className="ml-auto flex items-center gap-1 text-[10px] flex-wrap">
+                    <span className="opacity-70">Match</span>
+                    <select className={`btn ${buttonSizeClass}`} value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
+                      <option value="singles">Singles</option>
+                      <option value="doubles">Doubles</option>
+                    </select>
+                    <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
+                    <span className="opacity-50">vs</span>
+                    <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
+                  </div>
+                </div>
+              )
+            })()}
             {/* Summary area */}
             {compactView ? (
               <div className="mb-3">
@@ -1617,18 +1637,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
             )}
             {compactView ? (
               <div className="space-y-2">
-                {/* Match type + Top toolbar */}
+                {/* Top toolbar */}
                 <div className="flex flex-col gap-2 mb-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="opacity-70 text-[11px]">Match</span>
-                    <select className={`btn ${buttonSizeClass}`} value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
-                      <option value="singles">Singles</option>
-                      <option value="doubles">Doubles</option>
-                    </select>
-                    <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
-                    <span className="opacity-50">vs</span>
-                    <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
-                  </div>
                   <div className="flex items-center gap-2">
                   <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-autoscore' as any)) }catch{} }}>Autoscore</button>
                   <button className={`btn ${buttonSizeClass}`} onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:open-scoring' as any)) }catch{} }}>Scoring</button>
@@ -1686,22 +1696,9 @@ export default function OnlinePlay({ user }: { user?: any }) {
                             fill
                           />
                         </ResizablePanel>
-                        {mobileStream && (
-                          <div className="mt-2">
-                            <video 
-                              ref={mobileVideoRef} 
-                              autoPlay 
-                              playsInline 
-                              muted 
-                              className="w-full h-auto max-h-32 object-contain rounded border bg-black" 
-                            />
-                            <div className="text-xs opacity-70 mt-1">Mobile Camera</div>
-                          </div>
-                        )}
+                        {/** Duplicate compact toolbar removed; header now contains match controls */}
                       </div>
-                    ) : (
-                      <div className="text-xs opacity-60">Camera disabled in settings</div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <div className="font-semibold">Current: {match.players[match.currentPlayerIdx]?.name || 'ÔÇö'}</div>
@@ -1721,7 +1718,11 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       }
                       // Instant local celebration
                       try { if (score === 180) triggerCelebration('180', current?.name || 'Player'); if (finished) triggerCelebration('leg', current?.name || 'Player') } catch {}
-                      if (!finished) { match.nextPlayer() }
+                      // If an opponent is present, rotate turns; otherwise stay on the same player for solo practice
+                      if (!finished) {
+                        const hasOpponent = (participants?.length || 0) >= 2
+                        if (hasOpponent) { match.nextPlayer() }
+                      }
                       sendState()
                     }} />
                     <div className="flex items-center gap-1.5 mb-2">
@@ -2156,7 +2157,13 @@ export default function OnlinePlay({ user }: { user?: any }) {
                         try { if (score === 180) triggerCelebration('180', current?.name || 'Player'); if (finished) triggerCelebration('leg', current?.name || 'Player') } catch {}
                         // Small delay before rotating to next player to avoid dropping late autoscore events
                         if (!finished) {
-                          setTimeout(() => { try { match.nextPlayer(); sendState() } catch {} }, 750)
+                          const hasOpponent = (participants?.length || 0) >= 2
+                          if (hasOpponent) {
+                            setTimeout(() => { try { match.nextPlayer(); sendState() } catch {} }, 750)
+                          } else {
+                            // Solo: keep turn with current player
+                            sendState()
+                          }
                         } else {
                           sendState()
                         }

@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useUserSettings } from '../store/userSettings'
 import { useCalibration } from '../store/calibration'
 import { useMatch } from '../store/match'
-import { BoardRadii, drawPolyline, sampleRing, scaleHomography, type Point } from '../utils/vision'
+import { BoardRadii, drawPolyline, sampleRing, scaleHomography, type Point, applyHomography, drawCross, refinePointSobel } from '../utils/vision'
 import { scoreFromImagePoint } from '../utils/autoscore'
+import { DartDetector } from '../utils/dartDetector'
 import { addSample } from '../store/profileStats'
 import { subscribeExternalWS } from '../utils/scoring'
 import ResizablePanel from './ui/ResizablePanel'
@@ -57,6 +58,7 @@ export default function CameraView({
   const x01DoubleInSetting = useUserSettings(s => s.x01DoubleIn)
   const x01DoubleIn = (typeof x01DoubleInOverride === 'boolean') ? !!x01DoubleInOverride : !!x01DoubleInSetting
   const [openedById, setOpenedById] = useState<Record<string, boolean>>({})
+  const matchState = useMatch(s => s)
   const currentPlayerId = matchState.players[matchState.currentPlayerIdx]?.id
   const isOpened = !!(currentPlayerId && openedById[currentPlayerId])
   const setOpened = (v: boolean) => { if (!currentPlayerId) return; setOpenedById(m => ({ ...m, [currentPlayerId]: v })) }
@@ -69,7 +71,6 @@ export default function CameraView({
   useEffect(() => () => { try { resetPendingVisit() } catch {} }, [resetPendingVisit])
   const addVisit = useMatch(s => s.addVisit)
   const endLeg = useMatch(s => s.endLeg)
-  const matchState = useMatch(s => s)
   const addHeatSample = useHeatmapStore(s => s.addSample)
   // Quick entry dropdown selections
   const [quickSelAuto, setQuickSelAuto] = useState('')
@@ -88,6 +89,10 @@ export default function CameraView({
   const [dartTimeLeft, setDartTimeLeft] = useState<number | null>(null)
   const timerRef = useRef<number | null>(null)
   const paused = useMatchControl(s => s.paused)
+  // Built-in CV detector
+  const detectorRef = useRef<DartDetector | null>(null)
+  const rafRef = useRef<number | null>(null)
+  const [detectorSeedVersion, setDetectorSeedVersion] = useState(0)
   // Open Autoscore modal from parent via global event
   useEffect(() => {
     const onOpen = () => { if (!manualOnly) setShowAutoModal(true) }
@@ -389,6 +394,134 @@ export default function CameraView({
     return () => clearInterval(id)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [H, imageSize, streaming, manualOnly])
+
+  // Built-in autoscore loop (offline/local CV)
+  useEffect(() => {
+    if (manualOnly) return
+    if (autoscoreProvider !== 'built-in') return
+    if (!streaming || !videoRef.current) return
+    if (!H || !imageSize) return
+
+    let canceled = false
+    const v = videoRef.current
+    const proc = canvasRef.current
+    if (!proc) return
+
+    // Initialize or reset detector
+    if (!detectorRef.current) detectorRef.current = new DartDetector()
+
+    const tick = () => {
+      if (canceled) return
+      try {
+        const vw = v.videoWidth || 0
+        const vh = v.videoHeight || 0
+        if (!vw || !vh) { rafRef.current = requestAnimationFrame(tick); return }
+        if (proc.width !== vw) proc.width = vw
+        if (proc.height !== vh) proc.height = vh
+        const ctx = proc.getContext('2d')
+        if (!ctx) { rafRef.current = requestAnimationFrame(tick); return }
+        ctx.drawImage(v, 0, 0, vw, vh)
+        const frame = ctx.getImageData(0, 0, vw, vh)
+
+        // Seed ROI from calibration homography (board center + double radius along X)
+        const cImg = applyHomography(H, { x: 0, y: 0 })
+        const rImg = applyHomography(H, { x: BoardRadii.doubleOuter, y: 0 })
+        // Scale calibration image coordinates to current video size
+        const sx = vw / imageSize.w
+        const sy = vh / imageSize.h
+        const cx = cImg.x * sx
+        const cy = cImg.y * sy
+        const rx = rImg.x * sx
+        const ry = rImg.y * sy
+        const roiR = Math.hypot(rx - cx, ry - cy) * 1.08
+
+        const detector = detectorRef.current!
+        if (detectorSeedVersion >= 0) {
+          detector.setROI(cx, cy, Math.max(24, Math.min(Math.max(vw, vh), roiR)))
+        }
+
+        // Try to detect a new dart when not paused and visit has room
+        if (!paused && pendingDarts < 3) {
+          const det = detector.detect(frame)
+          if (det && det.confidence >= 0.6) {
+            // Refine tip on gradients
+            const tipRefined = refinePointSobel(proc, det.tip, 6)
+            // Map to calibration image space before scoring
+            const pCal = { x: tipRefined.x / sx, y: tipRefined.y / sy }
+            const score = scoreFromImagePoint(H, pCal)
+            const s = `${score.ring} ${score.base > 0 ? score.base : ''}`.trim()
+            setLastAutoScore(s)
+            setLastAutoValue(score.base)
+            setLastAutoRing(score.ring as Ring)
+            setHadRecentAuto(true)
+
+            // Draw debug tip and shaft axis on overlay (scaled to overlay canvas)
+            try {
+              const o = overlayRef.current
+              if (o) {
+                const octx = o.getContext('2d')
+                if (octx) {
+                  // Maintain overlay size and clear a small area
+                  const ox = (tipRefined.x / vw) * o.width
+                  const oy = (tipRefined.y / vh) * o.height
+                  octx.save()
+                  octx.beginPath()
+                  octx.strokeStyle = '#f59e0b'
+                  octx.lineWidth = 2
+                  octx.arc(ox, oy, 6, 0, Math.PI * 2)
+                  octx.stroke()
+                  // axis line if available
+                  if ((det as any).axis) {
+                    const ax = (det as any).axis
+                    const ax1 = (ax.x1 / vw) * o.width
+                    const ay1 = (ax.y1 / vh) * o.height
+                    const ax2 = (ax.x2 / vw) * o.width
+                    const ay2 = (ax.y2 / vh) * o.height
+                    octx.beginPath()
+                    octx.moveTo(ax1, ay1)
+                    octx.lineTo(ax2, ay2)
+                    octx.stroke()
+                  }
+                  // bbox
+                  if ((det as any).bbox) {
+                    const bx = ((det as any).bbox.x / vw) * o.width
+                    const by = ((det as any).bbox.y / vh) * o.height
+                    const bw = ((det as any).bbox.w / vw) * o.width
+                    const bh = ((det as any).bbox.h / vh) * o.height
+                    octx.strokeStyle = '#22d3ee'
+                    octx.strokeRect(bx, by, bw, bh)
+                  }
+                  octx.restore()
+                }
+              }
+            } catch {}
+
+            // Optional immediate commit for practice/custom flows
+            try {
+              if (immediateAutoCommit && onAutoDart) {
+                onAutoDart(score.base, score.ring as Ring, { sector: score.sector, mult: score.mult })
+              }
+            } catch {}
+
+            // Accept to avoid double-triggering on the same physical dart
+            detector.accept(frame, det)
+          }
+        }
+      } catch (e) {
+        // Soft-fail; continue next frame
+        // console.warn('Autoscore tick error:', e)
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+    return () => {
+      canceled = true
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manualOnly, autoscoreProvider, streaming, H, imageSize, paused, pendingDarts, detectorSeedVersion])
 
   // External autoscore subscription
   useEffect(() => {
@@ -785,6 +918,11 @@ export default function CameraView({
                 )}
                 {/* Removed Snapshot panel; Capture remains for future features (e.g., quick preview) */}
                 <button className="btn" onClick={capture} disabled={!streaming}>Capture Still</button>
+                <button className="btn bg-slate-700 hover:bg-slate-800" disabled={!streaming} onClick={()=>{
+                  // Reset/seed detector background on demand
+                  detectorRef.current = null
+                  setDetectorSeedVersion(v=>v+1)
+                }}>Reset Autoscore Background</button>
               </>
             )}
             <button className="btn bg-slate-700 hover:bg-slate-800" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
@@ -1050,6 +1188,7 @@ export default function CameraView({
                         <button className="btn bg-gradient-to-r from-rose-600 to-rose-700 text-white font-bold" onClick={stopCamera}>Stop Camera</button>
                       )}
                       <button className="btn bg-gradient-to-r from-indigo-500 to-indigo-700 text-white font-bold" onClick={capture} disabled={!streaming}>Capture Still</button>
+                      <button className="btn bg-gradient-to-r from-slate-600 to-slate-800 text-white font-bold" disabled={!streaming} onClick={()=>{ detectorRef.current = null; setDetectorSeedVersion(v=>v+1) }}>Reset Autoscore Background</button>
                     </>
                   )}
                   <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>

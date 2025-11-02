@@ -268,12 +268,15 @@ export default function Tournaments({ user }: { user: any }) {
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-2xl font-bold">Tournaments</h2>
       </div>
-      {/* Create Tournament+ box (top-right area) */}
-      <div className="mb-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-end">
-        <button className="btn" onClick={()=>setShowCreate(true)}>Create Tournament +</button>
+      {/* Create Tournament + and default match prefs on a single header row */}
+      <div className="mb-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-between gap-2 flex-wrap">
+        <div className="min-w-0">
+          <MatchPrefs />
+        </div>
+        <div className="shrink-0">
+          <button className="btn" onClick={()=>setShowCreate(true)}>Create Tournament +</button>
+        </div>
       </div>
-  {/* Default match preferences */}
-  <MatchPrefs />
   <div className="mb-2 text-sm font-semibold text-slate-300">World Lobby</div>
       {/* Persistent banner for next official weekly tournament */}
       {nextOfficial && (
