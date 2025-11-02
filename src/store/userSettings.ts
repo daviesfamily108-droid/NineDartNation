@@ -80,7 +80,7 @@ const KEY = 'ndn_user_settings'
 function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'callerVoice' | 'avgMode' | 'callerVolume' | 'speakCheckoutOnly' | 'autoStartOffline' | 'rememberLastOffline' | 'lastOffline' | 'reducedMotion' | 'compactHeader' | 'allowSpectate' | 'cameraScale' | 'cameraAspect' | 'cameraFitMode' | 'calibrationGuide' | 'preferredCameraId' | 'preferredCameraLabel' | 'preferredCameraLocked' | 'cameraEnabled' | 'offlineLayout' | 'autoscoreProvider' | 'autoscoreWsUrl' | 'textSize' | 'boxSize' | 'matchType' | 'teamAName' | 'teamBName' | 'dartTimerEnabled' | 'dartTimerSeconds' | 'x01DoubleIn'> {
   try {
     const raw = localStorage.getItem(KEY)
-  if (!raw) return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', cameraFitMode: 'fill', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, cameraEnabled: true, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '', textSize: 'medium', boxSize: 'medium', matchType: 'singles', teamAName: 'Team A', teamBName: 'Team B', dartTimerEnabled: false, dartTimerSeconds: 10, x01DoubleIn: false }
+  if (!raw) return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', cameraFitMode: 'fit', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, cameraEnabled: true, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '', textSize: 'medium', boxSize: 'medium', matchType: 'singles', teamAName: 'Team A', teamBName: 'Team B', dartTimerEnabled: false, dartTimerSeconds: 10, x01DoubleIn: false }
     const j = JSON.parse(raw)
     return {
       favoriteDouble: j.favoriteDouble || 'D16',
@@ -102,7 +102,7 @@ function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'calle
       allowSpectate: (typeof j.allowSpectate === 'boolean') ? j.allowSpectate : true,
   cameraScale: (typeof j.cameraScale === 'number' && isFinite(j.cameraScale)) ? Math.max(0.5, Math.min(1.25, j.cameraScale)) : 1.0,
   cameraAspect: j.cameraAspect === 'square' ? 'square' : 'wide',
-  cameraFitMode: (j.cameraFitMode === 'fit' || j.cameraFitMode === 'fill') ? j.cameraFitMode : 'fill',
+  cameraFitMode: (j.cameraFitMode === 'fit' || j.cameraFitMode === 'fill') ? j.cameraFitMode : 'fit',
   autoscoreProvider: (j.autoscoreProvider === 'external-ws') ? 'external-ws' : (j.autoscoreProvider === 'manual' ? 'manual' : 'built-in'),
   autoscoreWsUrl: typeof j.autoscoreWsUrl === 'string' ? j.autoscoreWsUrl : '',
       calibrationGuide: (typeof j.calibrationGuide === 'boolean') ? j.calibrationGuide : true,
@@ -121,7 +121,7 @@ function load(): Pick<SettingsState, 'favoriteDouble' | 'callerEnabled' | 'calle
       x01DoubleIn: (typeof j.x01DoubleIn === 'boolean') ? j.x01DoubleIn : false,
     }
   } catch {
-  return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', cameraFitMode: 'fill', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, preferredCameraLocked: false, cameraEnabled: true, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '', textSize: 'medium', boxSize: 'medium', matchType: 'singles', teamAName: 'Team A', teamBName: 'Team B', dartTimerEnabled: false, dartTimerSeconds: 10, x01DoubleIn: false }
+  return { favoriteDouble: 'D16', callerEnabled: true, callerVoice: '', callerVolume: 1, speakCheckoutOnly: false, avgMode: 'all-time', autoStartOffline: false, rememberLastOffline: true, lastOffline: { mode: 'X01', x01Start: 501, firstTo: 1, aiLevel: 'None' }, reducedMotion: false, compactHeader: false, allowSpectate: true, cameraScale: 1.0, cameraAspect: 'wide', cameraFitMode: 'fit', calibrationGuide: true, preferredCameraId: undefined, preferredCameraLabel: undefined, preferredCameraLocked: false, cameraEnabled: true, offlineLayout: 'modern', autoscoreProvider: 'built-in', autoscoreWsUrl: '', textSize: 'medium', boxSize: 'medium', matchType: 'singles', teamAName: 'Team A', teamBName: 'Team B', dartTimerEnabled: false, dartTimerSeconds: 10, x01DoubleIn: false }
   }
 }
 
