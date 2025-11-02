@@ -473,9 +473,16 @@ export default function OfflinePlay({ user }: { user: any }) {
     setPlayerLastDart(dart)
     setPlayerDartsThrown(d => d + 1)
     setTotalPlayerDarts(d => d + 1)
-    if (remaining < 0) {
+  if (remaining < 0) {
       // bust: revert to visit start, end turn
       setPlayerScore(playerVisitStart)
+      // Count doubles attempts made this visit if we were in the double window
+      const bustPreRemaining = playerScore
+      if (bustPreRemaining <= 50) {
+        // playerVisitDartsAtDouble has previous window darts; include this dart as an attempt too
+        const attemptsThisVisit = (playerVisitDartsAtDouble || 0) + 1
+        setPlayerDoublesAtt(a => a + attemptsThisVisit)
+      }
       // Announce visit total on bust (0 for the visit)
       if (callerEnabled) {
         try { sayScore(user?.username || 'Player', 0, Math.max(playerVisitStart, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
@@ -511,9 +518,11 @@ export default function OfflinePlay({ user }: { user: any }) {
       // Highest checkout if <= 170
       const checkout = playerVisitStart
       if (checkout <= 170) setPlayerHighestCheckout(h => Math.max(h, checkout))
-      // Count a double hit only if last dart is a double that takes out from <= 50
+      // Count doubles attempts in this visit and record a hit when finishing from <= 50
       if (preRemaining <= 50) {
-        setPlayerDoublesAtt(a => a + (playerVisitDartsAtDouble > 0 ? playerVisitDartsAtDouble : 1))
+        // Include this dart in attempts
+        const attemptsThisVisit = (playerVisitDartsAtDouble || 0) + 1
+        setPlayerDoublesAtt(a => a + attemptsThisVisit)
         setPlayerDoublesHit(h => h + 1)
       }
       // Announce total of the visit on checkout
@@ -530,6 +539,11 @@ export default function OfflinePlay({ user }: { user: any }) {
       if (playerVisitSum + dart === 180) setPlayer180s(n => n + 1)
       else if (playerVisitSum + dart >= 140) setPlayer140s(n => n + 1)
       else if (playerVisitSum + dart >= 100) setPlayer100s(n => n + 1)
+      // Count doubles attempts on a non-finishing visit inside double window
+      if (preRemaining <= 50) {
+        const attemptsThisVisit = (playerVisitDartsAtDouble || 0) + 1
+        setPlayerDoublesAtt(a => a + attemptsThisVisit)
+      }
       // Announce visit total after third dart
       if (callerEnabled) {
         const visitTotal = playerVisitSum + dart
@@ -582,7 +596,12 @@ export default function OfflinePlay({ user }: { user: any }) {
     if (callerEnabled) {
       try { sayScore(user?.username || 'Player', total, Math.max(remaining, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
     }
-    // Checkout if exactly zero; we cannot infer doubles from a visit total, so we won't alter doubles stats
+    // Doubles attempts/hit from visit total if we were in checkout range at visit start
+    if (playerVisitStart <= 50) {
+      setPlayerDoublesAtt(a => a + 3)
+      if (remaining === 0) setPlayerDoublesHit(h => h + 1)
+    }
+    // Checkout if exactly zero
     if (remaining === 0) {
       const checkout = playerVisitStart
       if (checkout <= 170) setPlayerHighestCheckout(h => Math.max(h, checkout))
@@ -1310,7 +1329,15 @@ export default function OfflinePlay({ user }: { user: any }) {
                         ))}
                       </span>
                     </div>
-                    <div className="text-xs opacity-80 mt-1">Doubles: <span className="font-semibold">Att {playerDoublesAtt} · Hit {playerDoublesHit}</span></div>
+                    <div className="text-xs opacity-80 mt-1">{
+                      (() => {
+                        const att = playerDoublesAtt
+                        const hit = playerDoublesHit
+                        const miss = Math.max(0, att - hit)
+                        const pct = att > 0 ? Math.round((hit/att)*100) : 0
+                        return <span className="font-semibold">Doubles: {hit}/{miss} ({pct}%)</span>
+                      })()
+                    }</div>
                     {playerScore <= 170 && playerScore > 0 && (
                       (() => {
                         const sugs = suggestCheckouts(playerScore, favoriteDouble)
@@ -1377,7 +1404,13 @@ export default function OfflinePlay({ user }: { user: any }) {
                       <div className="text-xs opacity-70">Darts thrown: {aiDartsThrown}</div>
                     )}
                     {ai !== 'None' && (
-                      <div className="text-xs opacity-80 mt-1">Doubles: <span className="font-semibold">Att {aiDoublesAtt} · Hit {aiDoublesHit}</span></div>
+                      (() => {
+                        const att = aiDoublesAtt
+                        const hit = aiDoublesHit
+                        const miss = Math.max(0, att - hit)
+                        const pct = att > 0 ? Math.round((hit/att)*100) : 0
+                        return <div className="text-xs opacity-80 mt-1"><span className="font-semibold">Doubles: {hit}/{miss} ({pct}%)</span></div>
+                      })()
                     )}
                   </div>
                 </div>
