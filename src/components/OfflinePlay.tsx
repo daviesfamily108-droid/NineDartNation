@@ -1052,6 +1052,17 @@ export default function OfflinePlay({ user }: { user: any }) {
                 })()}
               </div>
               <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">Legs: {playerLegs}–{aiLegs}</span>
+              {/* Move match type and team names to the right of Legs for a single-row header */}
+              <div className="ml-auto flex items-center gap-1 text-[10px] flex-wrap">
+                <span className="opacity-70">Match</span>
+                <select className={`btn ${buttonSizeClass}`} value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
+                  <option value="singles">Singles</option>
+                  <option value="doubles">Doubles</option>
+                </select>
+                <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
+                <span className="opacity-50">vs</span>
+                <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
+              </div>
             </div>
             {selectedMode !== 'X01' ? (
               <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col h-full mb-2">
@@ -1322,17 +1333,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   {!manualScoring ? (
                     <>
                       <div className="flex items-center flex-wrap gap-1.5 mt-1">
-                        {/* Match type and names */}
-                        <div className="flex items-center gap-1 text-[10px] mr-auto">
-                          <span className="opacity-70">Match</span>
-                          <select className={`btn ${buttonSizeClass}`} value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
-                            <option value="singles">Singles</option>
-                            <option value="doubles">Doubles</option>
-                          </select>
-                          <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
-                          <span className="opacity-50">vs</span>
-                          <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
-                        </div>
+                        {/* Match type and names moved to header (next to Legs) */}
                         <div className="ml-auto flex items-center gap-1 text-[10px]">
                           <span className="opacity-70">Cam</span>
                           <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
