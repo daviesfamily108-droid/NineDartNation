@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState } from 'react'
+import { useUserSettings } from '../store/userSettings'
 import { X } from 'lucide-react'
 
 interface FloatingCameraPreviewProps {
@@ -19,6 +20,7 @@ export default function FloatingCameraPreview({
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [positionState, setPositionState] = useState(position)
+  const cameraFitMode = useUserSettings(s => s.cameraFitMode) || 'fit'
 
   useEffect(() => {
     if (!visible || !videoRef.current) return
@@ -70,7 +72,7 @@ export default function FloatingCameraPreview({
       {/* Video */}
       <video
         ref={videoRef}
-        className="flex-1 w-full h-full object-cover rounded-b-lg bg-black"
+        className={`flex-1 w-full h-full ${cameraFitMode==='fit' ? 'object-contain' : 'object-cover'} rounded-b-lg bg-black`}
         autoPlay
         muted
         playsInline

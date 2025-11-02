@@ -738,27 +738,35 @@ export default function CameraView({
                 </div>
               </div>
             ) : (
-              <>
-                <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
-                <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
-                {/* Visit status dots: green=counts, red=not counted/miss, gray=not yet thrown */}
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
-                  aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
-                >
-                  {[0,1,2].map(i => {
-                    const e = pendingEntries[i] as any
-                    const isPending = !e
-                    const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
-                    const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
-                    return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
-                  })}
-                  {dartTimerEnabled && dartTimeLeft !== null && (
-                    <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
-                      {Math.max(0, dartTimeLeft)}s
-                    </span>
-                  )}
-                </div>
-              </>
+              (() => {
+                const fit = (useUserSettings.getState().cameraFitMode || 'fit') === 'fit'
+                const videoClass = fit
+                  ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
+                  : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black'
+                return (
+                  <div className="relative w-full aspect-[4/3] bg-black">
+                    <video ref={videoRef} className={videoClass} playsInline webkit-playsinline="true" muted autoPlay />
+                    <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                    {/* Visit status dots: green=counts, red=not counted/miss, gray=not yet thrown */}
+                    <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
+                      aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
+                    >
+                      {[0,1,2].map(i => {
+                        const e = pendingEntries[i] as any
+                        const isPending = !e
+                        const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
+                        const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+                        return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
+                      })}
+                      {dartTimerEnabled && dartTimeLeft !== null && (
+                        <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
+                          {Math.max(0, dartTimeLeft)}s
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()
             )}
           </ResizablePanel>
           <div className="flex gap-2 mt-3">
@@ -998,27 +1006,35 @@ export default function CameraView({
                       </div>
                     </div>
                   ) : (
-                    <>
-                      <video ref={videoRef} className="w-full h-full object-cover" playsInline webkit-playsinline="true" muted autoPlay />
-                      <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
-                      {/* Visit status dots: green=counts, red=not counted/miss, gray=not yet thrown */}
-                      <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
-                        aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
-                      >
-                        {[0,1,2].map(i => {
-                          const e = pendingEntries[i] as any
-                          const isPending = !e
-                          const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
-                          const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
-                          return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
-                        })}
-                        {dartTimerEnabled && dartTimeLeft !== null && (
-                          <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
-                            {Math.max(0, dartTimeLeft)}s
-                          </span>
-                        )}
-                      </div>
-                    </>
+                    (() => {
+                      const fit = (useUserSettings.getState().cameraFitMode || 'fit') === 'fit'
+                      const videoClass = fit
+                        ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
+                        : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black'
+                      return (
+                        <div className="relative w-full aspect-[4/3] bg-black">
+                          <video ref={videoRef} className={videoClass} playsInline webkit-playsinline="true" muted autoPlay />
+                          <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                          {/* Visit status dots: green=counts, red=not counted/miss, gray=not yet thrown */}
+                          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
+                            aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
+                          >
+                            {[0,1,2].map(i => {
+                              const e = pendingEntries[i] as any
+                              const isPending = !e
+                              const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
+                              const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+                              return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
+                            })}
+                            {dartTimerEnabled && dartTimeLeft !== null && (
+                              <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
+                                {Math.max(0, dartTimeLeft)}s
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })()
                   )}
                 </ResizablePanel>
                 <div className="flex gap-2 mt-3">

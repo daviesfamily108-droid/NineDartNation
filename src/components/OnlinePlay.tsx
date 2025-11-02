@@ -1682,6 +1682,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                           <CameraTile 
                             label="Your Board" 
                             autoStart={user?.username && match.players[match.currentPlayerIdx]?.name === user.username} 
+                            aspect="classic"
                             fill
                           />
                         </ResizablePanel>
@@ -1692,7 +1693,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                               autoPlay 
                               playsInline 
                               muted 
-                              className="w-full h-auto max-h-32 object-cover rounded border" 
+                              className="w-full h-auto max-h-32 object-contain rounded border bg-black" 
                             />
                             <div className="text-xs opacity-70 mt-1">Mobile Camera</div>
                           </div>
@@ -2103,6 +2104,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <CameraTile 
                         label="Your Board" 
                         autoStart={user?.username && match.players[match.currentPlayerIdx]?.name === user.username} 
+                        aspect="classic"
                         fill
                       />
                     </ResizablePanel>

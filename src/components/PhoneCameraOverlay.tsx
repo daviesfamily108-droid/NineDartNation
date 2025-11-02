@@ -279,9 +279,9 @@ export default function PhoneCameraOverlay() {
 				</div>
 			)}
 
-			{/* Canvas content - hidden when minimized */}
+			{/** Canvas content - hidden when minimized */}
 			{!minimized && (
-				<div className="bg-black w-full relative overflow-hidden" style={{ aspectRatio: '16/9' }}>
+				<div className="bg-black w-full relative overflow-hidden" style={{ aspectRatio: '4/3' }}>
 					<canvas
 						ref={canvasRef}
 						// Use object-cover to eliminate any letterboxing in the floating preview

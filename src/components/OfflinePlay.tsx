@@ -1428,6 +1428,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                     label="Your Board"
                     autoStart={true}
                     className="min-w-0 h-full"
+                    aspect="classic"
                     fill
                   />
                 </ResizablePanel>
