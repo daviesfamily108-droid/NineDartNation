@@ -38,7 +38,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify(username.includes('@') ? { email: username, password } : { username, password })
       });
       const data = await res.json();
       if (res.ok && data?.user && data?.token) {
@@ -133,7 +133,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
             <input className="input w-full" type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required />
           )}
           {mode !== 'reset' && (
-            <input className="input w-full" type="text" placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required />
+        <input className="input w-full" type="text" placeholder="Username or Email" value={username} onChange={e => setUsername(e.target.value)} required />
           )}
           {mode !== 'reset' && (
             <div className="relative">

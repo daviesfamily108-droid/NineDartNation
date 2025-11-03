@@ -485,15 +485,22 @@ app.post('/api/auth/signup', async (req, res) => {
 
 // Login endpoint
 app.post('/api/auth/login', async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required.' });
+  const { username, email, password } = req.body || {};
+  const rawId = (username || email || '').trim();
+  if (!rawId || !password) {
+    return res.status(400).json({ error: 'Username or email and password required.' });
   }
+  const idLower = rawId.toLowerCase();
 
   try {
     // Check in-memory users FIRST (fastest path - no network, <1ms)
     for (const u of users.values()) {
-      if (u.username === username) {
+      const uEmailLower = String(u.email||'').toLowerCase();
+      const uNameLower = String(u.username||'').toLowerCase();
+      const matches = idLower.includes('@')
+        ? (uEmailLower === idLower)
+        : (uNameLower === idLower || uEmailLower === idLower);
+      if (matches) {
         const stored = String(u.password || '')
         const isHashed = stored.startsWith('$2')
         const ok = isHashed ? await bcrypt.compare(String(password), stored) : (stored === password)
@@ -508,10 +515,11 @@ app.post('/api/auth/login', async (req, res) => {
     // Return error immediately, then cache in background for future logins
     if (supabase) {
       // Async fetch - doesn't block the response
+      const fetchBy = idLower.includes('@') ? { col: 'email', val: idLower } : { col: 'username', val: rawId };
       supabase
         .from('users')
         .select('*')
-        .eq('username', username)
+        .eq(fetchBy.col, fetchBy.val)
         .single()
         .then(async ({ data, error }) => {
           try {
@@ -526,7 +534,7 @@ app.post('/api/auth/login', async (req, res) => {
                   password: stored,
                   admin: data.admin || false
                 });
-                console.log('[LOGIN] Cached user from Supabase:', username);
+                console.log('[LOGIN] Cached user from Supabase:', data.username);
               }
             }
           } catch {}
@@ -535,7 +543,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     // Return invalid immediately (user not in cache, and we don't wait for DB)
-    return res.status(401).json({ error: 'Invalid username or password.' });
+    return res.status(401).json({ error: 'Invalid credentials.' });
   } catch (error) {
     console.error('[LOGIN] Error:', error);
     return res.status(500).json({ error: 'Internal server error.' });
