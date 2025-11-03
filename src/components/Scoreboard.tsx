@@ -65,8 +65,15 @@ export default function Scoreboard() {
           {players.map((p, idx) => {
             const currentLeg = p.legs[p.legs.length-1]
             const remaining = currentLeg ? currentLeg.totalScoreRemaining : startingScore
-            const dartsThrown = currentLeg ? currentLeg.dartsThrown : 0
-            const avg = currentLeg ? ((currentLeg.totalScoreStart - currentLeg.totalScoreRemaining) / Math.max(1, dartsThrown)) * 3 : 0
+            // TV-style 3-dart avg across the entire match (all legs): sum(points)/sum(darts)*3
+            const totals = p.legs.reduce((acc, L) => {
+              acc.points += (L.totalScoreStart - L.totalScoreRemaining)
+              const legDarts = (L.visits || []).reduce((a, v) => a + (v.darts || 0) - (v.preOpenDarts || 0), 0)
+              acc.darts += legDarts
+              return acc
+            }, { points: 0, darts: 0 })
+            const dartsThrown = totals.darts
+            const avg = dartsThrown > 0 ? ((totals.points / dartsThrown) * 3) : 0
 
             return (
               <div key={p.id} className={`card glass ${idx === currentPlayerIdx ? 'ring-2 ring-brand-400' : ''}`}>

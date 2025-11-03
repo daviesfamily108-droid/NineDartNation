@@ -1,6 +1,14 @@
 import { create } from 'zustand'
+import { useAudit } from './audit'
 
-export type ThrowVisit = { darts: number; score: number } // e.g., 3 darts, scored 100
+export type ThrowVisit = {
+  darts: number
+  score: number
+  preOpenDarts?: number // exclude from avg in Double-In
+  doubleWindowDarts?: number // darts thrown while remaining <= 50 (double-out window) in this visit
+  finishedByDouble?: boolean // visit ended the leg with a double or inner bull
+  visitTotal?: number // convenience to detect 180s and summaries
+}
 export type Leg = {
   visits: ThrowVisit[]
   totalScoreStart: number // e.g., 501
@@ -72,7 +80,7 @@ function updatePlayerEndOfGameStats(player: Player) {
 
 export type Actions = {
   newMatch: (players: string[], startingScore: number, roomId?: string) => void
-  addVisit: (score: number, darts: number) => void
+  addVisit: (score: number, darts: number, meta?: { preOpenDarts?: number; doubleWindowDarts?: number; finishedByDouble?: boolean; visitTotal?: number }) => void
   undoVisit: () => void
   endLeg: (checkoutScore: number) => void
   nextPlayer: () => void
@@ -97,7 +105,7 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
     return { players, currentPlayerIdx: 0, startingScore, inProgress: true, roomId, bestLegThisMatch: undefined }
   }),
 
-  addVisit: (score, darts) => set((state) => {
+  addVisit: (score, darts, meta) => set((state) => {
     if (!state.inProgress) return state
     const p = state.players[state.currentPlayerIdx]
     // ensure a current leg exists
@@ -109,9 +117,23 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
       }
       p.legs.push(leg)
     }
-    leg.visits.push({ darts, score })
+    const preRem = leg.totalScoreRemaining
+    const postRem = Math.max(0, preRem - score)
+  leg.visits.push({ darts, score, preOpenDarts: meta?.preOpenDarts, doubleWindowDarts: meta?.doubleWindowDarts, finishedByDouble: meta?.finishedByDouble, visitTotal: meta?.visitTotal ?? score })
     leg.dartsThrown += darts
-    leg.totalScoreRemaining = Math.max(0, leg.totalScoreRemaining - score)
+    leg.totalScoreRemaining = postRem
+    // Audit record (best-effort; ignore failures)
+    try {
+      const bust = score === 0 && darts > 0 && postRem === preRem
+      const finish = postRem === 0
+      useAudit.getState().recordVisit('x01-match', darts, score, {
+        preOpenDarts: meta?.preOpenDarts ?? 0,
+        preRemaining: preRem,
+        postRemaining: postRem,
+        bust,
+        finish,
+      })
+    } catch {}
     return { ...state }
   }),
 

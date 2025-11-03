@@ -3,10 +3,14 @@ import BarChart from './BarChart'
 import TabPills from './ui/TabPills'
 import { getGameModeStats } from '../store/profileStats'
 import { allGames } from '../utils/games'
+import { useWS } from './WSProvider'
+import StatusDot from './ui/StatusDot'
+import CameraStatusBadge from './CameraStatusBadge'
 
 const OWNER_EMAIL = 'daviesfamily108@gmail.com'
 
 export default function AdminDashboard({ user }: { user: any }) {
+	const ws = (() => { try { return useWS() } catch { return null } })()
 	const [admins, setAdmins] = useState<string[]>([])
 	const [email, setEmail] = useState('')
 	const [status, setStatus] = useState<any>(null)
@@ -366,7 +370,34 @@ export default function AdminDashboard({ user }: { user: any }) {
 	)
 
 	return (
-		<div className="space-y-4">
+			<div className="space-y-4">
+				{/* Top connection status strip */}
+				<div className="p-2 rounded-xl bg-white/10 border border-white/10 flex items-center justify-between gap-2 flex-wrap">
+					<div className="flex items-center gap-2 text-sm">
+						<span className="font-semibold">Connection Status</span>
+						{ws ? (
+							<span className="inline-flex items-center gap-2">
+								<StatusDot status={ws.status} title={`WebSocket: ${ws.status}`} />
+								<span className="text-xs opacity-80">WS: {ws.status}</span>
+							</span>
+						) : (
+							<span className="text-xs opacity-70">WS: unavailable</span>
+						)}
+					</div>
+					<div className="shrink-0 flex items-center gap-2">
+						{/* Keep the green connected badge; no HTTP/HTTPS pills here */}
+						<CameraStatusBadge />
+						{ws && (ws as any).reconnect && (
+							<button
+								onClick={() => (ws as any).reconnect()}
+								className="ml-1 rounded-md bg-neutral-700/60 hover:bg-neutral-600/70 px-2.5 py-1 text-xs border border-white/10"
+								title="Force close and recreate the WebSocket connection"
+							>
+								Recreate WS
+							</button>
+						)}
+					</div>
+				</div>
 			{isOwner && (
 				<TabPills
 					tabs={[

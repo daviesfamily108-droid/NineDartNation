@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import QRCode from 'qrcode'
+import { makeQrDataUrlWithLogo } from '../utils/qr'
 import { useUserSettings } from '../store/userSettings'
 import { useCameraSession } from '../store/cameraSession'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice, discoverUSBDevices, requestUSBDevice, connectToUSBDevice, type USBDevice } from '../utils/networkDevices'
@@ -126,9 +126,14 @@ export default function CameraTile({
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
   useEffect(() => {
     if (!pairCode) { setQrDataUrl(''); return }
-    QRCode.toDataURL(mobileUrl, { width: 160, margin: 1, color: { dark: '#000000', light: '#ffffff' } })
-      .then(setQrDataUrl)
-      .catch(() => setQrDataUrl(''))
+    const logoPath = (import.meta as any).env?.VITE_QR_LOGO_URL || '/dart-thrower.svg'
+    makeQrDataUrlWithLogo(mobileUrl, {
+      width: 160,
+      margin: 1,
+      errorCorrectionLevel: 'H',
+      color: { dark: '#000000', light: '#ffffff' },
+      logo: { logoUrl: logoPath, logoScale: 0.2, mask: true, shape: 'circle' }
+    }).then(setQrDataUrl).catch(() => setQrDataUrl(''))
   }, [mobileUrl, pairCode])
   useEffect(() => {
     if (!expiresAt) return

@@ -13,6 +13,7 @@ import useHeatmapStore from '../store/heatmap'
 import { usePendingVisit } from '../store/pendingVisit'
 import { useCameraSession } from '../store/cameraSession'
 import { useMatchControl } from '../store/matchControl'
+import { useAudit } from '../store/audit'
 
 // Shared ring type across autoscore/manual flows
 type Ring = 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'
@@ -55,6 +56,8 @@ export default function CameraView({
   const [pendingDarts, setPendingDarts] = useState<number>(0)
   const [pendingScore, setPendingScore] = useState<number>(0)
   const [pendingEntries, setPendingEntries] = useState<{ label: string; value: number; ring: Ring }[]>([])
+  const [pendingPreOpenDarts, setPendingPreOpenDarts] = useState<number>(0)
+  const [pendingDartsAtDouble, setPendingDartsAtDouble] = useState<number>(0)
   // X01 Double-In handling: per-player opened state in this session
   const x01DoubleInSetting = useUserSettings(s => s.x01DoubleIn)
   const x01DoubleIn = (typeof x01DoubleInOverride === 'boolean') ? !!x01DoubleInOverride : !!x01DoubleInSetting
@@ -528,6 +531,13 @@ export default function CameraView({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manualOnly, autoscoreProvider, streaming, H, imageSize, paused, pendingDarts, detectorSeedVersion])
 
+  // Update calibration audit status whenever homography or image size changes
+  useEffect(() => {
+    try {
+      useAudit.getState().setCalibrationStatus({ hasHomography: !!H, imageSize })
+    } catch {}
+  }, [H, imageSize])
+
   // External autoscore subscription
   useEffect(() => {
     if (autoscoreProvider !== 'external-ws' || !autoscoreWsUrl) return
@@ -617,15 +627,23 @@ export default function CameraView({
 
     // If a new dart arrives while 3 are pending, auto-commit previous visit and start a new one
     if (pendingDarts >= 3) {
-      addVisit(pendingScore, pendingDarts)
+      // Commit previous full visit
+      addVisit(pendingScore, pendingDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: false, visitTotal: pendingScore })
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name
         if (name) addSample(name, pendingDarts, pendingScore)
       } catch {}
       // Start next visit with this dart
+      const willCount = !x01DoubleIn || isOpened || ring === 'DOUBLE' || ring === 'INNER_BULL'
+      const applied = willCount ? value : 0
       setPendingDarts(1)
-      setPendingScore(value)
-      setPendingEntries([{ label, value, ring }])
+      setPendingScore(applied)
+      setPendingEntries([{ label, value: applied, ring }])
+      setPendingPreOpenDarts(willCount ? 0 : 1)
+      setPendingDartsAtDouble(0)
+      if (x01DoubleIn && !isOpened && (ring === 'DOUBLE' || ring === 'INNER_BULL')) {
+        setOpened(true)
+      }
       if (onVisitCommitted) onVisitCommitted(pendingScore, pendingDarts, false)
       return
     }
@@ -646,29 +664,47 @@ export default function CameraView({
 
     if (isBust) {
       // Commit bust visit: 0 score, darts thrown so far including this one
-      addVisit(0, newDarts)
-      setPendingDarts(0); setPendingScore(0); setPendingEntries([])
+      const preOpenThis = (x01DoubleIn && !isOpened && !(ring === 'DOUBLE' || ring === 'INNER_BULL')) ? 1 : 0
+      const preOpenTotal = (pendingPreOpenDarts || 0) + preOpenThis
+      // Count attempts in double-out window
+  const postAfter = after
+  const postBefore = after + appliedValue
+  const attemptsThisDart = ((postBefore > 50 && postAfter <= 50) || (postBefore <= 50)) ? 1 : 0
+      const attemptsTotal = (pendingDartsAtDouble || 0) + attemptsThisDart
+      addVisit(0, newDarts, { preOpenDarts: preOpenTotal, doubleWindowDarts: attemptsTotal, finishedByDouble: false, visitTotal: 0 })
+      setPendingDarts(0); setPendingScore(0); setPendingEntries([]); setPendingPreOpenDarts(0)
+      setPendingDartsAtDouble(0)
       if (onVisitCommitted) onVisitCommitted(0, newDarts, false)
       return
     }
 
   // Normal add (value may be zero if not opened yet)
-  setPendingDarts(newDarts)
-  setPendingScore(newScore)
-  setPendingEntries(e => [...e, { label, value: appliedValue, ring }])
+    setPendingDarts(newDarts)
+    setPendingScore(newScore)
+    setPendingEntries(e => [...e, { label, value: appliedValue, ring }])
+    if (x01DoubleIn && !isOpened && !(ring === 'DOUBLE' || ring === 'INNER_BULL')) {
+      setPendingPreOpenDarts(n => (n||0) + 1)
+    }
+    // Track double-out attempts within this visit
+    {
+      const postAfter = after
+      const postBefore = after + appliedValue
+      const countThisDart = (postBefore > 50 && postAfter <= 50) || (postBefore <= 50)
+      if (countThisDart) setPendingDartsAtDouble(c => (c||0) + 1)
+    }
 
     if (isFinish) {
       // Commit visit with current total and end leg
-      addVisit(newScore, newDarts)
+      addVisit(newScore, newDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: true, visitTotal: newScore })
       endLeg(newScore)
-      setPendingDarts(0); setPendingScore(0); setPendingEntries([])
+      setPendingDarts(0); setPendingScore(0); setPendingEntries([]); setPendingPreOpenDarts(0); setPendingDartsAtDouble(0)
       if (onVisitCommitted) onVisitCommitted(newScore, newDarts, true)
       return
     }
 
     if (newDarts >= 3) {
-      addVisit(newScore, newDarts)
-      setPendingDarts(0); setPendingScore(0); setPendingEntries([])
+      addVisit(newScore, newDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: false, visitTotal: newScore })
+      setPendingDarts(0); setPendingScore(0); setPendingEntries([]); setPendingPreOpenDarts(0); setPendingDartsAtDouble(0)
       if (onVisitCommitted) onVisitCommitted(newScore, newDarts, false)
     }
   }

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNod
 import ReactDOM from 'react-dom'
 import DartLoader from './DartLoader'
 
-import QRCode from 'qrcode'
+import { makeQrDataUrlWithLogo } from '../utils/qr'
 import { useCalibration } from '../store/calibration'
 import { useCameraSession } from '../store/cameraSession'
 import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, applyHomography, type Homography, type Point } from '../utils/vision'
@@ -14,41 +14,7 @@ import { apiFetch } from '../utils/api'
 type Phase = 'idle' | 'camera' | 'capture' | 'select' | 'computed'
 type CamMode = 'local' | 'phone' | 'wifi'
 
-// --- QR helpers: compose a center logo on the QR image and keep scan reliability ---
-async function loadImage(src: string): Promise<HTMLImageElement> {
-	return new Promise((resolve, reject) => {
-		const img = new Image()
-		img.onload = () => resolve(img)
-		img.onerror = (e) => reject(e)
-		img.src = src
-	})
-}
-
-async function composeQrWithLogo(qrDataUrl: string, logoUrl: string): Promise<string> {
-	const [qrImg, logoImg] = await Promise.all([
-		loadImage(qrDataUrl),
-		loadImage(logoUrl),
-	])
-	// Use the QR image dimensions directly to preserve sharpness
-	const w = Math.max(160, qrImg.width || 160)
-	const h = Math.max(160, qrImg.height || 160)
-	const canvas = document.createElement('canvas')
-	canvas.width = w
-	canvas.height = h
-	const ctx = canvas.getContext('2d')!
-	// Base white background (quiet zone is already baked into QR)
-	ctx.fillStyle = '#ffffff'
-	ctx.fillRect(0, 0, w, h)
-	// Draw the QR
-	ctx.imageSmoothingEnabled = false
-	ctx.drawImage(qrImg, 0, 0, w, h)
-	// Center logo composition without masking so the exact logo artwork is preserved
-	const cx = w / 2
-	const cy = h / 2
-	const logoSize = Math.round(Math.min(w, h) * 0.24) // slightly smaller to preserve scanning, exact art kept
-	ctx.drawImage(logoImg, Math.round(cx - logoSize / 2), Math.round(cy - logoSize / 2), logoSize, logoSize)
-	return canvas.toDataURL('image/png')
-}
+// Center-logo QR helpers moved to ../utils/qr
 
 export default function Calibrator() {
 	const videoRef = useRef<HTMLVideoElement>(null)
@@ -280,19 +246,15 @@ export default function Calibrator() {
 
 	useEffect(() => {
 		if (!pairCode) { setQrDataUrl(''); return }
-		// Generate a crisp QR, then composite the center logo
-		QRCode.toDataURL(mobileUrl, { width: 256, margin: 2, color: { dark: '#000000', light: '#ffffff' } })
-			.then(async (base) => {
-				try {
-					const logoPath = (import.meta as any).env?.VITE_QR_LOGO_URL || '/dart-thrower.svg'
-					const composed = await composeQrWithLogo(base, logoPath)
-					setQrDataUrl(composed)
-				} catch (e) {
-					// Fallback to plain QR if logo fails to load
-					setQrDataUrl(base)
-				}
-			})
-			.catch(() => setQrDataUrl(''))
+		// Generate a crisp QR (H-level error correction) with centered logo and white mask
+		const logoPath = (import.meta as any).env?.VITE_QR_LOGO_URL || '/dart-thrower.svg'
+		makeQrDataUrlWithLogo(mobileUrl, {
+			width: 256,
+			margin: 2,
+			errorCorrectionLevel: 'H',
+			color: { dark: '#000000', light: '#ffffff' },
+			logo: { logoUrl: logoPath, logoScale: 0.2, mask: true, shape: 'circle' }
+		}).then(setQrDataUrl).catch(() => setQrDataUrl(''))
 	}, [mobileUrl, pairCode])
 
 	useEffect(() => {

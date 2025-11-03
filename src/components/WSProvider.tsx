@@ -8,6 +8,7 @@ type WSContextType = {
   status: WSStatus
   send: (msg: WSMessage) => void
   addListener: (fn: (data: WSMessage) => void) => () => void
+  reconnect: () => void
 }
 
 const WSContext = createContext<WSContextType | null>(null)
@@ -113,6 +114,24 @@ export function WSProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const reconnect = useCallback(() => {
+    try {
+      // Prevent auto-retry logic from racing while we recreate
+      shouldReconnectRef.current = false
+      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null }
+      try { wsRef.current?.close() } catch {}
+      wsRef.current = null
+    } catch {}
+    // Reset counters and allow reconnect
+    attemptsRef.current = 0
+    shouldReconnectRef.current = true
+    setStatus('connecting')
+    setConnected(false)
+    // Attempt immediate connect
+    connect()
+  }, [connect])
+
   useEffect(() => {
     shouldReconnectRef.current = true
     connect()
@@ -153,7 +172,7 @@ export function WSProvider({ children }: { children: ReactNode }) {
     return () => { listenersRef.current.delete(fn) }
   }, [])
 
-  const value = useMemo(() => ({ connected, status, send, addListener }), [connected, status, send, addListener])
+  const value = useMemo(() => ({ connected, status, send, addListener, reconnect }), [connected, status, send, addListener, reconnect])
   return <WSContext.Provider value={value}>{children}</WSContext.Provider>
 }
 

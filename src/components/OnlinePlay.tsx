@@ -8,9 +8,11 @@ import { addSample, getAllTimeAvg } from '../store/profileStats'
 import { getFreeRemaining, incOnlineUsage } from '../utils/quota'
 import { useUserSettings } from '../store/userSettings'
 import { useCalibration } from '../store/calibration'
+import MatchSummaryModal from './MatchSummaryModal'
 import { freeGames, premiumGames, allGames, type GameKey } from '../utils/games'
 import { getUserCurrency, formatPriceInCurrency } from '../utils/config'
 import ResizableModal from './ui/ResizableModal'
+import GameHeaderBar from './ui/GameHeaderBar'
 import { useToast } from '../store/toast'
 // import { TabKey } from './Sidebar'
 import { useWS } from './WSProvider'
@@ -120,6 +122,65 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [compactView, setCompactView] = useState<boolean>(() => {
     try { const ua = navigator.userAgent || ''; return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) } catch { return false }
   })
+  // Online end-of-match summary modal (appears when inProgress flips from true->false)
+  const [showX01EndSummary, setShowX01EndSummary] = useState(false)
+  const endSummaryPrevRef = useRef<boolean>(!!useMatch.getState().inProgress)
+  useEffect(() => {
+    const prev = endSummaryPrevRef.current
+    const now = !!match.inProgress
+    if (prev && !now) {
+      const hasFinished = (match.players || []).some(p => (p.legs||[]).some(L => L.finished))
+      if (hasFinished) setShowX01EndSummary(true)
+    }
+    endSummaryPrevRef.current = now
+  }, [match.inProgress, match.players])
+  // Dev-only: auto-simulate a short X01 leg to validate double-out stats via ?autotest=doubleout
+  useEffect(() => {
+    try {
+      if (!(import.meta as any).env?.DEV) return
+      const q = new URLSearchParams(window.location.search)
+      if (q.get('autotest') !== 'doubleout') return
+      // Prevent re-run on HMR
+      if ((window as any).__NDN_AUTO_TESTED__) return
+      ;(window as any).__NDN_AUTO_TESTED__ = true
+      // Create simple 101 match and simulate visits:
+      // You: 41 (attempts=0) -> Opp: 26 -> You: 10 (cross into window; attempts=1) -> Opp: 26 -> You: 40 finish on D20 (attempts=1, finishedByDouble=true)
+      match.newMatch([user?.username || 'You', 'Opponent'], 101, 'local-dev')
+      // You visit 1: 41 (no attempts yet)
+      match.addVisit(41, 3, { preOpenDarts: 0, doubleWindowDarts: 0, finishedByDouble: false, visitTotal: 41 })
+      match.nextPlayer()
+      // Opponent visit: dummy 26
+      match.addVisit(26, 3, { preOpenDarts: 0, doubleWindowDarts: 0, finishedByDouble: false, visitTotal: 26 })
+      match.nextPlayer()
+      // You visit 2: 10 (enters window, attempts=1)
+      match.addVisit(10, 3, { preOpenDarts: 0, doubleWindowDarts: 1, finishedByDouble: false, visitTotal: 10 })
+      match.nextPlayer()
+      // Opponent visit: dummy 26
+      match.addVisit(26, 3, { preOpenDarts: 0, doubleWindowDarts: 0, finishedByDouble: false, visitTotal: 26 })
+      match.nextPlayer()
+      // You visit 3: 40 (D20) finish inside window, attempts=1, hit=1
+      match.addVisit(40, 1, { preOpenDarts: 0, doubleWindowDarts: 1, finishedByDouble: true, visitTotal: 40 })
+      match.endLeg(40)
+      match.endGame()
+      // Modal will auto-open via inProgress flip hook
+    } catch {}
+  }, [])
+  // Build doubles stats (double-out only) for summary modal
+  const doublesStats = (() => {
+    const out: Record<string, { dartsAtDouble?: number; doublesHit?: number }> = {}
+    for (const p of (match.players || [])) {
+      let attempts = 0
+      let hits = 0
+      for (const L of (p.legs || [])) {
+        for (const v of (L.visits || [])) {
+          attempts += Math.max(0, Number(v.doubleWindowDarts || 0))
+          if (v.finishedByDouble) hits += 1
+        }
+      }
+      out[p.id] = { dartsAtDouble: attempts, doublesHit: hits }
+    }
+    return out
+  })()
   // Ephemeral celebration overlay (e.g., 180), tied to the current player's turn
   const [celebration, setCelebration] = useState<null | { kind: '180' | 'leg'; by: string; turnIdx: number; ts: number }>(null)
   const lastCelebrationRef = useRef<{ kind: '180'|'leg'; by: string; ts: number } | null>(null)
@@ -534,9 +595,21 @@ export default function OnlinePlay({ user }: { user?: any }) {
     const cur = players[curIdx]
     const leg = cur?.legs?.[cur?.legs?.length - 1]
     const remaining = leg ? leg.totalScoreRemaining : match.startingScore
-    const darts = leg?.dartsThrown || 0
-    const scored = leg ? (leg.totalScoreStart - leg.totalScoreRemaining) : 0
-    const avg3 = darts > 0 ? ((scored / darts) * 3) : 0
+    // TV-style 3-dart average: sum points across all legs / total darts * 3
+    const totals = (() => {
+      let pts = 0, darts = 0
+      if (cur?.legs) {
+        for (const L of cur.legs) {
+          // Points: sum of scored points this leg
+          pts += (L.totalScoreStart - L.totalScoreRemaining)
+          // Darts: sum visits darts, subtract pre-open darts (Double-In) if any
+          const legDarts = (L.visits || []).reduce((a, v) => a + (v.darts || 0) - (v.preOpenDarts || 0), 0)
+          darts += legDarts
+        }
+      }
+      return { pts, darts }
+    })()
+    const avg3 = totals.darts > 0 ? ((totals.pts / totals.darts) * 3) : 0
     const lastScore = leg?.visits?.[leg.visits.length-1]?.score ?? 0
     let matchScore = 'ÔÇö'
     if (players.length === 2) {
@@ -587,6 +660,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
       </div>
     )
   }
+
+  
 
   // Subscribe to global WS messages if available
   useEffect(() => {
@@ -1055,7 +1130,18 @@ export default function OnlinePlay({ user }: { user?: any }) {
   // Helper to submit a manual visit with shared logic
   function submitVisitManual(v: number) {
     const score = Math.max(0, v | 0)
-    match.addVisit(score, 3)
+    // Estimate double-out attempts and finish for manual numeric entry
+    try {
+      const p = match.players[match.currentPlayerIdx]
+      const leg = p?.legs?.[p.legs.length - 1]
+      const preRem = leg ? leg.totalScoreRemaining : match.startingScore
+      const postRem = Math.max(0, preRem - score)
+      const attempts = preRem <= 50 ? 3 : (postRem <= 50 ? 1 : 0)
+      const finished = postRem === 0
+      match.addVisit(score, 3, { preOpenDarts: 0, doubleWindowDarts: attempts, finishedByDouble: finished, visitTotal: score })
+    } catch {
+      match.addVisit(score, 3)
+    }
     setVisitScore(0)
     const p = match.players[match.currentPlayerIdx]
     const leg = p.legs[p.legs.length - 1]
@@ -1215,10 +1301,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <button className="btn bg-emerald-600 hover:bg-emerald-700"
                 onClick={() => {
                   const me = (user?.username || '')
-                  const next = { ...pauseAcceptedBy, [me]: true }
+                  const next: Record<string, boolean> = { ...pauseAcceptedBy, [me]: true }
                   setPauseAcceptedBy(next)
                   // If at least 2 unique acceptances (both players), start pause
-                  const acceptedCount = Object.keys(next).filter(k => next[k]).length
+                  const acceptedCount = Object.keys(next).filter((k: string) => !!next[k]).length
                   const required = Math.max(2, (participants?.length || 2))
                   if (acceptedCount >= 2 || acceptedCount >= required) {
                     const ends = Date.now() + Math.min(600, Math.max(60, pauseDurationSec||300)) * 1000
@@ -1497,24 +1583,32 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 title={compactView ? 'Switch to full multi-player view' : 'Switch to compact player-by-player view'}
               >{compactView ? 'Full view' : 'Compact view'}</button>
             </div>
-            {/* Header row: Legs chip on the left, Match controls on the right */}
+            {/* Header row styled to match Offline X01 screen (sticky, glassy bar) */}
             {(() => {
               const a = match.players?.[0]?.legsWon || 0
               const b = match.players?.[1]?.legsWon || 0
               return (
-                <div className="mb-2 flex items-center gap-2 flex-wrap">
-                  <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10 text-white">Legs: {a}–{b}</span>
-                  <div className="ml-auto flex items-center gap-1 text-[10px] flex-wrap">
-                    <span className="opacity-70">Match</span>
-                    <select className={`btn ${buttonSizeClass}`} value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
-                      <option value="singles">Singles</option>
-                      <option value="doubles">Doubles</option>
-                    </select>
-                    <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
-                    <span className="opacity-50">vs</span>
-                    <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
-                  </div>
-                </div>
+                <GameHeaderBar
+                  left={(
+                    <>
+                      <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">Game Mode</span>
+                      <span className="font-medium whitespace-nowrap">{currentGame}{currentGame==='X01' ? ` / ${match.startingScore}` : ''}</span>
+                      <span className="opacity-80 whitespace-nowrap">Legs {a}–{b}</span>
+                    </>
+                  )}
+                  right={(
+                    <>
+                      <span className="opacity-70 text-[10px]">Match</span>
+                      <select className={`btn ${buttonSizeClass}`} value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
+                        <option value="singles">Singles</option>
+                        <option value="doubles">Doubles</option>
+                      </select>
+                      <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
+                      <span className="opacity-50">vs</span>
+                      <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
+                    </>
+                  )}
+                />
               )
             })()}
             {/* Summary area */}
@@ -1528,8 +1622,9 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   const rem = leg ? leg.totalScoreRemaining : match.startingScore
                   const isMe = (user?.username && p.name === user.username)
                   const lastVisitScore = leg && leg.visits.length ? leg.visits[leg.visits.length-1].score : 0
-                  const dartsThrown = leg ? leg.dartsThrown : 0
-                  const avg = dartsThrown > 0 ? (((leg?.totalScoreStart ?? match.startingScore) - rem) / dartsThrown) * 3 : 0
+                  // TV-style match average for this player across all legs
+                  const totals = (() => { let pts=0, d=0; for (const L of (p?.legs||[])) { pts += (L.totalScoreStart - L.totalScoreRemaining); d += (L.visits||[]).reduce((a,v)=>a + (v.darts||0) - (v.preOpenDarts||0), 0) } return { pts, d } })()
+                  const avg = totals.d > 0 ? ((totals.pts / totals.d) * 3) : 0
                   if (currentGame === 'X01') {
                     return (
                       <div className={`p-4 rounded-xl bg-brand-50 text-black ${idx===match.currentPlayerIdx?'ring-2 ring-brand-400':''}`}>
@@ -2532,6 +2627,20 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <div className="text-xs opacity-80 mb-3">
                 {pendingInvite.game || 'X01'} ÔÇó {pendingInvite.mode==='firstto' ? `First To ${pendingInvite.value}` : `Best Of ${pendingInvite.value}`} {pendingInvite.game==='X01' && pendingInvite.startingScore ? `ÔÇó ${pendingInvite.startingScore}` : ''}
               </div>
+            )}
+            {/* End-of-match modal for Online/Tournament */}
+            {showX01EndSummary && (
+              <MatchSummaryModal
+                open={showX01EndSummary}
+                onClose={() => setShowX01EndSummary(false)}
+                title="Match Summary"
+                players={match.players || []}
+                doublesStats={doublesStats}
+                centerScore={(() => {
+                  const ps = match.players || []
+                  return ps.length===2 ? `${ps[0]?.legsWon||0} – ${ps[1]?.legsWon||0}` : ''
+                })()}
+              />
             )}
             {pendingInvite.boardPreview ? (
               <div className="mb-3">

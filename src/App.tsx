@@ -404,11 +404,7 @@ export default function App() {
                 {ws ? (
                   <span className="ml-0 md:ml-2"><StatusDot status={ws.status} /></span>
                 ) : null}
-                {httpsInfo?.https ? (
-                  <span className="text-[10px] md:text-xs px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/40" title={`Phone HTTPS active on :${httpsInfo.port}`}>HTTPS READY</span>
-                ) : (
-                  <span className="text-[10px] md:text-xs px-3 py-1 rounded-full bg-slate-600/30 text-slate-300 border border-slate-400/30" title="Enable HTTPS for iPhone camera pairing">HTTP ONLY</span>
-                )}
+                {/* Protocol pill removed per request: keep green connected badge only */}
               </div>
             </header>
             </div>

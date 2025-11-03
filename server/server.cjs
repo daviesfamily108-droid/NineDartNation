@@ -3,6 +3,7 @@ const dotenv = require('dotenv'); dotenv.config();
 const upstashRestUrl = process.env.UPSTASH_REDIS_REST_URL;
 const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 const { WebSocketServer } = require('ws');
+const bcrypt = require('bcrypt');
 const { nanoid } = require('nanoid');
 const express = require('express');
 const cors = require('cors');
@@ -24,10 +25,13 @@ const { createClient } = require('@supabase/supabase-js');
 
 const PORT = process.env.PORT || 8787;
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
+const JWT_EXPIRES = process.env.JWT_EXPIRES || '12h';
 // Track HTTPS runtime status and port
 let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
 const app = express();
+// Trust proxy when behind render/netlify or nginx
+try { app.set('trust proxy', 1) } catch {}
 
 // Global error handlers
 process.on('uncaughtException', (err) => {
@@ -292,8 +296,51 @@ const redisHelpers = {
 };
 
 // Security & performance
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
-app.use(cors())
+// Configure CORS with a safe default allowlist (overridable via env CORS_ORIGINS)
+const RAW_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+const DEFAULT_ORIGINS = [
+  'http://localhost:5173', 'http://127.0.0.1:5173',
+  'http://localhost:8787', 'http://127.0.0.1:8787',
+  'https://ninedartnation.onrender.com',
+]
+const ALLOWED_ORIGINS = (RAW_ORIGINS.length ? RAW_ORIGINS : DEFAULT_ORIGINS)
+function isAllowedOrigin(origin) {
+  if (!origin) return true // allow non-browser clients
+  try {
+    const u = new URL(origin)
+    return ALLOWED_ORIGINS.some(allowed => {
+      try { return new URL(allowed).host === u.host && new URL(allowed).protocol === u.protocol } catch { return allowed === origin }
+    })
+  } catch { return false }
+}
+
+// Security headers with CSP; relax in dev for Vite
+const IS_DEV = (process.env.NODE_ENV !== 'production')
+const cspDirectives = {
+  defaultSrc: ["'self'"],
+  baseUri: ["'self'"],
+  frameAncestors: ["'none'"],
+  imgSrc: ["'self'", 'data:', 'blob:'],
+  styleSrc: ["'self'", "'unsafe-inline'"],
+  connectSrc: ["'self'", 'ws:', 'wss:'],
+}
+if (IS_DEV) {
+  // Vite dev server
+  cspDirectives.scriptSrc = ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
+} else {
+  cspDirectives.scriptSrc = ["'self'"]
+}
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: { useDefaults: true, directives: cspDirectives },
+  referrerPolicy: { policy: 'no-referrer' },
+  frameguard: { action: 'deny' },
+}))
+
+app.use(cors({
+  origin: (origin, cb) => cb(isAllowedOrigin(origin) ? null : new Error('CORS blocked'), isAllowedOrigin(origin)),
+  credentials: true,
+}))
 app.use(compression())
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
 app.use(limiter)
@@ -311,6 +358,27 @@ app.use((req, res, next) => {
 })
 // Guard JSON body size to avoid excessive memory
 app.use(express.json({ limit: '100kb' }));
+// Minimal CSRF guard for cookie-bearing browser requests:
+// For unsafe methods, require Origin/Referer to be on the allowlist.
+// Non-browser clients (no Origin/Referer) pass through.
+app.use((req, res, next) => {
+  try {
+    const method = (req.method || 'GET').toUpperCase()
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return next()
+    const origin = req.headers.origin || ''
+    const referer = req.headers.referer || ''
+    const refOrigin = (() => { try { return referer ? new URL(referer).origin : '' } catch { return '' } })()
+    if (origin && !isAllowedOrigin(origin)) {
+      return res.status(403).json({ error: 'CSRF blocked (origin)' })
+    }
+    if (!origin && refOrigin && !isAllowedOrigin(refOrigin)) {
+      return res.status(403).json({ error: 'CSRF blocked (referer)' })
+    }
+    return next()
+  } catch {
+    return res.status(400).json({ error: 'Invalid request headers' })
+  }
+})
 // Serve static assets (mobile camera page)
 app.use(express.static('./public'))
 // In production, also serve the built client app. Prefer root ../dist, fallback to ../app/dist, then server/dist.
@@ -377,7 +445,9 @@ app.post('/api/auth/signup', async (req, res) => {
       }
     }
 
-    const user = { email, username, password, admin: false, subscription: { fullAccess: false } }
+  // Hash password using bcrypt
+  const hashed = await bcrypt.hash(String(password), 12)
+  const user = { email, username, password: hashed, admin: false, subscription: { fullAccess: false } }
 
     // Save to Supabase if available (async, don't wait for response)
     if (supabase) {
@@ -387,7 +457,7 @@ app.post('/api/auth/signup', async (req, res) => {
         .insert([{
           email: user.email,
           username: user.username,
-          password: user.password,
+          password: user.password, // hashed
           admin: user.admin,
           subscription: user.subscription,
           created_at: new Date().toISOString()
@@ -405,7 +475,7 @@ app.post('/api/auth/signup', async (req, res) => {
     users.set(email, user)
 
     // Create JWT token and respond immediately
-    const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
+  const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
     return res.json({ user, token })
   } catch (error) {
     console.error('[SIGNUP] Error:', error);
@@ -423,9 +493,14 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     // Check in-memory users FIRST (fastest path - no network, <1ms)
     for (const u of users.values()) {
-      if (u.username === username && u.password === password) {
-        const token = jwt.sign({ username: u.username, email: u.email }, JWT_SECRET, { expiresIn: '100y' });
-        return res.json({ user: u, token }); // Return immediately - no Supabase call
+      if (u.username === username) {
+        const stored = String(u.password || '')
+        const isHashed = stored.startsWith('$2')
+        const ok = isHashed ? await bcrypt.compare(String(password), stored) : (stored === password)
+        if (ok) {
+          const token = jwt.sign({ username: u.username, email: u.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+          return res.json({ user: u, token }); // Return immediately - no Supabase call
+        }
       }
     }
 
@@ -438,17 +513,23 @@ app.post('/api/auth/login', async (req, res) => {
         .select('*')
         .eq('username', username)
         .single()
-        .then(({ data, error }) => {
-          if (!error && data && data.password === password) {
-            // Cache this user for future logins (synchronously)
-            users.set(data.email, {
-              email: data.email,
-              username: data.username,
-              password: data.password,
-              admin: data.admin || false
-            });
-            console.log('[LOGIN] Cached user from Supabase:', username);
-          }
+        .then(async ({ data, error }) => {
+          try {
+            if (!error && data && data.password) {
+              const stored = String(data.password)
+              const isHashed = stored.startsWith('$2')
+              const ok = isHashed ? await bcrypt.compare(String(password), stored) : (stored === password)
+              if (ok) {
+                users.set(data.email, {
+                  email: data.email,
+                  username: data.username,
+                  password: stored,
+                  admin: data.admin || false
+                });
+                console.log('[LOGIN] Cached user from Supabase:', username);
+              }
+            }
+          } catch {}
         })
         .catch(err => console.warn('[LOGIN] Background Supabase sync failed:', err));
     }
@@ -1284,10 +1365,19 @@ wsConnections.set(0)
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
+  // Enforce origin allowlist for WS as well
+  try {
+    const origin = req?.headers?.origin || ''
+    if (!isAllowedOrigin(origin)) {
+      try { ws.close(1008, 'Origin not allowed') } catch {}
+      return
+    }
+  } catch {}
   try { console.log(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
   ws._id = nanoid(8);
   clients.set(ws._id, ws)
   wsConnections.inc()
+  ws._authed = false
   // Heartbeat
   ws.isAlive = true
   ws.on('pong', () => { ws.isAlive = true })
@@ -1318,6 +1408,28 @@ wss.on('connection', (ws, req) => {
     if (!allowMessage()) return
     try {
       const data = JSON.parse(msg.toString());
+      // Optional WS auth: if REQUIRE_WS_AUTH=1, demand a valid JWT via 'auth' or in 'presence.token'
+      if (String(process.env.REQUIRE_WS_AUTH || '0') === '1') {
+        if (!ws._authed) {
+          let tok = null
+          if (data && typeof data.token === 'string') tok = data.token
+          if (!tok && data && data.type === 'presence' && typeof data.token === 'string') tok = data.token
+          if (tok) {
+            try {
+              const decoded = jwt.verify(tok, JWT_SECRET)
+              ws._authed = true
+              ws._username = decoded?.username || ws._username
+              ws._email = String(decoded?.email || '').toLowerCase() || ws._email
+            } catch {
+              try { ws.close(1008, 'Invalid token') } catch {}
+              return
+            }
+          } else {
+            // If the message isn't an auth/presence attempt, ignore until authed
+            if (data.type !== 'auth' && data.type !== 'presence') return
+          }
+        }
+      }
       if (data.type === 'join') {
         await leaveRoom(ws);
         await joinRoom(ws, data.roomId);

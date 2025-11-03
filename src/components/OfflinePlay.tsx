@@ -20,7 +20,9 @@ import { createGolf, applyGolfDart } from '../game/golf'
 import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
 import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS, hasClosedAllAm } from '../game/americanCricket'
 import ResizableModal from './ui/ResizableModal'
+import { useAudit } from '../store/audit'
 import ResizablePanel from './ui/ResizablePanel'
+import GameHeaderBar from './ui/GameHeaderBar'
 
 const freeGames = ['X01', 'Double Practice'];
 const premiumGames = [
@@ -107,7 +109,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [pendingLegWinner, setPendingLegWinner] = useState<'player'|'ai'|null>(null)
   const [doubleDarts, setDoubleDarts] = useState(1);
   const [checkoutDarts, setCheckoutDarts] = useState(1);
-  const [legStats, setLegStats] = useState<{ winner: 'player'|'ai'; doubleDarts: number; checkoutDarts: number; doublesAtt?: number; doublesHit?: number }[]>([]);
+  const [legStats, setLegStats] = useState<{ winner: 'player'|'ai'; doubleDarts: number; checkoutDarts: number; winnerDarts: number; doublesAtt?: number; doublesHit?: number }[]>([]);
   // New: pre-game adjustable AI delay (ms)
   const [aiDelayMs, setAiDelayMs] = useState<number>(2000)
   const toast = useToast();
@@ -475,6 +477,11 @@ export default function OfflinePlay({ user }: { user: any }) {
     setTotalPlayerDarts(d => d + 1)
   if (remaining < 0) {
       // bust: revert to visit start, end turn
+      try {
+        const preRemaining = playerScore
+        const postRemaining = playerVisitStart
+        useAudit.getState().recordVisit('offline-x01', newVisitDarts, 0, { preRemaining, postRemaining, bust: true, finish: false })
+      } catch {}
       setPlayerScore(playerVisitStart)
       // Count doubles attempts made this visit if we were in the double window
       const bustPreRemaining = playerScore
@@ -511,6 +518,11 @@ export default function OfflinePlay({ user }: { user: any }) {
     }
     if (remaining === 0) {
       // Player wins the leg
+      try {
+        const visitTotal = playerVisitSum + dart
+        const preRemaining = playerScore
+        useAudit.getState().recordVisit('offline-x01', newVisitDarts, visitTotal, { preRemaining, postRemaining: 0, finish: true, bust: false })
+      } catch {}
       // Power score classification on final visit
       if (playerVisitSum + dart === 180) setPlayer180s(n => n + 1)
       else if (playerVisitSum + dart >= 140) setPlayer140s(n => n + 1)
@@ -536,6 +548,12 @@ export default function OfflinePlay({ user }: { user: any }) {
     }
     if (newVisitDarts >= 3) {
       // Classify power score for completed visit
+      try {
+        const visitTotal = playerVisitSum + dart
+        const preRemaining = playerScore
+        const postRemaining = remaining
+        useAudit.getState().recordVisit('offline-x01', newVisitDarts, visitTotal, { preRemaining, postRemaining, finish: false, bust: false })
+      } catch {}
       if (playerVisitSum + dart === 180) setPlayer180s(n => n + 1)
       else if (playerVisitSum + dart >= 140) setPlayer140s(n => n + 1)
       else if (playerVisitSum + dart >= 100) setPlayer100s(n => n + 1)
@@ -582,6 +600,11 @@ export default function OfflinePlay({ user }: { user: any }) {
       if (callerEnabled) {
         try { sayScore(user?.username || 'Player', 0, Math.max(playerVisitStart, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
       }
+      try {
+        const preRemaining = playerScore
+        const postRemaining = playerVisitStart
+        useAudit.getState().recordVisit('offline-x01', 3, 0, { preRemaining, postRemaining, bust: true, finish: false })
+      } catch {}
       setPlayerScore(playerVisitStart)
       endTurn(playerVisitStart)
       setPlayerVisitSum(0)
@@ -605,12 +628,21 @@ export default function OfflinePlay({ user }: { user: any }) {
     if (remaining === 0) {
       const checkout = playerVisitStart
       if (checkout <= 170) setPlayerHighestCheckout(h => Math.max(h, checkout))
+      try {
+        const preRemaining = playerScore
+        useAudit.getState().recordVisit('offline-x01', 3, total, { preRemaining, postRemaining: 0, finish: true, bust: false })
+      } catch {}
       setPendingLegWinner('player')
       setShowWinPopup(true)
       setVisitTotalInput("")
       return
     }
     // Otherwise end turn
+    try {
+      const preRemaining = playerScore
+      const postRemaining = remaining
+      useAudit.getState().recordVisit('offline-x01', 3, total, { preRemaining, postRemaining, finish: false, bust: false })
+    } catch {}
     endTurn(remaining)
     setPlayerVisitSum(0)
     setPlayerVisitDarts(0)
@@ -921,7 +953,8 @@ export default function OfflinePlay({ user }: { user: any }) {
     // Approximate per-leg doubles attempts: if winner is player and they finished from <=50, attempts were counted in playerVisitDartsAtDouble; otherwise leave undefined
     const legDoublesAtt = winner==='player' ? (playerVisitDartsAtDouble || undefined) : (aiVisitDartsAtDouble || undefined)
     const legDoublesHit = 1
-    setLegStats([...legStats, { winner, doubleDarts, checkoutDarts, doublesAtt: legDoublesAtt, doublesHit: legDoublesHit }]);
+    const winnerDarts = winner==='player' ? playerDartsThrown : aiDartsThrown
+    setLegStats([...legStats, { winner, doubleDarts, checkoutDarts, winnerDarts, doublesAtt: legDoublesAtt, doublesHit: legDoublesHit }]);
     setShowWinPopup(false);
     // Increment legs for the winner
     let p = playerLegs
@@ -1041,43 +1074,48 @@ export default function OfflinePlay({ user }: { user: any }) {
               style={{ overflowY: fitAll ? 'hidden' as any : 'auto' }}
               ref={(el) => { (scrollerRef as any).current = el }}
             >
-              <div ref={(el)=>{ (headerBarRef as any).current = el }} className="sticky top-0 relative overflow-hidden flex items-center justify-between gap-2 mb-2 px-2 sm:px-3 py-2 rounded-xl bg-white/10 border border-white/10 z-10 backdrop-blur-sm">
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900/30 via-slate-900/10 to-transparent" />
-                <div className="flex items-center gap-2 text-xs sm:text-sm leading-none flex-wrap">
-                  <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">Game Mode</span>
-                  <span className="font-medium whitespace-nowrap">{selectedMode}{selectedMode==='X01' ? ` / ${x01Score}` : ''}</span>
-                  <span className="opacity-80 whitespace-nowrap">First to {firstTo} · Legs {playerLegs}-{aiLegs}</span>
-                  <span className={`ml-2 px-2 py-0.5 rounded-full border text-[10px] sm:text-xs ${offlineLayout==='modern' ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30' : 'bg-white/10 text-white/70 border-white/20'}`}>{offlineLayout==='modern' ? 'Modern layout' : 'Classic layout'}</span>
-                </div>
-                <div className="flex items-center gap-1 flex-wrap justify-end">
-                  {/* Camera scale controls (match Online UI) */}
-                  <div className="hidden items-center gap-2 mr-2 text-xs">
-                    <span className="opacity-80">Cam</span>
-                    <button
-                      className="btn btn--ghost px-2 py-1"
-                      onClick={() => setCameraScale(Math.max(0.5, Math.round((cameraScale - 0.05) * 100) / 100))}
-                      title="Decrease camera size"
-                    >−</button>
-                    <span className="w-9 text-center">{Math.round(cameraScale * 100)}%</span>
-                    <button
-                      className="btn btn--ghost px-2 py-1"
-                      onClick={() => setCameraScale(Math.min(1.25, Math.round((cameraScale + 0.05) * 100) / 100))}
-                      title="Increase camera size"
-                    >+</button>
-                  </div>
-                  <button
-                    className="btn btn--ghost px-3 py-1 text-sm"
-                    title={fitAll ? 'Actual Size' : 'Fit All'}
-                    onClick={() => setFitAll(v => !v)}
-                  >{fitAll ? 'Actual Size' : 'Fit All'}</button>
-                  <button
-                    className="btn btn--ghost px-3 py-1 text-sm"
-                    title={maximized ? 'Restore' : 'Maximize'}
-                    onClick={() => setMaximized(m => !m)}
-                  >{maximized ? 'Restore' : 'Maximize'}</button>
-                  <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={() => { startMatch() }}>Restart</button>
-                  <button className="btn bg-rose-600 hover:bg-rose-700 px-3 py-1 text-sm" onClick={() => { setShowMatchModal(false); setInMatch(false); }}>Quit</button>
-                </div>
+              <div ref={(el)=>{ (headerBarRef as any).current = el }}>
+                <GameHeaderBar
+                  left={(
+                    <>
+                      <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">Game Mode</span>
+                      <span className="font-medium whitespace-nowrap">{selectedMode}{selectedMode==='X01' ? ` / ${x01Score}` : ''}</span>
+                      <span className="opacity-80 whitespace-nowrap">First to {firstTo} · Legs {playerLegs}-{aiLegs}</span>
+                      <span className={`ml-2 px-2 py-0.5 rounded-full border text-[10px] sm:text-xs ${offlineLayout==='modern' ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30' : 'bg-white/10 text-white/70 border-white/20'}`}>{offlineLayout==='modern' ? 'Modern layout' : 'Classic layout'}</span>
+                    </>
+                  )}
+                  right={(
+                    <>
+                      {/* Camera scale controls (match Online UI) */}
+                      <div className="hidden items-center gap-2 mr-2 text-xs">
+                        <span className="opacity-80">Cam</span>
+                        <button
+                          className="btn btn--ghost px-2 py-1"
+                          onClick={() => setCameraScale(Math.max(0.5, Math.round((cameraScale - 0.05) * 100) / 100))}
+                          title="Decrease camera size"
+                        >−</button>
+                        <span className="w-9 text-center">{Math.round(cameraScale * 100)}%</span>
+                        <button
+                          className="btn btn--ghost px-2 py-1"
+                          onClick={() => setCameraScale(Math.min(1.25, Math.round((cameraScale + 0.05) * 100) / 100))}
+                          title="Increase camera size"
+                        >+</button>
+                      </div>
+                      <button
+                        className="btn btn--ghost px-3 py-1 text-sm"
+                        title={fitAll ? 'Actual Size' : 'Fit All'}
+                        onClick={() => setFitAll(v => !v)}
+                      >{fitAll ? 'Actual Size' : 'Fit All'}</button>
+                      <button
+                        className="btn btn--ghost px-3 py-1 text-sm"
+                        title={maximized ? 'Restore' : 'Maximize'}
+                        onClick={() => setMaximized(m => !m)}
+                      >{maximized ? 'Restore' : 'Maximize'}</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={() => { startMatch() }}>Restart</button>
+                      <button className="btn bg-rose-600 hover:bg-rose-700 px-3 py-1 text-sm" onClick={() => { setShowMatchModal(false); setInMatch(false); }}>Quit</button>
+                    </>
+                  )}
+                />
               </div>
               <div
                 ref={(el) => { (contentRef as any).current = el }}
@@ -1320,7 +1358,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                       <div className="h-full bg-emerald-400/70" style={{ width: `${Math.max(0, Math.min(100, (1 - (playerScore / x01Score)) * 100))}%` }} />
                     </div>
                     <div className="text-sm mt-1 opacity-90">Last dart: <span className="font-semibold">{playerLastDart}</span></div>
-                    <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{playerDartsThrown>0 ? (((x01Score - playerScore)/playerDartsThrown)*3).toFixed(1) : '0.0'}</span></div>
+                    <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{totalPlayerDarts>0 ? ((totalPlayerPoints/totalPlayerDarts)*3).toFixed(1) : '0.0'}</span></div>
                     <div className="text-xs opacity-70 flex items-center gap-2">
                       <span>Darts thrown: {playerDartsThrown}</span>
                       <span className="inline-flex items-center gap-1" aria-label="Visit darts">
@@ -1399,7 +1437,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                       </div>
                     )}
                     <div className="text-sm mt-1 opacity-90">Last dart: <span className="font-semibold">{ai === 'None' ? 0 : aiLastDart}</span></div>
-                    <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{ai !== 'None' ? (aiDartsThrown>0 ? (((x01Score - aiScore)/aiDartsThrown)*3).toFixed(1) : '0.0') : '—'}</span></div>
+                    <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{ai !== 'None' ? (totalAiDarts>0 ? ((totalAiPoints/totalAiDarts)*3).toFixed(1) : '0.0') : '—'}</span></div>
                     {ai !== 'None' && (
                       <div className="text-xs opacity-70">Darts thrown: {aiDartsThrown}</div>
                     )}
@@ -1476,7 +1514,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <div className="h-full bg-emerald-400/70" style={{ width: `${Math.max(0, Math.min(100, (1 - (playerScore / x01Score)) * 100))}%` }} />
                 </div>
                 <div className="text-sm mt-1 opacity-90">Last dart: <span className="font-semibold">{playerLastDart}</span></div>
-                <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{playerDartsThrown>0 ? (((x01Score - playerScore)/playerDartsThrown)*3).toFixed(1) : '0.0'}</span></div>
+                <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{totalPlayerDarts>0 ? ((totalPlayerPoints/totalPlayerDarts)*3).toFixed(1) : '0.0'}</span></div>
                 <div className="text-xs opacity-70 flex items-center gap-2">
                   <span>Darts thrown: {playerDartsThrown}</span>
                   <span className="inline-flex items-center gap-1" aria-label="Visit darts">
@@ -1568,7 +1606,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   </div>
                 )}
                 <div className="text-sm mt-1 opacity-90">Last dart: <span className="font-semibold">{ai === 'None' ? 0 : aiLastDart}</span></div>
-                <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{ai !== 'None' ? (aiDartsThrown>0 ? (((x01Score - aiScore)/aiDartsThrown)*3).toFixed(1) : '0.0') : '—'}</span></div>
+                <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{ai !== 'None' ? (totalAiDarts>0 ? ((totalAiPoints/totalAiDarts)*3).toFixed(1) : '0.0') : '—'}</span></div>
                 {ai !== 'None' && (
                   <div className="text-xs opacity-70">Darts thrown: {aiDartsThrown}</div>
                 )}
@@ -2126,41 +2164,71 @@ export default function OfflinePlay({ user }: { user: any }) {
           <ResizableModal storageKey="ndn:modal:offline-summary" className="w-full relative" defaultWidth={820} defaultHeight={520} minWidth={600} minHeight={400} maxWidth={1400} maxHeight={1000}>
             <h3 className="text-xl font-extrabold mb-2">Match Summary</h3>
             <div className="text-xs opacity-80 mb-3">{selectedMode} · {x01Score} start · First to {firstTo}</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="p-3 rounded-2xl glass border border-white/10">
-                <div className="text-sm font-semibold mb-1">You</div>
-                <div className="text-3xl font-extrabold">{playerLegs}</div>
-                <div className="text-xs opacity-80">Legs Won</div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="opacity-70">3-Dart Avg</span><div className="font-semibold">{totalPlayerDarts>0 ? ((totalPlayerPoints/totalPlayerDarts)*3).toFixed(1) : '0.0'}</div></div>
-                  <div><span className="opacity-70">1-Dart Avg</span><div className="font-semibold">{totalPlayerDarts>0 ? (totalPlayerPoints/totalPlayerDarts).toFixed(2) : '0.00'}</div></div>
-                  <div><span className="opacity-70">180s</span><div className="font-semibold">{player180s}</div></div>
-                  <div><span className="opacity-70">140+</span><div className="font-semibold">{player140s}</div></div>
-                  <div><span className="opacity-70">100+</span><div className="font-semibold">{player100s}</div></div>
-                  <div><span className="opacity-70">High Checkout</span><div className="font-semibold">{playerHighestCheckout || '—'}</div></div>
-                  <div><span className="opacity-70">Dbl Att</span><div className="font-semibold">{playerDoublesAtt}</div></div>
-                  <div><span className="opacity-70">Dbl Hit</span><div className="font-semibold">{playerDoublesHit}</div></div>
+            {(() => {
+              const player3da = totalPlayerDarts>0 ? ((totalPlayerPoints/totalPlayerDarts)*3) : 0
+              const player9da = player3da * 3
+              const playerBest = (() => {
+                const darts = legStats.filter(l=>l.winner==='player' && typeof l.winnerDarts==='number').map(l=>l.winnerDarts)
+                if (!darts.length) return '—'
+                return `${Math.min(...darts)} darts`
+              })()
+              const playerWorst = (() => {
+                const darts = legStats.filter(l=>l.winner==='player' && typeof l.winnerDarts==='number').map(l=>l.winnerDarts)
+                if (!darts.length) return '—'
+                return `${Math.max(...darts)} darts`
+              })()
+              const playerPct = playerDoublesAtt>0 ? Math.round((playerDoublesHit/playerDoublesAtt)*100) : 0
+
+              const ai3da = totalAiDarts>0 ? ((totalAiPoints/totalAiDarts)*3) : 0
+              const ai9da = ai3da * 3
+              const aiBest = (() => {
+                const darts = legStats.filter(l=>l.winner==='ai' && typeof l.winnerDarts==='number').map(l=>l.winnerDarts)
+                if (!darts.length) return '—'
+                return `${Math.min(...darts)} darts`
+              })()
+              const aiWorst = (() => {
+                const darts = legStats.filter(l=>l.winner==='ai' && typeof l.winnerDarts==='number').map(l=>l.winnerDarts)
+                if (!darts.length) return '—'
+                return `${Math.max(...darts)} darts`
+              })()
+              const aiPct = aiDoublesAtt>0 ? Math.round((aiDoublesHit/aiDoublesAtt)*100) : 0
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-2xl glass border border-white/10">
+                    <div className="text-sm font-semibold mb-1">{user?.username || 'You'}</div>
+                    <div className="text-3xl font-extrabold">{playerLegs}</div>
+                    <div className="text-xs opacity-80">Legs Won</div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <div><span className="opacity-70">Final 3DA</span><div className="font-semibold">{player3da.toFixed(1)}</div></div>
+                      <div><span className="opacity-70">Final 9DA</span><div className="font-semibold">{player9da.toFixed(1)}</div></div>
+                      <div><span className="opacity-70">Darts At Double</span><div className="font-semibold">{playerDoublesAtt}</div></div>
+                      <div><span className="opacity-70">Double %</span><div className="font-semibold">{playerPct}%</div></div>
+                      <div><span className="opacity-70">Best Dart Leg</span><div className="font-semibold">{playerBest}</div></div>
+                      <div><span className="opacity-70">Worst Dart Leg</span><div className="font-semibold">{playerWorst}</div></div>
+                      <div><span className="opacity-70">180's Hit</span><div className="font-semibold">{player180s}</div></div>
+                    </div>
+                  </div>
+                  <div className="hidden md:flex items-center justify-center">
+                    <div className="text-4xl font-black">{playerLegs} – {aiLegs}</div>
+                  </div>
+                  <div className="p-3 rounded-2xl glass border border-white/10">
+                    <div className="text-sm font-semibold mb-1">{ai==='None' ? 'Opponent' : `${ai} AI`}</div>
+                    <div className="text-3xl font-extrabold">{aiLegs}</div>
+                    <div className="text-xs opacity-80">Legs Won</div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <div><span className="opacity-70">Final 3DA</span><div className="font-semibold">{ai3da.toFixed(1)}</div></div>
+                      <div><span className="opacity-70">Final 9DA</span><div className="font-semibold">{ai9da.toFixed(1)}</div></div>
+                      <div><span className="opacity-70">Darts At Double</span><div className="font-semibold">{aiDoublesAtt}</div></div>
+                      <div><span className="opacity-70">Double %</span><div className="font-semibold">{aiPct}%</div></div>
+                      <div><span className="opacity-70">Best Dart Leg</span><div className="font-semibold">{aiBest}</div></div>
+                      <div><span className="opacity-70">Worst Dart Leg</span><div className="font-semibold">{aiWorst}</div></div>
+                      <div><span className="opacity-70">180's Hit</span><div className="font-semibold">{ai180s}</div></div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="hidden md:flex items-center justify-center">
-                <div className="text-4xl font-black">{playerLegs} – {aiLegs}</div>
-              </div>
-              <div className="p-3 rounded-2xl glass border border-white/10">
-                <div className="text-sm font-semibold mb-1">{ai==='None' ? 'Opponent' : `${ai} AI`}</div>
-                <div className="text-3xl font-extrabold">{aiLegs}</div>
-                <div className="text-xs opacity-80">Legs Won</div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="opacity-70">3-Dart Avg</span><div className="font-semibold">{totalAiDarts>0 ? ((totalAiPoints/totalAiDarts)*3).toFixed(1) : '0.0'}</div></div>
-                  <div><span className="opacity-70">1-Dart Avg</span><div className="font-semibold">{totalAiDarts>0 ? (totalAiPoints/totalAiDarts).toFixed(2) : '0.00'}</div></div>
-                  <div><span className="opacity-70">180s</span><div className="font-semibold">{ai180s}</div></div>
-                  <div><span className="opacity-70">140+</span><div className="font-semibold">{ai140s}</div></div>
-                  <div><span className="opacity-70">100+</span><div className="font-semibold">{ai100s}</div></div>
-                  <div><span className="opacity-70">High Checkout</span><div className="font-semibold">{aiHighestCheckout || '—'}</div></div>
-                  <div><span className="opacity-70">Dbl Att</span><div className="font-semibold">{aiDoublesAtt}</div></div>
-                  <div><span className="opacity-70">Dbl Hit</span><div className="font-semibold">{aiDoublesHit}</div></div>
-                </div>
-              </div>
-            </div>
+              )
+            })()}
             <div className="mt-4">
               <div className="text-sm font-semibold mb-2">Legs Timeline</div>
               <div className="flex flex-wrap gap-2">
