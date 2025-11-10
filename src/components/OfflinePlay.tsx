@@ -2047,26 +2047,41 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {/* Unified Game Scoreboard */}
                 {(selectedMode as any) === 'X01' && (
                   <>
+                    <div className="flex gap-3 min-h-0 flex-1">
+                      {/* Scoreboard on the left (60% width) */}
+                      <div className="flex-[0.6] min-w-0 overflow-y-auto">
+                        <GameScoreboard
+                          gameMode="X01"
+                          players={statsX01}
+                          matchScore={`${playerLegs}-${aiLegs}`}
+                        />
+                      </div>
+                      {/* Camera on the right (40% width) */}
+                      {cameraEnabled && (
+                        <div className="flex-[0.4] min-w-0 rounded-2xl overflow-hidden bg-black">
+                          <CameraView
+                            scoringMode="custom"
+                            showToolbar={false}
+                            immediateAutoCommit
+                            onAutoDart={(value, ring) => {
+                              // For X01, apply the dart value directly
+                              if (value > 0) applyDartValue(value)
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+                {/* Remove the separate camera view below scoreboard */}
+                {(selectedMode as any) === 'X01' && !cameraEnabled && (
+                  <>
                     <GameScoreboard
                       gameMode="X01"
                       players={statsX01}
                       matchScore={`${playerLegs}-${aiLegs}`}
                     />
                   </>
-                )}
-                {/* Camera view for X01 auto-scoring */}
-                {(selectedMode as any) === 'X01' && cameraEnabled && (
-                  <div className="rounded-2xl overflow-hidden bg-black">
-                    <CameraView
-                      scoringMode="custom"
-                      showToolbar={false}
-                      immediateAutoCommit
-                      onAutoDart={(value, ring) => {
-                        // For X01, apply the dart value directly
-                        if (value > 0) applyDartValue(value)
-                      }}
-                    />
-                  </div>
                 )}
                 {(selectedMode as any) === 'Cricket' && (
                   <>
