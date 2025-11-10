@@ -2043,13 +2043,11 @@ export default function OfflinePlay({ user }: { user: any }) {
               </div>
             ) : (
               <div className="space-y-2">
-                {/* Scorecard for X01 */}
-                {/* Unified Game Scoreboard */}
-                {(selectedMode as any) === 'X01' && (
-                  <>
-                    <div className="flex gap-3 min-h-0 flex-1 text-[14px]">
+                {/* Scorecard + Camera split (Option A): Scoreboard LEFT, Camera RIGHT */}
+                <div className="flex gap-3 min-h-0 flex-1 text-[14px]">
                       {/* Left column: Scoreboard + Manual Scoring (50% width) */}
                       <div className="basis-1/2 shrink-0 min-w-0 flex flex-col gap-2 overflow-y-auto pr-2 text-sm">
+                        <div className="text-sm font-semibold opacity-80">Scoreboard</div>
                         {/* Scoreboard */}
                         <div className="flex-shrink-0">
                           <GameScoreboard
@@ -2137,9 +2135,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                           />
                         </div>
                       )}
-                    </div>
-                  </>
-                )}
+                </div>
                 {/* Remove the separate camera view below scoreboard */}
                 {(selectedMode as any) === 'X01' && !cameraEnabled && (
                   <>
