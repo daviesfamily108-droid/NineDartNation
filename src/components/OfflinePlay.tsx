@@ -2041,7 +2041,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   </>
                 )}
               </div>
-            ) : isPlayerTurn ? (
+            ) : (
               <div className="space-y-2">
                 {/* Scorecard for X01 */}
                 {/* Unified Game Scoreboard */}
