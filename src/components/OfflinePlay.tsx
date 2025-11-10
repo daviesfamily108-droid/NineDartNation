@@ -2049,7 +2049,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <>
                     <div className="flex gap-3 min-h-0 flex-1 text-[14px]">
                       {/* Left column: Scoreboard + Manual Scoring (50% width) */}
-                      <div className="flex-[0.5] min-w-0 flex flex-col gap-2 overflow-y-auto pr-2">
+                      <div className="basis-1/2 shrink-0 min-w-0 flex flex-col gap-2 overflow-y-auto pr-2 text-sm">
                         {/* Scoreboard */}
                         <div className="flex-shrink-0">
                           <GameScoreboard
@@ -2126,7 +2126,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
                       {/* Right column: Main Camera Feed (50% width) */}
                       {cameraEnabled && (
-                        <div className="flex-[0.5] min-w-0 rounded-2xl overflow-hidden bg-black flex-shrink-0">
+                        <div className="basis-1/2 shrink-0 min-w-0 rounded-2xl overflow-hidden bg-black">
                           <CameraView
                             scoringMode="custom"
                             showToolbar={false}
