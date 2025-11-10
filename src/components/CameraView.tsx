@@ -40,7 +40,7 @@ export default function CameraView({
   x01DoubleInOverride?: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const { preferredCameraId, preferredCameraLabel, setPreferredCamera, autoscoreProvider, autoscoreWsUrl } = useUserSettings()
+  const { preferredCameraId, preferredCameraLabel, setPreferredCamera, autoscoreProvider, autoscoreWsUrl, cameraAspect, cameraFitMode } = useUserSettings()
   const manualOnly = autoscoreProvider === 'manual'
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -82,6 +82,8 @@ export default function CameraView({
   const [nonRegCount, setNonRegCount] = useState(0)
   const [showRecalModal, setShowRecalModal] = useState(false)
   const [hadRecentAuto, setHadRecentAuto] = useState(false)
+  const [pulseManualPill, setPulseManualPill] = useState(false)
+  const pulseTimeoutRef = useRef<number | null>(null)
   const [activeTab, setActiveTab] = useState<'auto'|'manual'>('auto')
   const [showManualModal, setShowManualModal] = useState(false)
   const [showAutoModal, setShowAutoModal] = useState(false)
@@ -104,11 +106,43 @@ export default function CameraView({
     return () => window.removeEventListener('ndn:open-autoscore' as any, onOpen)
   }, [manualOnly])
 
+  // cleanup pulse timer on unmount
+  useEffect(() => {
+    return () => {
+      try { if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current) } catch {}
+    }
+  }, [])
+
   // Open Scoring (Camera + Pending Visit) modal from parent via global event
   useEffect(() => {
     const onOpen = () => setShowScoringModal(true)
     window.addEventListener('ndn:open-scoring' as any, onOpen)
     return () => window.removeEventListener('ndn:open-scoring' as any, onOpen)
+  }, [])
+
+  // Enumerate devices on mount and when devices change so USB webcams appear quickly
+  useEffect(() => {
+    let mounted = true
+    async function refresh() {
+      try {
+        if (!navigator?.mediaDevices?.enumerateDevices) return
+        const list = await navigator.mediaDevices.enumerateDevices()
+        if (!mounted) return
+        setAvailableCameras(list.filter(d => d.kind === 'videoinput'))
+      } catch (err) {
+        console.warn('[CAMERA] enumerateDevices failed:', err)
+      }
+    }
+    refresh()
+    try {
+      navigator.mediaDevices.addEventListener('devicechange', refresh)
+    } catch {
+      try { (navigator.mediaDevices as any).ondevicechange = refresh } catch {}
+    }
+    return () => {
+      mounted = false
+      try { navigator.mediaDevices.removeEventListener('devicechange', refresh) } catch {}
+    }
   }, [])
 
   // Allow parent to open/close the manual modal via global events
@@ -339,7 +373,7 @@ export default function CameraView({
             // Stop current camera and wait for cleanup
             stopCamera()
             // Small delay to ensure camera device is fully released
-            await new Promise(resolve => setTimeout(resolve, 100))
+            await new Promise(resolve => setTimeout(resolve, 150))
             try {
               await startCamera()
             } catch (err) {
@@ -358,9 +392,25 @@ export default function CameraView({
         >
           <option value="">Auto</option>
           {availableCameras.map(d => (
-            <option key={d.deviceId} value={d.deviceId}>{d.label || 'Camera'}</option>
+            <option key={d.deviceId} value={d.deviceId}>{d.label || (d.deviceId ? `Camera (${d.deviceId.slice(0,6)})` : 'Camera')}</option>
           ))}
         </select>
+        <button
+          className="btn btn--ghost btn-sm ml-2"
+          onClick={async () => {
+            try {
+              // quick user-triggered rescan
+              const list = await navigator.mediaDevices.enumerateDevices()
+              setAvailableCameras(list.filter(d=>d.kind==='videoinput'))
+            } catch (err) {
+              console.warn('Rescan failed:', err)
+              alert('Failed to rescan devices. Ensure camera permissions are granted.')
+            }
+          }}
+          title="Rescan connected cameras"
+        >
+          Rescan
+        </button>
       </div>
     )
   }
@@ -461,7 +511,16 @@ export default function CameraView({
             setLastAutoScore(s)
             setLastAutoValue(score.base)
             setLastAutoRing(score.ring as Ring)
-            setHadRecentAuto(true)
+                setHadRecentAuto(true)
+                // If this looks like a valid confirmed auto (non-miss, positive base), pulse the Manual pill briefly
+                try {
+                  const ok = !!score && score.ring !== 'MISS' && (score.base || 0) > 0
+                  if (ok) {
+                    setPulseManualPill(true)
+                    try { if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current) } catch {}
+                    pulseTimeoutRef.current = window.setTimeout(() => { setPulseManualPill(false); pulseTimeoutRef.current = null }, 1500)
+                  }
+                } catch {}
 
             // Draw debug tip and shaft axis on overlay (scaled to overlay canvas)
             try {
@@ -504,10 +563,10 @@ export default function CameraView({
               }
             } catch {}
 
-            // Optional immediate commit for practice/custom flows
+            // Notify parent about each autoscore detection (non-committal)
             try {
-              if (immediateAutoCommit && onAutoDart) {
-                onAutoDart(score.base, score.ring as Ring, { sector: score.sector, mult: score.mult })
+              if (onAutoDart) {
+                onAutoDart(score.base, score.ring as Ring, { sector: (score.sector ?? null), mult: (score.mult as any) ?? 0 })
               }
             } catch {}
 
@@ -833,6 +892,22 @@ export default function CameraView({
     setNonRegCount(0)
   }
 
+  // Keyboard shortcut: press 'm' to open Manual Correction (if not typing in an input)
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      try {
+        const active = document.activeElement as HTMLElement | null
+        const tag = active?.tagName?.toLowerCase()
+        if (e.key === 'm' && tag !== 'input' && tag !== 'textarea') {
+          setActiveTab('manual')
+          setShowManualModal(true)
+        }
+      } catch {}
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   // Centralized quick-entry handler for S/D/T 1-20 buttons
   function onQuickEntry(num: number, mult: 'S'|'D'|'T') {
     if (pendingDarts >= 3) return
@@ -898,9 +973,9 @@ export default function CameraView({
         </div>
       )}
       {!hideInlinePanels && !manualOnly ? (
-        <div className="card">
+        <div className="card relative">
           <h2 className="text-xl font-semibold mb-3">Camera</h2>
-          <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={320} minHeight={240} maxWidth={1600} maxHeight={900}>
+          <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={320} minHeight={240} maxWidth={1600} maxHeight={900} autoFill>
             <CameraSelector />
             {preferredCameraLabel === 'Phone Camera' ? (
               <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
@@ -913,12 +988,21 @@ export default function CameraView({
               </div>
             ) : (
               (() => {
-                const fit = (useUserSettings.getState().cameraFitMode || 'fit') === 'fit'
-                const videoClass = fit
-                  ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
-                  : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black'
+                const aspect = cameraAspect || (useUserSettings.getState().cameraAspect || 'wide')
+                const fit = (cameraFitMode || (useUserSettings.getState().cameraFitMode || 'fit')) === 'fit'
+                // For square aspect we left-align and cover so the video is clipped to the left portion
+                // This hides the right-side area (the red region in your screenshot) while keeping the board visible on the left.
+                const videoClass = (aspect === 'square')
+                  ? 'absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black'
+                  : (fit
+                    ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
+                    : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black')
+                // When square, limit the maximum width so the camera doesn't expand to fill the whole column
+                const containerClass = aspect === 'square'
+                  ? 'relative w-full max-w-[640px] mx-auto aspect-square bg-black'
+                  : 'relative w-full aspect-[4/3] bg-black'
                 return (
-                  <div className="relative w-full aspect-[4/3] bg-black">
+                  <div className={containerClass}>
                     <video ref={videoRef} className={videoClass} playsInline webkit-playsinline="true" muted autoPlay />
                     <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
                     {/* Visit status dots: green=counts, red=not counted/miss, gray=not yet thrown */}
@@ -943,6 +1027,47 @@ export default function CameraView({
               })()
             )}
           </ResizablePanel>
+
+          {/* Small Manual pill in top-right of camera card so users in any game mode can open Manual Correction */}
+          {inProgress ? (
+            <div className="absolute top-3 right-3 z-30">
+              {/**
+               * Autoscore state styles:
+               * - success: recent auto detected a valid non-miss score -> green
+               * - ambiguous: recent auto detected but result is miss/zero/empty -> amber
+               * - idle: default white/neutral
+               */}
+              {
+                (() => {
+                  let stateClass = 'bg-white/90 text-slate-800'
+                  let title = 'Manual Correction (M)'
+                  if (hadRecentAuto) {
+                    const ok = !!lastAutoScore && lastAutoRing !== 'MISS' && lastAutoValue > 0
+                    if (ok) {
+                      stateClass = 'bg-emerald-600 text-white'
+                      title = `Manual Correction (M) — Autoscore: ${lastAutoScore} (confirmed)`
+                    } else {
+                      stateClass = 'bg-amber-400 text-black'
+                      title = `Manual Correction (M) — Autoscore ambiguous: ${lastAutoScore || '—'}`
+                    }
+                  }
+                  // Larger, clearer pill text and padding
+                  const baseClasses = 'px-4 py-2 rounded-full text-base font-semibold shadow-sm hover:opacity-90'
+                  const okNow = hadRecentAuto && !!lastAutoScore && lastAutoRing !== 'MISS' && lastAutoValue > 0
+                  const pulseClass = pulseManualPill && okNow ? 'ring-4 ring-emerald-400/60 animate-ping' : (hadRecentAuto && !okNow ? 'animate-pulse' : '')
+                  return (
+                    <button
+                      className={`${baseClasses} ${stateClass} ${pulseClass}`}
+                      onClick={() => { setActiveTab('manual'); setShowManualModal(true) }}
+                      title={title}
+                    >
+                      Manual
+                    </button>
+                  )
+                })()
+              }
+            </div>
+          ) : null}
           <div className="flex gap-2 mt-3">
             {preferredCameraLabel === 'Phone Camera' ? (
               <div className="text-sm text-blue-200 px-3 py-2 rounded bg-blue-900/30 flex-1">
@@ -968,6 +1093,19 @@ export default function CameraView({
             )}
             <button className="btn bg-slate-700 hover:bg-slate-800" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
           </div>
+        </div>
+      ) : null}
+
+      {/* Floating Manual Correction button (always available for quick manual typing during games) */}
+      {inProgress ? (
+        <div className="fixed bottom-6 right-6 z-50">
+          <button
+            className="btn btn--primary rounded-full w-12 h-12 flex items-center justify-center shadow-lg"
+            title="Open Manual Correction (M)"
+            onClick={() => { setActiveTab('manual'); setShowManualModal(true) }}
+          >
+            ✏️
+          </button>
         </div>
       ) : null}
       {!hideInlinePanels && manualOnly && (
@@ -1107,6 +1245,26 @@ export default function CameraView({
                     <button className="btn" onClick={onApplyManual} disabled={pendingDarts>=3}>Add</button>
                   </div>
                   <div className="text-xs opacity-70 mb-4">Press Enter to Add · Shift+Enter to Replace Last</div>
+                  {/* Numeric keypad for quick manual numeric entry */}
+                  <div className="mb-4">
+                    <div className="text-sm font-semibold mb-2">Number pad</div>
+                    <div className="grid grid-cols-3 gap-2 max-w-sm">
+                      {['7','8','9','4','5','6','1','2','3','0'].map((d) => (
+                        <button key={d} className="btn text-lg" onClick={()=>{
+                          // Append digit to manualScore (keep T/D/T prefixes if present)
+                          setManualScore(ms => {
+                            // If existing starts with letter (S/D/T), append after it
+                            if (/^[SDT]/i.test(ms)) return ms + d
+                            return (ms || '') + d
+                          })
+                        }}>{d}</button>
+                      ))}
+                      <button className="btn bg-rose-600 hover:bg-rose-700 text-white" onClick={() => setManualScore('')}>Clear</button>
+                      <button className="btn bg-slate-600 hover:bg-slate-700 text-white" onClick={() => setManualScore(ms => (ms||'').slice(0,-1))}>⌫</button>
+                      <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => onApplyManual()} disabled={pendingDarts>=3}>Enter</button>
+                    </div>
+                    <div className="text-xs opacity-70 mt-2">Tap numbers then press Enter to submit. Use D/T prefixes for doubles/trebles (e.g., D16).</div>
+                  </div>
                   <div className="mt-auto">
                     <div className="text-sm font-semibold mb-2">Quick entry</div>
                     {/* Bulls */}
@@ -1282,36 +1440,7 @@ export default function CameraView({
           </div>
         </div>
       )}
-  {!hideInlinePanels ? (
-  <div className="card">
-        <h2 className="text-xl font-semibold mb-3">Pending Visit</h2>
-        <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
-        <div className="flex items-center gap-2 mb-2">
-          {[0,1,2].map(i => {
-            const e = pendingEntries[i] as any
-            const isPending = !e
-            const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
-            const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
-            return <span key={i} className={`w-2.5 h-2.5 rounded-full shadow ${color}`} />
-          })}
-          {dartTimerEnabled && dartTimeLeft !== null && (
-            <span className="ml-2 px-2 py-0.5 rounded bg-black/40 text-white text-xs font-semibold">{Math.max(0, dartTimeLeft)}s</span>
-          )}
-        </div>
-        <ul className="text-sm mb-2 list-disc pl-5">
-          {pendingEntries.length === 0 ? <li className="opacity-60">No darts yet</li> : pendingEntries.map((e,i) => <li key={i}>{e.label}</li>)}
-        </ul>
-        <div className="flex items-center gap-4 mb-2">
-          <div className="font-semibold">Darts: {pendingDarts}/3</div>
-          <div className="font-semibold">Total: {pendingScore}</div>
-        </div>
-        <div className="flex gap-2">
-          <button className="btn" onClick={onUndoDart} disabled={pendingDarts===0}>Undo Dart</button>
-          <button className="btn" onClick={onCommitVisit} disabled={pendingDarts===0}>Commit Visit</button>
-          <button className="btn" onClick={()=>{setPendingDarts(0);setPendingScore(0);setPendingEntries([])}} disabled={pendingDarts===0}>Clear</button>
-        </div>
-  </div>
-  ) : null}
+  {/* Duplicate Pending Visit panel removed to avoid showing the same controls twice when inline panels are visible. */}
     </div>
   )
 }

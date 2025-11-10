@@ -17,6 +17,9 @@ export const premiumGames = [
 	'Golf',
 	'Tic Tac Toe',
 	'American Cricket',
+	'Scam',
+	'Fives',
+	'Sevens',
 ] as const
 export type GameKey = typeof freeGames[number] | typeof premiumGames[number]
 export const allGames: GameKey[] = [...freeGames, ...premiumGames]

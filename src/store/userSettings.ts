@@ -146,6 +146,9 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
   setReducedMotion: (v) => { save({ reducedMotion: v }); set({ reducedMotion: v }) },
   setCompactHeader: (v) => { save({ compactHeader: v }); set({ compactHeader: v }) },
   setAllowSpectate: (v) => { save({ allowSpectate: v }); set({ allowSpectate: v }) },
+  // Temporarily suppress external camera-mode syncing (used while user is interacting with device picker)
+  ignorePreferredCameraSync: false,
+  setIgnorePreferredCameraSync: (v: boolean) => { save({} as any); set({ ignorePreferredCameraSync: v }) },
   setCameraScale: (n) => { const s = Math.max(0.5, Math.min(1.25, n)); save({ cameraScale: s }); set({ cameraScale: s }) },
   setCameraAspect: (a) => { const v = (a === 'square') ? 'square' : 'wide'; save({ cameraAspect: v }); set({ cameraAspect: v }) },
   setCameraFitMode: (m) => { const v = (m === 'fit') ? 'fit' : 'fill'; save({ cameraFitMode: v }); set({ cameraFitMode: v }) },

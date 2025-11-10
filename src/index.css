@@ -135,6 +135,26 @@ body::-webkit-scrollbar-track, .overflow-auto::-webkit-scrollbar-track, .overflo
   --card: white;
 }
 
+/* Fix: Some dropdown/select controls rendered inside white backgrounds with white text
+   were visually invisible in certain theme combinations. Force selects and their
+   option menus to use readable system-like colors when they would otherwise be
+   white-on-white. This targets common utility classes used across the app. */
+.bg-white .input, .bg-white select, select.bg-white, .input.bg-white {
+  background-color: #ffffff !important;
+  color: #111827 !important; /* dark text on white */
+}
+.bg-white .input option, .bg-white select option, select.bg-white option, .input.bg-white option {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* Generic fix for any select element that has both white bg and white text via utility classes */
+select[class*="bg-white"][class*="text-white"], select.bg-white.text-white, .bg-white select.text-white {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
+
 body {
   background: radial-gradient(1200px 600px at 10% 10%, #222046 0%, transparent 60%),
               radial-gradient(1000px 500px at 90% 90%, #5b2bb766 0%, transparent 60%),
@@ -210,11 +230,84 @@ body {
   background: rgba(49,46,129,0.18);
   box-shadow: 0 10px 32px -8px rgba(49,46,129,0.25), 0 1.5px 8px rgba(160,132,232,0.10);
   border-radius: 1.5rem;
-  padding: 2rem;
+  padding: 1.25rem;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   color: #F5F5F5;
   border: 1.5px solid #8F43EE44;
+}
+
+/* Consistent outer shell for all game-mode screens (online, offline, tournaments)
+   Ensures the card stretches to fill the tab and inner panels can scroll. */
+.ndn-game-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  /* reduce outer padding so inner card can extend closer to the viewport bottom */
+  padding: 0.75rem;
+}
+.ndn-game-shell > .card, .ndn-game-shell.card {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* make the card a column flex container so inner panels can stretch vertically */
+  display: flex;
+  flex-direction: column;
+  /* reduce inner card padding when used as a game shell to give more vertical space */
+  padding: 0.5rem;
+}
+
+/* Positioning helper: allow an inner filling area to absolutely span the shell
+   without changing the document flow of the header. Use together with a
+   small wrapper element called .ndn-shell-body (added in components). */
+.ndn-game-shell { position: relative; }
+.ndn-shell-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto; /* scroll inner content without moving the shell */
+}
+.ndn-shell-body { position: relative; }
+/* Give inner scrolling area some breathing room at the bottom so floating controls don't occlude content */
+.ndn-shell-body { padding-bottom: 1.5rem; }
+
+/* Camera sizing utility: give camera-containing wrappers more vertical room
+   Desktop: taller (good for large screens), mobile/tablet: moderate height. */
+.ndn-camera-tall {
+  min-height: 520px;
+}
+@media (max-width: 1024px) {
+  .ndn-camera-tall { min-height: 360px; }
+}
+@media (max-width: 640px) {
+  .ndn-camera-tall { min-height: 280px; }
+}
+.absolute-fill {
+  position: absolute !important;
+  inset: 0 !important;
+}
+
+/* Visual parity tweaks for all game-mode shells */
+.ndn-game-shell {
+  /* visual parity tweaks (kept minimal) */
+  border-radius: 1.25rem; /* slightly tighter radius to match header corners */
+}
+.ndn-game-shell > h2, .ndn-game-shell h2 {
+  color: inherit;
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem 0;
+  line-height: 1.1;
+}
+.ndn-game-shell h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.ndn-game-shell .btn { /* slightly smaller pills inside game shells for consistent rhythm */
+  padding: 0.5rem 1rem;
+}
+.ndn-game-shell .input {
+  padding: 0.5rem 0.75rem;
 }
 
 /* Fullscreen modal override */
@@ -236,35 +329,77 @@ body {
 /* Utility: let an absolute child span across the parent's padding to touch outer corners */
 .inset-card-bleed { position: absolute; top: -2rem; right: -2rem; bottom: -2rem; left: -2rem; }
 
+/* Make camera containers inside game shells match the card background instead of solid black
+   so full-screen or compact camera panes blend with the surrounding UI. This targets the
+   common pattern used for camera wrappers without changing global bg-black behavior. */
+.ndn-game-shell .rounded-2xl.overflow-hidden.bg-black {
+  background: rgba(49,46,129,0.18) !important; /* match .card background */
+}
+
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
   border-radius: 999px;
-  padding: 0.75rem 2rem;
+  padding: 0.5rem 1rem;
   background: linear-gradient(90deg, #A084E8 0%, #8F43EE 100%);
   color: #fff;
   font-weight: 700;
-  font-size: 1.1rem;
+  font-size: 1rem;
+  line-height: 1.1;
+  flex-wrap: wrap;
+  white-space: normal;
+  max-height: 3.2rem; /* ~2 lines + vertical padding */
+  overflow: hidden;
+  /* Clamp to two lines and show ellipsis if longer */
+  display: -webkit-box;
+  /* standard property for compatibility */
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
   box-shadow: 0 4px 16px rgba(143,67,238,0.24);
-  transition: all 0.18s cubic-bezier(.4,0,.2,1);
+  transition: all 0.12s cubic-bezier(.4,0,.2,1);
   border: none;
-  filter: drop-shadow(0 2px 8px rgba(143,67,238,0.25));
+  filter: drop-shadow(0 2px 8px rgba(143,67,238,0.18));
+  /* Let pills size to their content so labels are fully visible; keep a sensible min height */
+  min-height: 40px;
 }
 .btn:hover {
   background: linear-gradient(90deg, #8F43EE 0%, #A084E8 100%);
-  box-shadow: 0 6px 20px rgba(143,67,238,0.3);
-  transform: scale(1.04);
-  filter: drop-shadow(0 4px 16px rgba(143,67,238,0.4));
+  box-shadow: 0 6px 20px rgba(143,67,238,0.28);
+  transform: translateY(-2px);
+  filter: drop-shadow(0 4px 12px rgba(143,67,238,0.28));
 }
 
 /* Ghost/secondary button for subtle actions */
 .btn--ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
   background: transparent;
   color: #E5E7EB;
-  border: 1px solid rgba(229, 231, 235, 0.2);
+  border: 1px solid rgba(229, 231, 235, 0.14);
   box-shadow: none;
+  /* allow wrap + limit height to two lines */
+  flex-wrap: wrap;
+  white-space: normal;
+  max-height: 3.2rem; /* ~2 lines + vertical padding */
+  overflow: hidden;
+  /* Clamp to two lines and show ellipsis if longer */
+  display: -webkit-box;
+  /* standard property for compatibility */
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
 }
 .btn--ghost:hover {
-  background: rgba(255,255,255,0.06);
-  border-color: rgba(229, 231, 235, 0.35);
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(229, 231, 235, 0.28);
   transform: translateY(-1px);
 }
 
@@ -293,6 +428,8 @@ body {
   color: #F5F5F5;
   font-weight: 600;
   font-size: 1.1rem;
+/* Ensure cards can shrink in nested flex layouts (prevents overflow when used inside flex containers) */
+.card { min-height: 0; }
   transition: background 0.18s;
   box-shadow: 0 2px 10px rgba(17, 24, 39, 0.25);
   cursor: pointer;

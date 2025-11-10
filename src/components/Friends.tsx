@@ -98,7 +98,7 @@ export default function Friends({ user }: { user?: any }) {
   // Friend Requests pill: use real requests data
   const requestsCount = requests.length + outgoingRequests.length;
   return (
-    <div className="card">
+    <div className="card ndn-game-shell">
       <h2 className="text-2xl font-bold text-brand-700 mb-2">Friends</h2>
       <p className="mb-2 text-brand-600">Manage your friends. See who’s online, in-game, or offline; find new teammates; and invite people to play.</p>
       <div className="text-xs opacity-70 mb-3">Online: {friends.filter(f=>f.status==='online').length} · In-game: {friends.filter(f=>f.status==='ingame').length} · Offline: {friends.filter(f=>!f.status || f.status==='offline').length}</div>

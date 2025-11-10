@@ -4,6 +4,7 @@ import { formatAvg } from '../utils/stats'
 import { getAllTime } from '../store/profileStats'
 import { STRIPE_CHECKOUT_URL } from '../utils/stripe'
 import { useUserSettings } from '../store/userSettings'
+import { useAudit } from '../store/audit'
 
 function goTab(tab: string) {
   try { window.dispatchEvent(new CustomEvent('ndn:change-tab', { detail: { tab } })) } catch {}
@@ -97,7 +98,7 @@ export default function Home({ user }: { user?: any }) {
             onClick={()=>goTab('online')} 
             className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-green-500 to-blue-400 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
           >
-            <span aria-hidden>🏆</span> Join Online League
+            <span aria-hidden>🏆</span> Join Online Match
           </button>
           <button 
             onClick={()=>{ goTab('offline'); try { window.dispatchEvent(new CustomEvent('ndn:auto-start', { detail: { mode: 'Double Practice' } })) } catch {} }} 

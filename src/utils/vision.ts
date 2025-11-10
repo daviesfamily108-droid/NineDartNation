@@ -1,11 +1,12 @@
 // Vision and calibration utilities for dartboard mapping
+// Standard dartboard: 18 inches (457.2 mm) outer diameter
 // Board dimensions follow standard measurements (millimeters)
 // - Inner bull radius: 6.35 mm (12.7 mm diameter)
 // - Outer bull radius: 15.9 mm (31.8 mm diameter)
 // - Treble inner radius: 99 mm
 // - Treble outer radius: 107 mm
 // - Double inner radius: 162 mm
-// - Double outer radius: 170 mm (playing field outer edge)
+// - Double outer radius: 170 mm (playing field outer edge = 340 mm diameter)
 
 export type Point = { x: number; y: number }
 export type Homography = [number, number, number, number, number, number, number, number, number] // row-major 3x3
@@ -151,19 +152,17 @@ function gaussianSolve(M: number[][], v: number[]): number[] {
 // Canonical calibration targets in board space (mm)
 // We ask the user to click the image positions for: 
 // 1. TOP, RIGHT, BOTTOM, LEFT of double outer rim (4 points for rim constraint)
-// 2. BULLSEYE center (inner bull) and OUTER BULL (2 points for center constraint)
-// Total: 6 calibration points for improved accuracy
+// Canonical calibration points in board space (mm)
+// 5-point system: TOP, RIGHT, BOTTOM, LEFT of double ring outer edge + CENTER bull
+// This matches the actual image points clicked/detected as cardinal directions
 export function canonicalRimTargets(): Point[] {
 	const doubleR = BoardRadii.doubleOuter
-	const innerBullR = BoardRadii.bullInner
-	const outerBullR = BoardRadii.bullOuter
 	return [
-		{ x: 0, y: -doubleR }, // 0: TOP of double rim
-		{ x: doubleR, y: 0 },  // 1: RIGHT of double rim
-		{ x: 0, y: doubleR },  // 2: BOTTOM of double rim
-		{ x: -doubleR, y: 0 }, // 3: LEFT of double rim
-		{ x: 0, y: 0 },        // 4: CENTER (bullseye inner bull center)
-		{ x: 0, y: -outerBullR }, // 5: TOP of outer bull (for vertical center constraint)
+		{ x: 0, y: -doubleR },        // TOP of double ring
+		{ x: doubleR, y: 0 },         // RIGHT of double ring
+		{ x: 0, y: doubleR },         // BOTTOM of double ring
+		{ x: -doubleR, y: 0 },        // LEFT of double ring
+		{ x: 0, y: 0 },               // CENTER (bullseye)
 	]
 }
 

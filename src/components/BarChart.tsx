@@ -30,8 +30,8 @@ export default function BarChart({
                   style={{ height: h }}
                   title={`${d.label}: ${d.value}`}
                 />
-                {showValues && <div className="text-[10px] mt-1 opacity-80">{d.value}</div>}
-                <div className="text-[10px] mt-1 opacity-70 select-none">{d.label}</div>
+                {showValues && <div className="text-[10px] mt-1 text-indigo-200 font-semibold">{d.value}</div>}
+                <div className="text-[10px] mt-1 text-slate-200 font-medium select-none">{d.label}</div>
               </div>
             )
           })}

@@ -10,6 +10,7 @@ type Props = {
   minHeight?: number
   maxWidth?: number
   maxHeight?: number
+  autoFill?: boolean
 }
 
 type Size = { width?: number; height?: number }
@@ -24,10 +25,12 @@ export default function ResizablePanel({
   minHeight = 200,
   maxWidth = 1600,
   maxHeight = 1200,
+  autoFill = false,
 }: Props) {
   const [size, setSize] = useState<Size>(() => {
     try { const raw = localStorage.getItem(storageKey); if (raw) return JSON.parse(raw) } catch {}
-    return { width: defaultWidth, height: defaultHeight }
+    // If autoFill is requested, don't persist a fixed height — let CSS stretch the panel
+    return autoFill ? { width: defaultWidth } : { width: defaultWidth, height: defaultHeight }
   })
   const startRef = useRef<{ x: number; y: number; w: number; h: number; dir: string } | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -60,19 +63,23 @@ export default function ResizablePanel({
     const dx = e.clientX - s.x; const dy = e.clientY - s.y
     let w = s.w; let h = s.h
     if (s.dir.includes('e')) w = clamp(s.w + dx, minWidth, maxWidth)
-    if (s.dir.includes('s')) h = clamp(s.h + dy, minHeight, maxHeight)
+    // If autoFill is enabled, ignore vertical resizing (panel should fill parent)
+    if (!autoFill && s.dir.includes('s')) h = clamp(s.h + dy, minHeight, maxHeight)
     if (s.dir.includes('w')) w = clamp(s.w - dx, minWidth, maxWidth)
-    if (s.dir.includes('n')) h = clamp(s.h - dy, minHeight, maxHeight)
+    if (!autoFill && s.dir.includes('n')) h = clamp(s.h - dy, minHeight, maxHeight)
     setSize({ width: Math.round(w), height: Math.round(h) })
   }
   function endResize() { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', endResize); startRef.current = null }
 
   const style: CSSProperties = {
     width: size.width ? `${size.width}px` : undefined,
-    height: size.height ? `${size.height}px` : undefined,
+    height: autoFill ? '100%' : (size.height ? `${size.height}px` : undefined),
     maxWidth: '100%',
-    maxHeight: '80vh',
+    // Allow the panel to fill the parent when autoFill is enabled. Otherwise keep a sensible cap.
+    maxHeight: autoFill ? '100%' : '80vh',
     position: 'relative',
+    // Make it participate in flex layouts when filling
+    ...(autoFill ? { display: 'flex', flexDirection: 'column', flex: '1 1 auto' } : {}),
   }
 
   return (

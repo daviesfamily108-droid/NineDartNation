@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { HelpCircle, MessageCircle, X, Send } from 'lucide-react';
+import { apiFetch } from '../utils/api'
+import { useWS } from './WSProvider'
+import HelpdeskChat from './HelpdeskChat'
 
 interface HelpAssistantProps {}
 
@@ -9,6 +12,26 @@ export default function HelpAssistant({}: HelpAssistantProps) {
     { text: "Hi! I'm your Nine Dart Nation assistant. How can I help you today?", isUser: false }
   ]);
   const [input, setInput] = useState('');
+  const [awaitingAdminConfirm, setAwaitingAdminConfirm] = useState(false)
+  const [lastUserQuestion, setLastUserQuestion] = useState('')
+  const [myRequest, setMyRequest] = useState<any | null>(null)
+  const ws = (() => { try { return useWS() } catch { return null } })()
+
+  useEffect(() => {
+    if (!ws) return
+    const unsub = ws.addListener((data: any) => {
+      try {
+        if (data?.type === 'help-message' && myRequest && String(data.requestId) === String(myRequest.id)) {
+          // append message to chat (the HelpdeskChat modal will also get WS events, but keep assistant messages synced)
+          // We don't duplicate state here; just forward to help chat placeholder by refreshing request from server
+        }
+        if (data?.type === 'help-request-updated' && myRequest && data.request?.id === myRequest.id) {
+          setMyRequest(data.request)
+        }
+      } catch {}
+    })
+    return () => unsub()
+  }, [ws, myRequest])
 
   const faq = {
     'how to play': 'To play darts, select a game mode from the menu. For online play, join a match. For offline, start a local game.',
@@ -20,6 +43,11 @@ export default function HelpAssistant({}: HelpAssistantProps) {
     'stats': 'View your statistics in the Stats tab.',
     'settings': 'Customize your experience in the Settings panel.',
     'support': 'Contact support via email or check the FAQ in Settings > Support.',
+    'scoring': 'Auto-scoring assigns each detected dart to the correct board segment using the detection pipeline. You can review scores in the Match Summary after the round.',
+    'autoscore': 'AutoScore attempts to place darts automatically. If a dart placement looks wrong, you can adjust it in the match review screen or disable immediate auto-commit in Settings.',
+    'pairing': 'To pair a phone or camera, open the Pairing flow from the main menu and follow the QR / pairing code steps. Ensure both devices are on the same network.',
+    'highlights': 'Highlights are saved when you checkout 50+ or visit 100+. You can download them from Settings > Highlights or save to your account.',
+    'legal': 'See the Legal Notice in the footer for Privacy & Copyright information. Click the footer link to view the full policy.',
   };
 
   const navigateToTab = (tabKey: string) => {
@@ -82,6 +110,30 @@ export default function HelpAssistant({}: HelpAssistantProps) {
         links: [{ text: 'Go to Tournaments', tab: 'tournaments' }]
       };
     }
+    if (message.includes('score') || message.includes('scoring') || message.includes('autoscore')) {
+      return {
+        text: 'Auto-scoring assigns darts to board segments automatically. You can review and adjust placements in the Match Summary screen.',
+        links: [{ text: 'Go to Match Summary', tab: 'matchsummary' }]
+      }
+    }
+    if (message.includes('pair') || message.includes('pairing') || message.includes('phone') || message.includes('camera pairing')) {
+      return {
+        text: 'Use the Pairing flow to connect phones and cameras. Make sure devices are on the same Wi‑Fi and scan the QR code shown.',
+        links: [{ text: 'Open Pairing', tab: 'pairing' }]
+      }
+    }
+    if (message.includes('highlight') || message.includes('download') || message.includes('save')) {
+      return {
+        text: 'Highlights can be downloaded or saved to your account from the Highlights section. We keep a record when you hit milestone checkouts or visits.',
+        links: [{ text: 'Open Highlights', tab: 'highlights' }]
+      }
+    }
+    if (message.includes('privacy') || message.includes('copyright') || message.includes('legal')) {
+      return {
+        text: 'Our Legal Notice and Privacy information are available in the footer. You can view privacy, copyright, and contact details there.',
+        links: [{ text: 'View Legal Notice', tab: 'footer' }]
+      }
+    }
     if (message.includes('help') || message.includes('support') || message.includes('faq')) {
       return {
         text: 'You\'re already in the help section! Check Settings for more resources.',
@@ -103,12 +155,54 @@ export default function HelpAssistant({}: HelpAssistantProps) {
 
   const handleSend = () => {
     if (!input.trim()) return;
-    const userMessage = input.toLowerCase();
-    setMessages(prev => [...prev, { text: input, isUser: true }]);
+    const userMessageRaw = input.trim()
+    const userMessage = userMessageRaw.toLowerCase();
+    setMessages(prev => [...prev, { text: userMessageRaw, isUser: true }]);
     setInput('');
+
+    // If we're awaiting admin confirmation, interpret YES/NO
+    if (awaitingAdminConfirm) {
+      if (userMessage.startsWith('y')) {
+        // Send help request to server
+        setMessages(prev => [...prev, { text: 'Okay — I will notify an admin. Please wait for them to join the chat.', isUser: false }]);
+  setAwaitingAdminConfirm(false);
+        // fire-and-forget
+        (async () => {
+          try {
+            const payload = { message: lastUserQuestion || userMessageRaw }
+            const res = await apiFetch('/api/help/requests', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+            const j = await res.json().catch(() => null)
+            // If server returns the request record, open the live chat
+            if (j && j.request) {
+              setMyRequest(j.request)
+              setMessages(prev => [...prev, { text: 'Okay — I will notify an admin. Please wait for them to join the chat.', isUser: false }])
+            } else {
+              setMessages(prev => [...prev, { text: 'Okay — I will notify an admin. Please wait for them to join the chat.', isUser: false }])
+            }
+          } catch (err) {
+            setMessages(prev => [...prev, { text: 'Failed to contact admins. Please try again later.', isUser: false }])
+          }
+        })()
+        return
+      } else {
+        setMessages(prev => [...prev, { text: "Okay — I won't notify an admin. If you change your mind, just ask.", isUser: false }]);
+  setAwaitingAdminConfirm(false);
+        return
+      }
+    }
 
     // Get response with smart link suggestions
     const response = getResponseWithLinks(userMessage);
+
+    // If the bot couldn't answer well, offer to escalate
+    if (typeof response.text === 'string' && response.text.includes("I'm not sure about that")) {
+      setLastUserQuestion(userMessageRaw)
+  setAwaitingAdminConfirm(true);
+      setTimeout(() => {
+        setMessages(prev => [...prev, { text: { text: 'I can connect you to a member of our admin team — would you like that? Type YES or NO.', links: [] }, isUser: false }]);
+      }, 350)
+      return
+    }
 
     setTimeout(() => {
       setMessages(prev => [...prev, { text: response, isUser: false }]);
@@ -201,6 +295,11 @@ export default function HelpAssistant({}: HelpAssistantProps) {
           </div>
         </div>
       )}
+
+        {/* Render live chat modal if a help request exists for this user */}
+        {myRequest && (
+          <HelpdeskChat request={myRequest} user={{ email: null, username: null, isAdmin: false }} onClose={() => setMyRequest(null)} />
+        )}
     </>
   );
 }

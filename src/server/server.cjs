@@ -587,6 +587,68 @@ app.post('/api/admin/maintenance', (req, res) => {
   res.json({ ok: true, maintenance: maintenanceMode })
 })
 
+app.get('/api/admin/system-health', (req, res) => {
+  const authHeader = req.headers.authorization || ''
+  
+  // Basic authentication check
+  const isAuthenticated = !!authHeader
+  if (!isAuthenticated) {
+    return res.status(403).json({ ok: false, error: 'UNAUTHORIZED' })
+  }
+  
+  const uptime = process.uptime()
+  const memUsage = process.memoryUsage()
+  
+  res.json({
+    ok: true,
+    health: {
+      database: true, // Would check actual DB
+      websocket: true, // Would check WebSocket server status
+      https: process.env.NODE_ENV === 'production',
+      maintenance: maintenanceMode || false,
+      clustering: false, // Would check actual clustering status
+      uptime: uptime,
+      memory: {
+        heapUsed: memUsage.heapUsed,
+        heapTotal: memUsage.heapTotal
+      },
+      version: '1.0.0'
+    }
+  })
+})
+
+app.post('/api/admin/clustering', (req, res) => {
+  const authHeader = req.headers.authorization || ''
+  
+  // Verify authorization header exists
+  if (!authHeader) {
+    return res.status(403).json({ ok: false, error: 'UNAUTHORIZED' })
+  }
+  
+  const { enabled, maxWorkers, capacity } = req.body || {}
+  
+  // Store clustering config
+  const clusteringConfig = {
+    enabled: !!enabled,
+    maxWorkers: Number(maxWorkers) || 4,
+    capacity: Number(capacity) || 1500,
+    updatedAt: new Date().toISOString()
+  }
+  
+  // In production, this would:
+  // 1. Set NODE_WORKERS environment variable
+  // 2. Restart worker processes
+  // 3. Configure load balancer
+  
+  console.log('[Admin] Clustering config updated:', clusteringConfig)
+  
+  res.json({ 
+    ok: true, 
+    clustering: clusteringConfig,
+    message: `Clustering ${enabled ? 'enabled' : 'disabled'}. Capacity: ${capacity} concurrent users.`
+  })
+})
+
 app.post('/api/admin/announce', (req, res) => {
   const { message, requesterEmail } = req.body || {}
   if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
@@ -1012,6 +1074,11 @@ function broadcastAll(data) {
 
 function broadcastTournaments() {
   const list = Array.from(tournaments.values())
+  // Diagnostic log: print tournaments count and ids when broadcasting
+  try {
+    const ids = list.map(t => t.id).slice(0,50)
+    console.log(`[BROADCAST] tournaments=${list.length} ids=${ids.join(',')}`)
+  } catch (e) { console.log('[BROADCAST] could not stringify tournaments', e && e.message) }
   broadcastAll({ type: 'tournaments', tournaments: list })
 }
 
@@ -1780,7 +1847,7 @@ app.get('/api/tournaments', (req, res) => {
 })
 
 app.post('/api/tournaments/create', (req, res) => {
-  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeAmount, currency, prizeNotes, requesterEmail } = req.body || {}
+  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeAmount, currency, prizeNotes, requesterEmail, requireCalibration } = req.body || {}
   const id = nanoid(10)
   // Only the owner can create "official" tournaments or set prize metadata
   const isOwner = String(requesterEmail || '').toLowerCase() === OWNER_EMAIL
@@ -1802,6 +1869,7 @@ app.post('/api/tournaments/create', (req, res) => {
     capacity: Math.min(64, Math.max(6, Number(capacity) || 8)),
   participants: [],
     official: isOfficial,
+    requireCalibration: !!requireCalibration,
     prize: isOfficial ? (pType !== 'none') : false,
     prizeType: pType,
     prizeAmount: amount || undefined,
@@ -1816,6 +1884,8 @@ app.post('/api/tournaments/create', (req, res) => {
     startingScore: (typeof startingScore === 'number' && startingScore>0) ? Math.floor(startingScore) : (String(game)==='X01' ? 501 : undefined),
   }
   tournaments.set(id, t)
+  // Diagnostic log: announce creation
+  try { console.log(`[TOURNAMENT CREATED] id=${id} title=${t.title} official=${!!t.official} creator=${t.creatorEmail}`) } catch (e) {}
   broadcastTournaments()
   res.json({ ok: true, tournament: t })
 })

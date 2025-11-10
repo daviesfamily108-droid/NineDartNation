@@ -11,6 +11,7 @@ export default function StatsPanel({ user }: { user?: any }) {
   const [family, setFamily] = useState<'x01' | 'other'>('x01')
   const [playersText, setPlayersText] = useState('Player 1, Player 2')
   const [start, setStart] = useState(501)
+  const [selectedGameMode, setSelectedGameMode] = useState<string>('')
   // Opponent compare: select a friend to render on the second card
   const [friends, setFriends] = useState<Array<{ email: string; username?: string }>>([])
   const [opponent, setOpponent] = useState<string>('')
@@ -105,10 +106,10 @@ export default function StatsPanel({ user }: { user?: any }) {
   }, [])
 
   return (
-    <div className="card">
+    <div className="card ndn-game-shell" style={{ background: 'linear-gradient(135deg, #393053 0%, #635985 100%)' }}>
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xl font-semibold">Match Stats</h2>
+          <h2 className="text-2xl font-extrabold text-white">Match Stats</h2>
           <span className="text-xs opacity-70">View</span>
         </div>
         <TabPills
@@ -117,39 +118,16 @@ export default function StatsPanel({ user }: { user?: any }) {
           onChange={(k)=> setFamily((k as 'x01'|'other'))}
         />
       </div>
-      {players.length === 0 && (
-        <div className="mb-4 p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
-          <div className="font-semibold mb-2">No match data yet</div>
-          <div className="text-sm opacity-80 mb-2">Start a quick X01 match to generate stats. Stats like Best/Worst 3-dart are finalized when you end the game.</div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
-            <div>
-              <label className="block text-xs text-slate-300 mb-1">Players (comma separated)</label>
-              <input className="input w-full" value={playersText} onChange={e => setPlayersText(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-300 mb-1">Starting Score</label>
-              <input className="input w-full" type="number" value={start} onChange={e => setStart(parseInt(e.target.value||'501'))} />
-            </div>
-            <div>
-              <button className="btn w-full" onClick={()=>{
-                const names = playersText.split(',').map(s=>s.trim()).filter(Boolean)
-                if (!names.length) return alert('Enter at least one player')
-                newMatch(names, start)
-              }}>Start Match</button>
-            </div>
-          </div>
-        </div>
-      )}
       {inProgress && (
         <div className="mb-3 p-2 rounded-lg text-sm border border-amber-500/40 bg-amber-500/10 text-amber-200">Note: Detailed leg stats are finalized at the end of the game.</div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {players.map((p, idx) => (
-          <div key={p.id} className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
+          <div key={p.id} className="p-4 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-700/6 to-indigo-900/6 shadow-sm transform transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
             <div className="flex items-center justify-between mb-2">
               <div className="font-semibold">{idx===1 && !opponent ? (p.name || 'Opponent') : (idx===1 && opponent ? opponent : p.name)}</div>
               {idx === 1 && (
-                <div className="flex flex-wrap gap-2 items-center">
+                <div className="flex gap-2 items-center overflow-x-auto py-1">
                   <button
                     className="text-[11px] px-3 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10"
                     onClick={()=> setShowPicker(s => !s)}
@@ -161,7 +139,7 @@ export default function StatsPanel({ user }: { user?: any }) {
                     return (
                       <button
                         key={f.email}
-                        className={`text-[11px] px-3 py-1 rounded-full border ${active ? 'bg-indigo-500/30 border-indigo-400/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                        className={`text-[11px] px-3 py-1 rounded-full border ${active ? 'bg-indigo-500/30 border-indigo-400/50' : 'bg-white/6 border-white/8 hover:bg-white/10 transform hover:-translate-y-0.5 transition-all duration-150'}`}
                         onClick={()=> setOpponent(lbl)}
                         title={`Compare vs ${lbl}`}
                       >{lbl}</button>
@@ -283,7 +261,7 @@ export default function StatsPanel({ user }: { user?: any }) {
         ))}
         {/* Opponent compare card: if there are fewer than 2 players, show a selector to compare with a friend */}
         {players.length <= 1 && (
-          <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
+          <div className="p-3 rounded-2xl border border-purple-500/20 bg-gradient-to-r from-purple-800/6 to-pink-800/6">
             <div className="flex items-center justify-between mb-2">
               <div className="font-semibold">Opponent</div>
               <div className="flex flex-wrap gap-2">
@@ -293,7 +271,7 @@ export default function StatsPanel({ user }: { user?: any }) {
                   return (
                     <button
                       key={f.email}
-                      className={`text-[11px] px-3 py-1 rounded-full border ${active ? 'bg-indigo-500/30 border-indigo-400/50' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}
+                      className={`text-[11px] px-3 py-1 rounded-full border ${active ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white border-transparent shadow-sm' : 'bg-gradient-to-r from-purple-500/8 to-pink-500/8 border-white/10 hover:from-purple-500/12 hover:to-pink-500/12'}`}
                       onClick={()=> setOpponent(lbl)}
                       title={`Compare vs ${lbl}`}
                     >{lbl}</button>
@@ -352,30 +330,70 @@ export default function StatsPanel({ user }: { user?: any }) {
         )}
       </div>
 
-      {/* Score distribution for selection */}
-      <div className="mt-6">
-        <div className="mb-2 text-sm opacity-80">Score Distribution ({family.toUpperCase()}): Visits by scored points</div>
-        <div className="rounded-xl border border-indigo-500/40 bg-indigo-500/10 p-3">
-          <BarChart data={dist} showValues={false} />
-        </div>
-      </div>
-
-      {/* Other Modes: Played/Won per game as a bar chart */}
-      <div className="mt-6">
-        <div className="mb-2 text-sm opacity-80">Other Modes: games played (bar height) with wins shown beneath each label</div>
-        <div className="rounded-xl border border-indigo-500/40 bg-indigo-500/10 p-3">
-          {/* Reuse BarChart for bar height = played; render captions underneath */}
-          <BarChart data={otherData.map(d => ({ label: d.label, value: d.value }))} showValues={false} />
-          <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px] opacity-80">
-            {otherData.map((d, i) => (
-              <div key={i} className="flex items-center justify-between px-2 py-1 rounded-md bg-white/5 border border-white/10">
-                <span className="truncate mr-2">{d.label}</span>
-                <span className="whitespace-nowrap">Played {d.value} · Won {d.extra}</span>
-              </div>
-            ))}
+      {/* Score distribution for X01 family OR Game Stats for Other Modes */}
+      {family !== 'other' ? (
+        <div className="mt-6">
+          <div className="mb-2 text-sm opacity-80">Score Distribution ({family.toUpperCase()}): Visits by scored points</div>
+          <div className="rounded-xl border border-indigo-500/20 p-3 min-h-[220px] transform transition-shadow duration-200 hover:shadow-lg overflow-y-auto" style={{ background: 'linear-gradient(135deg, #393053 0%, #635985 100%)', scrollbarColor: '#8F43EE #18122B' }}>
+            <BarChart data={dist} showValues={false} />
           </div>
         </div>
-      </div>
+      ) : selectedGameMode && otherData.find(d => d.label === selectedGameMode) ? (
+        <div className="mt-6">
+          {(() => {
+            const game = otherData.find(d => d.label === selectedGameMode)!
+            return (
+              <div>
+                <div className="mb-2 text-sm opacity-80">Game Stats for {game.label}</div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-lg bg-white/10 border border-white/20">
+                    <div className="text-slate-300 text-sm mb-1">Games Played</div>
+                    <div className="text-3xl font-bold text-white">{game.value}</div>
+                  </div>
+                  <div className="p-4 rounded-lg bg-white/10 border border-white/20">
+                    <div className="text-slate-300 text-sm mb-1">Games Won</div>
+                    <div className="text-3xl font-bold text-green-400">{game.extra}</div>
+                  </div>
+                  <div className="p-4 rounded-lg bg-white/10 border border-white/20">
+                    <div className="text-slate-300 text-sm mb-1">Win Rate</div>
+                    <div className="text-3xl font-bold text-blue-400">{game.value > 0 ? ((game.extra / game.value) * 100).toFixed(1) : 0}%</div>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+      ) : null}
+
+      {/* Other Modes: Game Mode Selector with Pills */}
+      {family === 'other' && (
+        <div className="mt-6">
+          <div className="mb-3">
+            <div className="text-sm opacity-80 mb-3">Other Modes: Click a game to view stats</div>
+            <div className="rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-2 flex items-center gap-2 overflow-x-auto no-scrollbar flex-wrap">
+              {otherData.map((d) => (
+                <button
+                  key={d.label}
+                  onClick={() => setSelectedGameMode(d.label)}
+                  className={`transition-all select-none whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 active:scale-[0.98] ${
+                    selectedGameMode === d.label
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg'
+                      : 'bg-gradient-to-r from-slate-700 to-slate-600 text-white hover:from-slate-600 hover:to-slate-500'
+                  }`}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {!selectedGameMode && (
+            <div className="rounded-xl border border-indigo-500/20 p-4" style={{ background: 'linear-gradient(135deg, #393053 0%, #635985 100%)' }}>
+              <div className="text-center text-slate-300">Select a game mode above to view detailed stats</div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

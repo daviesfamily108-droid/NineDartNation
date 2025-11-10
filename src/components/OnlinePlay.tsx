@@ -8,6 +8,7 @@ import { addSample, getAllTimeAvg } from '../store/profileStats'
 import { getFreeRemaining, incOnlineUsage } from '../utils/quota'
 import { useUserSettings } from '../store/userSettings'
 import { useCalibration } from '../store/calibration'
+import GameCalibrationStatus from './GameCalibrationStatus'
 import MatchSummaryModal from './MatchSummaryModal'
 import { freeGames, premiumGames, allGames, type GameKey } from '../utils/games'
 import { getUserCurrency, formatPriceInCurrency } from '../utils/config'
@@ -34,6 +35,8 @@ import { createBaseball, applyBaseballDart } from '../game/baseball'
 import { createGolf, applyGolfDart, GOLF_TARGETS } from '../game/golf'
 import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
 import { useMatchControl } from '../store/matchControl'
+import GameScoreboard from './scoreboards/GameScoreboard'
+import { useOnlineGameStats } from './scoreboards/useGameStats'
 
 export default function OnlinePlay({ user }: { user?: any }) {
   const API_URL = (import.meta as any).env?.VITE_API_URL || ''
@@ -94,6 +97,49 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [x01DoubleInMatch, setX01DoubleInMatch] = useState<boolean>(false)
   // Mobile camera pairing
   const [pairingCode, setPairingCode] = useState<string | null>(null)
+  // Highlight auto-download UI
+  const [highlightCandidate, setHighlightCandidate] = useState<any | null>(null)
+  const [showHighlightModal, setShowHighlightModal] = useState(false)
+
+  // Download highlight to device as a JSON file
+  function downloadHighlightToDevice() {
+    if (!highlightCandidate) return
+    try {
+      const blob = new Blob([JSON.stringify(highlightCandidate, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const name = `ndn-highlight-${highlightCandidate.player || 'player'}-${highlightCandidate.ts || Date.now()}.json`
+      a.href = url
+      a.download = name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+  toast?.('Downloaded highlight to device', { type: 'success' })
+      setShowHighlightModal(false)
+    } catch (err) {
+  toast?.('Download failed', { type: 'error' })
+    }
+  }
+
+  async function saveHighlightToAccount() {
+    if (!highlightCandidate) return
+    const token = localStorage.getItem('authToken')
+  if (!token) { toast?.('You must be signed in to save to account', { type: 'error' }); return }
+    try {
+      const res = await apiFetch('/api/user/highlights', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(highlightCandidate) })
+      if (!res.ok) {
+        const j = await res.json().catch(()=>({}))
+  toast?.(`Save failed: ${j.error || res.statusText}`, { type: 'error' })
+        return
+      }
+      const j = await res.json()
+  toast?.('Saved highlight to your account', { type: 'success' })
+      setShowHighlightModal(false)
+    } catch (err) {
+  toast?.('Save failed', { type: 'error' })
+    }
+  }
   // WebRTC for mobile camera
   const [mobileStream, setMobileStream] = useState<MediaStream | null>(null)
   const mobileVideoRef = useRef<HTMLVideoElement>(null)
@@ -329,7 +375,9 @@ export default function OnlinePlay({ user }: { user?: any }) {
         match.addVisit(100, 3) // You
         setCurrentGame('X01')
         setShowMatchModal(true)
-      } catch {}
+      } catch (err) {
+        console.error('Demo error:', err)
+      }
     }
     window.addEventListener('ndn:online-match-demo', handler as any)
     return () => window.removeEventListener('ndn:online-match-demo', handler as any)
@@ -1247,8 +1295,9 @@ export default function OnlinePlay({ user }: { user?: any }) {
   }
 
   return (
-    <div className="card flex flex-col min-h-[85vh] relative overflow-hidden">
+    <div className="card ndn-game-shell relative overflow-hidden">
       <h2 className="text-xl font-semibold mb-1">Online Play</h2>
+      <div className="ndn-shell-body">
       {/* Pause overlay/banner */}
       {paused && (
         <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
@@ -1327,7 +1376,13 @@ export default function OnlinePlay({ user }: { user?: any }) {
           <button
             className="text-[11px] px-3 py-1 rounded-full bg-indigo-500/25 text-indigo-100 border border-indigo-400/40 hover:bg-indigo-500/40 shrink-0"
             title="Open a simulated online match demo"
-            onClick={() => { try { window.dispatchEvent(new CustomEvent('ndn:online-match-demo', { detail: { game: 'X01', start: 501 } })) } catch {} }}
+            onClick={() => { 
+              try { 
+                window.dispatchEvent(new CustomEvent('ndn:online-match-demo', { detail: { game: 'X01', start: 501 } })) 
+              } catch (err) {
+                console.error('Demo click error:', err)
+              }
+            }}
           >DEMO</button>
           {connected && (
             <button className="btn shrink-0" onClick={() => setShowMatchModal(true)} disabled={locked} title={locked ? 'Weekly free games used' : ''}>Open Match</button>
@@ -1409,10 +1464,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 onChange={(k)=> setFilterMode(k as any)}
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs opacity-70 mb-1">Game</label>
-                <select className="input w-full" value={filterGame as any} onChange={e=>setFilterGame(e.target.value as any)}>
+                <label className="block text-xs opacity-70 mb-2 font-semibold">Game</label>
+                <select className="input w-full text-sm" value={filterGame as any} onChange={e=>setFilterGame(e.target.value as any)}>
                   <option value="all">All</option>
                   {allGames.map(g => (
                     <option key={g} value={g}>{g}</option>
@@ -1420,8 +1475,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs opacity-70 mb-1">Starting Score</label>
-                <select className="input w-full" value={filterStart as any} onChange={e=>{
+                <label className="block text-xs opacity-70 mb-2 font-semibold">Starting Score</label>
+                <select className="input w-full text-sm" value={filterStart as any} onChange={e=>{
                   const v = e.target.value
                   if (v==='all') setFilterStart('all'); else setFilterStart(Number(v) as any)
                 }} disabled={filterGame !== 'all' && filterGame !== 'X01'}>
@@ -1432,21 +1487,71 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs opacity-70 mb-1">Opponent near my avg</label>
-                <div className="flex items-center gap-2">
-                  <input id="nearavg" type="checkbox" className="accent-purple-500" checked={nearAvg} onChange={e=>setNearAvg(e.target.checked)} disabled={!myAvg} />
-                  <label htmlFor="nearavg" className="cursor-pointer text-sm">Near my average</label>
-                  <input className="input w-24" type="number" min={5} max={40} step={1} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
+                <label className="block text-xs opacity-70 mb-2 font-semibold">Opponent Average</label>
+                <div className="flex items-center gap-2 h-10 px-3 rounded bg-slate-900/30 border border-slate-500/30">
+                  <input 
+                    id="nearavg" 
+                    type="checkbox" 
+                    className="w-4 h-4 cursor-pointer accent-purple-500" 
+                    checked={nearAvg} 
+                    onChange={e=>setNearAvg(e.target.checked)} 
+                    title={!myAvg || myAvg === 0 ? 'Play a game first to use this filter' : 'Filter matches near your average'}
+                  />
+                  <label htmlFor="nearavg" className="cursor-pointer text-sm flex-1">Near my avg</label>
+                  <input 
+                    type="number" 
+                    className="input w-20 text-sm px-2 py-1" 
+                    min={5} 
+                    max={40} 
+                    step={1} 
+                    value={avgTolerance} 
+                    onChange={e=>{
+                      const val = parseInt(e.target.value || '10');
+                      if (!isNaN(val)) setAvgTolerance(Math.max(5, Math.min(40, val)));
+                    }}
+                    disabled={!nearAvg}
+                    title="Tolerance range (±)"
+                  />
                 </div>
               </div>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex-1 max-w-sm">
-                <label className={`block text-xs opacity-70 mb-1 ${!nearAvg ? 'opacity-40' : ''}`}>Avg tolerance (±)</label>
-                <input className="w-full" type="range" min={1} max={50} value={avgTolerance} onChange={e=>setAvgTolerance(parseInt(e.target.value||'10'))} disabled={!nearAvg} />
-                <div className="text-xs opacity-70 mt-1">± {avgTolerance}</div>
+            <div className="flex items-center justify-between gap-3 pt-2">
+              <div className="flex-1 max-w-xs">
+                <label className={`block text-xs opacity-70 mb-2 font-semibold ${!nearAvg ? 'opacity-40' : ''}`}>Avg Tolerance (±)</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="range" 
+                    min="1" 
+                    max="50" 
+                    value={avgTolerance} 
+                    onChange={e=>{
+                      const newVal = parseInt(e.target.value, 10);
+                      if (!isNaN(newVal)) {
+                        setAvgTolerance(Math.max(1, Math.min(50, newVal)));
+                      }
+                    }}
+                    disabled={!nearAvg}
+                    title="Drag to set tolerance"
+                    className="w-32 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      background: nearAvg 
+                        ? 'linear-gradient(to right, rgb(55, 65, 81) 0%, rgb(55, 65, 81) ' + ((avgTolerance - 1) / 49 * 100) + '%, rgb(88, 28, 135) ' + ((avgTolerance - 1) / 49 * 100) + '%, rgb(88, 28, 135) 100%)'
+                        : 'linear-gradient(to right, rgb(71, 85, 105) 0%, rgb(71, 85, 105) 100%)'
+                    }}
+                  />
+                  <div className="text-xs font-mono font-semibold w-8 text-right text-purple-400">±{avgTolerance}</div>
+                </div>
               </div>
-              <button className="btn px-3 py-1 text-sm" onClick={()=>{ setFilterMode('all'); setFilterGame('all'); setFilterStart('all'); setNearAvg(false); setAvgTolerance(10) }}>Reset</button>
+              <button 
+                className="btn px-3 py-2 text-sm mt-6" 
+                onClick={()=>{ 
+                  setFilterMode('all'); 
+                  setFilterGame('all'); 
+                  setFilterStart('all'); 
+                  setNearAvg(false); 
+                  setAvgTolerance(10) 
+                }}
+              >Reset</button>
             </div>
           </div>
           {filteredLobby.length === 0 ? (
@@ -1769,11 +1874,21 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   </div>
                 </div>
                 {/* Summary (left) + Camera (right) */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 items-start">
-                  <div className="order-1"><RenderMatchSummary /></div>
-                  <div className="order-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 items-start h-full">
+                  <div className="order-1">
+                    {currentGame === 'X01' ? (
+                      <RenderMatchSummary />
+                    ) : (
+                      <GameScoreboard
+                        gameMode={currentGame as any}
+                        players={useOnlineGameStats(currentGame as any, match, participants)}
+                        matchScore={match.players?.length === 2 ? `${match.players[0]?.legsWon || 0}-${match.players[1]?.legsWon || 0}` : undefined}
+                      />
+                    )}
+                  </div>
+                  <div className="order-2 flex-1 min-h-0">
                     {cameraEnabled ? (
-                      <div className="min-w-0 relative z-10">
+                      <div className="min-w-0 relative z-10 flex-1 min-h-0 ndn-camera-tall">
                         <ResizablePanel
                           storageKey="ndn:camera:tile:online:top"
                           className="relative rounded-2xl overflow-hidden bg-black"
@@ -1783,6 +1898,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                           minHeight={200}
                           maxWidth={1600}
                           maxHeight={900}
+                          autoFill
                         >
                           <CameraTile 
                             label="Your Board" 
@@ -1819,7 +1935,42 @@ export default function OnlinePlay({ user }: { user?: any }) {
                         if (hasOpponent) { match.nextPlayer() }
                       }
                       sendState()
+
+                      try {
+                        // Auto-show highlight modal for notable events:
+                        // - a checkout (finished) where the visit score was > 50
+                        // - a big visit where score > 100
+                        if ((finished && score > 50) || score > 100) {
+                          const current = match.players[match.currentPlayerIdx]
+                          const remaining = (current?.legs?.[current.legs.length-1]?.totalScoreRemaining) ?? match.startingScore
+                          const highlight = {
+                            player: current?.name || user?.username || 'Player',
+                            score,
+                            darts,
+                            finished,
+                            remainingBefore: Math.max(0, (remaining + score)),
+                            ts: Date.now(),
+                          }
+                          setHighlightCandidate(highlight)
+                          setShowHighlightModal(true)
+                        }
+                      } catch {}
                     }} />
+                    {/* Highlight modal: offers download or save to account when a notable visit occurs */}
+                    {showHighlightModal && highlightCandidate ? (
+                      <ResizableModal storageKey="ndn:modal:highlight" className="w-[420px]" defaultWidth={420} defaultHeight={220} minWidth={320} minHeight={160} initialFitHeight>
+                        <div className="p-4">
+                          <div className="text-lg font-semibold mb-2">Save highlight</div>
+                          <div className="text-sm mb-3">Player: <strong>{highlightCandidate.player}</strong> — Score: <strong>{highlightCandidate.score}</strong> — Darts: <strong>{highlightCandidate.darts}</strong></div>
+                          <div className="flex items-center gap-2">
+                            <button className="btn" onClick={() => downloadHighlightToDevice()}>Download to device</button>
+                            <button className="btn" onClick={() => saveHighlightToAccount()}>Save to account</button>
+                            <button className="btn btn-ghost ml-auto" onClick={() => { setShowHighlightModal(false); setHighlightCandidate(null); }}>Close</button>
+                          </div>
+                          <div className="text-xs opacity-70 mt-3">You can download this JSON to keep a copy, or save it to your account for later access.</div>
+                        </div>
+                      </ResizableModal>
+                    ) : null}
                     <div className="flex items-center gap-1.5 mb-2">
                       <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn px-2 py-0.5 text-xs" onClick={() => submitVisitManual(visitScore)}>Submit Visit</button>
@@ -2186,7 +2337,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     </div>
                   </div>
                   {/* Camera row (under toolbar, left side) */}
-                  <div className="mt-2 relative">
+                  <div className="mt-2 relative flex-1 min-h-0 ndn-camera-tall">
                     <ResizablePanel
                       storageKey="ndn:camera:tile:online:row"
                       className="relative rounded-2xl overflow-hidden bg-black w-full"
@@ -2196,6 +2347,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       minHeight={220}
                       maxWidth={1600}
                       maxHeight={900}
+                      autoFill
                     >
                       <CameraTile 
                         label="Your Board" 
@@ -2464,6 +2616,13 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     </option>
                   ))}
                 </select>
+                {/* Calibration Status - displayed below game selector */}
+                <div className="mt-2">
+                  <GameCalibrationStatus 
+                    gameMode={game} 
+                    compact={true}
+                  />
+                </div>
               </div>
               <div className="col-span-1">
                 <label className="block text-sm text-slate-300 mb-1">Mode</label>
@@ -2615,7 +2774,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       {/* Invitation modal for creator */}
       {pendingInvite && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <ResizableModal storageKey="ndn:modal:invite" className="w-full relative" defaultWidth={620} defaultHeight={420} minWidth={520} minHeight={320} maxWidth={1000} maxHeight={800}>
+          <ResizableModal storageKey="ndn:modal:invite" className="w-full relative" defaultWidth={620} defaultHeight={420} minWidth={520} minHeight={320} maxWidth={1000} maxHeight={800} initialFitHeight>
             <h3 className="text-xl font-bold mb-1">Incoming Match Request</h3>
             <div className="text-sm mb-2">
               <span className="font-semibold">{pendingInvite.fromName}</span> wants to join your match.
@@ -2732,6 +2891,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
           </ResizableModal>
         </div>
       )}
+      </div>
     </div>
   )
 }

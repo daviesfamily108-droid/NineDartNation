@@ -51,6 +51,7 @@ export default function Tournaments({ user }: { user: any }) {
     checkinMinutes: 15,
     capacity: 8,
     startingScore: 501,
+    requireCalibration: false,
   })
   const isTouch = (() => {
     try { return ('ontouchstart' in window) || (navigator.maxTouchPoints||0) > 0 } catch { return false }
@@ -86,13 +87,8 @@ export default function Tournaments({ user }: { user: any }) {
   const MatchPrefs = () => (
     <div className="mb-3 p-2 rounded-lg bg-slate-900/40 border border-white/10 text-white text-xs flex items-center gap-2 flex-wrap">
       <span className="opacity-70">Default match</span>
-      <select className="btn py-1 px-2" value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
-        <option value="singles">Singles</option>
-        <option value="doubles">Doubles</option>
-      </select>
-      <input className="input py-1 px-2 w-[8rem]" value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
-      <span className="opacity-50">vs</span>
-      <input className="input py-1 px-2 w-[8rem]" value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
+      <span className="btn py-1 px-2 bg-indigo-500/30 border border-indigo-400/50 text-indigo-100">Singles</span>
+      <span className="text-xs opacity-60 ml-2">(tournaments use Singles only)</span>
     </div>
   )
   // Fetch subscription to detect if user is a recent tournament winner (cooldown)
@@ -232,6 +228,7 @@ export default function Tournaments({ user }: { user: any }) {
         checkinMinutes: Number(form.checkinMinutes),
         capacity: Number(form.capacity),
         startingScore: form.game==='X01' ? Number(form.startingScore||501) : undefined,
+        requireCalibration: !!form.requireCalibration,
         creatorEmail: user?.email,
         creatorName: user?.username,
       }) })
@@ -264,10 +261,11 @@ export default function Tournaments({ user }: { user: any }) {
   }
 
   return (
-    <div className="card">
+    <div className="card ndn-game-shell">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-2xl font-bold">Tournaments</h2>
       </div>
+      <div className="ndn-shell-body">
       {/* Create Tournament + and default match prefs on a single header row */}
       <div className="mb-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-between gap-2 flex-wrap">
         <div className="min-w-0">
@@ -435,7 +433,7 @@ export default function Tournaments({ user }: { user: any }) {
                 <div>
                   <label className="block text-sm font-semibold mb-1">Game</label>
                   <select className="input w-full" value={form.game} onChange={e=>setForm(f=>({ ...f, game: e.target.value }))}>
-                    {['X01','Around the Clock','Cricket','Halve It','Shanghai','High-Low','Killer'].map(g => <option key={g} value={g}>{g}</option>)}
+                    {['X01', 'Cricket', 'Killer'].map(g => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </div>
                 <div>
@@ -472,6 +470,13 @@ export default function Tournaments({ user }: { user: any }) {
                   </select>
                 </div>
               )}
+              <div>
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" className="accent-purple-500" checked={!!form.requireCalibration} onChange={e=>setForm(f=>({ ...f, requireCalibration: !!e.target.checked }))} />
+                  <span className="font-semibold">Require calibration</span>
+                </label>
+                <div className="text-xs opacity-70 mt-1">If checked, players must have a calibrated board to join matches spawned from this tournament.</div>
+              </div>
               <div>
                 <label className="block text-sm font-semibold mb-1">Capacity</label>
                 <input className="input w-full" type="number" min={6} max={64} value={form.capacity} onChange={e=>setForm(f=>({ ...f, capacity: Number(e.target.value) }))} />
@@ -536,6 +541,7 @@ export default function Tournaments({ user }: { user: any }) {
       )}
       
   {/* Phone camera overlay removed per UX preference; header badge preview only */}
+    </div>
     </div>
   )
 }

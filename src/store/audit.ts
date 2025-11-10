@@ -77,6 +77,10 @@ export const useAudit = create<AuditState>((set, get) => ({
         postRemaining: item.postRemaining,
       })
     } catch {}
+    // Persist recent visits to localStorage so Home can show recent across reloads
+    try {
+      localStorage.setItem('ndn_audit_recent', JSON.stringify(recent))
+    } catch {}
     return { ...state, recent, totals }
   }),
   setCalibrationStatus: (c) => set((state) => {
@@ -104,5 +108,18 @@ try {
     get: () => useAudit.getState(),
     subscribe: useAudit.subscribe,
     reset: () => useAudit.getState().reset(),
+  }
+} catch {}
+
+// Initialize persisted recent visits if present
+try {
+  if (typeof window !== 'undefined') {
+    const raw = localStorage.getItem('ndn_audit_recent')
+    if (raw) {
+      const arr = JSON.parse(raw)
+      if (Array.isArray(arr) && arr.length) {
+        useAudit.setState((s) => ({ ...s, recent: arr.slice(-50) }))
+      }
+    }
   }
 } catch {}

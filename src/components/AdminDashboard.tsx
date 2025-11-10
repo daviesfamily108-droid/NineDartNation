@@ -6,6 +6,9 @@ import { allGames } from '../utils/games'
 import { useWS } from './WSProvider'
 import StatusDot from './ui/StatusDot'
 import CameraStatusBadge from './CameraStatusBadge'
+import HelpdeskChat from './HelpdeskChat'
+import { useCalibration } from '../store/calibration'
+import { getCalibrationConfidenceForGame, getCalibrationQualityText } from '../utils/gameCalibrationRequirements'
 
 const OWNER_EMAIL = 'daviesfamily108@gmail.com'
 
@@ -36,12 +39,17 @@ export default function AdminDashboard({ user }: { user: any }) {
 	})
 	const [emailCopy, setEmailCopy] = useState<any>({ reset:{}, reminder:{}, confirmEmail:{}, changed:{} })
 	const [preview, setPreview] = useState<{ open: boolean, kind?: string, html?: string }>({ open: false })
-	const [activeTab, setActiveTab] = useState<'general' | 'maintenance' | 'premium'>('general')
+	const [activeTab, setActiveTab] = useState<'general' | 'maintenance' | 'premium' | 'helpdesk' | 'tourneys'>('general')
 	const isOwner = user?.email?.toLowerCase() === OWNER_EMAIL
   const [winners, setWinners] = useState<any[]>([])
 		const [reports, setReports] = useState<any[]>([])
+	const [helpRequests, setHelpRequests] = useState<any[]>([])
+	const [helpTyping, setHelpTyping] = useState<Record<string, { who: string, ts: number }>>({})
+	const [selectedRequest, setSelectedRequest] = useState<any | null>(null)
 	const [logs, setLogs] = useState<any[]>([])
 	const [systemHealth, setSystemHealth] = useState<any>(null)
+	const [clusteringEnabled, setClusteringEnabled] = useState(false)
+	const [clusterCapacity, setClusterCapacity] = useState(1500)
 
 	// --- Game usage (played/won per mode) ---
 	const [gmVersion, setGmVersion] = useState(0)
@@ -51,87 +59,176 @@ export default function AdminDashboard({ user }: { user: any }) {
 		return () => window.removeEventListener('ndn:stats-updated', on as any)
 	}, [])
 	const gmStats = useMemo(() => getGameModeStats(allGames as unknown as string[]), [gmVersion])
-	const gmBars = useMemo(() => (
-		(allGames as unknown as string[]).map(mode => ({ label: mode, value: gmStats[mode]?.played || 0, won: gmStats[mode]?.won || 0 }))
-	), [gmStats])
+	
+	// Calibration data and preview effect
+	const cal = useCalibration()
+	
+	useEffect(() => {
+		if (!preview.open) return
+		function onKey(e: KeyboardEvent) { if (e.key === 'Escape') setPreview({ open: false }) }
+		document.addEventListener('keydown', onKey)
+		return () => document.removeEventListener('keydown', onKey)
+	}, [preview.open])
 
+	// Calibration quality display
+	const calibQuality = useMemo(() => {
+		const errorPx = cal.errorPx ?? null
+		const items: any[] = []
+		for (const game of allGames) {
+			const confidence = getCalibrationConfidenceForGame(game, errorPx)
+			const qualityInfo = getCalibrationQualityText(game, errorPx)
+			items.push({ game, confidence, qualityInfo })
+		}
+		return items
+	}, [cal.errorPx])
+
+	// Lightweight derived bars for the Game Usage chart
+	const gmBars: any[] = useMemo(() => {
+		const bars: any[] = []
+		if (gmStats && typeof gmStats === 'object') {
+			for (const [gameKey, stats] of Object.entries(gmStats as any)) {
+				const s = stats as any
+				bars.push({
+					label: gameKey,
+					value: s?.played || 0,
+					won: s?.won || 0
+				})
+			}
+		}
+		return bars
+	}, [gmStats])
+
+	// Refresh common admin data (help requests, admins, tournaments)
 	async function refresh() {
 		try {
-			const res = await fetch('/api/admins')
-			const data = await res.json()
-			setAdmins(Array.isArray(data.admins) ? data.admins : [])
-			if (isOwner) {
-				const sres = await fetch(`/api/admin/status?requesterEmail=${encodeURIComponent(user?.email || '')}`)
-				if (sres.ok) setStatus(await sres.json())
-				const tres = await fetch(`/api/admin/tournaments?requesterEmail=${encodeURIComponent(user?.email || '')}`)
-        if (tres.ok) {
-          const td = await tres.json()
-          setTournaments(Array.isArray(td.tournaments) ? td.tournaments : [])
-        }
-				const rres = await fetch(`/api/admin/reports?requesterEmail=${encodeURIComponent(user?.email || '')}`)
-				if (rres.ok) {
-					const rd = await rres.json()
-					setReports(Array.isArray(rd.reports) ? rd.reports : [])
-				}
-				const pw = await fetch(`/api/admin/premium-winners?requesterEmail=${encodeURIComponent(user?.email||'')}`)
-				if (pw.ok) {
-					const d = await pw.json()
-					setWinners(Array.isArray(d.winners) ? d.winners : [])
-				}
-						const wres = await fetch(`/api/admin/wallet/withdrawals?requesterEmail=${encodeURIComponent(user?.email || '')}`)
-						if (wres.ok) {
-							const wd = await wres.json()
-							setWithdrawals(Array.isArray(wd.withdrawals) ? wd.withdrawals : [])
-						}
+			const headers = { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+			const [hrRes, adminsRes, tRes] = await Promise.all([
+				fetch('/api/admin/help-requests', { headers }),
+				fetch('/api/admins', { headers }),
+				fetch('/api/tournaments', { headers }),
+			])
+			if (hrRes.ok) {
+				const d = await hrRes.json();
+				setHelpRequests(Array.isArray(d) ? d : (d.requests || []))
 			}
-		} catch {}
+			if (adminsRes.ok) {
+				const d = await adminsRes.json();
+				setAdmins(Array.isArray(d) ? d : (d.admins || []))
+			}
+			if (tRes.ok) {
+				const d = await tRes.json();
+				setTournaments(Array.isArray(d) ? d : (d.tournaments || d))
+			}
+		} catch (e) {
+			console.error('refresh failed', e)
+		}
 	}
 
-	useEffect(() => { refresh() }, [])
-
-	async function grant() {
-		if (!email) return
-		await fetch('/api/admins/grant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, requesterEmail: user?.email }) })
-		setEmail('')
-		refresh()
-	}
 	async function revoke(target: string) {
-		await fetch('/api/admins/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: target, requesterEmail: user?.email }) })
-		refresh()
+		try {
+			await fetch('/api/admins/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ email: target }) })
+			await refresh()
+		} catch {}
 	}
 
 	async function grantPremium(email: string, days: number) {
 		if (!email) return
-		await fetch('/api/admin/premium/grant', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, days, requesterEmail: user?.email }) })
-		await refresh()
-	}
-	async function revokePremium(email: string) {
-		await fetch('/api/admin/premium/revoke', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, requesterEmail: user?.email }) })
-		await refresh()
+		try {
+			await fetch('/api/admin/premium/grant', { method:'POST', headers: { 'Content-Type':'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ email, days }) })
+			await refresh()
+		} catch {}
 	}
 
-	async function toggleMaintenance(enabled: boolean) {
-		setLoading(true)
+	async function revokePremium(email: string) {
 		try {
-			await fetch('/api/admin/maintenance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled, requesterEmail: user?.email }) })
+			await fetch('/api/admin/premium/revoke', { method:'POST', headers: { 'Content-Type':'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ email }) })
 			await refresh()
-		} finally { setLoading(false) }
+		} catch {}
 	}
 
 	async function sendAnnouncement() {
 		if (!announcement.trim()) return
-		setLoading(true)
 		try {
-			await fetch('/api/admin/announce', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: announcement, requesterEmail: user?.email }) })
+			await fetch('/api/admin/announce', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ message: announcement }) })
 			setAnnouncement('')
 			await refresh()
-		} finally { setLoading(false) }
+		} catch {}
+	}
+
+	async function toggleMaintenance(next: boolean) {
+		try {
+			await fetch('/api/admin/maintenance', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ maintenance: next }) })
+			await refresh()
+		} catch {}
+	}
+
+
+		// Listen for help-typing and help-request events over WS to show live typing indicators and new requests
+		useEffect(() => {
+			if (!ws) return
+			const unsub = ws.addListener((data: any) => {
+				try {
+					if (data?.type === 'help-typing') {
+						const rid = String(data.requestId || '')
+						if (!rid) return
+						setHelpTyping(prev => ({ ...prev, [rid]: { who: data.fromName || 'someone', ts: Date.now() } }))
+						return
+					}
+					if (data?.type === 'help-request') {
+						const req = data.request
+						if (!req || !req.id) return
+						setHelpRequests(prev => {
+							const filtered = (prev || []).filter((r:any) => String(r.id) !== String(req.id))
+							return [req, ...filtered]
+						})
+						return
+					}
+					if (data?.type === 'help-request-updated') {
+						refresh()
+					}
+				} catch {}
+			})
+			const iv = setInterval(() => {
+				const now = Date.now()
+				let changed = false
+				const copy = { ...helpTyping }
+				for (const k of Object.keys(copy)) {
+					if (now - copy[k].ts > 3500) { delete copy[k]; changed = true }
+				}
+				if (changed) setHelpTyping(copy)
+			}, 1500)
+			return () => { try { unsub() } catch {} ; clearInterval(iv) }
+		}, [ws])
+
+
+	async function claimHelp(id: string) {
+		try {
+			const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+			const res = await fetch(`/api/admin/help-requests/${encodeURIComponent(id)}/claim`, { method: 'POST', headers, body: JSON.stringify({ }) })
+			if (res.ok) { await refresh() }
+		} catch {}
+	}
+
+	async function resolveHelp(id: string) {
+		try {
+			const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+			const res = await fetch(`/api/admin/help-requests/${encodeURIComponent(id)}/resolve`, { method: 'POST', headers, body: JSON.stringify({ }) })
+			if (res.ok) { await refresh() }
+		} catch {}
+	}
+
+	async function grant() {
+		if (!email) return
+		await fetch('/api/admins/grant', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ email }) })
+		setEmail('')
+					
 	}
 
 	async function searchUsers() {
 		if (!userSearch.trim()) return
 		try {
-			const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(userSearch)}&requesterEmail=${encodeURIComponent(user?.email || '')}`)
+			const authHeader = { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+			const res = await fetch(`/api/admin/users/search?q=${encodeURIComponent(userSearch)}`, { headers: authHeader })
 			if (res.ok) {
 				const data = await res.json()
 				setUserResults(Array.isArray(data.users) ? data.users : [])
@@ -145,8 +242,8 @@ export default function AdminDashboard({ user }: { user: any }) {
 		try {
 			await fetch('/api/admin/users/ban', { 
 				method: 'POST', 
-				headers: { 'Content-Type': 'application/json' }, 
-				body: JSON.stringify({ email, requesterEmail: user?.email }) 
+				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, 
+				body: JSON.stringify({ email }) 
 			})
 			await searchUsers() // Refresh results
 		} catch (error) {
@@ -158,8 +255,8 @@ export default function AdminDashboard({ user }: { user: any }) {
 		try {
 			await fetch('/api/admin/users/unban', { 
 				method: 'POST', 
-				headers: { 'Content-Type': 'application/json' }, 
-				body: JSON.stringify({ email, requesterEmail: user?.email }) 
+				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, 
+				body: JSON.stringify({ email }) 
 			})
 			await searchUsers() // Refresh results
 		} catch (error) {
@@ -170,7 +267,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 	async function flipPremium(next: boolean) {
 		setLoading(true)
 		try {
-			await fetch('/api/admin/subscription', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fullAccess: next, requesterEmail: user?.email }) })
+			await fetch('/api/admin/subscription', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ fullAccess: next }) })
 			await refresh()
 		} finally { setLoading(false) }
 	}
@@ -179,7 +276,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 		setLoading(true)
 		try {
 			const start = new Date(createForm.startAt).getTime()
-			await fetch('/api/tournaments/create', {
+			const res = await fetch('/api/tournaments/create', {
 				method: 'POST', headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
 					title: createForm.title,
@@ -190,6 +287,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 					startAt: start,
 					checkinMinutes: Number(createForm.checkinMinutes),
 					capacity: Number(createForm.capacity),
+					requireCalibration: !!createForm.requireCalibration,
 					creatorEmail: user?.email,
 					creatorName: user?.username,
 					requesterEmail: user?.email,
@@ -200,14 +298,22 @@ export default function AdminDashboard({ user }: { user: any }) {
 					prizeNotes: createForm.prizeNotes,
 				})
 			})
+			// refresh admin view and broadcast will update lobby for connected clients
 			await refresh()
+			try {
+				// If creation returned the tournament id, navigate the app to the tournaments tab so lobby is visible
+				const data = await res.json()
+				if (data && data.tournament && data.tournament.id) {
+					window.dispatchEvent(new CustomEvent('ndn:change-tab', { detail: { tab: 'tournaments' } }))
+				}
+			} catch {}
 		} finally { setLoading(false) }
 	}
 
 	async function setWinner(tid: string, winnerEmail: string) {
 		setLoading(true)
 		try {
-			await fetch('/api/admin/tournaments/winner', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: tid, winnerEmail, requesterEmail: user?.email }) })
+			await fetch('/api/admin/tournaments/winner', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ tournamentId: tid, winnerEmail }) })
 			await refresh()
 		} finally { setLoading(false) }
 	}
@@ -215,7 +321,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 	async function markPaid(tid: string) {
 		setLoading(true)
 		try {
-			await fetch('/api/admin/tournaments/mark-paid', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: tid, requesterEmail: user?.email }) })
+			await fetch('/api/admin/tournaments/mark-paid', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ tournamentId: tid }) })
 			await refresh()
 		} finally { setLoading(false) }
 	}
@@ -223,7 +329,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 	async function deleteTournament(tid: string) {
 		setLoading(true)
 		try {
-			await fetch('/api/admin/tournaments/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: tid, requesterEmail: user?.email }) })
+			await fetch('/api/admin/tournaments/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ tournamentId: tid }) })
 			await refresh()
 		} finally { setLoading(false) }
 	}
@@ -231,7 +337,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 	async function reseedWeekly() {
 		setLoading(true)
 		try {
-			await fetch('/api/admin/tournaments/reseed-weekly', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requesterEmail: user?.email }) })
+			await fetch('/api/admin/tournaments/reseed-weekly', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ }) })
 			await refresh()
 		} finally { setLoading(false) }
 	}
@@ -239,7 +345,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 		async function decideWithdrawal(id: string, approve: boolean) {
 			setLoading(true)
 			try {
-				await fetch('/api/admin/wallet/withdrawals/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, approve, requesterEmail: user?.email }) })
+				await fetch('/api/admin/wallet/withdrawals/decide', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ id, approve }) })
 				await refresh()
 			} finally { setLoading(false) }
 		}
@@ -247,14 +353,15 @@ export default function AdminDashboard({ user }: { user: any }) {
 	async function deleteMatch(id: string) {
 		setLoading(true)
 		try {
-			await fetch('/api/admin/matches/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ matchId: id, requesterEmail: user?.email }) })
+				await fetch('/api/admin/matches/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }, body: JSON.stringify({ matchId: id }) })
 			await refresh()
 		} finally { setLoading(false) }
 	}
 
 	async function fetchLogs() {
 		try {
-			const res = await fetch(`/api/admin/logs?requesterEmail=${encodeURIComponent(user?.email || '')}`)
+			const authHeader = { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+			const res = await fetch('/api/admin/logs', { headers: authHeader })
 			if (res.ok) {
 				const data = await res.json()
 				if (data?.ok) setLogs(data.logs || [])
@@ -266,14 +373,56 @@ export default function AdminDashboard({ user }: { user: any }) {
 
 	async function fetchSystemHealth() {
 		try {
-			const res = await fetch(`/api/admin/system-health?requesterEmail=${encodeURIComponent(user?.email || '')}`)
+			const authHeader = { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+			const res = await fetch('/api/admin/system-health', { headers: authHeader })
 			if (res.ok) {
 				const data = await res.json()
-				if (data?.ok) setSystemHealth(data.health)
+				if (data?.ok && data?.health) {
+					setSystemHealth({
+						database: data.health.database || false,
+						websocket: data.health.websocket || false,
+						https: data.health.https || false,
+						maintenance: data.health.maintenance || false,
+						clustering: data.health.clustering || false,
+						uptime: data.health.uptime || 0,
+						memory: data.health.memory || { heapUsed: 0 },
+						version: data.health.version || 'unknown'
+					})
+					setClusteringEnabled(data.health?.clustering || false)
+				}
 			}
 		} catch (error) {
 			console.error('Failed to fetch system health:', error)
 		}
+	}
+
+	async function toggleClustering(enable: boolean) {
+		setLoading(true)
+		try {
+			const res = await fetch('/api/admin/clustering', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` },
+				body: JSON.stringify({ enabled: enable, maxWorkers: 4, capacity: clusterCapacity })
+			})
+			const data = await res.json()
+			console.log('Clustering response:', data)
+			if (data?.ok) {
+				alert(`Clustering ${enable ? 'enabled' : 'disabled'} successfully. Max capacity: ${clusterCapacity.toLocaleString()} concurrent users. NODE_WORKERS environment variable is set to max capacity.`)
+				await fetchSystemHealth()
+			} else {
+				alert(`Failed: ${data?.error || data?.message || 'Unknown error'}`)
+			}
+		} catch (error) {
+			console.error('Clustering toggle failed:', error)
+			alert('Clustering toggle failed: ' + (error instanceof Error ? error.message : String(error)))
+		} finally {
+			setLoading(false)
+		}
+	}
+
+	async function updateClusterCapacity(newCapacity: number) {
+		setClusterCapacity(newCapacity)
+		// Capacity is updated locally and sent when clustering toggle is used
 	}
 
 	async function runQuickFix(action: string) {
@@ -281,8 +430,8 @@ export default function AdminDashboard({ user }: { user: any }) {
 		try {
 			const res = await fetch('/api/admin/quick-fix', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ action, requesterEmail: user?.email })
+				headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` },
+				body: JSON.stringify({ action })
 			})
 			const data = await res.json()
 			if (data?.ok) {
@@ -301,7 +450,8 @@ export default function AdminDashboard({ user }: { user: any }) {
 
 	async function loadEmailCopy() {
 		try {
-			const res = await fetch(`/api/admin/email-copy?requesterEmail=${encodeURIComponent(user?.email||'')}`)
+			const authHeader = { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+			const res = await fetch('/api/admin/email-copy', { headers: authHeader })
 			if (res.ok) {
 				const d = await res.json()
 				if (d?.ok) setEmailCopy(d.copy || emailCopy)
@@ -318,14 +468,24 @@ export default function AdminDashboard({ user }: { user: any }) {
 	}, [isOwner, activeTab])
 
 	async function saveEmailCopy(kind: string, payload: any) {
-		await fetch('/api/admin/email-copy', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ requesterEmail: user?.email, kind, ...payload }) })
+		await fetch('/api/admin/email-copy', { method:'POST', headers:{'Content-Type':'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}`}, body: JSON.stringify({ kind, ...payload }) })
 		await loadEmailCopy()
 	}
 
-	async function openInlinePreview(kind: string) {
+	async function openInlinePreview(kind: string, openInNewTab?: boolean) {
 		try {
-			const res = await fetch(`/api/email/preview?kind=${encodeURIComponent(kind)}&requesterEmail=${encodeURIComponent(user?.email||'')}`)
+			const authHeader = { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+			const res = await fetch(`/api/email/preview?kind=${encodeURIComponent(kind)}`, { headers: authHeader })
 			const html = await res.text()
+			if (openInNewTab) {
+				const w = window.open()
+				if (w) {
+					w.document.open()
+					w.document.write(html)
+					w.document.close()
+					return
+				}
+			}
 			setPreview({ open: true, kind, html })
 		} catch {
 			setPreview({ open: true, kind, html: '<!doctype html><html><body style="font-family:sans-serif;padding:16px">Failed to load preview.</body></html>' })
@@ -354,7 +514,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 				<textarea className="input w-full" rows={2} placeholder="Intro line (optional)" value={intro} onChange={e=>setIntro(e.target.value)} />
 				<input className="input w-full" placeholder="Button label (optional)" value={btn} onChange={e=>setBtn(e.target.value)} />
 				<div className="flex gap-2 justify-end">
-					<a className="btn" href={`/api/email/preview?kind=${encodeURIComponent(kind)}&requesterEmail=${encodeURIComponent(user?.email||'')}`} target="_blank" rel="noreferrer">Preview</a>
+					<button className="btn" type="button" onClick={()=>openInlinePreview(kind, true)}>Preview</button>
 					<button className="btn" type="button" onClick={()=>openInlinePreview(kind)}>Popup</button>
 					<button className="btn" onClick={()=>saveEmailCopy(kind, { title, intro, buttonLabel: btn })}>Save</button>
 				</div>
@@ -362,15 +522,48 @@ export default function AdminDashboard({ user }: { user: any }) {
 		)
 	}
 
-	if (!isOwner) return (
+		if (!isOwner) { return (
 		<div className="card">
 			<h2 className="text-2xl font-bold mb-2">Admin</h2>
 			<div className="text-sm opacity-80">You don’t have permission to manage admins.</div>
 		</div>
-	)
+		) }
+
+	/* Top help-requests strip for quick admin actions */
+		{helpRequests.length > 0 && (
+			<div className="p-2 rounded-xl bg-amber-900/10 border border-amber-500/20 mt-3">
+				<div className="flex items-center justify-between">
+					<div className="flex items-center gap-3">
+						<span className="font-semibold">Open Help Requests</span>
+						<span className="text-sm opacity-80">{helpRequests.length} open</span>
+					</div>
+					<div className="flex items-center gap-2">
+						<button className="btn" onClick={() => setSelectedRequest(helpRequests[0])}>Open Latest</button>
+						<button className="btn btn-ghost" onClick={() => refresh()}>Refresh</button>
+					</div>
+				</div>
+				<div className="mt-2 flex gap-2 overflow-x-auto">
+					{helpRequests.slice(0,6).map((hr:any) => (
+						<div key={hr.id} className="p-2 rounded bg-black/10 border border-white/10 min-w-[220px]">
+							<div className="font-medium">{hr.username || 'Anonymous'}</div>
+							<div className="text-xs opacity-70">{new Date(hr.ts || 0).toLocaleTimeString()}</div>
+							<div className="text-sm truncate mt-1">{hr.message}</div>
+							<div className="mt-2 flex gap-2">
+								{hr.status === 'open' ? (
+									<button className="btn" onClick={() => claimHelp(hr.id)}>Claim</button>
+								) : (
+									<span className="text-xs opacity-70">{hr.status} by {hr.claimedBy || '—'}</span>
+								)}
+								<button className="btn" onClick={() => setSelectedRequest(hr)}>Chat</button>
+							</div>
+						</div>
+					))}
+				</div>
+			</div>
+		)}
 
 	return (
-			<div className="space-y-4">
+			<div className="space-y-4 ndn-game-shell">
 				{/* Top connection status strip */}
 				<div className="p-2 rounded-xl bg-white/10 border border-white/10 flex items-center justify-between gap-2 flex-wrap">
 					<div className="flex items-center gap-2 text-sm">
@@ -398,27 +591,26 @@ export default function AdminDashboard({ user }: { user: any }) {
 						)}
 					</div>
 				</div>
-			{isOwner && (
-				<TabPills
-					tabs={[
-						{ key: 'general', label: 'General' },
-						{ key: 'maintenance', label: 'Maintenance' },
-						{ key: 'premium', label: 'Premium' }
-					]}
-					active={activeTab}
-					onChange={(key) => setActiveTab(key as 'general' | 'maintenance' | 'premium')}
-					className="mb-4"
-				/>
-			)}
-
-			{activeTab === 'general' && (
+		{isOwner && (
+			<TabPills
+				tabs={[
+					{ key: 'general', label: 'General' },
+					{ key: 'maintenance', label: 'Maintenance' },
+					{ key: 'premium', label: 'Premium' },
+					{ key: 'tourneys', label: 'Tourneys' },
+					{ key: 'helpdesk', label: 'Help Desk' }
+				]}
+				active={activeTab}
+				onChange={(key) => setActiveTab(key as 'general' | 'maintenance' | 'premium' | 'helpdesk' | 'tourneys')}
+				className="mb-4"
+			/>
+		)}			{activeTab === 'general' && (
 				<>
 					{isOwner && (
 						<div className="card">
 							<h3 className="text-xl font-semibold mb-2">Game Usage</h3>
-							<div className="text-sm opacity-80 mb-2">Bar height shows total plays per mode. Wins are listed under each label. This helps decide which modes to keep or iterate on.</div>
 							<div className="rounded-xl border border-indigo-500/40 bg-indigo-500/10 p-3">
-								<BarChart data={gmBars.map(d => ({ label: d.label, value: d.value }))} />
+								<BarChart data={gmBars.map(d => ({ label: '', value: d.value }))} />
 								<div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px] opacity-80">
 									{gmBars.map((d, i) => (
 										<div key={i} className="flex items-center justify-between px-2 py-1 rounded-md bg-white/5 border border-white/10">
@@ -426,6 +618,29 @@ export default function AdminDashboard({ user }: { user: any }) {
 											<span className="whitespace-nowrap">Played {d.value} · Won {d.won}</span>
 										</div>
 									))}
+								</div>
+							</div>
+						</div>
+					)}
+
+					{isOwner && (
+						<div className="card">
+							<h3 className="text-xl font-semibold mb-2">Calibration Quality Status</h3>
+							<div className="text-sm opacity-80 mb-3">Camera calibration confidence by game mode. Shows current system calibration readiness for each game.</div>
+							<div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">
+								<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px]">
+									{calibQuality.map((item) => {
+										const colorClass = item.confidence >= 85 ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-200' 
+											: item.confidence >= 70 ? 'bg-amber-500/20 border-amber-500/40 text-amber-200'
+											: 'bg-rose-500/20 border-rose-500/40 text-rose-200'
+										return (
+											<div key={item.game} className={`px-2 py-2 rounded-md border ${colorClass}`}>
+												<div className="font-semibold text-xs truncate">{item.game}</div>
+												<div className="text-[10px] opacity-80 truncate">{item.qualityInfo.quality}</div>
+												<div className="text-[10px] font-mono mt-0.5">{Math.round(item.confidence)}%</div>
+											</div>
+										)
+									})}
 								</div>
 							</div>
 						</div>
@@ -461,49 +676,6 @@ export default function AdminDashboard({ user }: { user: any }) {
 					</div>
 
 					<div className="card">
-						<h3 className="text-lg font-semibold mb-2">Tournament Premium Winners</h3>
-						<div className="text-sm opacity-80 mb-3">Users who have won premium prizes in tournaments and need access granted.</div>
-						<div className="space-y-2">
-							{tournaments
-								.filter((t: any) => t.status === 'completed' && t.winnerEmail && t.prizeType === 'premium')
-								.map((t: any) => {
-									const winner = winners.find((w: any) => w.email === t.winnerEmail)
-									const hasAccess = winner && !winner.expired
-									return (
-										<div key={t.id} className="p-3 rounded bg-black/20 text-sm">
-											<div className="flex items-center justify-between mb-2">
-												<div className="font-semibold">{t.title}</div>
-												<div className="text-xs opacity-70">{new Date(t.startAt).toLocaleDateString()}</div>
-											</div>
-											<div className="flex items-center justify-between">
-												<div>
-													<div className="font-medium">{t.winnerEmail}</div>
-													<div className="text-xs opacity-70">Prize: {t.prizeAmount} month{t.prizeAmount > 1 ? 's' : ''} PREMIUM</div>
-												</div>
-												<div className="flex items-center gap-2">
-													{hasAccess ? (
-														<span className="px-2 py-1 rounded bg-emerald-600 text-xs">Access Granted</span>
-													) : (
-														<button 
-															className="btn bg-emerald-600 hover:bg-emerald-700 text-xs" 
-															disabled={loading}
-															onClick={() => grantPremium(t.winnerEmail, t.prizeAmount * 30 * 24 * 60 * 60 * 1000)}
-														>
-															Grant Access
-														</button>
-													)}
-												</div>
-											</div>
-										</div>
-									)
-								})}
-							{tournaments.filter((t: any) => t.status === 'completed' && t.winnerEmail && t.prizeType === 'premium').length === 0 && (
-								<div className="text-center py-4 text-sm opacity-60">No completed premium tournaments.</div>
-							)}
-						</div>
-					</div>
-
-					<div className="card">
 						<h3 className="text-xl font-semibold mb-2">Announcements</h3>
 						<div className="text-sm opacity-80 mb-2">Send a message to all users. This will appear as a toast notification.</div>
 						<div className="flex gap-2">
@@ -534,91 +706,6 @@ export default function AdminDashboard({ user }: { user: any }) {
 							</div>
 						)}
 					</div>
-
-					{isOwner && (
-						<div className="card">
-							<h3 className="text-xl font-semibold mb-3">Tournaments Management</h3>
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-								<div>
-									<div className="font-semibold mb-2">Create Official</div>
-									<div className="space-y-2">
-										<input className="input w-full" placeholder="Title" value={createForm.title} onChange={e=>setCreateForm((f:any)=>({ ...f, title: e.target.value }))} />
-										<div className="grid grid-cols-3 gap-2">
-											<select className="input" value={createForm.game} onChange={e=>setCreateForm((f:any)=>({ ...f, game: e.target.value }))}>
-												{['X01','Around the Clock','Cricket','Halve It','Shanghai','High-Low'].map((g)=> <option key={g} value={g}>{g}</option>)}
-											</select>
-											<select className="input" value={createForm.mode} onChange={e=>setCreateForm((f:any)=>({ ...f, mode: e.target.value }))}>
-												<option value="bestof">Best of</option>
-												<option value="firstto">First to</option>
-											</select>
-											<input className="input" type="number" min={1} value={createForm.value} onChange={e=>setCreateForm((f:any)=>({ ...f, value: Number(e.target.value) }))} />
-										</div>
-										<textarea className="input w-full" rows={2} placeholder="Description" value={createForm.description} onChange={e=>setCreateForm((f:any)=>({ ...f, description: e.target.value }))} />
-										<div className="grid grid-cols-2 gap-2">
-											<input className="input" type="datetime-local" value={createForm.startAt} onChange={e=>setCreateForm((f:any)=>({ ...f, startAt: e.target.value }))} />
-											<input className="input" type="number" min={0} value={createForm.checkinMinutes} onChange={e=>setCreateForm((f:any)=>({ ...f, checkinMinutes: Number(e.target.value) }))} />
-										</div>
-										<input className="input w-full" type="number" min={6} max={64} value={createForm.capacity} onChange={e=>setCreateForm((f:any)=>({ ...f, capacity: Number(e.target.value) }))} />
-										<div className="grid grid-cols-3 gap-2 items-center">
-											<select className="input" value={createForm.prizeType} onChange={e=>{
-												const newType = e.target.value
-												setCreateForm((f:any)=>({ ...f, prizeType: newType, prizeAmount: newType === 'premium' ? 3 : 0 }))
-											}}>
-												<option value="premium">PREMIUM</option>
-												<option value="cash">Cash</option>
-											</select>
-											{createForm.prizeType === 'premium' ? (
-												<select className="input" value={createForm.prizeAmount} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeAmount: Number(e.target.value) }))}>
-													<option value={1}>1 month</option>
-													<option value={3}>3 months</option>
-												</select>
-											) : (
-												<input className="input" type="number" min={0} value={createForm.prizeAmount} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeAmount: Number(e.target.value) }))} />
-											)}
-											<select className="input" disabled={createForm.prizeType!=='cash'} value={createForm.currency} onChange={e=>setCreateForm((f:any)=>({ ...f, currency: e.target.value }))}>
-												<option value="GBP">GBP</option>
-												<option value="USD">USD</option>
-												<option value="EUR">EUR</option>
-												<option value="CAD">CAD</option>
-												<option value="AUD">AUD</option>
-											</select>
-										</div>
-										<input className="input w-full" placeholder="Prize notes (optional)" value={createForm.prizeNotes} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeNotes: e.target.value }))} />
-										<div className="flex justify-end">
-											<button className="btn" disabled={loading} onClick={createOfficialTournament}>Create</button>
-										</div>
-									</div>
-								</div>
-								<div>
-									<div className="font-semibold mb-2">Existing</div>
-									<ul className="space-y-2">
-										{tournaments.map((t:any)=> (
-											<li key={t.id} className="p-2 rounded bg-black/20 text-sm">
-												<div className="flex items-center justify-between">
-													<div className="font-semibold">{t.title}</div>
-													<div className="opacity-70">{t.status}</div>
-												</div>
-												<div className="opacity-80">{t.game} · {t.mode==='firstto'?'FT':'BO'} {t.value} · {new Date(t.startAt).toLocaleString()} · {t.capacity} cap</div>
-												{t.prize && (
-													<div className="text-xs mt-1">Prize: {t.prizeType==='cash' && t.prizeAmount ? `${t.currency||'USD'} ${t.prizeAmount}` : `${t.prizeAmount || 3} month${(t.prizeAmount || 3) > 1 ? 's' : ''} PREMIUM`} {t.prizeType==='cash' && t.status==='completed' && t.payoutStatus && (<span className={`ml-2 px-1.5 py-0.5 rounded ${t.payoutStatus==='paid'?'bg-emerald-600':'bg-amber-600'}`}>{t.payoutStatus}</span>)}</div>
-												)}
-												<div className="mt-2 flex flex-wrap gap-2">
-													<button className="btn" disabled={loading || t.status!=='scheduled'} onClick={()=>setWinner(t.id, prompt('Winner email?')||'')}>Set Winner</button>
-													{t.prizeType==='cash' && t.status==='completed' && t.payoutStatus!=='paid' && (
-														<button className="btn" disabled={loading} onClick={()=>markPaid(t.id)}>Mark Paid</button>
-													)}
-												</div>
-											</li>
-										))}
-										{tournaments.length===0 && <li className="opacity-60">No tournaments.</li>}
-									</ul>
-									<div className="mt-3 flex justify-end">
-										<button className="btn" disabled={loading} onClick={reseedWeekly}>Reseed Weekly Giveaway</button>
-									</div>
-								</div>
-							</div>
-						</div>
-					)}
 
 					{isOwner && (
 						<div className="card">
@@ -718,19 +805,32 @@ export default function AdminDashboard({ user }: { user: any }) {
 											{!systemHealth.maintenance ? 'Normal' : 'Active'}
 										</span>
 									</div>
+									<div className="flex items-center justify-between">
+										<span>Clustering (Auto-Scaling)</span>
+										<span className={`px-2 py-1 rounded text-xs ${clusteringEnabled ? 'bg-emerald-600' : 'bg-amber-600'}`}>
+											{clusteringEnabled ? 'Enabled' : 'Disabled'}
+										</span>
+									</div>
 								</div>
 								<div className="space-y-2">
 									<div className="text-sm">
 										<span className="font-semibold">Uptime:</span> {Math.floor(systemHealth.uptime / 3600)}h {Math.floor((systemHealth.uptime % 3600) / 60)}m
 									</div>
 									<div className="text-sm">
-										<span className="font-semibold">Memory:</span> {Math.round(systemHealth.memory.heapUsed / 1024 / 1024)}MB used
+										<span className="font-semibold">Memory:</span> {systemHealth.memory ? Math.round(systemHealth.memory.heapUsed / 1024 / 1024) : '?'}MB used
 									</div>
 									<div className="text-sm">
 										<span className="font-semibold">Version:</span> {systemHealth.version}
 									</div>
-									<div className="flex gap-2 mt-3">
+									<div className="flex gap-2 flex-wrap">
 										<button className="btn" onClick={fetchSystemHealth}>Refresh</button>
+										<button 
+											className={`btn ${clusteringEnabled ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'}`} 
+											disabled={loading}
+											onClick={() => toggleClustering(!clusteringEnabled)}
+										>
+											{clusteringEnabled ? 'Disable' : 'Enable'} Clustering
+										</button>
 									</div>
 								</div>
 							</div>
@@ -740,6 +840,49 @@ export default function AdminDashboard({ user }: { user: any }) {
 								<button className="btn" onClick={fetchSystemHealth}>Load Health Status</button>
 							</div>
 						)}
+						
+						<div className="mt-4 pt-4 border-t border-white/10">
+							<h4 className="font-semibold mb-3">Clustering Capacity</h4>
+							<div className="space-y-3">
+								<div>
+									<div className="flex items-center justify-between mb-2">
+										<label className="font-semibold">Max Concurrent Users</label>
+										<span className="text-sm bg-blue-600 px-2 py-1 rounded">{clusterCapacity.toLocaleString()}</span>
+									</div>
+									<input 
+										type="range" 
+										min="1500" 
+										max="50000" 
+										step="500"
+										value={clusterCapacity}
+										onChange={(e) => updateClusterCapacity(Number(e.target.value))}
+										disabled={loading}
+										className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+										style={{
+											background: clusteringEnabled ? 
+												`linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((clusterCapacity - 1500) / (50000 - 1500)) * 100}%, #374151 ${((clusterCapacity - 1500) / (50000 - 1500)) * 100}%, #374151 100%)` : 
+												'#374151'
+										}}
+									/>
+									<div className="flex justify-between text-xs opacity-60 mt-1">
+										<span>1.5k</span>
+										<span>50k</span>
+									</div>
+								</div>
+								<div className="flex gap-2 flex-wrap">
+									<button 
+										className={`btn ${clusteringEnabled ? 'bg-amber-600 hover:bg-amber-700' : 'bg-emerald-600 hover:bg-emerald-700'}`} 
+										disabled={loading}
+										onClick={() => toggleClustering(!clusteringEnabled)}
+									>
+										{clusteringEnabled ? 'Disable' : 'Enable'} Clustering
+									</button>
+								</div>
+							</div>
+							<div className="text-xs opacity-70 mt-2 p-2 bg-white/5 rounded">
+								💡 Clustering enables auto-scaling with capacity up to {clusterCapacity.toLocaleString()} concurrent users. Adjust the slider to set maximum capacity. NODE_WORKERS environment variable is set to handle the configured load behind a reverse proxy.
+							</div>
+						</div>
 					</div>
 
 					<div className="card">
@@ -759,12 +902,12 @@ export default function AdminDashboard({ user }: { user: any }) {
 											{r.status==='open' && (
 												<>
 													<button className="btn bg-emerald-600 hover:bg-emerald-700" disabled={loading} onClick={async()=>{
-														await fetch('/api/admin/reports/resolve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: r.id, action: 'resolved', requesterEmail: user?.email }) })
+														await fetch('/api/admin/reports/resolve', { method:'POST', headers:{'Content-Type':'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}`}, body: JSON.stringify({ id: r.id, action: 'resolved' }) })
 														await refresh()
 													}}>Resolve</button>
 													<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={async()=>{
 														const notes = prompt('Enter notes for action taken (e.g., warning, block):') || ''
-														await fetch('/api/admin/reports/resolve', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: r.id, action: 'actioned', notes, requesterEmail: user?.email }) })
+														await fetch('/api/admin/reports/resolve', { method:'POST', headers:{'Content-Type':'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}`}, body: JSON.stringify({ id: r.id, action: 'actioned', notes }) })
 														await refresh()
 													}}>Action</button>
 												</>
@@ -895,6 +1038,9 @@ export default function AdminDashboard({ user }: { user: any }) {
 							</div>
 						</div>
 					</div>
+					{selectedRequest && (
+						<HelpdeskChat request={selectedRequest} user={{ email: user?.email, username: user?.username, isAdmin: true }} onClose={() => setSelectedRequest(null)} />
+					)}
 				</>
 			)}
 
@@ -934,6 +1080,183 @@ export default function AdminDashboard({ user }: { user: any }) {
 							{winners.length === 0 && <div className="opacity-60">No premium winners.</div>}
 						</div>
 					</div>
+				</>
+			)}
+
+			{activeTab === 'tourneys' && isOwner && (
+				<>
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-3">Create Official Tournament</h3>
+						<div className="text-sm opacity-80 mb-3">Set up a new official tournament with custom rules, timing, and prizes.</div>
+						<div className="space-y-2">
+							<input className="input w-full" placeholder="Tournament Title" value={createForm.title} onChange={e=>setCreateForm((f:any)=>({ ...f, title: e.target.value }))} />
+							<div className="grid grid-cols-3 gap-2">
+								<select className="input" value={createForm.game} onChange={e=>setCreateForm((f:any)=>({ ...f, game: e.target.value }))}>
+									{['X01','Around the Clock','Cricket','Halve It','Shanghai','High-Low'].map((g)=> <option key={g} value={g}>{g}</option>)}
+								</select>
+								<select className="input" value={createForm.mode} onChange={e=>setCreateForm((f:any)=>({ ...f, mode: e.target.value }))}>
+									<option value="bestof">Best of</option>
+									<option value="firstto">First to</option>
+								</select>
+								<input className="input" type="number" min={1} value={createForm.value} onChange={e=>setCreateForm((f:any)=>({ ...f, value: Number(e.target.value) }))} />
+							</div>
+							<textarea className="input w-full" rows={2} placeholder="Description" value={createForm.description} onChange={e=>setCreateForm((f:any)=>({ ...f, description: e.target.value }))} />
+							<div className="grid grid-cols-2 gap-2">
+								<input className="input" type="datetime-local" value={createForm.startAt} onChange={e=>setCreateForm((f:any)=>({ ...f, startAt: e.target.value }))} />
+								<input className="input" type="number" min={0} placeholder="Checkin minutes" value={createForm.checkinMinutes} onChange={e=>setCreateForm((f:any)=>({ ...f, checkinMinutes: Number(e.target.value) }))} />
+							</div>
+							<input className="input w-full" type="number" min={6} max={64} placeholder="Capacity" value={createForm.capacity} onChange={e=>setCreateForm((f:any)=>({ ...f, capacity: Number(e.target.value) }))} />
+							<div className="grid grid-cols-3 gap-2 items-center">
+								<select className="input" value={createForm.prizeType} onChange={e=>{
+									const newType = e.target.value
+									setCreateForm((f:any)=>({ ...f, prizeType: newType, prizeAmount: newType === 'premium' ? 3 : 0 }))
+								}}>
+									<option value="premium">PREMIUM</option>
+									<option value="cash">Cash</option>
+								</select>
+								{createForm.prizeType === 'premium' ? (
+									<select className="input" value={createForm.prizeAmount} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeAmount: Number(e.target.value) }))}>
+										<option value={1}>1 month</option>
+										<option value={3}>3 months</option>
+									</select>
+								) : (
+									<input className="input" type="number" min={0} value={createForm.prizeAmount} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeAmount: Number(e.target.value) }))} />
+								)}
+								<select className="input" disabled={createForm.prizeType!=='cash'} value={createForm.currency} onChange={e=>setCreateForm((f:any)=>({ ...f, currency: e.target.value }))}>
+									<option value="GBP">GBP</option>
+									<option value="USD">USD</option>
+									<option value="EUR">EUR</option>
+									<option value="CAD">CAD</option>
+									<option value="AUD">AUD</option>
+								</select>
+							</div>
+							<input className="input w-full" placeholder="Prize notes (optional)" value={createForm.prizeNotes} onChange={e=>setCreateForm((f:any)=>({ ...f, prizeNotes: e.target.value }))} />
+							<div className="flex justify-end">
+								<button className="btn bg-emerald-600 hover:bg-emerald-700" disabled={loading} onClick={createOfficialTournament}>Create Tournament</button>
+							</div>
+						</div>
+					</div>
+
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-3">Tournament Premium Winners</h3>
+						<div className="text-sm opacity-80 mb-3">Users who have won premium prizes in tournaments. Grant them access here.</div>
+						<div className="space-y-2">
+							{tournaments
+								.filter((t: any) => t.status === 'completed' && t.winnerEmail && t.prizeType === 'premium')
+								.map((t: any) => {
+									const winner = winners.find((w: any) => w.email === t.winnerEmail)
+									const hasAccess = winner && !winner.expired
+									return (
+										<div key={t.id} className="p-3 rounded bg-black/20 text-sm">
+											<div className="flex items-center justify-between mb-2">
+												<div className="font-semibold">{t.title}</div>
+												<div className="text-xs opacity-70">{new Date(t.startAt).toLocaleDateString()}</div>
+											</div>
+											<div className="flex items-center justify-between">
+												<div>
+													<div className="font-medium">{t.winnerEmail}</div>
+													<div className="text-xs opacity-70">Prize: {t.prizeAmount} month{t.prizeAmount > 1 ? 's' : ''} PREMIUM</div>
+												</div>
+												<div className="flex items-center gap-2">
+													{hasAccess ? (
+														<span className="px-2 py-1 rounded bg-emerald-600 text-xs">✓ Access Granted</span>
+													) : (
+														<button 
+															className="btn bg-emerald-600 hover:bg-emerald-700 text-xs" 
+															disabled={loading}
+															onClick={() => grantPremium(t.winnerEmail, t.prizeAmount * 30)}
+														>
+															Grant Access
+														</button>
+													)}
+												</div>
+											</div>
+										</div>
+									)
+								})}
+							{tournaments.filter((t: any) => t.status === 'completed' && t.winnerEmail && t.prizeType === 'premium').length === 0 && (
+								<div className="text-center py-4 text-sm opacity-60">No completed premium tournaments.</div>
+							)}
+						</div>
+					</div>
+
+					<div className="card">
+						<h3 className="text-xl font-semibold mb-3">Manage Tournaments</h3>
+						<div className="text-sm opacity-80 mb-3">View and manage all tournaments. Set winners or mark payouts.</div>
+						<ul className="space-y-2">
+							{tournaments.map((t:any)=> (
+								<li key={t.id} className="p-3 rounded bg-black/20 text-sm">
+									<div className="flex items-center justify-between mb-2">
+										<div>
+											<div className="font-semibold">{t.title}</div>
+											<div className="opacity-80">{t.game} · {t.mode==='firstto'?'First to':'Best of'} {t.value}</div>
+										</div>
+										<div className={`px-2 py-1 rounded text-xs font-semibold ${
+											t.status === 'scheduled' ? 'bg-blue-600' :
+											t.status === 'running' ? 'bg-green-600' :
+											t.status === 'completed' ? 'bg-purple-600' :
+											'bg-gray-600'
+										}`}>
+											{t.status}
+										</div>
+									</div>
+									<div className="text-xs opacity-70 mb-2">
+										Start: {new Date(t.startAt).toLocaleString()} · Capacity: {t.capacity}
+									</div>
+									{t.prize && (
+										<div className="text-xs mb-2">
+											Prize: {t.prizeType==='cash' && t.prizeAmount ? `${t.currency||'USD'} ${t.prizeAmount}` : `${t.prizeAmount || 3} month${(t.prizeAmount || 3) > 1 ? 's' : ''} PREMIUM`} 
+											{t.prizeType==='cash' && t.status==='completed' && t.payoutStatus && (<span className={`ml-2 px-1.5 py-0.5 rounded ${t.payoutStatus==='paid'?'bg-emerald-600':'bg-amber-600'}`}>{t.payoutStatus}</span>)}
+										</div>
+									)}
+									<div className="mt-2 flex flex-wrap gap-2">
+										<button className="btn text-xs" disabled={loading || t.status!=='scheduled'} onClick={()=>setWinner(t.id, prompt('Winner email?')||'')}>Set Winner</button>
+										{t.prizeType==='cash' && t.status==='completed' && t.payoutStatus!=='paid' && (
+											<button className="btn text-xs" disabled={loading} onClick={()=>markPaid(t.id)}>Mark Paid</button>
+										)}
+										<button className="btn text-xs" disabled={loading} onClick={()=>reseedWeekly()}>Reseed</button>
+									</div>
+								</li>
+							))}
+							{tournaments.length===0 && <li className="opacity-60">No tournaments.</li>}
+						</ul>
+					</div>
+				</>
+			)}
+
+			{activeTab === 'helpdesk' && isOwner && (
+				<>
+					<div className="card">
+						<h3 className="text-lg font-semibold mb-2">Helpdesk Requests</h3>
+						<div className="text-sm opacity-80 mb-3">Incoming requests from users who asked to speak with an admin. Claim to take over the chat.</div>
+						{helpRequests.length === 0 ? (
+							<div className="text-sm opacity-70">No open requests.</div>
+						) : (
+							<div className="space-y-2">
+								{helpRequests.map(hr => (
+									<div key={hr.id} className="p-2 rounded bg-black/10 border border-white/10 flex items-center justify-between">
+										<div>
+											<div className="font-medium">{hr.username || 'Anonymous'}</div>
+											<div className="text-xs opacity-70">{new Date(hr.ts || 0).toLocaleString()}</div>
+											<div className="text-sm mt-1">{hr.message}</div>
+											{helpTyping[hr.id] && (
+												<div className="text-xs text-amber-300 mt-1">{helpTyping[hr.id].who} typing...</div>
+											)}
+										</div>
+										<div className="flex items-center gap-2">
+											{hr.status === 'open' ? (
+												<button className="btn" onClick={() => claimHelp(hr.id)}>Claim</button>
+											) : (
+												<span className="text-xs opacity-70">{hr.status} by {hr.claimedBy || '—'}</span>
+											)}
+											<button className="btn btn-ghost" onClick={() => resolveHelp(hr.id)}>Resolve</button>
+											<button className="btn" onClick={() => setSelectedRequest(hr)}>Chat</button>
+										</div>
+									</div>
+								))}
+							</div>
+							)}
+						</div>
 				</>
 			)}
 

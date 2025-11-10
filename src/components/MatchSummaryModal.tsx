@@ -64,6 +64,7 @@ export default function MatchSummaryModal({
         minHeight={420}
         maxWidth={1400}
         maxHeight={1000}
+        initialFitHeight
       >
         <h3 className="text-xl font-extrabold mb-2">{title}</h3>
         <div className="text-xs opacity-80 mb-3">Players: {players.map(p=>p.name).join(' vs ')}</div>

@@ -3,6 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { suggestCheckouts, sayScore } from '../utils/checkout';
 import { useUserSettings } from '../store/userSettings';
 import { useToast } from '../store/toast';
+import { useCalibration } from '../store/calibration';
+import GameCalibrationStatus from './GameCalibrationStatus';
 import CameraTile from './CameraTile'
 import CameraView from './CameraView'
 import HeatMap from './HeatMap'
@@ -18,28 +20,16 @@ import { createKillerState, assignKillerNumbers, applyKillerDart, killerWinner, 
 import { createBaseball, applyBaseballDart } from '../game/baseball'
 import { createGolf, applyGolfDart } from '../game/golf'
 import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
+import { createScamState, addScamAuto, addScamNumeric, resetScam, getScamTarget, SCAM_TARGET_NAMES, ScamState, createFivesState, addFivesAuto, addFivesNumeric, resetFives, FivesState, createSevensState, addSevensAuto, addSevensNumeric, resetSevens, SevensState } from '../game/scamFivesSevens'
 import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS, hasClosedAllAm } from '../game/americanCricket'
 import ResizableModal from './ui/ResizableModal'
 import { useAudit } from '../store/audit'
 import ResizablePanel from './ui/ResizablePanel'
 import GameHeaderBar from './ui/GameHeaderBar'
+import GameScoreboard from './scoreboards/GameScoreboard'
+import { useOfflineGameStats } from './scoreboards/useGameStats'
+import { freeGames, premiumGames, allGames } from '../utils/games'
 
-const freeGames = ['X01', 'Double Practice'];
-const premiumGames = [
-  'Around the Clock',
-  'Cricket',
-  'Halve It',
-  'Shanghai',
-  'High-Low',
-  'Killer',
-  "Bob's 27",
-  'Count-Up',
-  'High Score',
-  'Low Score',
-  'Checkout 170',
-  'Checkout 121',
-  'Treble Practice',
-];
 const aiLevels = ['Easy', 'Medium', 'Hardened'];
 
 function clamp(n: number, min: number, max: number) {
@@ -93,7 +83,7 @@ const API_URL = (import.meta as any).env?.VITE_API_URL || '';
 
 export default function OfflinePlay({ user }: { user: any }) {
   const { offlineLayout } = useUserSettings()
-  const [selectedMode, setSelectedMode] = useState('X01');
+  const [selectedMode, setSelectedMode] = useState<string>('X01');
   const [x01Score, setX01Score] = useState(501);
   const [ai, setAI] = useState('None');
   const [showRules, setShowRules] = useState(false);
@@ -186,6 +176,15 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [killerDarts, setKillerDarts] = useState<number>(0)
   const [killerWinnerId, setKillerWinnerId] = useState<string | null>(null)
   const [killerLastEvent, setKillerLastEvent] = useState<string>('')
+  // Scam/Scum state
+  const [scam, setScam] = useState(createScamState())
+  const [scamPlayer, setScamPlayer] = useState(createScamState())
+  // Fives state
+  const [fives, setFives] = useState(createFivesState(50))
+  const [fivesPlayer, setFivesPlayer] = useState(createFivesState(50))
+  // Sevens state
+  const [sevens, setSevens] = useState(createSevensState(70))
+  const [sevensPlayer, setSevensPlayer] = useState(createSevensState(70))
   const [playerDartsThrown, setPlayerDartsThrown] = useState<number>(0)
   const [playerLastDart, setPlayerLastDart] = useState<number>(0)
   const [playerVisitDarts, setPlayerVisitDarts] = useState<number>(0)
@@ -225,6 +224,41 @@ export default function OfflinePlay({ user }: { user: any }) {
   // Settings: favourite double and caller
   const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect, cameraFitMode = 'fill', setCameraFitMode, cameraEnabled, textSize, boxSize, autoscoreProvider, matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName } = useUserSettings()
   const manualScoring = autoscoreProvider === 'manual'
+
+  // Call all game stat hooks unconditionally at component level (React hooks rules)
+  const statsX01 = useOfflineGameStats(
+    'X01' as any,
+    playerScore, aiScore,
+    playerLegs, aiLegs,
+    playerLastDart, aiLastDart,
+    playerVisitSum, aiVisitSum,
+    playerDoublesHit, playerDoublesAtt,
+    aiDoublesHit, aiDoublesAtt,
+    legStats,
+    isPlayerTurn,
+    ai,
+    x01Score
+  )
+  const statsCricket = useOfflineGameStats(
+    'Cricket' as any,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    cricket
+  )
+  const statsShanghai = useOfflineGameStats(
+    'Shanghai' as any,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    isPlayerTurn, ai, undefined,
+    cricket, shanghai
+  )
+  const statsKiller = useOfflineGameStats(
+    'Killer' as any,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined,
+    killerPlayers, killerStates, killerAssigned, killerTurnIdx
+  )
+  const statsScam = useOfflineGameStats('Scam' as any)
+  const statsFives = useOfflineGameStats('Fives' as any)
+  const statsSevens = useOfflineGameStats('Sevens' as any)
 
   // Button size classes for toolbar buttons
   const getButtonSizeClasses = (size: string) => {
@@ -981,14 +1015,15 @@ export default function OfflinePlay({ user }: { user: any }) {
     startNextLeg()
   }
 
-  const isFreeSelected = freeGames.includes(selectedMode)
+  const isFreeSelected = freeGames.includes(selectedMode as any)
   const lockedPremium = !isFreeSelected && !(user?.fullAccess || user?.admin)
 
   // no external overlay: we render the match modal as absolute inset-0 inside this card
 
   return (
-  <div className="card relative overflow-hidden">
+  <div className="card ndn-game-shell relative overflow-hidden">
   <h2 className="text-2xl font-bold text-brand-700 mb-4">Offline Game Modes {offlineLayout==='classic' ? <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">Classic layout</span> : <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">Modern layout</span>}</h2>
+      <div className="ndn-shell-body">
       <div className="mb-4 flex flex-col gap-3">
         <label className="font-semibold">Select game mode:</label>
         <select className="input w-full" value={selectedMode} onChange={e => setSelectedMode(e.target.value)}>
@@ -997,6 +1032,13 @@ export default function OfflinePlay({ user }: { user: any }) {
             <option key={mode} value={mode} disabled={!(user?.fullAccess || user?.admin)}>{mode} {(user?.fullAccess || user?.admin) ? '' : '(Premium)'}</option>
           ))}
         </select>
+
+        {/* Calibration Status - displayed below game mode selector */}
+        <GameCalibrationStatus 
+          gameMode={selectedMode} 
+          compact={true}
+        />
+
         {selectedMode === 'Treble Practice' && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
             <div className="sm:col-span-1">
@@ -1182,7 +1224,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                       <span className="opacity-80">Current Target</span>
                       <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span>
                     </div>
-                    <div className="text-3xl font-extrabold tracking-tight">{dpHits} / 21</div>
+                    {/* Large counter moved to the camera column to allow the preview to be raised and enlarged */}
                   </>
                 )}
                 {selectedMode === 'Around the Clock' && (
@@ -1191,7 +1233,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                       <span className="opacity-80">Current Target</span>
                       <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">{ATC_ORDER[atcIndex] === 25 ? '25 (Outer Bull)' : ATC_ORDER[atcIndex] === 50 ? '50 (Inner Bull)' : (ATC_ORDER[atcIndex] || '—')}</span>
                     </div>
-                    <div className="text-3xl font-extrabold tracking-tight">{atcHits} / {ATC_ORDER.length}</div>
+                    {/* Large counter moved to the camera column to allow the preview to be raised and enlarged */}
                   </>
                 )}
                 {selectedMode === 'Cricket' && (
@@ -1282,8 +1324,25 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Treble Practice' && (
                   <>
-                    <div className="text-xs text-slate-600">Treble Target: T{trebleTarget}</div>
-                    <div className="text-3xl font-extrabold tracking-tight">Hits: {trebleHits}</div>
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-xs text-slate-600">Treble Target: T{trebleTarget}</div>
+                        <div className="text-3xl font-extrabold tracking-tight">Hits: {trebleHits}</div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <label className="text-sm">Target</label>
+                        <div className="inline-flex items-center gap-1">
+                          {[20,19,18].map(n => (
+                            <button key={`tpick-header-${n}`} className={`btn px-2 py-0.5 text-xs ${trebleTarget===n?'bg-emerald-600/30 border border-emerald-400/30':''}`} onClick={()=>setTrebleTarget(n)}>T{n}</button>
+                          ))}
+                        </div>
+                        <span className="opacity-60 text-xs">or</span>
+                        <select className="input w-24" value={trebleTarget} onChange={e=> setTrebleTarget(parseInt(e.target.value,10))}>
+                          {Array.from({length:20},(_,i)=>i+1).map(n=> <option key={n} value={n}>{n}</option>)}
+                        </select>
+                        <button className="btn px-3 py-1 text-sm" onClick={resetTreble}>Reset</button>
+                      </div>
+                    </div>
                   </>
                 )}
                 {selectedMode === 'Baseball' && (
@@ -1305,6 +1364,30 @@ export default function OfflinePlay({ user }: { user: any }) {
                     <div className="text-xs text-slate-600">Turn</div>
                     <div className="text-3xl font-extrabold tracking-tight">{ttt.turn}</div>
                     {ttt.finished && <div className="mt-1 text-xs">Winner: {ttt.winner || '—'}</div>}
+                  </>
+                )}
+                {selectedMode === 'Scam' && (
+                  <>
+                    <div className="text-xs text-slate-600">Target</div>
+                    <div className="text-3xl font-extrabold tracking-tight">{SCAM_TARGET_NAMES[scam.targetIndex]}</div>
+                    <div className="text-sm">Progress: <span className="font-semibold">{scam.targetIndex + 1}/{SCAM_TARGET_NAMES.length}</span></div>
+                    {scam.finished && <div className="mt-1 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200">🎉 Finished in {scam.darts} darts!</div>}
+                  </>
+                )}
+                {selectedMode === 'Fives' && (
+                  <>
+                    <div className="text-xs text-slate-600">Score</div>
+                    <div className="text-3xl font-extrabold tracking-tight">{fives.score}/{fives.target}</div>
+                    <div className="text-sm">Darts: <span className="font-semibold">{fives.darts}</span></div>
+                    {fives.finished && <div className="mt-1 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200">✓ Reached {fives.target}!</div>}
+                  </>
+                )}
+                {selectedMode === 'Sevens' && (
+                  <>
+                    <div className="text-xs text-slate-600">Score</div>
+                    <div className="text-3xl font-extrabold tracking-tight">{sevens.score}/{sevens.target}</div>
+                    <div className="text-sm">Darts: <span className="font-semibold">{sevens.darts}</span></div>
+                    {sevens.finished && <div className="mt-1 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200">✓ Reached {sevens.target}!</div>}
                   </>
                 )}
                 {selectedMode === 'American Cricket' && (
@@ -1341,119 +1424,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
               </div>
             ) : offlineLayout === 'modern' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 mb-2 items-stretch">
-                {/* Left column: Player panel, Match Summary, Opponent panel stacked */}
-                <div className="flex flex-col gap-2 min-w-0">
-                  <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col">
-                    <div className="text-xs text-slate-600 flex items-center justify-between">
-                      <span className="opacity-80">You Remain</span>
-                      {isPlayerTurn ? (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">THROWING</span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-200 text-xs font-bold">WAITING TO THROW</span>
-                      )}
-                    </div>
-                    <div className="text-3xl font-extrabold tracking-tight">{playerScore}</div>
-                    <div className="h-1.5 w-full bg-white/10 rounded-full mt-2 overflow-hidden">
-                      <div className="h-full bg-emerald-400/70" style={{ width: `${Math.max(0, Math.min(100, (1 - (playerScore / x01Score)) * 100))}%` }} />
-                    </div>
-                    <div className="text-sm mt-1 opacity-90">Last dart: <span className="font-semibold">{playerLastDart}</span></div>
-                    <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{totalPlayerDarts>0 ? ((totalPlayerPoints/totalPlayerDarts)*3).toFixed(1) : '0.0'}</span></div>
-                    <div className="text-xs opacity-70 flex items-center gap-2">
-                      <span>Darts thrown: {playerDartsThrown}</span>
-                      <span className="inline-flex items-center gap-1" aria-label="Visit darts">
-                        {[0,1,2].map(i => (
-                          <span key={i} className={`w-2 h-2 rounded-full ${i < playerVisitDarts ? 'bg-emerald-400' : 'bg-white/20'}`}></span>
-                        ))}
-                      </span>
-                    </div>
-                    <div className="text-xs opacity-80 mt-1">{
-                      (() => {
-                        const att = playerDoublesAtt
-                        const hit = playerDoublesHit
-                        const miss = Math.max(0, att - hit)
-                        const pct = att > 0 ? Math.round((hit/att)*100) : 0
-                        return <span className="font-semibold">Doubles: {hit}/{miss} ({pct}%)</span>
-                      })()
-                    }</div>
-                    {playerScore <= 170 && playerScore > 0 && (
-                      (() => {
-                        const sugs = suggestCheckouts(playerScore, favoriteDouble)
-                        const first = sugs[0] || '—'
-                        return (
-                          <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-white text-sm">
-                            <span className="opacity-70">Checkout</span>
-                            <span className="font-semibold">{first}</span>
-                          </div>
-                        )
-                      })()
-                    )}
-                  </div>
-                  {/* Match Summary */}
-                  <div className={`${boxSize === 'small' ? 'p-2' : boxSize === 'large' ? 'p-4' : 'p-3'} rounded-2xl bg-slate-900/40 border border-white/10 text-white ${textSize === 'small' ? 'text-xs' : textSize === 'large' ? 'text-base' : 'text-sm'}`}>
-                    <div className="font-semibold mb-2">Match Summary</div>
-                    {(() => {
-                      const currentThrower = isPlayerTurn ? (user?.username || 'You') : (ai === 'None' ? '—' : `${ai} AI`)
-                      const currentRemaining = isPlayerTurn ? playerScore : (ai === 'None' ? 0 : aiScore)
-                      const last = isPlayerTurn ? playerLastDart : aiLastDart
-                      const lastScoreVisit = isPlayerTurn ? playerVisitSum : aiVisitSum
-                      const dartsThrown = isPlayerTurn ? playerDartsThrown : aiDartsThrown
-                      const scored = (x01Score - (isPlayerTurn ? playerScore : (ai === 'None' ? x01Score : aiScore)))
-                      const avg3 = dartsThrown > 0 ? ((scored / dartsThrown) * 3) : 0
-                      const matchScore = `${playerLegs}-${aiLegs}`
-                      const bestLegText = legStats.length > 0 ? `${Math.min(...legStats.map(l=>l.doubleDarts + (l.checkoutDarts||0))) || 0} darts` : '—'
-                      return (
-                        <div className="grid grid-cols-2 gap-y-1">
-                          <div className="opacity-80">Current score</div>
-                          <div className="font-mono text-right">{matchScore}</div>
-                          <div className="opacity-80">Current thrower</div>
-                          <div className="text-right font-semibold text-lg">{currentThrower}</div>
-                          <div className="opacity-80">Score remaining</div>
-                          <div className="text-right font-mono font-bold text-xl">{currentRemaining}</div>
-                          <div className="opacity-80">3-dart avg</div>
-                          <div className="text-right font-mono">{avg3.toFixed(1)}</div>
-                          <div className="opacity-80">Last score</div>
-                          <div className="text-right font-mono">{lastScoreVisit || last}</div>
-                          <div className="opacity-80">Best leg</div>
-                          <div className="text-right">{bestLegText}</div>
-                        </div>
-                      )
-                    })()}
-                  </div>
-                  {/* Opponent panel */}
-                  <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col">
-                    <div className="text-xs flex items-center justify-between opacity-80">
-                      <span>{ai === 'None' ? 'Opponent' : `${ai} AI`} Remain</span>
-                      {!isPlayerTurn ? (
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold">THROWING</span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-200 text-xs font-bold">WAITING TO THROW</span>
-                      )}
-                    </div>
-                    <div className="text-3xl font-extrabold tracking-tight">{ai !== 'None' ? aiScore : 'N/A'}</div>
-                    {ai !== 'None' && (
-                      <div className="h-1.5 w-full bg-white/10 rounded-full mt-2 overflow-hidden">
-                        <div className="h-full bg-fuchsia-400/70" style={{ width: `${Math.max(0, Math.min(100, (1 - (aiScore / x01Score)) * 100))}%` }} />
-                      </div>
-                    )}
-                    <div className="text-sm mt-1 opacity-90">Last dart: <span className="font-semibold">{ai === 'None' ? 0 : aiLastDart}</span></div>
-                    <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{ai !== 'None' ? (totalAiDarts>0 ? ((totalAiPoints/totalAiDarts)*3).toFixed(1) : '0.0') : '—'}</span></div>
-                    {ai !== 'None' && (
-                      <div className="text-xs opacity-70">Darts thrown: {aiDartsThrown}</div>
-                    )}
-                    {ai !== 'None' && (
-                      (() => {
-                        const att = aiDoublesAtt
-                        const hit = aiDoublesHit
-                        const miss = Math.max(0, att - hit)
-                        const pct = att > 0 ? Math.round((hit/att)*100) : 0
-                        return <div className="text-xs opacity-80 mt-1"><span className="font-semibold">Doubles: {hit}/{miss} ({pct}%)</span></div>
-                      })()
-                    )}
-                  </div>
-                </div>
-                {/* Right area: toolbar + camera (span 2) */}
-                <div className="md:col-span-2 min-w-0 space-y-2">
+              <div className="grid grid-cols-1 gap-2 mb-2 items-stretch">
+                {/* Right area: toolbar + camera takes full width (left column removed) */}
+                <div className="min-w-0 space-y-2 flex flex-col justify-between">
                   {!manualScoring ? (
                     <>
                       <div className="flex items-center flex-wrap gap-1.5 mt-1">
@@ -1469,7 +1442,21 @@ export default function OfflinePlay({ user }: { user: any }) {
                           <button className={`btn ${buttonSizeClass}`} title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
                         </div>
                       </div>
-                      <div className="flex items-stretch justify-end min-w-0">
+                      <div className="flex items-stretch justify-end min-w-0 flex-1 min-h-0 ndn-camera-tall">
+                        {/* Centered mode counter moved here so camera preview can be pushed up and enlarged */}
+                        {(selectedMode as any) === 'Double Practice' && (
+                          <div className="w-full text-center mb-3">
+                            <div className="text-xs text-slate-600">Current Target</div>
+                            <div className="text-3xl font-extrabold tracking-tight">{dpHits} / 21</div>
+                          </div>
+                        )}
+                        {(selectedMode as any) === 'Around the Clock' && (
+                          <div className="w-full text-center mb-3">
+                            <div className="text-xs text-slate-600">Current Target</div>
+                            <div className="text-3xl font-extrabold tracking-tight">{atcHits} / {ATC_ORDER.length}</div>
+                          </div>
+                        )}
+
                         <ResizablePanel
                           storageKey="ndn:camera:tile:offline:primary"
                           className="relative rounded-2xl overflow-hidden bg-black"
@@ -1479,6 +1466,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                           minHeight={220}
                           maxWidth={1600}
                           maxHeight={900}
+                          autoFill
                         >
                           <CameraTile
                             label="Your Board"
@@ -1538,7 +1526,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
               </div>
               {/* Center camera preview: right-aligned and square when selected */}
-              <div className="flex items-stretch justify-end md:px-3 min-w-0">
+              <div className="flex items-stretch justify-end md:px-3 min-w-0 flex-1 min-h-0 ndn-camera-tall">
                 <ResizablePanel
                   storageKey="ndn:camera:tile:offline:center"
                   className="relative rounded-2xl overflow-hidden bg-black"
@@ -1548,6 +1536,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   minHeight={220}
                   maxWidth={1600}
                   maxHeight={900}
+                  autoFill
                 >
                   <CameraTile
                     label="Your Board"
@@ -1790,20 +1779,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
                 {selectedMode === 'Treble Practice' && (
                   <>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <label className="text-sm">Target</label>
-                      {/* Quick picks for common practice: T20/T19/T18 */}
-                      <div className="inline-flex items-center gap-1">
-                        {[20,19,18].map(n => (
-                          <button key={`tpick-${n}`} className={`btn px-2 py-0.5 text-xs ${trebleTarget===n?'bg-emerald-600/30 border border-emerald-400/30':''}`} onClick={()=>setTrebleTarget(n)}>T{n}</button>
-                        ))}
-                      </div>
-                      <span className="opacity-60 text-xs">or</span>
-                      <select className="input w-24" value={trebleTarget} onChange={e=> setTrebleTarget(parseInt(e.target.value,10))}>
-                        {Array.from({length:20},(_,i)=>i+1).map(n=> <option key={n} value={n}>{n}</option>)}
-                      </select>
-                      <button className="btn px-3 py-1 text-sm" onClick={resetTreble}>Reset</button>
-                    </div>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addTrebleAuto(value, r as any, info?.sector ?? null) }} />
                     </div>}
@@ -1873,6 +1848,50 @@ export default function OfflinePlay({ user }: { user: any }) {
                     <div className="flex items-center gap-2">
                       <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetAmCricket}>Reset</button>
                     </div>
+                  </>
+                )}
+                {selectedMode === 'Scam' && (
+                  <>
+                    <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{SCAM_TARGET_NAMES[scamPlayer.targetIndex]}</span></div>
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { setScamPlayer(addScamAuto(scamPlayer, value, ring as any)) }} />
+                    </div>}
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={1} max={25} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') setScamPlayer(addScamNumeric(scamPlayer, playerDartPoints)); setPlayerDartPoints(0) }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>{ setScamPlayer(addScamNumeric(scamPlayer, playerDartPoints)); setPlayerDartPoints(0) }}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>setScamPlayer(resetScam())}>Reset</button>
+                    </div>
+                    {scamPlayer.finished && <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">🎉 Finished in {scamPlayer.darts} darts!</div>}
+                  </>
+                )}
+                {selectedMode === 'Fives' && (
+                  <>
+                    <div className="font-semibold">Score: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{fivesPlayer.score}/{fivesPlayer.target}</span></div>
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { setFivesPlayer(addFivesAuto(fivesPlayer, value, ring as any)) }} />
+                    </div>}
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={5} max={50} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') setFivesPlayer(addFivesNumeric(fivesPlayer, playerDartPoints)); setPlayerDartPoints(0) }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>{ setFivesPlayer(addFivesNumeric(fivesPlayer, playerDartPoints)); setPlayerDartPoints(0) }}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>setFivesPlayer(resetFives(fivesPlayer.target))}>Reset</button>
+                    </div>
+                    <div className="text-xs text-slate-400">Valid scores: 5, 10, 15, 20, 25, 50 · Darts: {fivesPlayer.darts}</div>
+                    {fivesPlayer.finished && <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">✓ Reached {fivesPlayer.target} in {fivesPlayer.darts} darts!</div>}
+                  </>
+                )}
+                {selectedMode === 'Sevens' && (
+                  <>
+                    <div className="font-semibold">Score: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{sevensPlayer.score}/{sevensPlayer.target}</span></div>
+                    {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
+                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { setSevensPlayer(addSevensAuto(sevensPlayer, value, ring as any)) }} />
+                    </div>}
+                    <div className="flex items-center gap-2">
+                      <input className="input w-24" type="number" min={7} max={21} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') setSevensPlayer(addSevensNumeric(sevensPlayer, playerDartPoints)); setPlayerDartPoints(0) }} />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>{ setSevensPlayer(addSevensNumeric(sevensPlayer, playerDartPoints)); setPlayerDartPoints(0) }}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>setSevensPlayer(resetSevens(sevensPlayer.target))}>Reset</button>
+                    </div>
+                    <div className="text-xs text-slate-400">Valid scores: 7, 14, 21 · Darts: {sevensPlayer.darts}</div>
+                    {sevensPlayer.finished && <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">✓ Reached {sevensPlayer.target} in {sevensPlayer.darts} darts!</div>}
                   </>
                 )}
                 {selectedMode === 'Killer' && (
@@ -2024,6 +2043,156 @@ export default function OfflinePlay({ user }: { user: any }) {
               </div>
             ) : isPlayerTurn ? (
               <div className="space-y-2">
+                {/* Scorecard for X01 */}
+                {/* Unified Game Scoreboard */}
+                {(selectedMode as any) === 'X01' && (
+                  <>
+                    <GameScoreboard
+                      gameMode="X01"
+                      players={statsX01}
+                      matchScore={`${playerLegs}-${aiLegs}`}
+                    />
+                  </>
+                )}
+                {/* Camera view for X01 auto-scoring */}
+                {(selectedMode as any) === 'X01' && cameraEnabled && (
+                  <div className="rounded-2xl overflow-hidden bg-black">
+                    <CameraView
+                      scoringMode="custom"
+                      showToolbar={false}
+                      immediateAutoCommit
+                      onAutoDart={(value, ring) => {
+                        // For X01, apply the dart value directly
+                        if (value > 0) applyDartValue(value)
+                      }}
+                    />
+                  </div>
+                )}
+                {(selectedMode as any) === 'Cricket' && (
+                  <>
+                    <GameScoreboard
+                      gameMode="Cricket"
+                      players={statsCricket}
+                    />
+                  </>
+                )}
+                {/* Camera view for Cricket auto-scoring */}
+                {(selectedMode as any) === 'Cricket' && cameraEnabled && (
+                  <div className="rounded-2xl overflow-hidden bg-black">
+                    <CameraView
+                      scoringMode="custom"
+                      showToolbar={false}
+                      immediateAutoCommit
+                      onAutoDart={(value, ring, info) => {
+                        if (value > 0) {
+                          const r = ring === 'MISS' ? undefined : ring
+                          addCricketAuto(value, r as any, info?.sector ?? null)
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+                {(selectedMode as any) === 'Shanghai' && (
+                  <>
+                    <GameScoreboard
+                      gameMode="Shanghai"
+                      players={statsShanghai}
+                    />
+                  </>
+                )}
+                {/* Camera view for Shanghai auto-scoring */}
+                {(selectedMode as any) === 'Shanghai' && cameraEnabled && (
+                  <div className="rounded-2xl overflow-hidden bg-black">
+                    <CameraView
+                      scoringMode="custom"
+                      showToolbar={false}
+                      immediateAutoCommit
+                      onAutoDart={(value, ring, info) => {
+                        if (value > 0) {
+                          const r = ring === 'MISS' ? undefined : ring
+                          addShanghaiAuto(value, r as any, info?.sector ?? null)
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+                {(selectedMode as any) === 'Killer' && (
+                  <>
+                    <GameScoreboard
+                      gameMode="Killer"
+                      players={statsKiller}
+                    />
+                  </>
+                )}
+                {(selectedMode as any) === 'Scam' && (
+                  <>
+                    <GameScoreboard
+                      gameMode="Scam"
+                      players={statsScam}
+                    />
+                  </>
+                )}
+                {/* Camera view for Scam auto-scoring */}
+                {(selectedMode as any) === 'Scam' && cameraEnabled && (
+                  <div className="rounded-2xl overflow-hidden bg-black">
+                    <CameraView
+                      scoringMode="custom"
+                      showToolbar={false}
+                      immediateAutoCommit
+                      onAutoDart={(value, ring, info) => {
+                        if (value > 0) {
+                          setScamPlayer(addScamAuto(scamPlayer, value, ring as any))
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+                {(selectedMode as any) === 'Fives' && (
+                  <>
+                    <GameScoreboard
+                      gameMode="Fives"
+                      players={statsFives}
+                    />
+                  </>
+                )}
+                {/* Camera view for Fives auto-scoring */}
+                {(selectedMode as any) === 'Fives' && cameraEnabled && (
+                  <div className="rounded-2xl overflow-hidden bg-black">
+                    <CameraView
+                      scoringMode="custom"
+                      showToolbar={false}
+                      immediateAutoCommit
+                      onAutoDart={(value, ring, info) => {
+                        if (value > 0) {
+                          setFivesPlayer(addFivesAuto(fivesPlayer, value, ring as any))
+                        }
+                      }}
+                    />
+                  </div>
+                )}
+                {(selectedMode as any) === 'Sevens' && (
+                  <>
+                    <GameScoreboard
+                      gameMode="Sevens"
+                      players={statsSevens}
+                    />
+                  </>
+                )}
+                {/* Camera view for Sevens auto-scoring */}
+                {(selectedMode as any) === 'Sevens' && cameraEnabled && (
+                  <div className="rounded-2xl overflow-hidden bg-black">
+                    <CameraView
+                      scoringMode="custom"
+                      showToolbar={false}
+                      immediateAutoCommit
+                      onAutoDart={(value, ring, info) => {
+                        if (value > 0) {
+                          setSevensPlayer(addSevensAuto(sevensPlayer, value, ring as any))
+                        }
+                      }}
+                    />
+                  </div>
+                )}
                 <div className="font-semibold">Your Turn</div>
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
@@ -2135,9 +2304,9 @@ export default function OfflinePlay({ user }: { user: any }) {
           </div>
         </div>
       )}
-      {showWinPopup && (
+        {showWinPopup && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-          <ResizableModal storageKey="ndn:modal:offline-win" className="w-full relative" defaultWidth={420} defaultHeight={360} minWidth={360} minHeight={300} maxWidth={800} maxHeight={700}>
+          <ResizableModal storageKey="ndn:modal:offline-win" className="w-full relative" defaultWidth={420} defaultHeight={360} minWidth={360} minHeight={300} maxWidth={800} maxHeight={700} initialFitHeight>
             <h3 className="text-lg font-bold mb-2">Leg Won!</h3>
             <label className="block mb-1">Darts to hit double:</label>
             <div className="flex gap-2 mb-2">
@@ -2161,7 +2330,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       )}
       {showMatchSummary && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
-          <ResizableModal storageKey="ndn:modal:offline-summary" className="w-full relative" defaultWidth={820} defaultHeight={520} minWidth={600} minHeight={400} maxWidth={1400} maxHeight={1000}>
+          <ResizableModal storageKey="ndn:modal:offline-summary" className="w-full relative" defaultWidth={820} defaultHeight={520} minWidth={600} minHeight={400} maxWidth={1400} maxHeight={1000} initialFitHeight>
             <h3 className="text-xl font-extrabold mb-2">Match Summary</h3>
             <div className="text-xs opacity-80 mb-3">{selectedMode} · {x01Score} start · First to {firstTo}</div>
             {(() => {
@@ -2265,6 +2434,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       )}
       
   {/* Phone camera overlay removed per UX preference; use header badge preview only */}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,27 @@
+[
+  {
+    "id": "-4mLtpQI",
+    "ts": 1762434619378,
+    "username": "tester",
+    "message": "Need admin help for E2E smoke",
+    "meta": {},
+    "status": "resolved",
+    "claimedBy": "daviesfamily108@gmail.com",
+    "messages": [
+      {
+        "fromEmail": "tester@example.com",
+        "fromName": "tester",
+        "message": "Hello admin, I need help",
+        "ts": 1762434620250,
+        "admin": false
+      },
+      {
+        "fromEmail": null,
+        "fromName": "owner",
+        "message": "Hi tester, I am looking into it",
+        "ts": 1762434620554,
+        "admin": false
+      }
+    ]
+  }
+]

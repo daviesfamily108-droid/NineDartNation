@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS public.tournaments (
     winner_email TEXT,
     winner_name TEXT,
     starting_score INTEGER,
+    require_calibration BOOLEAN DEFAULT FALSE,
     creator_email TEXT,
     creator_name TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

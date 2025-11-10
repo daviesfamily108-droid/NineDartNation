@@ -51,10 +51,37 @@ export default function Scoreboard() {
                 <Undo2 className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
               <button className="btn" onClick={() => { endLeg(score); setScore(0); }}>End Leg (Checkout {score || 0})</button>
               <button className="btn bg-slate-700 hover:bg-slate-800" onClick={() => nextPlayer()}>Next Player</button>
-              <button className="btn bg-emerald-600 hover:bg-emerald-700" onClick={() => { addMatchToAllTime(players); endGame() }}>End Game</button>
+              <button className="btn bg-emerald-600 hover:bg-emerald-700" onClick={() => {
+                try {
+                  // Build a lightweight summary for the last finished match and persist it to localStorage
+                  const summary = {
+                    ts: Date.now(),
+                    players: players.map(p => {
+                      const totals = p.legs.reduce((acc, L) => {
+                        acc.points += (L.totalScoreStart - L.totalScoreRemaining)
+                        const legDarts = (L.visits || []).reduce((a, v) => a + (v.darts || 0) - (v.preOpenDarts || 0), 0)
+                        acc.darts += legDarts
+                        return acc
+                      }, { points: 0, darts: 0 })
+                      const dartsThrown = totals.darts
+                      const avg = dartsThrown > 0 ? ((totals.points / dartsThrown) * 3) : 0
+                      return {
+                        id: p.id,
+                        name: p.name,
+                        legsWon: p.legsWon,
+                        dartsThrown,
+                        avg: Math.round(avg * 100) / 100,
+                      }
+                    }),
+                    winner: players.reduce((best, p) => p.legsWon > (best?.legsWon || 0) ? p : best, players[0])?.name,
+                  }
+                  try { localStorage.setItem('ndn_last_match', JSON.stringify(summary)) } catch {}
+                } catch (err) {}
+                addMatchToAllTime(players); endGame()
+              }}>End Game</button>
             </div>
           </div>
         ) : (

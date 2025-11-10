@@ -5,8 +5,9 @@ import DartLoader from './DartLoader'
 import { makeQrDataUrlWithLogo } from '../utils/qr'
 import { useCalibration } from '../store/calibration'
 import { useCameraSession } from '../store/cameraSession'
-import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, applyHomography, type Homography, type Point } from '../utils/vision'
+import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, applyHomography, imageToBoard, scoreAtBoardPoint, type Homography, type Point } from '../utils/vision'
 import { detectMarkersFromCanvas, MARKER_ORDER, MARKER_TARGETS, markerIdToMatrix, type MarkerDetection } from '../utils/markerCalibration'
+import { detectBoard, refineRingDetection, type BoardDetectionResult } from '../utils/boardDetection'
 import { useUserSettings } from '../store/userSettings'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice } from '../utils/networkDevices'
 import { apiFetch } from '../utils/api'
@@ -21,6 +22,10 @@ export default function Calibrator() {
 	const canvasRef = useRef<HTMLCanvasElement>(null)
 	const overlayRef = useRef<HTMLCanvasElement>(null)
 	const fileInputRef = useRef<HTMLInputElement>(null)
+	// Camera diagnostics state
+	const [cameraPerm, setCameraPerm] = useState<'unknown' | 'granted' | 'denied' | 'prompt' | 'unsupported'>('unknown')
+	const [videoDevices, setVideoDevices] = useState<Array<{ deviceId: string; label: string }>>([])
+	const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null)
 	const [streaming, setStreaming] = useState(false)
 	const [videoPlayBlocked, setVideoPlayBlocked] = useState(false)
 	const [phase, setPhase] = useState<Phase>('camera')
@@ -58,6 +63,8 @@ export default function Calibrator() {
 		const [liveDetect, setLiveDetect] = useState<boolean>(false)
 		const [confidence, setConfidence] = useState<number>(0)
 	const [markerResult, setMarkerResult] = useState<MarkerDetection | null>(null)
+	// Verification results for UI: {label, expected, detected, match}
+	const [verificationResults, setVerificationResults] = useState<Array<{ label: string; expected: any; detected: any; match: boolean }>>([])
 
 	const createMarkerDataUrl = useCallback((id: number, size = 480) => {
 		if (typeof document === 'undefined') throw new Error('Marker rendering only available in browser context')
@@ -66,88 +73,44 @@ export default function Calibrator() {
 		canvas.width = size
 		canvas.height = size
 		const ctx = canvas.getContext('2d')
-		if (!ctx) throw new Error('Unable to create marker canvas context')
-		ctx.imageSmoothingEnabled = false
+		if (!ctx) return ''
+		// white background
 		ctx.fillStyle = '#ffffff'
 		ctx.fillRect(0, 0, size, size)
-		const padding = size * 0.08
-		const cells = matrix.length
-		const gridSize = size - padding * 2
-		const cellSize = gridSize / cells
-		const origin = padding
-		for (let y = 0; y < cells; y++) {
-			for (let x = 0; x < cells; x++) {
-				const value = matrix[y][x]
-				ctx.fillStyle = value === 1 ? '#000000' : '#ffffff'
-				ctx.fillRect(origin + x * cellSize, origin + y * cellSize, cellSize, cellSize)
+
+		const rows = matrix.length
+		const cols = matrix[0]?.length || rows
+		const cellW = size / cols
+		const cellH = size / rows
+
+		for (let y = 0; y < rows; y++) {
+			for (let x = 0; x < cols; x++) {
+				const v = matrix[y][x]
+				if (v) {
+					ctx.fillStyle = '#000000'
+					ctx.fillRect(Math.round(x * cellW), Math.round(y * cellH), Math.ceil(cellW), Math.ceil(cellH))
+				}
 			}
 		}
-		ctx.strokeStyle = '#000000'
-		ctx.lineWidth = Math.max(2, cellSize * 0.08)
-		ctx.strokeRect(origin, origin, cellSize * cells, cellSize * cells)
+
 		return canvas.toDataURL('image/png')
 	}, [])
+		// Pairing / phone-camera state (some of these were accidentally removed during edits)
+		const [pairCode, setPairCode] = useState<string | null>(null)
+		const pairCodeRef = useRef<string | null>(null)
+		const [ws, setWs] = useState<WebSocket | null>(null)
+		const pcRef = useRef<RTCPeerConnection | null>(null)
+		const pendingIceCandidatesRef = useRef<RTCIceCandidate[]>([])
+		const [expiresAt, setExpiresAt] = useState<number | null>(null)
+		const [now, setNow] = useState<number>(Date.now())
+		const [paired, setPaired] = useState<boolean>(false)
 
-	const openMarkerSheet = useCallback(() => {
-		try {
-			const markers = MARKER_ORDER.map((key) => {
-				const id = MARKER_TARGETS[key]
-				return { key, id, dataUrl: createMarkerDataUrl(id) }
-			})
-			const popup = window.open('', '_blank', 'width=900,height=1200')
-			if (!popup) throw new Error('Popup blocked by browser')
-			const html = `<!DOCTYPE html>
-			<html>
-			<head>
-				<meta charset="utf-8" />
-				<title>Nine Dart Nation – Marker Sheet</title>
-				<style>
-					body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; margin: 24px; color: #0f172a; }
-					h1 { font-size: 20px; margin-bottom: 4px; }
-					p { margin-top: 0; opacity: 0.7; }
-					.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; margin-top: 24px; }
-					.marker { text-align: center; }
-					.marker h2 { font-size: 16px; margin: 12px 0 8px; }
-					.marker img { width: 100%; max-width: 360px; border: 1px solid #0f172a; }
-					footer { margin-top: 24px; font-size: 12px; opacity: 0.6; }
-				</style>
-			</head>
-			<body>
-				<h1>Marker sheet</h1>
-				<p>Print at 100% scale on letter/A4 paper. Cut out and tape each marker so it is flush with the outer double ring.</p>
-				<div class="grid">
-					${markers.map((m) => `
-						<div class="marker">
-							<h2>${m.key.toUpperCase()} • ID ${m.id}</h2>
-							<img src="${m.dataUrl}" alt="Marker ${m.key}" />
-						</div>
-					`).join('')}
-				</div>
-				<footer>Tip: Keep markers flat, smooth, and unobstructed for best detection results.</footer>
-			</body>
-			</html>`
-			popup.document.write(html)
-			popup.document.close()
-		} catch (err: any) {
-			console.error('Marker sheet generation failed', err)
-			alert(`Unable to open marker sheet: ${err?.message || err}`)
+		function updatePairCode(code: string | null) {
+			try {
+				setPairCode(code)
+				pairCodeRef.current = code
+			} catch {}
 		}
-	}, [createMarkerDataUrl])
-
-	// Phone pairing state (mirrors CameraTile)
-	const [ws, setWs] = useState<WebSocket | null>(null)
-	const autoLockRef = useRef(false)
-	const [pairCode, setPairCode] = useState<string | null>(null)
-	const pairCodeRef = useRef<string | null>(null)
-	const updatePairCode = useCallback((code: string | null) => {
-		pairCodeRef.current = code
-		setPairCode(code)
-	}, [setPairCode])
-	const [expiresAt, setExpiresAt] = useState<number | null>(null)
-	const [now, setNow] = useState<number>(Date.now())
-	const [paired, setPaired] = useState<boolean>(false)
-	const pcRef = useRef<RTCPeerConnection | null>(null)
-	const pendingIceCandidatesRef = useRef<RTCIceCandidate[]>([])
 	const [qrDataUrl, setQrDataUrl] = useState<string>('')
 	const [lanHost, setLanHost] = useState<string | null>(null)
 	const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null)
@@ -156,6 +119,12 @@ export default function Calibrator() {
 	const [discoveringWifi, setDiscoveringWifi] = useState<boolean>(false)
 	const [copyFeedback, setCopyFeedback] = useState<'link' | 'code' | null>(null)
 	const copyTimeoutRef = useRef<number | null>(null)
+	
+	// Log streaming state changes for debugging
+	useEffect(() => {
+		console.log('[Calibrator] 🔄 STREAMING STATE CHANGED:', { streaming, phase, videoRefExists: !!videoRef.current })
+	}, [streaming, phase])
+	
 	useEffect(() => {
 		const h = window.location.hostname
 		if (h === 'localhost' || h === '127.0.0.1') {
@@ -257,6 +226,93 @@ export default function Calibrator() {
 		}).then(setQrDataUrl).catch(() => setQrDataUrl(''))
 	}, [mobileUrl, pairCode])
 
+	// Detect camera permission status where supported
+	useEffect(() => {
+		if (typeof navigator === 'undefined' || !(navigator as any).permissions) {
+			setCameraPerm('unsupported')
+			return
+		}
+		let mounted = true
+		;(async () => {
+			try {
+				const p = await (navigator as any).permissions.query({ name: 'camera' })
+				if (!mounted) return
+				setCameraPerm(p.state || 'unknown')
+				p.onchange = () => { if (mounted) setCameraPerm(p.state) }
+			} catch (err) {
+				// Some browsers don't support 'camera' permission query
+				if (mounted) setCameraPerm('unknown')
+			}
+		})()
+		return () => { mounted = false }
+	}, [])
+
+	async function refreshVideoDevices() {
+		if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return
+		try {
+			const list = await navigator.mediaDevices.enumerateDevices()
+			const vids = list.filter(d => d.kind === 'videoinput').map(d => ({ deviceId: (d as any).deviceId, label: d.label || 'Camera' }))
+			setVideoDevices(vids)
+			if (vids.length && !selectedDeviceId) setSelectedDeviceId(vids[0].deviceId)
+		} catch (err) {
+			// ignore
+		}
+	}
+
+	async function testCamera(deviceId?: string) {
+		if (typeof navigator === 'undefined' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+			alert('getUserMedia is not available in this browser')
+			return
+		}
+		const constraints: any = { video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' } }
+		let stream: MediaStream | null = null
+		try {
+			stream = await navigator.mediaDevices.getUserMedia(constraints)
+			// Immediately stop tracks to test access
+			stream.getTracks().forEach(t => t.stop())
+			setCameraPerm('granted')
+			// If a deviceId was provided, set it as the preferred camera so Start Camera will use it
+			try { if (deviceId && typeof setPreferredCamera === 'function') { setPreferredCamera(deviceId); } } catch {}
+			alert('Camera access granted — your webcam is available and set as preferred.')
+		} catch (err: any) {
+			console.error('[Calibrator] testCamera failed', err)
+			if (err && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+				setCameraPerm('denied')
+				alert('Camera permission denied. Please allow camera access in your browser settings and try again.')
+			} else if (err && (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError')) {
+				alert('No camera devices found. Ensure your USB webcam is connected and not in use by another app.')
+			} else {
+				alert('Unable to access the camera: ' + (err?.message || err))
+			}
+		} finally {
+			if (stream) stream.getTracks().forEach(t => t.stop())
+		}
+	}
+
+	function openBrowserSiteSettings() {
+		if (typeof window === 'undefined') return
+		const ua = navigator.userAgent || ''
+		let url: string | null = null
+		if (/Edg\//.test(ua) || /Chrome\//.test(ua) || /Chromium\//.test(ua)) {
+			// Chromium-based browsers: open camera content settings
+			url = 'chrome://settings/content/camera'
+		} else if (/Firefox\//.test(ua)) {
+			url = 'about:preferences#privacy'
+		} else if (/Safari\//.test(ua) && !/Chrome\//.test(ua)) {
+			// Safari has no direct site settings page we can open; show instructions instead
+			url = null
+		}
+		if (url) {
+			const w = window.open(url, '_blank')
+			if (!w) {
+				alert('Unable to open browser settings automatically. Please open your browser settings and search for "Camera" permissions for this site.')
+			}
+		} else {
+			// Fallback instructions
+			alert('Please open your browser settings and locate Site Settings → Camera (or Permissions) and allow camera access for this site. In Safari, use Preferences → Websites → Camera.')
+		}
+	}
+
 	useEffect(() => {
 		if (!expiresAt) return
 		const t = setInterval(() => setNow(Date.now()), 1000)
@@ -295,32 +351,9 @@ export default function Calibrator() {
 	}, [])
 	// Removed automatic regeneration of code when ttl expires. Only regenerate on explicit user action.
 
-	// Request camera permission on component load
-	useEffect(() => {
-		async function requestCameraPermission() {
-			try {
-				console.log('[Calibrator] Requesting camera permission on load...')
-				// This will prompt the user for permission if not already granted
-				await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-				console.log('[Calibrator] Camera permission granted')
-				// Stop the stream we just started for permission check
-				if (navigator.mediaDevices) {
-					const devices = await navigator.mediaDevices.enumerateDevices()
-					console.log('[Calibrator] Found devices:', devices.filter(d => d.kind === 'videoinput').length, 'cameras')
-				}
-			} catch (err: any) {
-				const name = (err && (err.name || err.code)) || ''
-				if (name === 'NotAllowedError') {
-					console.warn('[Calibrator] Camera permission denied by user')
-				} else if (name === 'NotFoundError' || name === 'NotAvailable') {
-					console.warn('[Calibrator] No camera device found')
-				} else {
-					console.warn('[Calibrator] Camera permission request failed:', err)
-				}
-			}
-		}
-		requestCameraPermission()
-	}, [])
+	// NOTE: Removed automatic permission request on load - it was blocking camera access
+	// Let startCamera() handle the permission request when user clicks "Enable camera"
+	// This prevents the camera from being held by the permission test
 
 		useEffect(() => {
 		return () => {
@@ -541,7 +574,6 @@ export default function Calibrator() {
 												if (!preferredCameraLocked) {
 													try {
 														setPreferredCameraLocked(true)
-														autoLockRef.current = true
 													} catch {}
 												}
 											try { setCameraEnabled(true) } catch {}
@@ -700,47 +732,71 @@ export default function Calibrator() {
 	async function startCamera() {
 		if (mode === 'phone') return startPhonePairing()
 		if (mode === 'wifi') return startWifiConnection()
+		console.log('[Calibrator] 🎬 START_CAMERA: mode=', mode, 'preferredCameraId=', preferredCameraId)
 		try {
-			console.log('[Calibrator] Attempting camera access...')
-			const constraints: MediaStreamConstraints = {
-				video: preferredCameraId ? { deviceId: { exact: preferredCameraId } } : { facingMode: 'environment' },
-				audio: false
+			let stream: MediaStream | null = null
+			
+			// Step 1: Try with preferred camera ID if available
+			if (preferredCameraId) {
+				try {
+					console.log('[Calibrator] 📹 Attempt 1: Using preferred camera ID:', preferredCameraId)
+					stream = await navigator.mediaDevices.getUserMedia({
+						video: { deviceId: { exact: preferredCameraId } },
+						audio: false
+					})
+					console.log('[Calibrator] ✅ SUCCESS with preferred camera:', stream.getTracks().length, 'tracks')
+				} catch (err: any) {
+					console.warn('[Calibrator] ⚠️ Preferred camera failed:', err?.name, err?.message)
+				}
 			}
-			console.log('[Calibrator] Camera constraints:', constraints)
-			let stream: MediaStream
-			try {
-				stream = await navigator.mediaDevices.getUserMedia(constraints)
-				console.log('[Calibrator] Camera stream obtained:', stream)
-			} catch (err: any) {
-				const name = (err && (err.name || err.code)) || ''
-				console.warn('[Calibrator] Preferred camera not available:', err)
-				if (preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError' || name === 'NotAllowedError')) {
-					stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
-					console.log('[Calibrator] Fallback camera stream obtained:', stream)
-				} else {
+			
+			// Step 2: If preferred didn't work, try any camera
+			if (!stream) {
+				try {
+					console.log('[Calibrator] 📹 Attempt 2: Using ANY available camera')
+					stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+					console.log('[Calibrator] ✅ SUCCESS with fallback camera:', stream.getTracks().length, 'tracks')
+				} catch (err: any) {
+					console.error('[Calibrator] ❌ BOTH attempts failed:', err?.name, err?.message)
 					throw err
 				}
 			}
-			if (videoRef.current) {
-				// Clean up any existing stream before assigning new one
-				if (videoRef.current.srcObject) {
-					const existingTracks = (videoRef.current.srcObject as MediaStream).getTracks()
-					existingTracks.forEach(t => t.stop())
-				}
-				videoRef.current.srcObject = stream
-				await videoRef.current.play()
-				console.log('[Calibrator] Video playback started')
-				setStreaming(true)
-				setPhase('capture')
-			} else {
-				console.warn('[Calibrator] videoRef.current is null - cannot display camera')
-				// Clean up the stream if we can't use it
-				stream.getTracks().forEach(t => t.stop())
-				throw new Error('Camera element not available')
+			
+			// Step 3: Assign to video element
+			if (!stream) {
+				throw new Error('No stream obtained')
 			}
-		} catch (e) {
-			console.error('[Calibrator] Camera access failed:', e)
-			alert(`Camera access failed: ${e instanceof Error ? e.message : 'Unknown error'}. Try refreshing the page or check camera permissions.`)
+			
+			if (!videoRef.current) {
+				throw new Error('Video element ref is null')
+			}
+			
+			console.log('[Calibrator] 📺 Assigning stream to video element')
+			videoRef.current.srcObject = stream
+			
+			console.log('[Calibrator] ▶️ Calling play()')
+			try {
+				await videoRef.current.play()
+				console.log('[Calibrator] ✅ Play succeeded')
+			} catch (playErr: any) {
+				console.warn('[Calibrator] ⚠️ Play failed, retrying in 100ms:', playErr?.message)
+				await new Promise(r => setTimeout(r, 100))
+				await videoRef.current.play()
+				console.log('[Calibrator] ✅ Play succeeded on retry')
+			}
+			
+			console.log('[Calibrator] 🟢 Setting streaming = true')
+			setStreaming(true)
+			setPhase('capture')
+			console.log('[Calibrator] 🟢 State updated')
+		} catch (e: any) {
+			console.error('[Calibrator] 🔴 FATAL:', e?.message || e)
+			alert(`Camera failed: ${e?.message || 'Unknown error'}`)
+			// Clean up any partial stream
+			if (videoRef.current?.srcObject) {
+				(videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop())
+				videoRef.current.srcObject = null
+			}
 		}
 	}
 
@@ -760,11 +816,6 @@ export default function Calibrator() {
 		// Clear camera session when stopping camera
 		cameraSession.setStreaming(false)
 		cameraSession.setMediaStream(null)
-	    // Unlock preferred camera selection only if we auto-locked it for this session
-	    if (autoLockRef.current) {
-	    	try { setPreferredCameraLocked(false) } catch {}
-	    	autoLockRef.current = false
-	    }
 	    // Only revert to local mode if EXPLICITLY requested (user clicked Stop button)
 	    // Otherwise preserve the selected mode so user can go to OfflinePlay and come back
 	    if (autoRevert && (mode === 'phone' || mode === 'wifi')) {
@@ -792,11 +843,6 @@ export default function Calibrator() {
 		try {
 			if (!preferredCameraLocked) {
 				setPreferredCameraLocked(true)
-				autoLockRef.current = true
-			} else if (autoLockRef.current) {
-				// already auto-locked; keep flag as-is
-			} else {
-				// Respect existing manual lock; do not mark as auto-managed
 			}
 		} catch {}
 	}
@@ -804,6 +850,12 @@ export default function Calibrator() {
 	// Allow uploading a photo instead of using a live camera
 	function triggerUpload() {
 		try { fileInputRef.current?.click() } catch {}
+	}
+
+	function openMarkerSheet() {
+		// Open the marker sheet page in a new tab for printing
+		const markerSheetUrl = `${window.location.origin}/marker-sheet.html`
+		window.open(markerSheetUrl, '_blank')
 	}
 
 	function onUploadPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -979,8 +1031,7 @@ export default function Calibrator() {
 
 	function compute() {
 		if (!canvasRef.current) return
-		if (dstPoints.length < 4) return alert('Please click at least 4 points on the board.')
-		if (dstPoints.length < 6) return alert('For best accuracy, click all 6 calibration points: TOP, RIGHT, BOTTOM, LEFT of double rim, plus BULLSEYE center and OUTER BULL top.')
+		if (dstPoints.length < 5) return alert('Please click all 5 calibration points: the 4 corners of the double ring plus the CENTER of the bull.')
 		const src = canonicalRimTargets() // board space mm
 		const Hcalc = computeHomographyDLT(src, dstPoints)
 		drawOverlay(dstPoints, Hcalc)
@@ -988,6 +1039,40 @@ export default function Calibrator() {
 		setCalibration({ H: Hcalc as Homography, createdAt: Date.now(), errorPx: err, imageSize: { w: canvasRef.current.width, h: canvasRef.current.height }, anchors: { src, dst: dstPoints } })
 		setPhase('computed')
 	}
+
+		function runVerification() {
+			if (!H || !overlayRef.current) return alert('Please compute calibration first (lock) before running verification.')
+			try {
+				// Prepare a set of canonical board test points (in mm)
+				const tests: Array<{ label: string; p: { x: number; y: number } }> = [
+					{ label: 'Bull (50)', p: { x: 0, y: 0 } },
+					{ label: 'Outer Bull (25)', p: { x: 0, y: -BoardRadii.bullOuter } },
+					{ label: 'Triple 20', p: { x: 0, y: -((BoardRadii.trebleInner + BoardRadii.trebleOuter) / 2) } },
+					{ label: 'Single 5 (near 5 sector)', p: { x: (BoardRadii.trebleInner + BoardRadii.trebleOuter) / 2 * Math.cos(Math.PI * 0.1), y: (BoardRadii.trebleInner + BoardRadii.trebleOuter) / 2 * Math.sin(Math.PI * 0.1) } },
+				]
+				const ctx = overlayRef.current.getContext('2d')!
+				// Redraw base overlay so markers are visible
+				drawOverlay(dstPoints, H)
+				const results: Array<any> = []
+				for (const t of tests) {
+					const imgP = applyHomography(H as any, { x: t.p.x, y: t.p.y })
+					const detectedBoard = imageToBoard(H as any, imgP)
+					const detected = scoreAtBoardPoint(detectedBoard)
+					const expected = scoreAtBoardPoint(t.p)
+					const match = (expected.base === detected.base && expected.mult === detected.mult) || (expected.base === detected.base)
+					results.push({ label: t.label, expected, detected, match })
+					// draw marker
+					drawCross(ctx, imgP, match ? '#10b981' : '#ef4444')
+					ctx.fillStyle = match ? '#10b981' : '#ef4444'
+					ctx.font = '12px sans-serif'
+					ctx.fillText(t.label, imgP.x + 6, imgP.y - 6)
+				}
+				setVerificationResults(results)
+			} catch (err) {
+				console.error('Verification failed', err)
+				alert('Verification failed: ' + (err as any)?.message)
+			}
+		}
 
 	function resetAll() {
 		setDstPoints([])
@@ -1156,6 +1241,51 @@ export default function Calibrator() {
 		setCalibration({ locked: autoLock })
 	}
 
+	// Advanced auto-calibration: detect board features without markers or manual clicking
+	function autoCalibrate() {
+		if (!canvasRef.current) return alert('Capture a frame or upload a photo first.')
+		
+		// Use the new board detection system
+		let boardDetection = detectBoard(canvasRef.current)
+		boardDetection = refineRingDetection(boardDetection)
+
+		if (!boardDetection.success || !boardDetection.homography || boardDetection.confidence < 50) {
+			alert(`❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click 5 points)`)
+			return
+		}
+
+		// Success! Apply the calibration
+		setDetected({
+			cx: boardDetection.cx,
+			cy: boardDetection.cy,
+			bullInner: boardDetection.bullInner,
+			bullOuter: boardDetection.bullOuter,
+			trebleInner: boardDetection.trebleInner,
+			trebleOuter: boardDetection.trebleOuter,
+			doubleInner: boardDetection.doubleInner,
+			doubleOuter: boardDetection.doubleOuter,
+		})
+
+		setDstPoints(boardDetection.calibrationPoints)
+		drawOverlay(boardDetection.calibrationPoints, boardDetection.homography)
+
+		const shouldLock = (boardDetection.errorPx ?? Number.POSITIVE_INFINITY) <= 2.0
+		setCalibration({
+			H: boardDetection.homography as Homography,
+			createdAt: Date.now(),
+			errorPx: boardDetection.errorPx ?? null,
+			imageSize: { w: canvasRef.current.width, h: canvasRef.current.height },
+			anchors: { src: canonicalRimTargets().slice(0, 4), dst: boardDetection.calibrationPoints },
+			locked: shouldLock ? true : locked,
+		})
+
+		setPhase('computed')
+
+		// Show success message
+		const confidenceLevel = boardDetection.confidence > 90 ? '🟢 Excellent' : boardDetection.confidence > 80 ? '🟢 Good' : boardDetection.confidence > 70 ? '🟡 Fair' : '🟡 Acceptable'
+		alert(`✅ Auto-Calibration Successful!\n\nConfidence: ${confidenceLevel} (${Math.round(boardDetection.confidence)}%)\nError: ${boardDetection.errorPx?.toFixed(2) ?? '?'} pixels\n\nCalibration has been ${shouldLock ? 'locked' : 'computed (not locked yet)'}.`)
+	}
+
 			function detectMarkers() {
 				if (!canvasRef.current) return alert('Capture a frame or upload a photo first.')
 				const result = detectMarkersFromCanvas(canvasRef.current)
@@ -1164,7 +1294,11 @@ export default function Calibrator() {
 					const missingMsg = result.missing.length
 						? ` Missing markers: ${result.missing.map(k => `${k.toUpperCase()} (ID ${MARKER_TARGETS[k]})`).join(', ')}`
 						: ''
-					alert(result.message ? `${result.message}${missingMsg}` : `Marker detection failed.${missingMsg}`)
+					const foundMsg = result.markersFound.length > 0
+						? `\n\nDetected ${result.markersFound.length} markers with IDs: ${result.markersFound.map(m => m.id).join(', ')}`
+						: '\n\nNo markers detected. Make sure markers are on white paper, fully visible, and well-lit.'
+					const fullMsg = `${result.message}${missingMsg}${foundMsg}\n\nYou can still use manual calibration: click 5 points on the board instead.`
+					alert(fullMsg)
 					return
 				}
 				setDetected(null)
@@ -1231,12 +1365,18 @@ export default function Calibrator() {
 		}, [locked, pairCode])
 
 		// DevicePicker moved from SettingsPanel
-		function DevicePicker() {
+			function DevicePicker() {
+				// Toggle to enable debug logs for dropdown behavior (set false to disable)
+				const DROPDOWN_DEBUG = true
 			const { preferredCameraId, preferredCameraLabel, setPreferredCamera, cameraEnabled, setCameraEnabled, preferredCameraLocked, setPreferredCameraLocked } = useUserSettings()
 			const [devices, setDevices] = useState<MediaDeviceInfo[]>([])
+						const [localDevicesSnapshot, setLocalDevicesSnapshot] = useState<MediaDeviceInfo[] | null>(null)
 			const [err, setErr] = useState('')
 			const [dropdownOpen, setDropdownOpen] = useState(false)
 			const dropdownRef = useRef<HTMLDivElement>(null)
+						const ignoreCloseUntilRef = useRef<number>(0)
+						// When true, the document outside-click handler is temporarily suspended
+						const suspendDocHandlerRef = useRef<boolean>(false)
 			const dropdownPortal = document.getElementById('dropdown-portal-root') || (() => {
 				const el = document.createElement('div');
 				el.id = 'dropdown-portal-root';
@@ -1245,13 +1385,24 @@ export default function Calibrator() {
 			})();
 
 			async function enumerate() {
+				if (DROPDOWN_DEBUG) console.debug('[DevicePicker] enumerate start', Date.now())
 				setErr('')
 				try {
 					// Ensure we have permission; otherwise labels may be empty.
-					try { await navigator.mediaDevices.getUserMedia({ video: true }); } catch {}
+					// IMPORTANT: Only request permission without blocking the camera
+					try { 
+						const permStream = await navigator.mediaDevices.getUserMedia({ video: true })
+						// Stop the test stream immediately - don't hold the camera!
+						permStream.getTracks().forEach(t => t.stop())
+					} catch {}
 					const list = await navigator.mediaDevices.enumerateDevices()
 					const cams = list.filter(d => d.kind === 'videoinput')
-					setDevices(cams)
+								setDevices(cams)
+								// If the picker is open, keep a stable snapshot so the list doesn't jump while interacting
+								if (dropdownRef.current && (dropdownRef.current as any).dataset?.open === 'true') {
+									setLocalDevicesSnapshot(cams)
+								}
+								if (DROPDOWN_DEBUG) console.debug('[DevicePicker] enumerate -> devices', cams.map(c=>c.deviceId), 'snapshot?', !!(dropdownRef.current && (dropdownRef.current as any).dataset?.open === 'true'))
 				} catch (e: any) {
 					setErr('Unable to list cameras. Grant camera permission in your browser.')
 				}
@@ -1259,21 +1410,39 @@ export default function Calibrator() {
 
 			useEffect(() => { enumerate() }, [])
 
-			// Close dropdown when clicking outside
-			useEffect(() => {
-				function handleClickOutside(event: MouseEvent) {
-					if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-						setDropdownOpen(false)
-					}
-				}
-				document.addEventListener('mousedown', handleClickOutside)
-				return () => document.removeEventListener('mousedown', handleClickOutside)
-			}, [])
+						// Close dropdown when clicking outside. Guard against immediate close
+						// caused by focus/stream state churn by briefly ignoring outside clicks
+						useEffect(() => {
+								function handleClickOutside(event: MouseEvent) {
+									try {
+										if (DROPDOWN_DEBUG) console.debug('[DevicePicker] document.mousedown', { target: (event && (event.target as any))?.tagName || String(event.target), time: Date.now(), ignoreUntil: ignoreCloseUntilRef.current })
+										// If suspended (recently opened) don't close yet
+										if (suspendDocHandlerRef.current) {
+											if (DROPDOWN_DEBUG) console.debug('[DevicePicker] document.mousedown ignored because suspendDocHandlerRef is true', Date.now())
+											return
+										}
+										// If we're within the ignore window, don't close yet
+										if (Date.now() < (ignoreCloseUntilRef.current || 0)) return
+										// Treat clicks inside the portal as inside the dropdown (portal elements live outside dropdownRef)
+										const tgt = event.target as Node
+										const clickedInsideMain = dropdownRef.current && dropdownRef.current.contains(tgt)
+										const clickedInsidePortal = dropdownPortal && dropdownPortal.contains && dropdownPortal.contains(tgt)
+										if (!clickedInsideMain && !clickedInsidePortal) {
+											if (DROPDOWN_DEBUG) console.debug('[DevicePicker] document.mousedown -> closing dropdown (outside both main+portal)', Date.now())
+											setDropdownOpen(false)
+										}
+									} catch {}
+								}
+							document.addEventListener('mousedown', handleClickOutside)
+							return () => document.removeEventListener('mousedown', handleClickOutside)
+						}, [])
 
-			const selectedDevice = devices.find(d => d.deviceId === preferredCameraId)
-			const selectedLabel = selectedDevice ? 
-				`${selectedDevice.label || 'Camera'}` : 
-				(preferredCameraId ? 'Camera (unavailable)' : 'Auto (browser default)')
+						const selectedDevice = devices.find(d => d.deviceId === preferredCameraId)
+						const selectedLabel = selectedDevice ? 
+							`${selectedDevice.label || 'Camera'}` : 
+							(preferredCameraId ? 'Camera (unavailable)' : 'Auto (browser default)')
+						// Local immediate label so UI reflects selection instantly even if global store
+						const [localSelectedLabel, setLocalSelectedLabel] = useState<string>(selectedLabel)
 
 			// If preferred camera is set but not found, show a warning
 			const preferredCameraUnavailable = preferredCameraId && !selectedDevice
@@ -1304,7 +1473,6 @@ export default function Calibrator() {
 						<button
 							className="btn btn--ghost px-2 py-0.5 text-xs ml-2"
 							onClick={() => {
-								autoLockRef.current = false
 								setPreferredCameraLocked(!preferredCameraLocked)
 							}}
 						>
@@ -1323,66 +1491,35 @@ export default function Calibrator() {
 						<label htmlFor="cameraEnabled-calibrator" className="text-sm">Enable camera for scoring</label>
 					</div>
 					<div className="grid grid-cols-3 gap-2 items-center text-sm">
-						<div className="col-span-2 relative" ref={dropdownRef}>
-							<div 
-								className={`input w-full flex items-center justify-between cursor-pointer`}
-								onClick={() => setDropdownOpen(!dropdownOpen)}
-							>
-								<span className="truncate">{selectedLabel}</span>
-								<svg className={`w-4 h-4 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-								</svg>
-							</div>
-							{dropdownOpen && ReactDOM.createPortal(
-								<div className="fixed left-0 top-0 w-full h-full z-[9999]" style={{ pointerEvents: 'none' }}>
-									<div className="absolute" style={{ left: dropdownRef.current?.getBoundingClientRect().left || 0, top: dropdownRef.current?.getBoundingClientRect().bottom || 0, width: dropdownRef.current?.offsetWidth || 240, pointerEvents: 'auto' }}>
-										<div className="bg-slate-800 border border-slate-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-											<div 
-												className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm"
-												onClick={() => {
-													setPreferredCamera(undefined, '', true)
-												}}
-											>
-												Auto (browser default)
-											</div>
-											{devices.map(d => {
-												const label = `${d.label || 'Camera'}`
-												return (
-													<div 
-														key={d.deviceId} 
-														className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm"
-														onClick={() => {
-															setPreferredCamera(d.deviceId, d.label || '', true)
-														}}
-													>
-														{label}
-													</div>
-												)
-											})}
-											<div 
-												key="phone-camera" 
-												className="px-3 py-2 hover:bg-slate-700 cursor-pointer text-sm text-indigo-400"
-												onClick={() => {
-													setMode('phone');
-													setPhase('camera');
-													setStreaming(false);
-													setSnapshotSet(false);
-													// Only start pairing if user clicks 'Pair Phone Camera' button
-												}}
-											>
-												📱 Phone Camera
-											</div>
-											<div className="px-3 py-2 text-right">
-												<button className="btn btn--ghost px-2 py-1 text-xs" onClick={() => setDropdownOpen(false)}>Close</button>
-											</div>
-										</div>
-									</div>
-								</div>,
-								dropdownPortal
-							)}
-						</div>
+						<select 
+							className="input col-span-2"
+							value={preferredCameraId || 'auto'}
+							onChange={(e) => {
+								const val = e.target.value
+								if (DROPDOWN_DEBUG) console.debug('[DevicePicker] select onChange', val, Date.now())
+								if (val === 'auto') {
+									try { setPreferredCamera(undefined, '', true) } catch {}
+								} else if (val === 'phone') {
+									try { setPreferredCamera(undefined, 'Phone Camera', true) } catch {}
+									try { setMode('phone'); setPhase('camera'); setStreaming(false); setSnapshotSet(false); } catch {}
+								} else {
+									const device = devices.find(d => d.deviceId === val)
+									if (device) {
+										try { setPreferredCamera(device.deviceId, device.label || '', true) } catch {}
+									}
+								}
+							}}
+						>
+							<option value="auto">Auto (browser default)</option>
+							{devices.map(d => (
+								<option key={d.deviceId} value={d.deviceId}>
+									{d.label || 'Camera'}
+								</option>
+							))}
+							<option value="phone">📱 Phone Camera</option>
+						</select>
 						<div className="text-right">
-							<button className="btn px-2 py-1" onClick={enumerate} disabled={streaming}>Refresh</button>
+							<button className="btn px-2 py-1" onClick={() => { testCamera(preferredCameraId || undefined); }} disabled={streaming}>Test</button>
 						</div>
 					</div>
 					{preferredCameraLabel && (
@@ -1471,43 +1608,22 @@ export default function Calibrator() {
 								{streaming ? 'Live stream active' : 'Stream idle'}
 							</span>
 							{locked ? (
-								<span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/60 bg-emerald-500/10 px-3 py-1 text-emerald-100">
-									<span>Locked • {errorPx != null ? `${errorPx.toFixed(2)}px error` : 'ready'}</span>
-								</span>
-							) : (
-								<span className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-amber-100">
-									<span>Not locked</span>
-									{errorPx != null && <span>• {errorPx.toFixed(2)}px</span>}
-								</span>
-							)}
+								<div className="space-y-3 rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm">
+									<div className="flex items-center justify-between gap-2">
+										<div className="flex items-center gap-3">
+											<div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20"><span className="text-lg">✓</span></div>
+											<div>
+												<h4 className="font-semibold text-emerald-100">Calibration active</h4>
+												<p className="text-xs opacity-80">Your calibration is saved and active across all game modes. It will be used in Online, Offline, and Tournaments.</p>
+											</div>
+										</div>
+										<button className="btn btn--ghost px-2 py-1 text-xs whitespace-nowrap" onClick={() => setCalibration({ locked: false })} title="Unlock to recalibrate">Unlock</button>
+									</div>
+									{errorPx != null && <div className="text-xs opacity-75">Precision: {errorPx.toFixed(2)} px RMS error</div>}
+								</div>
+							) : null}
 						</div>
 					</header>
-
-					{locked && H && (
-						<section className="space-y-3 rounded-2xl border border-emerald-400/40 bg-emerald-500/10 p-4 text-sm">
-							<div className="flex items-center justify-between gap-2">
-								<div className="flex items-center gap-3">
-									<div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20">
-										<span className="text-lg">✓</span>
-									</div>
-									<div>
-										<h4 className="font-semibold text-emerald-100">Calibration active</h4>
-										<p className="text-xs opacity-80">Your calibration is saved and active across all game modes. It will be used in Online, Offline, and Tournaments.</p>
-									</div>
-								</div>
-								<button
-									className="btn btn--ghost px-2 py-1 text-xs whitespace-nowrap"
-									onClick={() => setCalibration({ locked: false })}
-									title="Unlock to recalibrate"
-								>
-									Unlock
-								</button>
-							</div>
-							{errorPx != null && (
-								<div className="text-xs opacity-75">Precision: {errorPx.toFixed(2)} px RMS error</div>
-							)}
-						</section>
-					)}
 
 					<div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
 						<section className="space-y-4">
@@ -1564,7 +1680,7 @@ export default function Calibrator() {
 									className="relative w-full overflow-hidden rounded-2xl border border-indigo-400/30 bg-black"
 									style={{ aspectRatio: frameSize ? `${frameSize.w} / ${frameSize.h}` : '16 / 9' }}
 								>
-									{(!streaming || !paired) && (
+									{(mode === 'phone' ? (!streaming || !paired) : !streaming) && (
 										<div className="absolute inset-0 z-20 flex items-center justify-center bg-gradient-to-br from-black/40 to-black/10">
 											<DartLoader calibrationComplete={phase === 'computed'} />
 										</div>
@@ -1613,6 +1729,49 @@ export default function Calibrator() {
 									<input type="checkbox" className="accent-indigo-600" checked={calibrationGuide} onChange={e => setCalibrationGuide(e.target.checked)} />
 									Show preferred-view guide overlay
 								</label>
+
+								{/* Stage cards in the main free space — quick access to the three calibration stages */}
+								<div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 overflow-visible">
+									<div className="rounded-2xl border border-white/10 bg-white/5 p-4 overflow-visible">
+										<h3 className="text-sm font-semibold">Stage 1 · Capture</h3>
+										<p className="text-xs opacity-70">Start your camera or upload a photo to capture the board.</p>
+										<div className="mt-3 flex flex-col gap-2">
+											{mode === 'local' && <button className="btn" onClick={startCamera}>Enable camera</button>}
+											{mode === 'phone' && <button className="btn" onClick={startPhonePairing}>Pair phone camera</button>}
+											{mode === 'wifi' && <button className="btn" onClick={startWifiConnection}>Connect wifi camera</button>}
+											<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture frame</button>
+											<button className="btn" onClick={triggerUpload}>Upload photo</button>
+										</div>
+									</div>
+
+									<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+										<h3 className="text-sm font-semibold">Stage 2 · Auto-Calibrate</h3>
+										<p className="text-xs opacity-70">Automatically detect dartboard rings and compute calibration without any markers or clicking.</p>
+										<div className="mt-3 flex flex-col gap-2">
+											<button className="btn bg-emerald-600 hover:bg-emerald-700 font-semibold" disabled={!snapshotSet} onClick={autoCalibrate}>🎯 Auto-Calibrate (Advanced)</button>
+											<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Legacy: Auto detect rings</button>
+											<button className="btn" disabled={!snapshotSet} onClick={detectMarkers}>Legacy: Detect markers (print required)</button>
+											<button className="btn btn--ghost" onClick={openMarkerSheet}>Print markers</button>
+										</div>
+										<div className="mt-2 text-xs opacity-70">Confidence: {confidence}%</div>
+									</div>
+
+									<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+										<h3 className="text-sm font-semibold">Stage 3 · Align & lock</h3>
+										<p className="text-xs opacity-70">Click the board points, refine edges and lock calibration when satisfied.</p>
+										<div className="mt-3 flex flex-col gap-2">
+											<button className="btn" disabled={dstPoints.length < 4} onClick={compute}>Compute</button>
+											<button className={`btn ${locked ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`} onClick={() => setCalibration({ locked: !locked })}>{locked ? 'Unlock' : 'Lock in'}</button>
+											<button className="btn" onClick={() => runVerification()}>Verify</button>
+										</div>
+									</div>
+								</div>
+							</div>
+
+							{/* Pro tip section */}
+							<div className="mt-4 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
+								<div className="text-xs font-semibold text-blue-300 mb-1">💡 Pro Tip for Perfect Calibration</div>
+								<div className="text-xs opacity-80">Click the 4 corners of the double ring at <span className="font-semibold">D20, D6, D3, and D11</span>, then click the <span className="font-semibold">center bull</span>. This evenly-spaced layout provides the most accurate calibration.</div>
 							</div>
 
 							<div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
@@ -1622,7 +1781,7 @@ export default function Calibrator() {
 								</div>
 								<div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
 									<div className="uppercase tracking-wide opacity-60">Points selected</div>
-									<div className="text-sm font-semibold">{dstPoints.length} / 6</div>
+									<div className="text-sm font-semibold">{dstPoints.length} / 5</div>
 								</div>
 								<div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
 									<div className="uppercase tracking-wide opacity-60">Fit error</div>
@@ -1686,118 +1845,7 @@ export default function Calibrator() {
 								</section>
 							)}
 
-							<section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-								<div>
-									<h3 className="text-sm font-semibold">Step 1 · Capture image</h3>
-									<p className="text-xs opacity-70">Start your preferred camera or upload a static photo of the board.</p>
-								</div>
-								<div className="flex flex-wrap gap-2">
-									{!streaming ? (
-										<>
-											{mode === 'local' && (
-												<>
-													<button className="btn" onClick={startCamera} title="Click to enable camera (will request permission if needed)">
-														Enable camera
-													</button>
-													<button className="btn btn--ghost text-xs" onClick={async () => {
-														try {
-															await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-															console.log('[Calibrator] Camera permission granted via button')
-														} catch (err) {
-															alert('Camera permission denied. Please enable camera access in your browser settings.')
-														}
-													}}>
-														Request permission
-													</button>
-												</>
-											)}
-											{mode === 'phone' && <button className="btn" onClick={startPhonePairing}>Pair phone camera</button>}
-											{mode === 'wifi' && <button className="btn" onClick={startWifiConnection}>Connect wifi camera</button>}
-										</>
-									) : (
-										<>
-											<button className="btn bg-rose-600 hover:bg-rose-700" onClick={() => stopCamera(true)}>Stop camera</button>
-											<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture frame</button>
-										</>
-									)}
-								</div>
-								<div className="flex flex-wrap gap-2">
-									<input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={onUploadPhotoChange} />
-									<button className="btn" onClick={triggerUpload}>Upload photo</button>
-								</div>
-							</section>
-
-							<section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-								<div className="flex items-center justify-between gap-2">
-									<div>
-										<h3 className="text-sm font-semibold">Step 2 · Detect markers</h3>
-										<p className="text-xs opacity-70">Use fiducials or auto-detect to seed the rim points.</p>
-									</div>
-									<span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] ${confidence >= 85 ? 'border-emerald-400/60 bg-emerald-500/10 text-emerald-100' : 'border-white/20 bg-white/5 text-slate-200'}`}>
-										<span className="opacity-70">Confidence</span>
-										<span>{confidence}%</span>
-									</span>
-								</div>
-								<label className="inline-flex items-center gap-2 text-xs">
-									<input type="checkbox" className="accent-indigo-600" checked={liveDetect} onChange={e => setLiveDetect(e.target.checked)} />
-									Live auto-detect while streaming
-								</label>
-								<div className="flex flex-wrap gap-2">
-									<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Auto detect</button>
-									<button className="btn" disabled={!snapshotSet} onClick={detectMarkers}>Detect markers</button>
-									<button className="btn btn--ghost" onClick={openMarkerSheet} title="Print 4 markers (TOP/RIGHT/BOTTOM/LEFT)">Open marker sheet</button>
-								</div>
-								<p className="text-[11px] opacity-70">Tip: Use the 4 printed ArUco markers (IDs 0–3) at the double rim’s TOP, RIGHT, BOTTOM, and LEFT. Print at 100% on white paper, avoid glare, and fill the frame when capturing.</p>
-								{markerResult && (
-									<div
-										className={`rounded-lg border px-3 py-2 text-xs ${markerResult.success ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-100' : 'bg-rose-500/10 border-rose-500/30 text-rose-100'}`}
-									>
-										{markerResult.success ? (
-											<div className="space-y-1">
-												<div>
-													Detected markers → board anchors:{' '}
-													{MARKER_ORDER.map((key) => {
-														const assignment = markerResult.assignments?.[key]
-														return `${key.toUpperCase()}→${assignment ? `ID ${assignment.id}` : '—'}`
-													}).join(', ')}
-												</div>
-												{markerResult.errorPx != null && <div>RMS error: {markerResult.errorPx.toFixed(2)} px</div>}
-												<div className="opacity-80">Markers correspond to IDs TOP {MARKER_TARGETS.top}, RIGHT {MARKER_TARGETS.right}, BOTTOM {MARKER_TARGETS.bottom}, LEFT {MARKER_TARGETS.left}.</div>
-											</div>
-										) : (
-											<div className="space-y-1">
-												<div>{markerResult.message || 'Unable to detect all markers.'}</div>
-												{markerResult.missing.length > 0 && (
-													<div>Missing: {markerResult.missing.map(k => `${k.toUpperCase()} (ID ${MARKER_TARGETS[k]})`).join(', ')}</div>
-												)}
-											</div>
-										)}
-									</div>
-								)}
-							</section>
-
-							<section className="space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4">
-								<div>
-									<h3 className="text-sm font-semibold">Step 3 · Align & lock</h3>
-									<p className="text-xs opacity-70">Click 6 points in order: ① TOP ② RIGHT ③ BOTTOM ④ LEFT of double rim, then ⑤ BULLSEYE center ⑥ outer bull top. Refine edges, then lock.</p>
-								</div>
-								<div className="flex flex-wrap gap-2">
-									<button className="btn" disabled={dstPoints.length < 4} onClick={compute}>Compute</button>
-									<button className={`btn ${locked ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`} onClick={() => setCalibration({ locked: !locked })}>
-										{locked ? 'Unlock' : 'Lock in'}
-									</button>
-								</div>
-								{locked && (
-									<div className="text-xs opacity-75">
-										Calibration saved {errorPx != null ? `· error ${errorPx.toFixed(2)} px` : ''}
-									</div>
-								)}
-								<div className="flex flex-wrap gap-2">
-									<button className="btn" disabled={dstPoints.length === 0} onClick={undoPoint}>Undo</button>
-									<button className="btn" disabled={dstPoints.length === 0} onClick={refinePoints}>Refine points</button>
-									<button className="btn" onClick={resetAll}>Reset</button>
-								</div>
-							</section>
+							{/* Sidebar Step cards intentionally removed — these controls remain available in the main stage cards above to avoid showing duplicate controls in the right-hand sidebar. */}
 						</aside>
 					</div>
 

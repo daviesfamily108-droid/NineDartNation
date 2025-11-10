@@ -2111,7 +2111,7 @@ app.get('/api/tournaments', async (req, res) => {
 })
 
 app.post('/api/tournaments/create', async (req, res) => {
-  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeAmount, currency, prizeNotes, requesterEmail } = req.body || {}
+  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeAmount, currency, prizeNotes, requesterEmail, requireCalibration } = req.body || {}
   const id = nanoid(10)
   // Only the owner can create "official" tournaments or set prize metadata
   const isOwner = String(requesterEmail || '').toLowerCase() === OWNER_EMAIL
@@ -2133,6 +2133,7 @@ app.post('/api/tournaments/create', async (req, res) => {
     capacity: Math.min(64, Math.max(6, Number(capacity) || 8)),
   participants: [],
     official: isOfficial,
+    requireCalibration: !!requireCalibration,
     prize: isOfficial ? (pType !== 'none') : false,
     prizeType: pType,
     prizeAmount: amount || undefined,

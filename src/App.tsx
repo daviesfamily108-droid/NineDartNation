@@ -31,6 +31,7 @@ import HelpAssistant from './components/HelpAssistant'
 import GlobalCameraLogger from './components/GlobalCameraLogger'
 import GlobalPhoneVideoSink from './components/GlobalPhoneVideoSink'
 import CameraStatusBadge from './components/CameraStatusBadge'
+import Footer from './components/Footer'
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -327,7 +328,7 @@ export default function App() {
   const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username||'NDN')}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`
   return (
     <ThemeProvider>
-  <div ref={appRef} className={`${user?.fullAccess ? 'premium-body' : ''} h-screen overflow-hidden p-1 xs:p-2 sm:p-3 md:p-4`}>
+  <div ref={appRef} className={`${user?.fullAccess ? 'premium-body' : ''} h-screen overflow-hidden pt-1 pb-0 px-1 xs:pt-2 xs:pb-0 xs:px-2 sm:pt-3 sm:pb-0 sm:px-3 md:pt-4 md:pb-0 md:px-4`}>
         <Toaster />
   <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-2 xs:gap-3 sm:gap-4 h-full overflow-hidden">
           {/* Desktop sidebar; hidden on mobile/tablet */}
@@ -344,8 +345,8 @@ export default function App() {
               <div className="flex items-center gap-2 order-1">
                 <h1
                   className="text-lg xs:text-xl sm:text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap cursor-pointer select-none"
-                  onClick={() => { if (isMobile) setTab('score') }}
-                  title={isMobile ? 'Go Home' : undefined}
+                  onClick={() => { setTab('score') }}
+                  title={'Go Home'}
                 >
                   NINE-DART-NATION 🎯
                 </h1>
@@ -418,24 +419,24 @@ export default function App() {
                 user={user}
               />
             )}
-            <main id="ndn-main-scroll" className="space-y-4 flex-1 overflow-y-auto pr-1">
+            <main id="ndn-main-scroll" className="space-y-4 flex-1 overflow-y-auto pr-1 flex flex-col">
             {tab === 'settings' && (
-              <ScrollFade>
+              <ScrollFade className="flex-1 min-h-0">
                 <SettingsPanel user={user} />
               </ScrollFade>
             )}
             {tab === 'score' && (
-              <ScrollFade>
+              <ScrollFade className="flex-1 min-h-0">
                 <Home user={user} />
               </ScrollFade>
             )}
             {tab === 'online' && (
-              <ScrollFade>
+              <ScrollFade className="flex-1 min-h-0">
                 <OnlinePlay user={user} />
               </ScrollFade>
             )}
             {tab === 'offline' && (
-              <ScrollFade>
+              <ScrollFade className="flex-1 min-h-0">
                 <OfflinePlay user={user} />
               </ScrollFade>
             )}
@@ -446,30 +447,30 @@ export default function App() {
               </ScrollFade>
             </div>
             {tab === 'friends' && (
-              <ScrollFade>
+              <ScrollFade className="flex-1 min-h-0">
                 <Friends user={user} />
               </ScrollFade>
             )}
             {tab === 'stats' && (
-              <ScrollFade>
+              <ScrollFade className="flex-1 min-h-0">
                 <StatsPanel user={user} />
               </ScrollFade>
             )}
             {tab === 'tournaments' && (
-              <ScrollFade>
+              <ScrollFade className="flex-1 min-h-0">
                 <Tournaments user={user} />
               </ScrollFade>
             )}
             {tab === 'admin' && (
-              <ScrollFade>
-                <div className="space-y-6">
+              <ScrollFade className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 space-y-6">
                   <AdminDashboard user={user} />
                   <OpsDashboard user={user} />
                 </div>
               </ScrollFade>
             )}
             {tab === 'fullaccess' && (
-              <ScrollFade>
+              <ScrollFade className="flex-1 min-h-0">
                 <AdminAccess user={user} />
               </ScrollFade>
             )}
@@ -480,6 +481,8 @@ export default function App() {
 
   {/* Floating Help Assistant - Always visible */}
   <HelpAssistant />
+  {/* App footer with legal notice */}
+  <Footer />
   {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
   <GlobalCameraLogger />
       {/* Global phone camera overlay - visibility controlled by store */}

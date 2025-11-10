@@ -60,6 +60,181 @@ if (!supabase) {
   console.warn('[DB] Supabase not configured - using in-memory storage only');
 }
 
+// Highlights persistence (server-wide). If Supabase is configured we'll use it,
+// otherwise fall back to a file-backed JSON store under server/data/highlights.json
+const HIGHLIGHTS_FILE = path.join(__dirname, 'data', 'highlights.json');
+let highlightsCache = null; // { username: [ {id,ts,data}, ... ] }
+
+function loadHighlightsFromDisk() {
+  if (highlightsCache !== null) return highlightsCache;
+  try {
+    if (fs.existsSync(HIGHLIGHTS_FILE)) {
+      const raw = fs.readFileSync(HIGHLIGHTS_FILE, 'utf8');
+      highlightsCache = JSON.parse(raw || '{}') || {};
+      console.log('[Highlights] Loaded highlights from disk');
+    } else {
+      highlightsCache = {};
+    }
+  } catch (err) {
+    console.warn('[Highlights] Failed to load from disk:', err && err.message);
+    highlightsCache = {};
+  }
+  return highlightsCache;
+}
+
+// Help requests (helpdesk) persistence
+const HELP_FILE = path.join(__dirname, 'data', 'help_requests.json')
+let helpCache = null
+
+function loadHelpFromDisk() {
+  if (helpCache !== null) return helpCache
+  try {
+    const file = HELP_FILE
+    if (fs.existsSync(file)) {
+      const raw = fs.readFileSync(file, 'utf8')
+      helpCache = JSON.parse(raw || '[]') || []
+      console.log('[Help] Loaded help requests from disk')
+    } else {
+      helpCache = []
+    }
+  } catch (err) {
+    console.warn('[Help] Failed to load from disk:', err && err.message)
+    helpCache = []
+  }
+  return helpCache
+}
+
+function persistHelpToDisk() {
+  try {
+    const dir = path.dirname(HELP_FILE)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(HELP_FILE, JSON.stringify(helpCache || [], null, 2), 'utf8')
+  } catch (err) { console.warn('[Help] Failed to persist to disk:', err && err.message) }
+}
+
+async function createHelpRequest(username, message, meta) {
+  const rec = { id: nanoid(8), ts: Date.now(), username: username || null, message: message || '', meta: meta || {}, status: 'open', claimedBy: null, messages: [] }
+  // Supabase not used for help requests currently
+  const store = loadHelpFromDisk()
+  store.unshift(rec)
+  if (store.length > 200) store.length = 200
+  helpCache = store
+  persistHelpToDisk()
+  console.log('[Help] New request:', rec.id, 'from', username || 'anonymous')
+  return rec
+}
+
+function getAdminFromReq(req) {
+  try {
+    const authHeader = String(req.headers && req.headers.authorization || '')
+    const token = authHeader.split(' ')[1]
+    if (!token) return null
+    const decoded = jwt.verify(token, JWT_SECRET)
+    const email = String(decoded.email || decoded.username || '').toLowerCase()
+    const user = users.get(email) || null
+    if (adminEmails.has(email) || (user && user.admin)) return { email, user }
+    return null
+  } catch (err) {
+    return null
+  }
+}
+
+function getOwnerFromReq(req) {
+  try {
+    const adm = getAdminFromReq(req)
+    if (!adm) return null
+    if ((adm.email || '').toLowerCase() === OWNER_EMAIL) return adm
+    return null
+  } catch { return null }
+}
+
+async function listHelpRequests() {
+  return loadHelpFromDisk()
+}
+
+async function claimHelpRequest(id, adminUser) {
+  const store = loadHelpFromDisk()
+  const idx = store.findIndex(r => String(r.id) === String(id))
+  if (idx === -1) return null
+  store[idx].status = 'claimed'
+  store[idx].claimedBy = adminUser || null
+  persistHelpToDisk()
+  return store[idx]
+}
+
+async function resolveHelpRequest(id, adminUser) {
+  const store = loadHelpFromDisk()
+  const idx = store.findIndex(r => String(r.id) === String(id))
+  if (idx === -1) return null
+  store[idx].status = 'resolved'
+  store[idx].claimedBy = adminUser || store[idx].claimedBy || null
+  persistHelpToDisk()
+  return store[idx]
+}
+
+function persistHighlightsToDisk() {
+  try {
+    const dir = path.dirname(HIGHLIGHTS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(HIGHLIGHTS_FILE, JSON.stringify(highlightsCache || {}, null, 2), 'utf8');
+    // eslint-disable-next-line no-empty
+  } catch (err) { console.warn('[Highlights] Failed to persist to disk:', err && err.message); }
+}
+
+async function getUserHighlightsPersistent(username) {
+  // If Supabase is available prefer it
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('highlights').select('*').eq('username', username).order('ts', { ascending: false }).limit(100);
+      if (error) throw error;
+      return (data || []).map(r => ({ id: r.id, ts: r.ts, data: r.data }));
+    } catch (err) {
+      console.warn('[Highlights] Supabase fetch error:', err && err.message);
+    }
+  }
+  const store = loadHighlightsFromDisk();
+  return store[username] || [];
+}
+
+async function saveUserHighlightPersistent(username, payload) {
+  if (supabase) {
+    try {
+      const insert = { username, ts: Date.now(), data: payload };
+      const { data, error } = await supabase.from('highlights').insert(insert).select().single();
+      if (error) throw error;
+      return { id: data.id, ts: data.ts, data: data.data };
+    } catch (err) {
+      console.warn('[Highlights] Supabase insert error:', err && err.message);
+    }
+  }
+  const store = loadHighlightsFromDisk();
+  store[username] = store[username] || [];
+  const rec = { id: nanoid(8), ts: Date.now(), data: payload };
+  store[username].unshift(rec);
+  if (store[username].length > 100) store[username] = store[username].slice(0, 100);
+  persistHighlightsToDisk();
+  return rec;
+}
+
+async function deleteUserHighlightPersistent(username, id) {
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('highlights').delete().eq('username', username).eq('id', id);
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.warn('[Highlights] Supabase delete error:', err && err.message);
+    }
+  }
+  const store = loadHighlightsFromDisk();
+  if (!store[username]) return false;
+  const before = store[username].length;
+  store[username] = store[username].filter(r => String(r.id) !== String(id));
+  if (store[username].length === before) return false;
+  persistHighlightsToDisk();
+  return true;
+}
+
 // Initialize Redis for cross-server session management
 const redis = require('redis');
 
@@ -356,6 +531,7 @@ app.use((req, res, next) => {
   })
   next()
 })
+// (debug middleware removed)
 // Guard JSON body size to avoid excessive memory
 app.use(express.json({ limit: '100kb' }));
 // Minimal CSRF guard for cookie-bearing browser requests:
@@ -628,6 +804,171 @@ app.post('/api/user/calibration', (req, res) => {
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
+
+// User highlights storage (save notable visits: checkout >50 or visit >100)
+app.get('/api/user/highlights', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const username = decoded.username;
+    const highlights = await getUserHighlightsPersistent(username);
+    return res.json({ highlights });
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid token.' });
+  }
+});
+
+app.post('/api/user/highlights', express.json(), async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const username = decoded.username;
+    const payload = req.body || {};
+    const rec = await saveUserHighlightPersistent(username, payload);
+    console.log('[Highlights] Saved highlight for user:', username);
+    return res.json({ ok: true, highlight: rec });
+  } catch (err) {
+    console.error('[Highlights] Error:', err && err.message);
+    return res.status(401).json({ error: 'Invalid token.' });
+  }
+});
+
+// Delete a highlight by id for the authenticated user
+app.delete('/api/user/highlights/:id', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const username = decoded.username;
+    const id = String(req.params.id || '');
+    if (!id) return res.status(400).json({ error: 'Highlight id required.' });
+    const ok = await deleteUserHighlightPersistent(username, id);
+    if (!ok) return res.status(404).json({ error: 'Highlight not found.' });
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid token.' });
+  }
+});
+
+// Create a help request (open to authenticated or anonymous users)
+app.post('/api/help/requests', express.json(), async (req, res) => {
+  try {
+    const token = (req.headers.authorization || '').split(' ')[1]
+    let username = null
+    if (token) {
+      try { const decoded = jwt.verify(token, JWT_SECRET); username = decoded.username } catch {}
+    }
+    const body = req.body || {}
+    const message = body.message || ''
+    if (!message) return res.status(400).json({ error: 'Message required.' })
+    const rec = await createHelpRequest(username, message, body.meta || {})
+    // Broadcast to connected admin WS clients so admins see new requests immediately
+    try {
+      if (typeof wss !== 'undefined' && wss && wss.clients) {
+        const payload = JSON.stringify({ type: 'help-request', request: rec })
+        for (const client of wss.clients) {
+          try {
+            if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+              client.send(payload)
+            }
+          } catch (e) { /* ignore per-client send errors */ }
+        }
+      }
+    } catch (e) { console.warn('[Help] Broadcast new request failed', e && e.message) }
+
+    return res.json({ ok: true, request: rec })
+  } catch (err) { console.error('[Help] Create error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
+})
+
+// Admin: list help requests
+app.get('/api/admin/help-requests', async (req, res) => {
+  try {
+    const admin = getAdminFromReq(req)
+    if (!admin) return res.status(403).json({ error: 'Forbidden' })
+    const list = await listHelpRequests()
+    return res.json({ ok: true, requests: list })
+  } catch (err) { console.error('[Help] List error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
+})
+
+// Admin: claim a help request
+app.post('/api/admin/help-requests/:id/claim', express.json(), async (req, res) => {
+  try {
+    const admin = getAdminFromReq(req)
+    if (!admin) return res.status(403).json({ error: 'Forbidden' })
+    const id = String(req.params.id || '')
+    const adminEmail = admin.email
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const rec = await claimHelpRequest(id, adminEmail)
+    if (!rec) return res.status(404).json({ error: 'Not found' })
+    // Broadcast claim update to admin clients (and possibly the user)
+    try {
+      const payload = JSON.stringify({ type: 'help-request-updated', request: rec })
+      if (typeof wss !== 'undefined' && wss && wss.clients) {
+        for (const client of wss.clients) {
+          try {
+            if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+              client.send(payload)
+            }
+          } catch (e) {}
+        }
+        // Also notify the requesting user if online
+        if (rec.username) {
+          const u = users.get(rec.username)
+          if (u && u.wsId) {
+            const target = clients.get(u.wsId)
+            if (target && target.readyState === 1) {
+              try { target.send(payload) } catch {}
+            }
+          }
+        }
+      }
+    } catch (e) { console.warn('[Help] Broadcast claim failed', e && e.message) }
+
+    return res.json({ ok: true, request: rec })
+  } catch (err) { console.error('[Help] Claim error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
+})
+
+// Admin: resolve a help request
+app.post('/api/admin/help-requests/:id/resolve', express.json(), async (req, res) => {
+  try {
+    const admin = getAdminFromReq(req)
+    if (!admin) return res.status(403).json({ error: 'Forbidden' })
+    const id = String(req.params.id || '')
+    const adminEmail = admin.email
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const rec = await resolveHelpRequest(id, adminEmail)
+    if (!rec) return res.status(404).json({ error: 'Not found' })
+    // Broadcast resolve update
+    try {
+      const payload = JSON.stringify({ type: 'help-request-updated', request: rec })
+      if (typeof wss !== 'undefined' && wss && wss.clients) {
+        for (const client of wss.clients) {
+          try {
+            if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+              client.send(payload)
+            }
+          } catch (e) {}
+        }
+        if (rec.username) {
+          const u = users.get(rec.username)
+          if (u && u.wsId) {
+            const target = clients.get(u.wsId)
+            if (target && target.readyState === 1) {
+              try { target.send(payload) } catch {}
+            }
+          }
+        }
+      }
+    } catch (e) { console.warn('[Help] Broadcast resolve failed', e && e.message) }
+
+    return res.json({ ok: true, request: rec })
+  } catch (err) { console.error('[Help] Resolve error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
+})
 
 // Camera pairing session calibration storage (temporary, code-based)
 app.get('/cam/calibration/:code', async (req, res) => {
@@ -976,10 +1317,9 @@ app.get('/api/admins/check', (req, res) => {
 })
 
 app.post('/api/admins/grant', (req, res) => {
-  const { email, requesterEmail } = req.body || {}
-  if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const { email } = req.body || {}
   const target = String(email || '').toLowerCase()
   if (!target) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
   adminEmails.add(target)
@@ -987,10 +1327,9 @@ app.post('/api/admins/grant', (req, res) => {
 })
 
 app.post('/api/admins/revoke', (req, res) => {
-  const { email, requesterEmail } = req.body || {}
-  if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const { email } = req.body || {}
   const target = String(email || '').toLowerCase()
   if (!target) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
   if (target === OWNER_EMAIL) return res.status(400).json({ ok: false, error: 'CANNOT_REVOKE_OWNER' })
@@ -1000,8 +1339,8 @@ app.post('/api/admins/revoke', (req, res) => {
 
 // Admin ops (owner-only; demo ��� not secure)
 app.get('/api/admin/status', (req, res) => {
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   res.json({
     ok: true,
     server: {
@@ -1017,10 +1356,9 @@ app.get('/api/admin/status', (req, res) => {
 })
 
 app.post('/api/admin/maintenance', (req, res) => {
-  const { enabled, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const { enabled } = req.body || {}
   maintenanceMode = !!enabled
   // Optionally notify clients
   broadcastAll({ type: 'maintenance', enabled: maintenanceMode })
@@ -1028,10 +1366,9 @@ app.post('/api/admin/maintenance', (req, res) => {
 })
 
 app.post('/api/admin/announce', (req, res) => {
-  const { message, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const { message } = req.body || {}
   const msg = String(message || '').trim()
   if (!msg) return res.status(400).json({ ok: false, error: 'MESSAGE_REQUIRED' })
   lastAnnouncement = { message: msg, ts: Date.now() }
@@ -1040,26 +1377,26 @@ app.post('/api/admin/announce', (req, res) => {
 })
 
 app.post('/api/admin/subscription', (req, res) => {
-  const { fullAccess, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const { fullAccess } = req.body || {}
   subscription.fullAccess = !!fullAccess
   res.json({ ok: true, subscription })
 })
 
 // Admin: list/grant/revoke per-email premium overrides (demo)
 app.get('/api/admin/premium-winners', (req, res) => {
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   const now = Date.now()
   const list = Array.from(premiumWinners.entries()).map(([email, exp]) => ({ email, expiresAt: exp, expired: exp <= now }))
   res.json({ ok: true, winners: list })
 })
 
 app.post('/api/admin/premium/grant', (req, res) => {
-  const { email, days, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const { email, days } = req.body || {}
   const target = String(email || '').toLowerCase()
   const d = Number(days) || 30
   if (!target) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
@@ -1069,8 +1406,9 @@ app.post('/api/admin/premium/grant', (req, res) => {
 })
 
 app.post('/api/admin/premium/revoke', (req, res) => {
-  const { email, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const { email } = req.body || {}
   const target = String(email || '').toLowerCase()
   if (!target) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
   premiumWinners.delete(target)
@@ -1078,16 +1416,15 @@ app.post('/api/admin/premium/revoke', (req, res) => {
 })
 
 app.get('/api/admin/matches', (req, res) => {
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   res.json({ ok: true, matches: Array.from(matches.values()) })
 })
 
 app.post('/api/admin/matches/delete', (req, res) => {
-  const { matchId, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const { matchId } = req.body || {}
   if (!matchId || !matches.has(matchId)) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
   matches.delete(matchId)
   // Broadcast updated lobby
@@ -1107,8 +1444,8 @@ app.get('/api/https-info', (req, res) => {
 // Email template previews (owner-only)
 app.get('/api/email/preview', (req, res) => {
   const kind = String(req.query.kind || 'reset')
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).send('FORBIDDEN')
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).send('FORBIDDEN')
   let out
   if (kind === 'reset') out = EmailTemplates.passwordReset({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...emailCopy.reset })
   else if (kind === 'reminder') out = EmailTemplates.passwordReminder({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...emailCopy.reminder })
@@ -1585,6 +1922,116 @@ wss.on('connection', (ws, req) => {
           sess.pendingMessages.push({ type: data.type, payload: data.payload })
           await camSessions.set(code, sess)
         }
+  } else if (data.type === 'help-message') {
+          // Route helpdesk chat messages between user and admin in real-time
+          try {
+            const requestId = String(data.requestId || '')
+            const text = String(data.message || '')
+            if (!requestId || !text) return
+            const store = loadHelpFromDisk()
+            const idx = store.findIndex(r => String(r.id) === String(requestId))
+            if (idx === -1) return
+            const reqRec = store[idx]
+            const msgObj = {
+              fromEmail: ws._email || null,
+              fromName: ws._username || null,
+              message: text,
+              ts: Date.now(),
+              admin: !!(ws._email && adminEmails.has(String(ws._email).toLowerCase()))
+            }
+            reqRec.messages = reqRec.messages || []
+            reqRec.messages.push(msgObj)
+            // Persist change
+            helpCache = store
+            persistHelpToDisk()
+
+            const payload = JSON.stringify({ type: 'help-message', requestId: reqRec.id, message: msgObj })
+
+            // If sender is admin, target the requesting user
+            if (ws._email && adminEmails.has(String(ws._email).toLowerCase())) {
+              if (reqRec.username) {
+                const u = users.get(reqRec.username)
+                if (u && u.wsId) {
+                  const target = clients.get(u.wsId)
+                  if (target && target.readyState === 1) {
+                    try { target.send(payload) } catch {}
+                  }
+                }
+              }
+              // Also echo to other admin clients (so admin UI chat updates)
+              for (const client of wss.clients) {
+                try {
+                  if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+                    client.send(payload)
+                  }
+                } catch (e) {}
+              }
+            } else {
+              // Sender is user (or anonymous). If claimed, route to claimed admin; otherwise broadcast to all admins
+              let sentToAdmin = false
+              if (reqRec.claimedBy) {
+                const adminEmail = String(reqRec.claimedBy || '').toLowerCase()
+                const a = users.get(adminEmail)
+                if (a && a.wsId) {
+                  const target = clients.get(a.wsId)
+                  if (target && target.readyState === 1) {
+                    try { target.send(payload); sentToAdmin = true } catch {}
+                  }
+                }
+              }
+              if (!sentToAdmin) {
+                for (const client of wss.clients) {
+                  try {
+                    if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+                      client.send(payload)
+                    }
+                  } catch (e) {}
+                }
+              }
+            }
+          } catch (e) { console.warn('[Help] help-message handling failed', e && e.message) }
+        } else if (data.type === 'help-typing') {
+          // Brief typing indicator forwarded to relevant parties (admins + requesting user)
+          try {
+            const requestId = String(data.requestId || '')
+            if (!requestId) return
+            const store = loadHelpFromDisk()
+            const idx = store.findIndex(r => String(r.id) === String(requestId))
+            if (idx === -1) return
+            const reqRec = store[idx]
+            const who = String(data.fromName || data.fromEmail || (data.admin ? 'admin' : 'user'))
+            const msg = { type: 'help-typing', requestId: reqRec.id, fromName: who, admin: !!data.admin }
+            const payload2 = JSON.stringify(msg)
+            // Send to claimed admin (if present) or broadcast to admins
+            if (reqRec.claimedBy) {
+              const adminEmail = String(reqRec.claimedBy || '').toLowerCase()
+              const a = users.get(adminEmail)
+              if (a && a.wsId) {
+                const target = clients.get(a.wsId)
+                if (target && target.readyState === 1) {
+                  try { target.send(payload2) } catch {}
+                }
+              }
+            } else {
+              for (const client of wss.clients) {
+                try {
+                  if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+                    client.send(payload2)
+                  }
+                } catch (e) {}
+              }
+            }
+            // Also notify requesting user if online
+            if (reqRec.username) {
+              const u = users.get(reqRec.username)
+              if (u && u.wsId) {
+                const target = clients.get(u.wsId)
+                if (target && target.readyState === 1) {
+                  try { target.send(payload2) } catch {}
+                }
+              }
+            }
+          } catch (e) { console.warn('[Help] help-typing handling failed', e && e.message) }
       } else if (data.type === 'spectate') {
         await leaveRoom(ws);
         await joinRoom(ws, data.roomId);

@@ -19,12 +19,46 @@ export default function ScrollFade({ children, className, style }: ScrollFadePro
         wrapper.style.clipPath = ''
         return
       }
-  const scroller = document.getElementById('ndn-main-scroll') as HTMLElement | null
-  const scrollTop = scroller ? scroller.scrollTop : (window.scrollY || 0)
-  // As soon as the user scrolls at all, reserve the full header height so content never slides under it
-  const headerH = header.getBoundingClientRect().height
-  const overlap = scrollTop > 0 ? headerH : 0
-  wrapper.style.marginTop = overlap > 0 ? `${overlap}px` : '0px'
+       const scroller = document.getElementById('ndn-main-scroll') as HTMLElement | null
+       const scrollTop = scroller ? scroller.scrollTop : (window.scrollY || 0)
+       // Hide content under the sticky header by rendering a lightweight mask
+       // element at the top of the wrapper. Using an overlay avoids layout shifts
+       // and prevents clip-path + transform interactions that can cause rendering
+       // artifacts in some browsers.
+       const headerH = header.getBoundingClientRect().height
+       const overlap = scrollTop > 0 ? headerH : 0
+       try {
+         // Find or create the mask node
+         let mask = wrapper.querySelector('[data-ndn-top-mask]') as HTMLElement | null
+         if (!mask) {
+           mask = document.createElement('div')
+           mask.setAttribute('data-ndn-top-mask', '1')
+           // keep it non-interactive and on top of the wrapper content
+           Object.assign(mask.style, {
+             position: 'absolute',
+             left: '0px',
+             right: '0px',
+             top: '0px',
+             height: '0px',
+             pointerEvents: 'none',
+             zIndex: '20',
+             background: 'linear-gradient(to bottom, rgba(17,24,39,1), rgba(17,24,39,0))'
+           })
+           wrapper.style.position = wrapper.style.position || 'relative'
+           wrapper.insertBefore(mask, wrapper.firstChild)
+         }
+         if (overlap > 0) {
+           mask.style.height = `${overlap}px`
+           mask.style.display = ''
+         } else {
+           mask.style.height = '0px'
+           mask.style.display = 'none'
+         }
+         // keep layout position unchanged
+         wrapper.style.marginTop = '0px'
+       } catch (e) {
+         wrapper.style.marginTop = '0px'
+       }
     }
     updateClip()
     const onScrollOrResize = () => {

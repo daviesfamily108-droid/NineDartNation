@@ -116,7 +116,9 @@ export default function CameraTile({
   // When user locks in phone camera in Calibrator, it updates preferredCameraLabel
   // This effect ensures CameraTile's UI reflects that selection
   useEffect(() => {
-    console.log('[CAMERATILE] Checking camera selection sync: preferredCameraLabel=', preferredCameraLabel, 'mode=', mode)
+    const ignore = useUserSettings.getState().ignorePreferredCameraSync
+    console.log('[CAMERATILE] Checking camera selection sync: preferredCameraLabel=', preferredCameraLabel, 'mode=', mode, 'ignoreSync=', ignore)
+    if (ignore) return
     if (preferredCameraLabel === 'Phone Camera' && mode !== 'phone') {
       console.log('[CAMERATILE] Syncing mode to phone from Calibrator selection')
       setMode('phone')
@@ -517,8 +519,8 @@ function CameraFrame(props: any) {
     : ''
 
   const containerBase = fill
-    ? 'rounded-2xl overflow-hidden bg-black w-full flex flex-col'
-    : 'rounded-2xl overflow-hidden bg-black w-full mx-auto flex flex-col'
+    ? 'rounded-2xl overflow-hidden bg-transparent w-full flex flex-col'
+    : 'rounded-2xl overflow-hidden bg-transparent w-full mx-auto flex flex-col'
   const containerClass = [containerBase, className].filter(Boolean).join(' ').trim()
   const containerStyle: CSSProperties = { ...(style || {}) }
 
@@ -533,9 +535,9 @@ function CameraFrame(props: any) {
     const isFit = effectiveFitMode === 'fit'
     const baseVideoClass = isFit
       // Fit: preserve entire frame (may letterbox)
-      ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
-      // Fill: guarantee full coverage with classic min-w/min-h center trick
-      : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black'
+      ? 'absolute inset-0 w-full h-full object-contain object-center bg-transparent'
+      // Fill: guarantee full coverage with object-cover so there are no black bars
+      : 'absolute inset-0 w-full h-full object-cover object-center bg-transparent'
     if (fill) {
       if (shouldMaintainAspect) {
         return (
@@ -594,7 +596,7 @@ function CameraFrame(props: any) {
           </div>
         )}
       </div>
-      <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
+  <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
         <span className="truncate">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : mode==='wifi' ? 'WIFI LIVE' : 'LIVE') : 'Camera')}</span>
         <div className="flex items-center gap-1">
           {!streaming && (
