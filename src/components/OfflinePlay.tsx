@@ -2329,17 +2329,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                 </div>
                 <div className="text-xs text-slate-300">Tip: Enter to Add · Shift+Enter to Replace Last</div>
               </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="font-semibold">{ai === 'None' ? 'Opponent' : `${ai} AI`} Turn</div>
-                {ai !== 'None' ? (
-                  <div className="text-sm text-slate-300">Throwing in {Math.ceil(aiCountdownMs/1000)}s...</div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <button className="btn" onClick={() => setIsPlayerTurn(true)}>Switch Back to You</button>
-                  </div>
-                )}
-              </div>
             )}
             <div className="h-1" />
               </div>
