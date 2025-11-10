@@ -2048,17 +2048,88 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {(selectedMode as any) === 'X01' && (
                   <>
                     <div className="flex gap-3 min-h-0 flex-1">
-                      {/* Scoreboard on the left (60% width) */}
-                      <div className="flex-[0.6] min-w-0 overflow-y-auto">
-                        <GameScoreboard
-                          gameMode="X01"
-                          players={statsX01}
-                          matchScore={`${playerLegs}-${aiLegs}`}
-                        />
+                      {/* Left column: Scoreboard + Manual scoring (55% width) */}
+                      <div className="flex-[0.55] min-w-0 flex flex-col gap-3 overflow-y-auto">
+                        {/* Scoreboard */}
+                        <div className="flex-shrink-0">
+                          <GameScoreboard
+                            gameMode="X01"
+                            players={statsX01}
+                            matchScore={`${playerLegs}-${aiLegs}`}
+                          />
+                        </div>
+                        
+                        {/* Manual Scoring Section */}
+                        {isPlayerTurn && (
+                          <div className="p-3 rounded-2xl glass text-white border border-white/10 flex-shrink-0">
+                            <div className="font-semibold mb-3 text-sm">Your Turn - Manual Scoring</div>
+                            <div className="flex flex-col gap-2 text-sm">
+                              {/* Single Dart Entry */}
+                              <div className="flex items-center gap-2">
+                                <input
+                                  className="input w-20"
+                                  type="number"
+                                  min={0}
+                                  max={60}
+                                  placeholder="0-60"
+                                  value={playerDartPoints}
+                                  onChange={e => setPlayerDartPoints(Number(e.target.value||0))}
+                                  onKeyDown={e => { if (e.key==='Enter') (e.shiftKey? replaceLast() : addDartNumeric()) }}
+                                />
+                                <button className="btn px-2 py-1 text-xs" onClick={addDartNumeric} title="Add a single dart (0–60)">Add Dart</button>
+                              </div>
+                              
+                              {/* Visit Total Entry */}
+                              <div className="flex items-center gap-2">
+                                <input
+                                  className="input w-24"
+                                  type="number"
+                                  min={0}
+                                  max={180}
+                                  placeholder="0-180 visit"
+                                  value={visitTotalInput}
+                                  onChange={e=>setVisitTotalInput(e.target.value)}
+                                  onKeyDown={e => { if (e.key==='Enter') addVisitTotal() }}
+                                />
+                                <button className="btn px-2 py-1 text-xs" onClick={addVisitTotal} title="Commit a full 3-dart total like 93">Commit</button>
+                              </div>
+                              
+                              {/* Manual Input (T20, D16, etc) */}
+                              <div className="flex items-center gap-1">
+                                <input
+                                  className="input text-xs flex-1 min-w-0"
+                                  placeholder="T20, D16, 5, 25, 50"
+                                  value={manualBox}
+                                  onChange={e=>setManualBox(e.target.value)}
+                                  onKeyDown={e => { if (e.key==='Enter') (e.shiftKey? replaceLastManual() : addManual()) }}
+                                />
+                                <button className="btn btn--ghost px-1.5 py-1 text-xs" onClick={replaceLastManual} disabled={playerVisitDarts===0} title="Replace">✎</button>
+                                <button className="btn px-2 py-1 text-xs" onClick={addManual}>Add</button>
+                              </div>
+                              
+                              {/* Batch Input */}
+                              <div>
+                                <textarea
+                                  className="input w-full h-16 resize-none text-xs"
+                                  placeholder="Batch entry (one per line)"
+                                  value={manualTextarea}
+                                  onChange={e=>setManualTextarea(e.target.value)}
+                                />
+                                <div className="flex gap-1 mt-1">
+                                  <button className="btn px-2 py-1 text-xs flex-1" onClick={addManualTextarea}>Add All</button>
+                                  <button className="btn btn--ghost px-2 py-1 text-xs" onClick={() => setManualTextarea('')}>Clear</button>
+                                </div>
+                              </div>
+                              
+                              <div className="text-xs text-slate-400 opacity-80">Enter: Add · Shift+Enter: Replace</div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      {/* Camera on the right (40% width) */}
+                      
+                      {/* Right column: Camera (45% width) */}
                       {cameraEnabled && (
-                        <div className="flex-[0.4] min-w-0 rounded-2xl overflow-hidden bg-black">
+                        <div className="flex-[0.45] min-w-0 rounded-2xl overflow-hidden bg-black flex-shrink-0">
                           <CameraView
                             scoringMode="custom"
                             showToolbar={false}
