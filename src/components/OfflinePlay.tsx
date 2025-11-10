@@ -428,11 +428,11 @@ export default function OfflinePlay({ user }: { user: any }) {
         }
         return next
       })
-      if (aiCountdownMs > 0) raf = requestAnimationFrame(tick)
+      raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [showMatchModal, isPlayerTurn, ai, aiCountdownMs, aiScore])
+  }, [showMatchModal, isPlayerTurn, ai, aiScore])
 
   function startMatch() {
     setInMatch(true);

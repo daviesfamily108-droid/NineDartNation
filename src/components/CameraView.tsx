@@ -66,6 +66,7 @@ export default function CameraView({
   const currentPlayerId = matchState.players[matchState.currentPlayerIdx]?.id
   const isOpened = !!(currentPlayerId && openedById[currentPlayerId])
   const setOpened = (v: boolean) => { if (!currentPlayerId) return; setOpenedById(m => ({ ...m, [currentPlayerId]: v })) }
+  const inProgress = (matchState as any)?.inProgress
   // Broadcast pending visit to global store so Scoreboard can visualize dots
   const setVisit = usePendingVisit(s => s.setVisit)
   const resetPendingVisit = usePendingVisit(s => s.reset)
@@ -178,8 +179,7 @@ export default function CameraView({
 
   // Manage per-dart timer lifecycle
   useEffect(() => {
-  const inProgress = (matchState as any)?.inProgress
-  const shouldRun = !!dartTimerEnabled && inProgress && !paused && pendingDarts < 3
+    const shouldRun = !!dartTimerEnabled && inProgress && !paused && pendingDarts < 3
     // Clear any existing interval
     if (timerRef.current) {
       clearInterval(timerRef.current as any)
@@ -519,6 +519,8 @@ export default function CameraView({
                     setPulseManualPill(true)
                     try { if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current) } catch {}
                     pulseTimeoutRef.current = window.setTimeout(() => { setPulseManualPill(false); pulseTimeoutRef.current = null }, 1500)
+                    // AUTO-COMMIT the dart when high confidence is detected
+                    try { addDart(score.base, s, score.ring as Ring) } catch {}
                   }
                 } catch {}
 
@@ -893,7 +895,7 @@ export default function CameraView({
   }
 
   // Keyboard shortcut: press 'm' to open Manual Correction (if not typing in an input)
-  React.useEffect(() => {
+  useEffect(() => {
     function onKey(e: KeyboardEvent) {
       try {
         const active = document.activeElement as HTMLElement | null
