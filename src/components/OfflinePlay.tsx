@@ -1,62 +1,72 @@
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { suggestCheckouts, sayScore } from '../utils/checkout';
 import { useUserSettings } from '../store/userSettings';
 import { useToast } from '../store/toast';
 import { useCalibration } from '../store/calibration';
 import GameCalibrationStatus from './GameCalibrationStatus';
-import CameraTile from './CameraTile'
-import CameraView from './CameraView'
-import HeatMap from './HeatMap'
+import CameraTile from './CameraTile';
+import CameraView from './CameraView';
+import HeatMap from './HeatMap';
 import { getUserCurrency, formatPriceInCurrency } from '../utils/config';
-import { bumpGameMode } from '../store/profileStats'
-import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart } from '../game/types'
-import { ATC_ORDER } from '../game/aroundTheClock'
-import { createCricketState, applyCricketDart, CRICKET_NUMBERS, hasClosedAll as cricketClosedAll } from '../game/cricket'
-import { createShanghaiState, applyShanghaiDart, endShanghaiTurn } from '../game/shanghai'
-import { createDefaultHalveIt, getCurrentHalveTarget, applyHalveItDart, endHalveItTurn } from '../game/halveIt'
-import { createHighLow, applyHighLowDart, endHighLowTurn } from '../game/highLow'
-import { createKillerState, assignKillerNumbers, applyKillerDart, killerWinner, KillerState } from '../game/killer'
-import { createBaseball, applyBaseballDart } from '../game/baseball'
-import { createGolf, applyGolfDart } from '../game/golf'
-import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
-import { createScamState, addScamAuto, addScamNumeric, resetScam, getScamTarget, SCAM_TARGET_NAMES, ScamState, createFivesState, addFivesAuto, addFivesNumeric, resetFives, FivesState, createSevensState, addSevensAuto, addSevensNumeric, resetSevens, SevensState } from '../game/scamFivesSevens'
-import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS, hasClosedAllAm } from '../game/americanCricket'
-import ResizableModal from './ui/ResizableModal'
-import { useAudit } from '../store/audit'
-import ResizablePanel from './ui/ResizablePanel'
-import GameHeaderBar from './ui/GameHeaderBar'
-import GameScoreboard from './scoreboards/GameScoreboard'
-import { useOfflineGameStats } from './scoreboards/useGameStats'
-import { freeGames, premiumGames, allGames } from '../utils/games'
+import { bumpGameMode } from '../store/profileStats';
+import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart } from '../game/types';
+import { ATC_ORDER } from '../game/aroundTheClock';
+import { createCricketState, applyCricketDart, CRICKET_NUMBERS, hasClosedAll as cricketClosedAll } from '../game/cricket';
+import { createShanghaiState, applyShanghaiDart, endShanghaiTurn } from '../game/shanghai';
+import { createDefaultHalveIt, getCurrentHalveTarget, applyHalveItDart, endHalveItTurn } from '../game/halveIt';
+import { createHighLow, applyHighLowDart, endHighLowTurn } from '../game/highLow';
+import { createKillerState, assignKillerNumbers, applyKillerDart, killerWinner, KillerState } from '../game/killer';
+import { createBaseball, applyBaseballDart } from '../game/baseball';
+import { createGolf, applyGolfDart } from '../game/golf';
+import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe';
+import { createScamState, addScamAuto, addScamNumeric, resetScam, getScamTarget, SCAM_TARGET_NAMES, ScamState, createFivesState, addFivesAuto, addFivesNumeric, resetFives, FivesState, createSevensState, addSevensAuto, addSevensNumeric, resetSevens, SevensState } from '../game/scamFivesSevens';
+import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS, hasClosedAllAm } from '../game/americanCricket';
+import ResizableModal from './ui/ResizableModal';
+import { useAudit } from '../store/audit';
+import ResizablePanel from './ui/ResizablePanel';
+import GameHeaderBar from './ui/GameHeaderBar';
+import GameScoreboard, { type PlayerStats } from './scoreboards/GameScoreboard';
+import { useOfflineGameStats } from './scoreboards/useGameStats';
+import { freeGames, premiumGames, allGames } from '../utils/games';
 
 const aiLevels = ['Easy', 'Medium', 'Hardened'];
 
 function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n))
+  return Math.max(min, Math.min(max, n));
 }
 
+type PendingAutoVisit = {
+  visitTotal: number
+  darts: number
+  preRemaining: number
+  remaining: number
+  doubleAttempts: number
+  finished: boolean
+  doubleWindow: boolean
+  highestCheckout?: number | null
+  announced?: boolean
+}
+
+const BOARD_CLEAR_GRACE_MS = 6500;
+
 function aiVisitScore(remaining: number, level: string): number {
-  // Very simple AI: target a plausible 3-dart total based on difficulty
-  // Then adjust down if it would overshoot remaining.
-  let target = 0
+  let target = 0;
   if (level === 'Easy') {
-    const candidates = [22, 26, 41, 45, 60]
-    target = candidates[Math.floor(Math.random() * candidates.length)]
+    const candidates = [22, 26, 41, 45, 60];
+    target = candidates[Math.floor(Math.random() * candidates.length)];
   } else if (level === 'Medium') {
-    // around 60 with some variance
-    target = Math.round(clamp(60 + (Math.random() * 30 - 15), 30, 100))
+    target = Math.round(clamp(60 + (Math.random() * 30 - 15), 30, 100));
   } else {
-    // Hardened: around 80 with tighter variance
-    target = Math.round(clamp(80 + (Math.random() * 20 - 10), 50, 120))
+    target = Math.round(clamp(80 + (Math.random() * 20 - 10), 50, 120));
   }
-  if (remaining <= 0) return 0
+  if (remaining <= 0) return 0;
   if (target > remaining) {
-    // Try to pick something that doesn't bust
-    const safe = [100, 85, 81, 60, 57, 45, 41, 26, 22, 20, 1].find(v => v <= remaining)
-    return safe ?? 0
+    const safe = [100, 85, 81, 60, 57, 45, 41, 26, 22, 20, 1].find(v => v <= remaining);
+    return safe ?? 0;
   }
-  return target
+  return target;
 }
 
 function X01RulesPopup({ onClose }: { onClose: () => void }) {
@@ -82,7 +92,37 @@ function X01RulesPopup({ onClose }: { onClose: () => void }) {
 const API_URL = (import.meta as any).env?.VITE_API_URL || '';
 
 export default function OfflinePlay({ user }: { user: any }) {
-  const { offlineLayout } = useUserSettings()
+  const {
+    offlineLayout,
+    favoriteDouble,
+    callerEnabled,
+    callerVoice,
+    callerVolume,
+    speakCheckoutOnly,
+    rememberLastOffline,
+    setLastOffline,
+    autoStartOffline,
+    cameraScale,
+    setCameraScale,
+    cameraAspect = 'wide',
+    setCameraAspect,
+    cameraFitMode = 'fill',
+    setCameraFitMode,
+    cameraEnabled,
+    textSize,
+    boxSize,
+    autoscoreProvider,
+    autoCommitMode = 'wait-for-clear',
+    matchType = 'singles',
+    setMatchType,
+    teamAName = 'Team A',
+    setTeamAName,
+    teamBName = 'Team B',
+    setTeamBName,
+  } = useUserSettings()
+  const manualScoring = autoscoreProvider === 'manual'
+  const cameraToolbarVisible = cameraEnabled && !manualScoring
+  const waitForBoardClear = cameraEnabled && !manualScoring && autoCommitMode !== 'immediate'
   const [selectedMode, setSelectedMode] = useState<string>('X01');
   const [x01Score, setX01Score] = useState(501);
   const [ai, setAI] = useState('None');
@@ -113,8 +153,19 @@ export default function OfflinePlay({ user }: { user: any }) {
     setMaximized(offlineLayout === 'modern')
     setFitAll(offlineLayout === 'modern')
   }, [offlineLayout])
+  useEffect(() => {
+    if (cameraFitMode !== 'fit') {
+      setCameraFitMode('fit')
+    }
+  }, [cameraFitMode, setCameraFitMode])
   const [fitScale, setFitScale] = useState(1)
+  const [fitOverflowing, setFitOverflowing] = useState(false)
   const [isPlayerTurn, setIsPlayerTurn] = useState(true)
+  useEffect(() => {
+    const handleOpenManager = () => setShowCameraManager(true)
+    window.addEventListener('ndn:open-camera-manager', handleOpenManager)
+    return () => window.removeEventListener('ndn:open-camera-manager', handleOpenManager)
+  }, [])
   // Per-dart input and stats
   const [playerDartPoints, setPlayerDartPoints] = useState<number>(0)
   const [dpIndex, setDpIndex] = useState<number>(0) // 0..20 (DBULL at 20)
@@ -190,12 +241,28 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [playerVisitDarts, setPlayerVisitDarts] = useState<number>(0)
   const [playerVisitStart, setPlayerVisitStart] = useState<number>(x01Score)
   const [playerVisitSum, setPlayerVisitSum] = useState<number>(0)
+  const [playerLastVisitScore, setPlayerLastVisitScore] = useState<number | null>(null)
   const [playerVisitDartsAtDouble, setPlayerVisitDartsAtDouble] = useState<number>(0)
+  const lastBounceMissTsRef = useRef<number>(0)
+  const lastVisitDartsRef = useRef<number>(0)
+  const playerScoreRef = useRef<number>(playerScore)
+  const playerVisitDartsRef = useRef<number>(playerVisitDarts)
+  const playerVisitSumRef = useRef<number>(playerVisitSum)
+  const playerVisitStartRef = useRef<number>(playerVisitStart)
+  const playerVisitDartsAtDoubleRef = useRef<number>(playerVisitDartsAtDouble)
+
+  useEffect(() => { playerScoreRef.current = playerScore }, [playerScore])
+  useEffect(() => { playerVisitDartsRef.current = playerVisitDarts }, [playerVisitDarts])
+  useEffect(() => { playerVisitSumRef.current = playerVisitSum }, [playerVisitSum])
+  useEffect(() => { playerVisitStartRef.current = playerVisitStart }, [playerVisitStart])
+  useEffect(() => { playerVisitDartsAtDoubleRef.current = playerVisitDartsAtDouble }, [playerVisitDartsAtDouble])
   const [aiCountdownMs, setAiCountdownMs] = useState<number>(0)
   const aiTimerRef = useRef<number | null>(null)
   const [aiDartsThrown, setAiDartsThrown] = useState<number>(0)
   const [aiLastDart, setAiLastDart] = useState<number>(0)
   const [aiVisitSum, setAiVisitSum] = useState<number>(0)
+  const [aiVisitDarts, setAiVisitDarts] = useState<number>(0)
+  const [aiLastVisitScore, setAiLastVisitScore] = useState<number | null>(null)
   const [aiVisitDartsAtDouble, setAiVisitDartsAtDouble] = useState<number>(0)
   // Doubles attempts/hits
   const [playerDoublesAtt, setPlayerDoublesAtt] = useState<number>(0)
@@ -221,9 +288,122 @@ export default function OfflinePlay({ user }: { user: any }) {
   // Manual correction input for offline (matches CameraView UX)
   const [manualBox, setManualBox] = useState<string>('')
   const [manualTextarea, setManualTextarea] = useState<string>('')
-  // Settings: favourite double and caller
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, rememberLastOffline, setLastOffline, autoStartOffline, cameraScale, setCameraScale, cameraAspect = 'wide', setCameraAspect, cameraFitMode = 'fill', setCameraFitMode, cameraEnabled, textSize, boxSize, autoscoreProvider, matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName } = useUserSettings()
-  const manualScoring = autoscoreProvider === 'manual'
+  const [manualPlayerScoreInput, setManualPlayerScoreInput] = useState<string>('')
+  const [manualOpponentScoreInput, setManualOpponentScoreInput] = useState<string>('')
+  const [manualPlayerLegsInput, setManualPlayerLegsInput] = useState<string>('')
+  const [manualOpponentLegsInput, setManualOpponentLegsInput] = useState<string>('')
+  const [legOverrideConfirm, setLegOverrideConfirm] = useState<{ target: 'player' | 'ai'; value: number; stage: 1 | 2 } | null>(null)
+  const [showCameraManager, setShowCameraManager] = useState<boolean>(false)
+  const [dartCounts, setDartCounts] = useState<Record<string, number>>({})
+  const [awaitingBoardClear, setAwaitingBoardClear] = useState<boolean>(false)
+  const pendingVisitRef = useRef<PendingAutoVisit | null>(null)
+  const pendingVisitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const clearPendingVisitTimer = useCallback(() => {
+    const timer = pendingVisitTimerRef.current
+    if (timer) {
+      clearTimeout(timer)
+      pendingVisitTimerRef.current = null
+    }
+  }, [])
+
+  const speakAutoVisit = useCallback((pending: PendingAutoVisit) => {
+    if (!callerEnabled) return
+    const speaker = user?.username || 'Player'
+    try {
+      sayScore(speaker, pending.visitTotal, Math.max(pending.remaining, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly })
+    } catch {}
+  }, [callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, user?.username])
+
+  const commitPendingVisit = useCallback((pending: PendingAutoVisit, _trigger: 'immediate' | 'event' | 'timeout') => {
+    setAwaitingBoardClear(false)
+  const { visitTotal, darts, preRemaining, remaining, doubleAttempts, finished, doubleWindow, highestCheckout } = pending
+
+    if (!finished) {
+      setPlayerScore(remaining)
+      playerScoreRef.current = remaining
+    } else {
+      setPlayerScore(0)
+      playerScoreRef.current = 0
+      if (typeof highestCheckout === 'number' && highestCheckout > 0) {
+        setPlayerHighestCheckout(h => Math.max(h, highestCheckout))
+      }
+    }
+
+    setPlayerLastVisitScore(visitTotal)
+
+    if (visitTotal === 180) setPlayer180s(n => n + 1)
+    else if (visitTotal >= 140) setPlayer140s(n => n + 1)
+    else if (visitTotal >= 100) setPlayer100s(n => n + 1)
+
+    if (doubleWindow && doubleAttempts > 0) {
+      setPlayerDoublesAtt(a => a + doubleAttempts)
+      if (finished) setPlayerDoublesHit(h => h + 1)
+    }
+
+    if (!pending.announced) speakAutoVisit(pending)
+
+    try {
+      useAudit.getState().recordVisit('offline-x01', darts, visitTotal, { preRemaining, postRemaining: finished ? 0 : remaining, finish: finished, bust: false })
+    } catch {}
+
+    if (finished) {
+      setPendingLegWinner('player')
+      setShowWinPopup(true)
+    }
+
+    endTurn(finished ? 0 : remaining)
+
+    setPlayerVisitSum(0)
+    playerVisitSumRef.current = 0
+    setPlayerVisitDarts(0)
+    playerVisitDartsRef.current = 0
+    setPlayerVisitDartsAtDouble(0)
+    playerVisitDartsAtDoubleRef.current = 0
+  }, [endTurn, setPlayerHighestCheckout, setPendingLegWinner, setPlayerScore, setPlayerLastVisitScore, setPlayerVisitSum, setPlayerVisitDarts, setPlayerVisitDartsAtDouble, setShowWinPopup, setPlayer180s, setPlayer140s, setPlayer100s, setPlayerDoublesAtt, setPlayerDoublesHit, speakAutoVisit])
+
+  const finalizePendingVisit = useCallback((trigger: 'event' | 'timeout') => {
+    const pending = pendingVisitRef.current
+    if (!pending) return
+    pendingVisitRef.current = null
+    clearPendingVisitTimer()
+    commitPendingVisit(pending, trigger)
+  }, [clearPendingVisitTimer, commitPendingVisit])
+
+  const queuePendingVisit = useCallback((pending: PendingAutoVisit) => {
+    speakAutoVisit(pending)
+    pendingVisitRef.current = { ...pending, announced: true }
+    setAwaitingBoardClear(true)
+    clearPendingVisitTimer()
+    pendingVisitTimerRef.current = setTimeout(() => finalizePendingVisit('timeout'), BOARD_CLEAR_GRACE_MS)
+  }, [clearPendingVisitTimer, finalizePendingVisit, speakAutoVisit])
+
+  useEffect(() => {
+    if (!waitForBoardClear) return
+    const handler = () => finalizePendingVisit('event')
+    window.addEventListener('ndn:darts-cleared', handler as EventListener)
+    return () => window.removeEventListener('ndn:darts-cleared', handler as EventListener)
+  }, [waitForBoardClear, finalizePendingVisit])
+
+  useEffect(() => {
+    if (!waitForBoardClear) finalizePendingVisit('timeout')
+  }, [waitForBoardClear, finalizePendingVisit])
+
+  useEffect(() => () => clearPendingVisitTimer(), [clearPendingVisitTimer])
+
+  useEffect(() => {
+    if (playerVisitDarts === 0 && lastVisitDartsRef.current > 0) {
+      try {
+        window.dispatchEvent(new CustomEvent('ndn:darts-cleared', { detail: { source: 'offline-play', ts: Date.now() } }))
+      } catch {}
+      lastBounceMissTsRef.current = 0
+    }
+    lastVisitDartsRef.current = playerVisitDarts
+  }, [playerVisitDarts])
+
+
+  const humanName = user?.username || 'Player 1'
+  const aiDisplayName = ai === 'None' ? 'Player 2' : ai
 
   // Call all game stat hooks unconditionally at component level (React hooks rules)
   const statsX01 = useOfflineGameStats(
@@ -232,6 +412,8 @@ export default function OfflinePlay({ user }: { user: any }) {
     playerLegs, aiLegs,
     playerLastDart, aiLastDart,
     playerVisitSum, aiVisitSum,
+    playerLastVisitScore, aiLastVisitScore,
+    playerVisitDarts, aiVisitDarts,
     playerDoublesHit, playerDoublesAtt,
     aiDoublesHit, aiDoublesAtt,
     legStats,
@@ -241,24 +423,216 @@ export default function OfflinePlay({ user }: { user: any }) {
   )
   const statsCricket = useOfflineGameStats(
     'Cricket' as any,
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     cricket
   )
   const statsShanghai = useOfflineGameStats(
     'Shanghai' as any,
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     isPlayerTurn, ai, undefined,
     cricket, shanghai
   )
   const statsKiller = useOfflineGameStats(
     'Killer' as any,
-    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     undefined, undefined,
     killerPlayers, killerStates, killerAssigned, killerTurnIdx
   )
   const statsScam = useOfflineGameStats('Scam' as any)
   const statsFives = useOfflineGameStats('Fives' as any)
   const statsSevens = useOfflineGameStats('Sevens' as any)
+
+  const activeScoreboardStats = useMemo(() => {
+    const list = statsX01 || []
+    const playerResolvedLastScore = playerVisitDarts > 0
+      ? playerVisitSum
+      : (playerLastVisitScore ?? playerLastDart)
+    const aiResolvedLastScore = aiVisitDarts > 0
+      ? aiVisitSum
+      : (aiLastVisitScore ?? aiLastDart)
+    if (list.length === 0) {
+      return {
+        name: isPlayerTurn ? humanName : aiDisplayName,
+        isCurrentTurn: true,
+        legsWon: isPlayerTurn ? playerLegs : aiLegs,
+        score: isPlayerTurn ? playerScore : aiScore,
+        lastScore: isPlayerTurn ? playerResolvedLastScore : aiResolvedLastScore,
+      } as PlayerStats
+    }
+    return list.find(player => player.isCurrentTurn) ?? list[0]
+  }, [
+    statsX01,
+    isPlayerTurn,
+    humanName,
+    aiDisplayName,
+    playerLegs,
+    aiLegs,
+    playerScore,
+    aiScore,
+    playerVisitDarts,
+    playerVisitSum,
+    playerLastVisitScore,
+    playerLastDart,
+    aiVisitSum,
+    aiLastVisitScore,
+    aiLastDart,
+    aiVisitDarts,
+  ])
+
+  const singlePlayerScoreboard: PlayerStats[] = useMemo(() => {
+    if (!activeScoreboardStats) return []
+    const { matchAvg, allTimeAvg, ...rest } = activeScoreboardStats
+    return [{ ...rest, matchAvg: undefined, allTimeAvg: undefined } as PlayerStats]
+  }, [activeScoreboardStats])
+
+  const inactivePlayerName = isPlayerTurn ? aiDisplayName : humanName
+  const activePlayerName = activeScoreboardStats?.name ?? (isPlayerTurn ? humanName : aiDisplayName)
+  const activeRemaining = isPlayerTurn ? playerScore : aiScore
+  const activeLastScore = isPlayerTurn
+    ? (playerVisitDarts > 0 ? playerVisitSum : (playerLastVisitScore ?? playerLastDart))
+    : (aiVisitDarts > 0 ? aiVisitSum : (aiLastVisitScore ?? aiLastDart))
+
+  const recordDart = useCallback((mode: string, count = 1) => {
+    if (!mode || count <= 0) return
+    setDartCounts(prev => ({
+      ...prev,
+      [mode]: (prev[mode] || 0) + count
+    }))
+  }, [])
+
+  const resetDartCount = useCallback((mode: string) => {
+    if (!mode) return
+    setDartCounts(prev => {
+      if (prev[mode] === undefined) return prev
+      return { ...prev, [mode]: 0 }
+    })
+  }, [])
+
+  const activeModeDarts = dartCounts[selectedMode] || 0
+
+  const parseManualScoreOverride = (value: string): number | null => {
+    if (!value.trim()) return null
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) return null
+    return clamp(Math.round(parsed), 0, x01Score)
+  }
+
+  const parseManualLegsOverride = (value: string): number | null => {
+    if (!value.trim()) return null
+    const parsed = Number(value)
+    if (!Number.isFinite(parsed)) return null
+    return Math.max(0, Math.round(parsed))
+  }
+
+  const cancelPendingAutoVisit = useCallback(() => {
+    if (pendingVisitRef.current) {
+      pendingVisitRef.current = null
+    }
+    clearPendingVisitTimer()
+    setAwaitingBoardClear(false)
+  }, [clearPendingVisitTimer])
+
+  const applyPlayerScoreOverride = useCallback((nextScore: number) => {
+    const safeScore = clamp(nextScore, 0, x01Score)
+    cancelPendingAutoVisit()
+    setPlayerScore(safeScore)
+    playerScoreRef.current = safeScore
+
+    const nextVisitStart = safeScore === 0 ? x01Score : safeScore
+    setPlayerVisitStart(nextVisitStart)
+    playerVisitStartRef.current = nextVisitStart
+
+    setPlayerVisitSum(0)
+    playerVisitSumRef.current = 0
+    setPlayerVisitDarts(0)
+    playerVisitDartsRef.current = 0
+    setPlayerVisitDartsAtDouble(0)
+    playerVisitDartsAtDoubleRef.current = 0
+
+    setPlayerLastVisitScore(null)
+    setPlayerLastDart(0)
+    setPlayerDartPoints(0)
+    lastBounceMissTsRef.current = 0
+
+    if (safeScore === 0) {
+      setPendingLegWinner('player')
+      setShowWinPopup(true)
+    } else {
+      setPendingLegWinner(null)
+      setShowWinPopup(false)
+    }
+  }, [cancelPendingAutoVisit, setPlayerScore, x01Score, setPlayerVisitStart, setPlayerVisitSum, setPlayerVisitDarts, setPlayerVisitDartsAtDouble, setPlayerLastVisitScore, setPlayerLastDart, setPlayerDartPoints, setPendingLegWinner, setShowWinPopup])
+
+  const handleManualScoreOverride = (target: 'player' | 'ai') => {
+    const source = target === 'player' ? manualPlayerScoreInput : manualOpponentScoreInput
+    const parsed = parseManualScoreOverride(source)
+    if (parsed === null) {
+      toast(`Enter a number between 0 and ${x01Score}`, { type: 'error', timeout: 2500 })
+      return
+    }
+    if (target === 'player') {
+      applyPlayerScoreOverride(parsed)
+      setManualPlayerScoreInput('')
+      return
+    } else {
+      setAiScore(parsed)
+      setAiVisitSum(0)
+      setAiVisitDarts(0)
+      setAiLastVisitScore(null)
+      setAiVisitDartsAtDouble(0)
+      setAiLastDart(0)
+      setManualOpponentScoreInput('')
+    }
+    setPendingLegWinner(null)
+    setShowWinPopup(false)
+  }
+
+  const applyManualLegOverride = useCallback((target: 'player' | 'ai', value: number) => {
+    if (target === 'player') {
+      setPlayerLegs(value)
+      setManualPlayerLegsInput('')
+    } else {
+      setAiLegs(value)
+      setManualOpponentLegsInput('')
+    }
+    setPendingLegWinner(null)
+    setShowWinPopup(false)
+  }, [setAiLegs, setManualOpponentLegsInput, setManualPlayerLegsInput, setPendingLegWinner, setPlayerLegs, setShowWinPopup])
+
+  const handleManualLegsOverride = (target: 'player' | 'ai') => {
+    const source = target === 'player' ? manualPlayerLegsInput : manualOpponentLegsInput
+    const parsed = parseManualLegsOverride(source)
+    if (parsed === null) {
+      toast('Enter a non-negative whole number for legs', { type: 'error', timeout: 2500 })
+      return
+    }
+    setLegOverrideConfirm({ target, value: parsed, stage: 1 })
+  }
+
+  const handleLegOverrideYes = useCallback(() => {
+    setLegOverrideConfirm(prev => {
+      if (!prev) return prev
+      if (prev.stage === 1) return { ...prev, stage: 2 }
+      applyManualLegOverride(prev.target, prev.value)
+      return null
+    })
+  }, [applyManualLegOverride])
+
+  const handleLegOverrideNo = useCallback(() => {
+    setLegOverrideConfirm(null)
+  }, [])
+
+  useEffect(() => {
+    if (!legOverrideConfirm) return
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        handleLegOverrideNo()
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [handleLegOverrideNo, legOverrideConfirm])
 
   // Button size classes for toolbar buttons
   const getButtonSizeClasses = (size: string) => {
@@ -284,7 +658,11 @@ export default function OfflinePlay({ user }: { user: any }) {
     setFirstTo(wins)
   }, [formatType, formatCount])
   useEffect(() => {
-    if (!fitAll) { setFitScale(1); return }
+    if (!fitAll) {
+      setFitScale(1)
+      setFitOverflowing(false)
+      return
+    }
     const measure = () => {
       const scroller = scrollerRef.current
       const content = contentRef.current
@@ -301,8 +679,11 @@ export default function OfflinePlay({ user }: { user: any }) {
       // Compute scale to fit both height and width
       const scaleH = availH > 0 ? (availH / naturalHeight) : 1
       const scaleW = availW > 0 ? (availW / naturalWidth) : 1
-      const next = Math.min(1, Math.max(0.5, Math.min(scaleH, scaleW)))
-      setFitScale(next)
+  const next = Math.min(1, Math.max(0.5, Math.min(scaleH, scaleW)))
+  const scaledHeight = naturalHeight * next
+  const overflowing = availH > 0 && (scaledHeight - availH) > 1
+  setFitOverflowing(overflowing)
+  setFitScale(next)
     }
     measure()
   const RO: any = (window as any).ResizeObserver
@@ -366,7 +747,9 @@ export default function OfflinePlay({ user }: { user: any }) {
         if (next <= 0) {
           // Execute AI visit per dart (up to 3 darts or until finish/bust)
           let visitDarts = 0
+          let visitTotal = 0
           let remaining = aiScore
+          setAiVisitDarts(0)
           while (visitDarts < 3 && remaining > 0) {
             const targetVisit = aiVisitScore(remaining, ai)
             // break target into up to 3 darts (roughly 20 per dart for easy split)
@@ -380,9 +763,13 @@ export default function OfflinePlay({ user }: { user: any }) {
               remaining = aiScore
               setAiVisitSum(0)
               setAiVisitDartsAtDouble(0)
+              visitTotal = 0
+              setAiLastVisitScore(0)
+              setAiVisitDarts(0)
               break
             }
             // Only add points after confirming not a bust
+            visitTotal += dart
             setAiVisitSum(s => s + dart)
             setTotalAiPoints(p => p + dart)
             // Track darts at double window
@@ -392,14 +779,15 @@ export default function OfflinePlay({ user }: { user: any }) {
             else if (preRem <= 50) setAiVisitDartsAtDouble(c => c + 1)
             remaining = after
             visitDarts += 1
+            setAiVisitDarts(visitDarts)
             if (remaining === 0) break
           }
           setAiScore(remaining)
           if (remaining === 0) {
             // Power score classification
-            if (aiVisitSum === 180) setAi180s(n => n + 1)
-            else if (aiVisitSum >= 140) setAi140s(n => n + 1)
-            else if (aiVisitSum >= 100) setAi100s(n => n + 1)
+            if (visitTotal === 180) setAi180s(n => n + 1)
+            else if (visitTotal >= 140) setAi140s(n => n + 1)
+            else if (visitTotal >= 100) setAi100s(n => n + 1)
             // Highest checkout
             const checkout = aiScore
             if (checkout <= 170) setAiHighestCheckout(h => Math.max(h, checkout))
@@ -408,21 +796,26 @@ export default function OfflinePlay({ user }: { user: any }) {
               setAiDoublesAtt(a => a + (aiVisitDartsAtDouble > 0 ? aiVisitDartsAtDouble : 1))
               setAiDoublesHit(h => h + 1)
             }
+            setAiLastVisitScore(visitTotal)
             setAiVisitSum(0)
             setAiVisitDartsAtDouble(0)
+            setAiVisitDarts(0)
             // AI won the leg
             setPendingLegWinner('ai')
             setShowWinPopup(true)
           }
           // If AI did not finish, but threw 3 darts this visit, classify power score and reset visit sum
           if (remaining > 0 && visitDarts >= 3) {
-            if (aiVisitSum === 180) setAi180s(n => n + 1)
-            else if (aiVisitSum >= 140) setAi140s(n => n + 1)
-            else if (aiVisitSum >= 100) setAi100s(n => n + 1)
+            if (visitTotal === 180) setAi180s(n => n + 1)
+            else if (visitTotal >= 140) setAi140s(n => n + 1)
+            else if (visitTotal >= 100) setAi100s(n => n + 1)
+            setAiLastVisitScore(visitTotal)
             setAiVisitSum(0)
             setAiVisitDartsAtDouble(0)
+            setAiVisitDarts(0)
           }
           // Hand turn back to player
+          setAiVisitDarts(0)
           setIsPlayerTurn(true)
           return 0
         }
@@ -437,6 +830,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   function startMatch() {
     setInMatch(true);
     setPlayerScore(x01Score);
+  playerScoreRef.current = x01Score
     setAiScore(x01Score);
     setOnDouble(false);
     setShowMatchModal(true);
@@ -445,13 +839,17 @@ export default function OfflinePlay({ user }: { user: any }) {
     setPlayerDartsThrown(0);
     setPlayerLastDart(0);
     setPlayerVisitDarts(0);
+  playerVisitDartsRef.current = 0
     setPlayerVisitStart(x01Score);
     setPlayerVisitSum(0)
+    setPlayerLastVisitScore(null)
   setPlayerVisitDartsAtDouble(0)
     setAiCountdownMs(0);
     setAiDartsThrown(0);
     setAiLastDart(0);
-    setAiVisitSum(0)
+  setAiVisitSum(0)
+  setAiVisitDarts(0)
+    setAiLastVisitScore(null)
     setPendingLegWinner(null)
     // When starting a brand-new match from menu, reset legs
   setPlayerLegs(0)
@@ -467,6 +865,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     setPlayerHighestCheckout(0); setAiHighestCheckout(0)
     setPlayerDoublesAtt(0); setPlayerDoublesHit(0)
     setAiDoublesAtt(0); setAiDoublesHit(0)
+  resetDartCount('X01')
     // Sync required wins from current format selection
     const n = Math.max(1, Math.floor(Number(formatCount) || 1))
     setFirstTo(formatType === 'first' ? n : Math.max(1, Math.ceil(n/2)))
@@ -477,6 +876,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
   function startNextLeg() {
     setPlayerScore(x01Score)
+  playerScoreRef.current = x01Score
     setAiScore(x01Score)
     setOnDouble(false)
     setShowMatchModal(true)
@@ -485,125 +885,152 @@ export default function OfflinePlay({ user }: { user: any }) {
     setPlayerDartsThrown(0)
     setPlayerLastDart(0)
     setPlayerVisitDarts(0)
+  playerVisitDartsRef.current = 0
     setPlayerVisitStart(x01Score)
     setPlayerVisitSum(0)
+    playerVisitStartRef.current = x01Score
+    playerVisitSumRef.current = 0
+    setPlayerLastVisitScore(null)
   setPlayerVisitDartsAtDouble(0)
+    playerVisitDartsAtDoubleRef.current = 0
+    playerVisitDartsAtDoubleRef.current = 0
     setAiCountdownMs(0)
     setAiDartsThrown(0)
     setAiLastDart(0)
     setAiVisitSum(0)
+    setAiVisitDarts(0)
+    setAiLastVisitScore(null)
     setPendingLegWinner(null)
   }
 
   // --- Offline per-dart helpers ---
   function endTurn(nextRemaining: number) {
     setPlayerVisitDarts(0)
-    setPlayerVisitStart(nextRemaining === 0 ? x01Score : playerScore)
+    playerVisitDartsRef.current = 0
+    setPlayerVisitStart(nextRemaining === 0 ? x01Score : nextRemaining)
+    playerVisitStartRef.current = (nextRemaining === 0 ? x01Score : nextRemaining)
     setPlayerVisitDartsAtDouble(0)
-    if (ai !== 'None') { setIsPlayerTurn(false); setAiCountdownMs(aiDelayMs) } else setIsPlayerTurn(false)
+    playerVisitDartsAtDoubleRef.current = 0
+    if (ai !== 'None') {
+      setIsPlayerTurn(false)
+      setAiCountdownMs(aiDelayMs)
+    } else {
+      setAiCountdownMs(0)
+      setIsPlayerTurn(true)
+    }
   }
 
   function applyDartValue(dart: number) {
-    const remaining = playerScore - dart
-    const newVisitDarts = playerVisitDarts + 1
+    if (waitForBoardClear && pendingVisitRef.current) {
+      if (!awaitingBoardClear) setAwaitingBoardClear(true)
+      toast('Remove your darts before starting the next throw', { type: 'info', timeout: 1800 })
+      return
+    }
+    recordDart('X01')
+    const currentScore = playerScoreRef.current
+    const currentVisitDarts = playerVisitDartsRef.current
+    const currentVisitSum = playerVisitSumRef.current
+    const currentVisitStart = playerVisitStartRef.current
+    const currentVisitDartsAtDouble = playerVisitDartsAtDoubleRef.current
+    const remaining = currentScore - dart
+    const newVisitDarts = currentVisitDarts + 1
+
     setPlayerLastDart(dart)
     setPlayerDartsThrown(d => d + 1)
     setTotalPlayerDarts(d => d + 1)
-  if (remaining < 0) {
-      // bust: revert to visit start, end turn
+
+    if (remaining < 0) {
       try {
-        const preRemaining = playerScore
-        const postRemaining = playerVisitStart
+        const preRemaining = currentScore
+        const postRemaining = currentVisitStart
         useAudit.getState().recordVisit('offline-x01', newVisitDarts, 0, { preRemaining, postRemaining, bust: true, finish: false })
       } catch {}
-      setPlayerScore(playerVisitStart)
-      // Count doubles attempts made this visit if we were in the double window
-      const bustPreRemaining = playerScore
-      if (bustPreRemaining <= 50) {
-        // playerVisitDartsAtDouble has previous window darts; include this dart as an attempt too
-        const attemptsThisVisit = (playerVisitDartsAtDouble || 0) + 1
+      setPlayerScore(currentVisitStart)
+      playerScoreRef.current = currentVisitStart
+
+      if (currentScore <= 50) {
+        const attemptsThisVisit = (currentVisitDartsAtDouble || 0) + 1
         setPlayerDoublesAtt(a => a + attemptsThisVisit)
       }
-      // Announce visit total on bust (0 for the visit)
+
       if (callerEnabled) {
-        try { sayScore(user?.username || 'Player', 0, Math.max(playerVisitStart, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
+        try { sayScore(user?.username || 'Player', 0, Math.max(currentVisitStart, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
       }
-      endTurn(playerVisitStart)
+
+      setPlayerLastVisitScore(0)
       setPlayerDartPoints(0)
       setPlayerVisitSum(0)
+      playerVisitSumRef.current = 0
       setPlayerVisitDartsAtDouble(0)
+      playerVisitDartsAtDoubleRef.current = 0
+      endTurn(currentVisitStart)
       return
     }
+
     setPlayerScore(remaining)
-    // Do not announce per-dart; we announce once per visit when it ends or on checkout
+    playerScoreRef.current = remaining
+
     setPlayerVisitDarts(newVisitDarts)
-    setPlayerVisitSum(s => s + dart)
+    playerVisitDartsRef.current = newVisitDarts
+    const newVisitSum = currentVisitSum + dart
+    setPlayerVisitSum(newVisitSum)
+    playerVisitSumRef.current = newVisitSum
+
     setTotalPlayerPoints(p => p + dart)
     setPlayerDartPoints(0)
-    // Start/continue counting darts at a double when remaining <= 50 and on a valid finish path
-    const preRemaining = playerScore
+
+    const preRemaining = currentScore
     const postRemaining = remaining
     const startedDoubleWindow = preRemaining > 50 && postRemaining <= 50
     const stillInDoubleWindow = preRemaining <= 50
     if (startedDoubleWindow) {
       setPlayerVisitDartsAtDouble(1)
+      playerVisitDartsAtDoubleRef.current = 1
     } else if (stillInDoubleWindow) {
       setPlayerVisitDartsAtDouble(c => c + 1)
+      playerVisitDartsAtDoubleRef.current = (currentVisitDartsAtDouble || 0) + 1
     }
+
+    const doubleAttemptsNow = playerVisitDartsAtDoubleRef.current || 0
+    const inDoubleWindow = preRemaining <= 50
+    const attemptsForVisit = inDoubleWindow ? Math.max(doubleAttemptsNow, Math.min(newVisitDarts, 3)) : 0
+
     if (remaining === 0) {
-      // Player wins the leg
-      try {
-        const visitTotal = playerVisitSum + dart
-        const preRemaining = playerScore
-        useAudit.getState().recordVisit('offline-x01', newVisitDarts, visitTotal, { preRemaining, postRemaining: 0, finish: true, bust: false })
-      } catch {}
-      // Power score classification on final visit
-      if (playerVisitSum + dart === 180) setPlayer180s(n => n + 1)
-      else if (playerVisitSum + dart >= 140) setPlayer140s(n => n + 1)
-      else if (playerVisitSum + dart >= 100) setPlayer100s(n => n + 1)
-      // Highest checkout if <= 170
-      const checkout = playerVisitStart
-      if (checkout <= 170) setPlayerHighestCheckout(h => Math.max(h, checkout))
-      // Count doubles attempts in this visit and record a hit when finishing from <= 50
-      if (preRemaining <= 50) {
-        // Include this dart in attempts
-        const attemptsThisVisit = (playerVisitDartsAtDouble || 0) + 1
-        setPlayerDoublesAtt(a => a + attemptsThisVisit)
-        setPlayerDoublesHit(h => h + 1)
+      const pending: PendingAutoVisit = {
+        visitTotal: newVisitSum,
+        darts: newVisitDarts,
+        preRemaining: currentScore,
+        remaining: 0,
+        doubleAttempts: attemptsForVisit,
+        finished: true,
+        doubleWindow: inDoubleWindow,
+        highestCheckout: currentVisitStart <= 170 ? currentVisitStart : null,
       }
-      // Announce total of the visit on checkout
-      if (callerEnabled) {
-        const visitTotal = playerVisitSum + dart
-        try { sayScore(user?.username || 'Player', visitTotal, 0, callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
+      if (waitForBoardClear) {
+        queuePendingVisit(pending)
+      } else {
+        commitPendingVisit(pending, 'immediate')
       }
-      setPendingLegWinner('player')
-      setShowWinPopup(true)
       return
     }
+
     if (newVisitDarts >= 3) {
-      // Classify power score for completed visit
-      try {
-        const visitTotal = playerVisitSum + dart
-        const preRemaining = playerScore
-        const postRemaining = remaining
-        useAudit.getState().recordVisit('offline-x01', newVisitDarts, visitTotal, { preRemaining, postRemaining, finish: false, bust: false })
-      } catch {}
-      if (playerVisitSum + dart === 180) setPlayer180s(n => n + 1)
-      else if (playerVisitSum + dart >= 140) setPlayer140s(n => n + 1)
-      else if (playerVisitSum + dart >= 100) setPlayer100s(n => n + 1)
-      // Count doubles attempts on a non-finishing visit inside double window
-      if (preRemaining <= 50) {
-        const attemptsThisVisit = (playerVisitDartsAtDouble || 0) + 1
-        setPlayerDoublesAtt(a => a + attemptsThisVisit)
+      const pending: PendingAutoVisit = {
+        visitTotal: newVisitSum,
+        darts: newVisitDarts,
+        preRemaining: currentScore,
+        remaining,
+        doubleAttempts: attemptsForVisit,
+        finished: false,
+        doubleWindow: inDoubleWindow,
+        highestCheckout: null,
       }
-      // Announce visit total after third dart
-      if (callerEnabled) {
-        const visitTotal = playerVisitSum + dart
-        try { sayScore(user?.username || 'Player', visitTotal, Math.max(remaining, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
+      if (waitForBoardClear) {
+        queuePendingVisit(pending)
+      } else {
+        commitPendingVisit(pending, 'immediate')
       }
-      endTurn(remaining)
-      setPlayerVisitSum(0)
-      setPlayerVisitDartsAtDouble(0)
+      return
     }
   }
 
@@ -612,80 +1039,184 @@ export default function OfflinePlay({ user }: { user: any }) {
     applyDartValue(dart)
   }
 
-  // Optional: Add a full-visit total (0–180) input for quick entry like "93"
-  const [visitTotalInput, setVisitTotalInput] = useState<string>("")
-  function addVisitTotal() {
-    const raw = Math.round(Number(visitTotalInput) || 0)
-    const total = clamp(raw, 0, 180)
-    if (total === 0 && raw !== 0) { alert('Enter a number 0–180 for visit total'); return }
-    const remaining = playerScore - total
-    // Track three darts for a full visit entry
+  function commitManualVisitTotal(rawTotal: number): boolean {
+    if (!Number.isFinite(rawTotal)) return false
+
+    const visitStart = playerVisitStartRef.current
+    const liveScore = playerScoreRef.current
+    const existingDarts = playerVisitDartsRef.current
+    const existingSum = playerVisitSumRef.current
+    const hadPartialVisit = existingDarts > 0 || existingSum > 0
+
+    if (hadPartialVisit) {
+      setPlayerScore(visitStart)
+      playerScoreRef.current = visitStart
+      setPlayerVisitDarts(0)
+      playerVisitDartsRef.current = 0
+      setPlayerVisitSum(0)
+      playerVisitSumRef.current = 0
+      setPlayerVisitDartsAtDouble(0)
+      playerVisitDartsAtDoubleRef.current = 0
+      setPlayerLastDart(0)
+      setPlayerDartPoints(0)
+      setPlayerDartsThrown(d => Math.max(0, d - existingDarts))
+      setTotalPlayerDarts(d => Math.max(0, d - existingDarts))
+      setTotalPlayerPoints(p => Math.max(0, p - existingSum))
+      lastBounceMissTsRef.current = 0
+    }
+
+    const preRemaining = hadPartialVisit ? visitStart : liveScore
+    const checkoutCap = preRemaining <= 170 ? 170 : 180
+    const total = clamp(Math.round(rawTotal), 0, checkoutCap)
+
+    recordDart('X01', 3)
     setPlayerDartsThrown(d => d + 3)
     setTotalPlayerDarts(d => d + 3)
     setPlayerVisitDarts(3)
+    playerVisitDartsRef.current = 3
     setPlayerVisitSum(total)
-    // Power score classification
+    playerVisitSumRef.current = total
+    setPlayerLastVisitScore(total)
+
     if (total === 180) setPlayer180s(n => n + 1)
     else if (total >= 140) setPlayer140s(n => n + 1)
     else if (total >= 100) setPlayer100s(n => n + 1)
-    // Handle bust
+
+    const remaining = preRemaining - total
+
     if (remaining < 0) {
-      // bust: revert to visit start and end turn
       if (callerEnabled) {
-        try { sayScore(user?.username || 'Player', 0, Math.max(playerVisitStart, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
+        try { sayScore(humanName, 0, Math.max(visitStart, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
       }
       try {
-        const preRemaining = playerScore
-        const postRemaining = playerVisitStart
-        useAudit.getState().recordVisit('offline-x01', 3, 0, { preRemaining, postRemaining, bust: true, finish: false })
+        useAudit.getState().recordVisit('offline-x01', 3, 0, { preRemaining, postRemaining: visitStart, bust: true, finish: false })
       } catch {}
-      setPlayerScore(playerVisitStart)
-      endTurn(playerVisitStart)
+      setPlayerScore(visitStart)
+      playerScoreRef.current = visitStart
+      setPlayerLastVisitScore(0)
       setPlayerVisitSum(0)
+      playerVisitSumRef.current = 0
       setPlayerVisitDarts(0)
+      playerVisitDartsRef.current = 0
       setPlayerVisitDartsAtDouble(0)
-      setVisitTotalInput("")
-      return
+      playerVisitDartsAtDoubleRef.current = 0
+      endTurn(visitStart)
+      return true
     }
-    // Normal reduce
+
     setPlayerScore(remaining)
-    // Announce visit
+    playerScoreRef.current = remaining
+    setTotalPlayerPoints(p => p + total)
+
     if (callerEnabled) {
-      try { sayScore(user?.username || 'Player', total, Math.max(remaining, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
+      try { sayScore(humanName, total, Math.max(remaining, 0), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly }) } catch {}
     }
-    // Doubles attempts/hit from visit total if we were in checkout range at visit start
-    if (playerVisitStart <= 50) {
+
+    if (preRemaining <= 50) {
       setPlayerDoublesAtt(a => a + 3)
       if (remaining === 0) setPlayerDoublesHit(h => h + 1)
     }
-    // Checkout if exactly zero
+
     if (remaining === 0) {
-      const checkout = playerVisitStart
-      if (checkout <= 170) setPlayerHighestCheckout(h => Math.max(h, checkout))
+      if (preRemaining <= 170) setPlayerHighestCheckout(h => Math.max(h, preRemaining))
       try {
-        const preRemaining = playerScore
         useAudit.getState().recordVisit('offline-x01', 3, total, { preRemaining, postRemaining: 0, finish: true, bust: false })
       } catch {}
       setPendingLegWinner('player')
       setShowWinPopup(true)
-      setVisitTotalInput("")
-      return
+      setPlayerVisitDarts(0)
+      playerVisitDartsRef.current = 0
+      setPlayerVisitSum(0)
+      playerVisitSumRef.current = 0
+      setPlayerVisitDartsAtDouble(0)
+      playerVisitDartsAtDoubleRef.current = 0
+      return true
     }
-    // Otherwise end turn
+
     try {
-      const preRemaining = playerScore
-      const postRemaining = remaining
-      useAudit.getState().recordVisit('offline-x01', 3, total, { preRemaining, postRemaining, finish: false, bust: false })
+      useAudit.getState().recordVisit('offline-x01', 3, total, { preRemaining, postRemaining: remaining, finish: false, bust: false })
     } catch {}
     endTurn(remaining)
     setPlayerVisitSum(0)
+    playerVisitSumRef.current = 0
     setPlayerVisitDarts(0)
+    playerVisitDartsRef.current = 0
     setPlayerVisitDartsAtDouble(0)
-    setVisitTotalInput("")
+    playerVisitDartsAtDoubleRef.current = 0
+    return true
   }
+
+  // Optional: Add a full-visit total (0–180) input for quick entry like "93"
+  const [visitTotalInput, setVisitTotalInput] = useState<string>("")
+  const handleVisitTotalChange = (raw: string) => {
+    if (!raw) {
+      setVisitTotalInput('')
+      return
+    }
+    const numericOnly = raw.replace(/[^0-9]/g, '')
+    if (!numericOnly) {
+      setVisitTotalInput('')
+      return
+    }
+    const parsed = Number(numericOnly)
+    if (!Number.isFinite(parsed)) return
+    const maxAllowed = playerScoreRef.current <= 170 ? 170 : 180
+    const safe = clamp(Math.round(parsed), 0, maxAllowed)
+    setVisitTotalInput(String(safe))
+  }
+  function addVisitTotal() {
+    if (!visitTotalInput) { alert('Enter a number 0–180 for visit total'); return }
+    const parsed = Number(visitTotalInput)
+    if (!Number.isFinite(parsed)) { alert('Enter a number 0–180 for visit total'); return }
+    const maxAllowed = playerScoreRef.current <= 170 ? 170 : 180
+    const bounded = clamp(Math.round(parsed), 0, maxAllowed)
+    if (parsed > maxAllowed) {
+      toast(`Visit totals cannot exceed ${maxAllowed}.`, { type: 'info', timeout: 2200 })
+    }
+    if (commitManualVisitTotal(bounded)) {
+      setVisitTotalInput("")
+    }
+  }
+
+  const clearCurrentVisit = useCallback(() => {
+    if (pendingVisitRef.current) {
+      pendingVisitRef.current = null
+      clearPendingVisitTimer()
+      setAwaitingBoardClear(false)
+    }
+    const visitDarts = playerVisitDartsRef.current
+    const visitTotal = playerVisitSumRef.current
+    const visitStart = playerVisitStartRef.current
+    if (visitDarts === 0 && visitTotal === 0) return
+    setPlayerScore(visitStart)
+  playerScoreRef.current = visitStart
+    setPlayerVisitDarts(0)
+  playerVisitDartsRef.current = 0
+    setPlayerVisitSum(0)
+  playerVisitSumRef.current = 0
+    setPlayerVisitDartsAtDouble(0)
+  playerVisitDartsAtDoubleRef.current = 0
+    setPlayerLastDart(0)
+    setPlayerDartPoints(0)
+    setPlayerDartsThrown(d => Math.max(0, d - visitDarts))
+    setTotalPlayerDarts(d => Math.max(0, d - visitDarts))
+    setTotalPlayerPoints(p => Math.max(0, p - visitTotal))
+    lastBounceMissTsRef.current = 0
+  }, [clearPendingVisitTimer])
+
+  useEffect(() => {
+    const onClearRequest = (evt: Event) => {
+      const detail = (evt as CustomEvent)?.detail
+      if (!detail || detail?.source === 'offline-play') return
+      clearCurrentVisit()
+    }
+    window.addEventListener('ndn:clear-visit-request', onClearRequest as EventListener)
+    return () => window.removeEventListener('ndn:clear-visit-request', onClearRequest as EventListener)
+  }, [clearCurrentVisit])
 
   // --- Double Practice helpers ---
   function addDpValue(val: number) {
+    recordDart('Double Practice')
     const dart = clamp(Math.round(val || 0), 0, 60)
     setPlayerLastDart(dart)
     setPlayerDartsThrown(d => d + 1)
@@ -713,13 +1244,14 @@ export default function OfflinePlay({ user }: { user: any }) {
   // Bob's 27
   function addB27Auto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
     if (b27Finished) return
+    recordDart("Bob's 27")
     const target = b27Stage
-    const hit = (ring === 'DOUBLE' && sector === target) || (!ring && value === target*2)
+    const hit = (ring === 'DOUBLE' && sector === target) || (!ring && value === target * 2)
     if (hit) setB27Hits(h => h + 1)
     setB27Darts(d => {
       const nd = d + 1
       if (nd >= 3) {
-        const totalHits = b27Hits + (hit?1:0)
+        const totalHits = b27Hits + (hit ? 1 : 0)
         if (totalHits > 0) setB27Score(s => s + totalHits * target * 2)
         else setB27Score(s => s - target * 2)
         const next = target + 1
@@ -731,13 +1263,25 @@ export default function OfflinePlay({ user }: { user: any }) {
       return nd
     })
   }
-  function addB27Numeric() { addB27Auto(Math.max(0, playerDartPoints|0)); setPlayerDartPoints(0) }
-  function resetB27() { setB27Stage(1); setB27Score(27); setB27Darts(0); setB27Hits(0); setB27Finished(false) }
+  function addB27Numeric() { addB27Auto(Math.max(0, playerDartPoints | 0)); setPlayerDartPoints(0) }
+  function resetB27() { setB27Stage(1); setB27Score(27); setB27Darts(0); setB27Hits(0); setB27Finished(false); resetDartCount("Bob's 27") }
 
   // Count-Up / High Score / Low Score
-  function addCountUpAuto(value: number) { setCuScore(s => s + Math.max(0, value|0)); setCuDarts(d => { const nd=d+1; if(nd>=3){ setCuRound(r=>r+1); return 0 } return nd }) }
-  function addHighScoreAuto(value: number) { setHsScore(s => s + Math.max(0, value|0)); setHsDarts(d => { const nd=d+1; if(nd>=3){ setHsRound(r=>r+1); return 0 } return nd }) }
-  function addLowScoreAuto(value: number) { setLsScore(s => s + Math.max(0, value|0)); setLsDarts(d => { const nd=d+1; if(nd>=3){ setLsRound(r=>r+1); return 0 } return nd }) }
+  function addCountUpAuto(value: number) {
+    recordDart('Count-Up')
+    setCuScore(s => s + Math.max(0, value | 0))
+    setCuDarts(d => { const nd = d + 1; if (nd >= 3) { setCuRound(r => r + 1); return 0 } return nd })
+  }
+  function addHighScoreAuto(value: number) {
+    recordDart('High Score')
+    setHsScore(s => s + Math.max(0, value | 0))
+    setHsDarts(d => { const nd = d + 1; if (nd >= 3) { setHsRound(r => r + 1); return 0 } return nd })
+  }
+  function addLowScoreAuto(value: number) {
+    recordDart('Low Score')
+    setLsScore(s => s + Math.max(0, value | 0))
+    setLsDarts(d => { const nd = d + 1; if (nd >= 3) { setLsRound(r => r + 1); return 0 } return nd })
+  }
 
   // Checkout routines (double out)
   function applyCheckout(rem: number, setRem: (n:number)=>void, darts: number, setDarts: (f:(n:number)=>number)=>void, setAttempts: (f:(n:number)=>number)=>void, setSuccesses: (f:(n:number)=>number)=>void, value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL') {
@@ -748,37 +1292,47 @@ export default function OfflinePlay({ user }: { user: any }) {
       if (ring === 'DOUBLE' || ring === 'INNER_BULL') {
         setSuccesses(s => s + 1)
         setAttempts(a => a + 1)
-        setDarts(()=>0)
+        setDarts(() => 0)
         setRem(rem) // caller will reset to initial value right after
         return
       }
+      setRem(next)
     } else {
       setRem(next)
     }
-    setDarts(d => { const nd = d + 1; if (nd>=3) { setAttempts(a=>a+1); return 0 } return nd })
+    setDarts(d => { const nd = d + 1; if (nd >= 3) { setAttempts(a => a + 1); return 0 } return nd })
   }
-  function addCo170Auto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL') { applyCheckout(co170Rem, setCo170Rem, co170Darts, setCo170Darts, setCo170Attempts, setCo170Successes, value, ring); if (co170Darts+1>=3) setCo170Rem(170) }
-  function addCo121Auto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL') { applyCheckout(co121Rem, setCo121Rem, co121Darts, setCo121Darts, setCo121Attempts, setCo121Successes, value, ring); if (co121Darts+1>=3) setCo121Rem(121) }
+  function addCo170Auto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL') {
+    recordDart('Checkout 170')
+    applyCheckout(co170Rem, setCo170Rem, co170Darts, setCo170Darts, setCo170Attempts, setCo170Successes, value, ring)
+    if (co170Darts + 1 >= 3) setCo170Rem(170)
+  }
+  function addCo121Auto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL') {
+    recordDart('Checkout 121')
+    applyCheckout(co121Rem, setCo121Rem, co121Darts, setCo121Darts, setCo121Attempts, setCo121Successes, value, ring)
+    if (co121Darts + 1 >= 3) setCo121Rem(121)
+  }
   function addCoManual(is170: boolean) {
     const v = parseManualDart(manualBox)
     if (v == null) { alert('Enter like T20, D16, 25, 50'); return }
     const t = manualBox.trim().toUpperCase()
     const isDouble = t.startsWith('D') || t === '50' || t === 'BULL' || t === 'DBULL' || t === 'IBULL' || t.includes('INNER')
-    if (is170) addCo170Auto(v, isDouble?'DOUBLE':undefined); else addCo121Auto(v, isDouble?'DOUBLE':undefined)
+    if (is170) addCo170Auto(v, isDouble ? 'DOUBLE' : undefined); else addCo121Auto(v, isDouble ? 'DOUBLE' : undefined)
     setManualBox('')
   }
-  function resetCo170() { setCo170Rem(170); setCo170Darts(0); setCo170Attempts(0); setCo170Successes(0) }
-  function resetCo121() { setCo121Rem(121); setCo121Darts(0); setCo121Attempts(0); setCo121Successes(0) }
+  function resetCo170() { setCo170Rem(170); setCo170Darts(0); setCo170Attempts(0); setCo170Successes(0); resetDartCount('Checkout 170') }
+  function resetCo121() { setCo121Rem(121); setCo121Darts(0); setCo121Attempts(0); setCo121Successes(0); resetDartCount('Checkout 121') }
 
   // Treble practice
   function addTrebleAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
     if (trebleFinished) return
-    const isHit = (ring==='TRIPLE' && sector===trebleTarget) || (!ring && value===trebleTarget*3)
-    if (isHit) setTrebleHits(h=>h+1)
+    recordDart('Treble Practice')
+    const isHit = (ring === 'TRIPLE' && sector === trebleTarget) || (!ring && value === trebleTarget * 3)
+    if (isHit) setTrebleHits(h => h + 1)
     setTrebleDarts(d => {
       const nd = d + 1
       // Auto-rotate target every 3 darts among T20→T19→T18
-      if (nd % 3 === 0 && [20,19,18].includes(trebleTarget)) {
+      if (nd % 3 === 0 && [20, 19, 18].includes(trebleTarget)) {
         const cycle = [20, 19, 18]
         const idx = cycle.indexOf(trebleTarget)
         const next = cycle[(idx + 1) % cycle.length]
@@ -789,34 +1343,39 @@ export default function OfflinePlay({ user }: { user: any }) {
       return nd
     })
   }
-  function resetTreble() { setTrebleHits(0); setTrebleDarts(0); setTrebleFinished(false) }
+  function resetTreble() { setTrebleHits(0); setTrebleDarts(0); setTrebleFinished(false); resetDartCount('Treble Practice') }
 
   // Baseball
   function addBaseballAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE', sector?: number | null) {
+    recordDart('Baseball')
     setBaseball(prev => { const cp = { ...prev }; applyBaseballDart(cp as any, value, ring as any, sector); return cp })
   }
-  function resetBaseball() { setBaseball(createBaseball()) }
+  function resetBaseball() { setBaseball(createBaseball()); resetDartCount('Baseball') }
 
   // Golf
   function addGolfAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE', sector?: number | null) {
+    recordDart('Golf')
     setGolf(prev => { const cp = { ...prev }; applyGolfDart(cp as any, value, ring as any, sector); return cp })
   }
-  function resetGolf() { setGolf(createGolf()) }
+  function resetGolf() { setGolf(createGolf()); resetDartCount('Golf') }
 
   // Tic Tac Toe
   function addTttAuto(cell: number, value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    recordDart('Tic Tac Toe')
     setTTT(prev => { const cp = { ...prev, board: [...prev.board] as any }; tryClaimCell(cp as any, cell as any, value, ring as any, sector); return cp })
   }
-  function resetTtt() { setTTT(createTicTacToe()) }
+  function resetTtt() { setTTT(createTicTacToe()); resetDartCount('Tic Tac Toe') }
 
   // American Cricket
   function addAmCricketAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    recordDart('American Cricket')
     setAmCricket(prev => { const cp = { ...prev, marks: { ...prev.marks } }; applyAmCricketDart(cp as any, value, ring as any, sector, () => false); return cp })
   }
-  function resetAmCricket() { setAmCricket(createAmCricketState()) }
+  function resetAmCricket() { setAmCricket(createAmCricketState()); resetDartCount('American Cricket') }
 
   // --- Around the Clock helpers ---
   function addAtcValue(val: number, ring?: 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    recordDart('Around the Clock')
     const target = ATC_ORDER[atcIndex]
     let hit = false
     if (typeof sector === 'number' && sector === target && (ring === 'SINGLE' || ring === 'DOUBLE' || ring === 'TRIPLE')) hit = true
@@ -842,6 +1401,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
   // --- Cricket helpers (solo practice) ---
   function addCricketAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    recordDart('Cricket')
     setCricket(prev => {
       const copy = { ...prev, marks: { ...prev.marks } }
       applyCricketDart(copy as any, value, ring, sector, () => false)
@@ -855,6 +1415,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
   // --- Shanghai helpers ---
   function addShanghaiAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    recordDart('Shanghai')
     setShanghai(prev => {
       const copy = { ...prev, turnHits: { ...prev.turnHits } }
       applyShanghaiDart(copy as any, value, ring, sector)
@@ -873,6 +1434,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
   // --- Halve It helpers ---
   function addHalveAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    recordDart('Halve It')
     setHalve(prev => {
       const copy = { ...prev, targets: [...prev.targets] }
       applyHalveItDart(copy as any, value, ring, sector)
@@ -891,6 +1453,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
   // --- High-Low helpers ---
   function addHighLowAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
+    recordDart('High-Low')
     setHighlow(prev => {
       const copy = { ...prev }
       applyHighLowDart(copy as any, value, ring, sector)
@@ -1113,7 +1676,7 @@ export default function OfflinePlay({ user }: { user: any }) {
             {/* Header bar with visible mode and actions; sheen is clipped to this area */}
             <div
               className="flex-1 min-h-0 overflow-x-hidden pr-1 pt-2 pb-2"
-              style={{ overflowY: fitAll ? 'hidden' as any : 'auto' }}
+              style={{ overflowY: fitAll && !fitOverflowing ? ('hidden' as const) : ('auto' as const) }}
               ref={(el) => { (scrollerRef as any).current = el }}
             >
               <div ref={(el)=>{ (headerBarRef as any).current = el }}>
@@ -1249,7 +1812,11 @@ export default function OfflinePlay({ user }: { user: any }) {
                     </div>
                     <div className="text-sm">Points: <span className="font-semibold">{cricket.points}</span></div>
                     {cricketClosedAll(cricket) && (
-                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={()=>{ setCricket(createCricketState()); setPracticeTurnDarts(0) }}>Reset</button></div>
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={() => {
+                        setCricket(createCricketState())
+                        setPracticeTurnDarts(0)
+                        resetDartCount('Cricket')
+                      }}>Reset</button></div>
                     )}
                   </>
                 )}
@@ -1258,7 +1825,11 @@ export default function OfflinePlay({ user }: { user: any }) {
                     <div className="text-xs text-slate-600 flex items-center justify-between"><span>Round</span><span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-xs font-semibold">{shanghai.round}</span></div>
                     <div className="text-3xl font-extrabold tracking-tight">Score: {shanghai.score}</div>
                     {shanghai.finished && (
-                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={()=>{ setShanghai(createShanghaiState()); setPracticeTurnDarts(0) }}>Reset</button></div>
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={() => {
+                        setShanghai(createShanghaiState())
+                        setPracticeTurnDarts(0)
+                        resetDartCount('Shanghai')
+                      }}>Reset</button></div>
                     )}
                   </>
                 )}
@@ -1268,7 +1839,11 @@ export default function OfflinePlay({ user }: { user: any }) {
                     <div className="text-sm">Target: <span className="font-semibold">{(() => { const t = getCurrentHalveTarget(halve); if (!t) return '—'; if (t.kind==='ANY_NUMBER') return 'Any'; if (t.kind==='BULL') return 'Bull'; if (t.kind==='DOUBLE' || t.kind==='TRIPLE' || t.kind==='NUMBER') return `${t.kind} ${(t as any).num}`; return '—' })()}</span></div>
                     <div className="text-3xl font-extrabold tracking-tight">Score: {halve.score}</div>
                     {halve.finished && (
-                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={()=>{ setHalve(createDefaultHalveIt()); setPracticeTurnDarts(0) }}>Reset</button></div>
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={() => {
+                        setHalve(createDefaultHalveIt())
+                        setPracticeTurnDarts(0)
+                        resetDartCount('Halve It')
+                      }}>Reset</button></div>
                     )}
                   </>
                 )}
@@ -1277,7 +1852,11 @@ export default function OfflinePlay({ user }: { user: any }) {
                     <div className="text-xs text-slate-600">Round {highlow.round} · Target {highlow.target}</div>
                     <div className="text-3xl font-extrabold tracking-tight">Score: {highlow.score}</div>
                     {highlow.finished && (
-                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={()=>{ setHighlow(createHighLow()); setPracticeTurnDarts(0) }}>Reset</button></div>
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={() => {
+                        setHighlow(createHighLow())
+                        setPracticeTurnDarts(0)
+                        resetDartCount('High-Low')
+                      }}>Reset</button></div>
                     )}
                   </>
                 )}
@@ -1424,69 +2003,156 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
               </div>
             ) : offlineLayout === 'modern' ? (
-              <div className="grid grid-cols-1 gap-2 mb-2 items-stretch">
-                {/* Right area: toolbar + camera takes full width (left column removed) */}
-                <div className="min-w-0 space-y-2 flex flex-col justify-between">
-                  {!manualScoring ? (
-                    <>
-                      <div className="flex items-center flex-wrap gap-1.5 mt-1">
-                        {/* Match type and names moved to header (next to Legs) */}
-                        <div className="ml-auto flex items-center gap-1 text-[10px]">
-                          <span className="opacity-70">Cam</span>
-                          <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.max(0.5, Math.round((cameraScale-0.05)*100)/100))}>−</button>
-                          <span className={`btn ${buttonSizeClass} min-w-[2.5rem] text-center`}>{Math.round(cameraScale*100)}%</span>
-                          <button className={`btn ${buttonSizeClass}`} onClick={()=>setCameraScale(Math.min(1.25, Math.round((cameraScale+0.05)*100)/100))}>+</button>
-                          <span className="opacity-50">|</span>
-                          <button className={`btn ${buttonSizeClass}`} title="Toggle fit/fill" onClick={()=>setCameraFitMode(cameraFitMode==='fill'?'fit':'fill')}>{cameraFitMode==='fill'?'Fill':'Fit'}</button>
-                          <span className="opacity-50">|</span>
-                          <button className={`btn ${buttonSizeClass}`} title="Toggle camera aspect" onClick={()=>setCameraAspect(cameraAspect==='square'?'wide':'square')}>{cameraAspect==='square'?'Square':'Wide'}</button>
+              <div className="space-y-3 mb-2">
+                {!manualScoring ? (
+                  <>
+                    <div className="flex items-center flex-wrap gap-1.5 mt-1">
+                      <div className="ml-auto flex items-center gap-1 text-[10px]">
+                        <span className="opacity-70">Cam</span>
+                        <button className={`btn ${buttonSizeClass}`} onClick={() => setCameraScale(Math.max(0.5, Math.round((cameraScale - 0.05) * 100) / 100))}>−</button>
+                        <span className={`btn ${buttonSizeClass} min-w-[2.5rem] text-center`}>{Math.round(cameraScale * 100)}%</span>
+                        <button className={`btn ${buttonSizeClass}`} onClick={() => setCameraScale(Math.min(1.25, Math.round((cameraScale + 0.05) * 100) / 100))}>+</button>
+                        <span className="opacity-50">|</span>
+                        <button className={`btn ${buttonSizeClass}`} title="Toggle fit/fill" onClick={() => setCameraFitMode(cameraFitMode === 'fill' ? 'fit' : 'fill')}>{cameraFitMode === 'fill' ? 'Fill' : 'Fit'}</button>
+                        <span className="opacity-50">|</span>
+                        <button className={`btn ${buttonSizeClass}`} title="Toggle camera aspect" onClick={() => setCameraAspect(cameraAspect === 'square' ? 'wide' : 'square')}>{cameraAspect === 'square' ? 'Square' : 'Wide'}</button>
+                      </div>
+                    </div>
+                    <div className="relative">
+                      <div className="flex flex-col gap-4 md:flex-row-reverse md:items-start md:gap-6">
+                        <div className="w-full h-[260px] rounded-2xl overflow-hidden bg-black shadow-xl md:w-[48%] md:min-h-[420px]">
+                            <CameraView 
+                              scoringMode="x01"
+                              showToolbar={cameraToolbarVisible}
+                              onAutoDart={(value, ring, info) => {
+                                applyDartValue(value)
+                              }}
+                            />
+                          </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-[minmax(0,1fr)_300px] md:items-start md:gap-4">
+                            <div className="space-y-4">
+                              <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-4 text-slate-100 shadow-lg backdrop-blur-sm">
+                                <div className="text-xs uppercase tracking-wide text-white/50">Current Shooter</div>
+                                <div className="mt-1 text-xl font-semibold text-white">{activePlayerName}</div>
+                                <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/80">
+                                  <div>
+                                    <div className="text-xs uppercase tracking-wide text-white/40">Remaining</div>
+                                    <div className="font-mono text-lg text-white">{activeRemaining}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-xs uppercase tracking-wide text-white/40">Last Dart</div>
+                                    <div className="font-mono text-lg text-white">{activeLastScore || 0}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-xs uppercase tracking-wide text-white/40">Match Legs</div>
+                                    <div className="font-semibold text-white">{playerLegs}-{aiLegs}</div>
+                                  </div>
+                                  <div>
+                                    <div className="text-xs uppercase tracking-wide text-white/40">Next Up</div>
+                                    <div className="font-medium text-white">{inactivePlayerName}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="hidden md:block">
+                              <GameScoreboard
+                                gameMode={selectedMode as any}
+                                players={singlePlayerScoreboard}
+                                matchScore={`${playerLegs}-${aiLegs}`}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="md:hidden">
+                            <GameScoreboard
+                              gameMode={selectedMode as any}
+                              players={singlePlayerScoreboard}
+                              matchScore={`${playerLegs}-${aiLegs}`}
+                            />
+                          </div>
+
+                          {(selectedMode as any) === 'X01' && (
+                            <div className="mt-3 md:mt-4 rounded-2xl bg-slate-900/60 border border-white/10 p-4 text-slate-100 shadow-lg backdrop-blur-sm">
+                              <div className="text-xs uppercase tracking-wide text-white/50">Manual Scoreboard Override</div>
+                              <p className="mt-1 text-xs text-white/40">Adjust the live totals if a dart was misread. Values are clamped between 0 and {x01Score}.</p>
+                              <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                                <div className="space-y-3">
+                                  <div className="text-sm font-semibold text-white">{humanName}</div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs uppercase tracking-wide text-white/50">Commit Visit</label>
+                                    <div className="flex items-center gap-2">
+                                      <button className="btn px-3 py-1 text-sm" onClick={addVisitTotal}>Commit Visit</button>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs uppercase tracking-wide text-white/50">Legs Override</label>
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        className="input w-20 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
+                                        type="number"
+                                        min={0}
+                                        value={manualPlayerLegsInput}
+                                        onChange={e => setManualPlayerLegsInput(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleManualLegsOverride('player') }}
+                                        placeholder={`${playerLegs}`}
+                                      />
+                                      <button className="btn px-3 py-1 text-sm" onClick={() => handleManualLegsOverride('player')}>Set</button>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="space-y-3">
+                                  <div className="text-sm font-semibold text-white">{aiDisplayName}</div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs uppercase tracking-wide text-white/50">Three Dart Edit</label>
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        className="input w-24 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
+                                        type="number"
+                                        min={0}
+                                        max={x01Score}
+                                        value={manualOpponentScoreInput}
+                                        onChange={e => setManualOpponentScoreInput(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleManualScoreOverride('ai') }}
+                                        placeholder={`${aiScore}`}
+                                      />
+                                      <button className="btn px-3 py-1 text-sm" onClick={() => handleManualScoreOverride('ai')}>Set</button>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs uppercase tracking-wide text-white/50">Legs Override</label>
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        className="input w-20 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
+                                        type="number"
+                                        min={0}
+                                        value={manualOpponentLegsInput}
+                                        onChange={e => setManualOpponentLegsInput(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleManualLegsOverride('ai') }}
+                                        placeholder={`${aiLegs}`}
+                                      />
+                                      <button className="btn px-3 py-1 text-sm" onClick={() => handleManualLegsOverride('ai')}>Set</button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-stretch justify-end min-w-0 flex-1 min-h-0 ndn-camera-tall">
-                        {/* Centered mode counter moved here so camera preview can be pushed up and enlarged */}
-                        {(selectedMode as any) === 'Double Practice' && (
-                          <div className="w-full text-center mb-3">
-                            <div className="text-xs text-slate-600">Current Target</div>
-                            <div className="text-3xl font-extrabold tracking-tight">{dpHits} / 21</div>
-                          </div>
-                        )}
-                        {(selectedMode as any) === 'Around the Clock' && (
-                          <div className="w-full text-center mb-3">
-                            <div className="text-xs text-slate-600">Current Target</div>
-                            <div className="text-3xl font-extrabold tracking-tight">{atcHits} / {ATC_ORDER.length}</div>
-                          </div>
-                        )}
-
-                        <ResizablePanel
-                          storageKey="ndn:camera:tile:offline:primary"
-                          className="relative rounded-2xl overflow-hidden bg-black"
-                          defaultWidth={720}
-                          defaultHeight={420}
-                          minWidth={320}
-                          minHeight={220}
-                          maxWidth={1600}
-                          maxHeight={900}
-                          autoFill
-                        >
-                          <CameraTile
-                            label="Your Board"
-                            autoStart={true}
-                            className="min-w-0 h-full"
-                            aspect="classic"
-                          />
-                        </ResizablePanel>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="card">
-                      <div className="text-sm font-semibold mb-1">Manual scoring active</div>
-                      <div className="text-xs opacity-70">Camera previews are disabled. Use the manual entry controls below to record your turn.</div>
                     </div>
-                  )}
-                </div>
+                  </>
+                ) : (
+                  <div className="card">
+                    <div className="text-sm font-semibold mb-1">Manual scoring active</div>
+                    <div className="text-xs opacity-70">Camera previews are disabled. Use the manual entry controls below to record your turn.</div>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:[grid-template-columns:1fr_1.2fr_1fr] gap-2 mb-2 items-stretch min-w-0">
+              <div className="grid grid-cols-1 md:[grid-template-columns:minmax(0,0.75fr)_minmax(0,3fr)_minmax(0,0.75fr)] gap-2 mb-2 items-stretch min-w-0">
                 <div className="flex items-stretch justify-center md:px-3 min-w-0">
               <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col h-full">
                 <div className="text-xs text-slate-600 flex items-center justify-between">
@@ -1502,6 +2168,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <div className="h-full bg-emerald-400/70" style={{ width: `${Math.max(0, Math.min(100, (1 - (playerScore / x01Score)) * 100))}%` }} />
                 </div>
                 <div className="text-sm mt-1 opacity-90">Last dart: <span className="font-semibold">{playerLastDart}</span></div>
+                <div className="text-sm opacity-90">Last score: <span className="font-semibold">{playerVisitDarts > 0 ? playerVisitSum : (playerLastVisitScore ?? playerLastDart)}</span></div>
                 <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{totalPlayerDarts>0 ? ((totalPlayerPoints/totalPlayerDarts)*3).toFixed(1) : '0.0'}</span></div>
                 <div className="text-xs opacity-70 flex items-center gap-2">
                   <span>Darts thrown: {playerDartsThrown}</span>
@@ -1526,16 +2193,16 @@ export default function OfflinePlay({ user }: { user: any }) {
                 )}
               </div>
               {/* Center camera preview: right-aligned and square when selected */}
-              <div className="flex items-stretch justify-end md:px-3 min-w-0 flex-1 min-h-0 ndn-camera-tall">
+              <div className="flex items-stretch justify-center md:justify-end md:px-3 min-w-0 flex-1 min-h-0 ndn-camera-tall">
                 <ResizablePanel
-                  storageKey="ndn:camera:tile:offline:center"
-                  className="relative rounded-2xl overflow-hidden bg-black"
-                  defaultWidth={720}
-                  defaultHeight={420}
-                  minWidth={320}
-                  minHeight={220}
-                  maxWidth={1600}
-                  maxHeight={900}
+                  storageKey="ndn:camera:tile:offline:center:v4"
+                  className="relative rounded-2xl overflow-hidden bg-black w-full camera-fullwidth-card"
+                  defaultWidth={0}
+                  defaultHeight={0}
+                  minWidth={300}
+                  minHeight={300}
+                  maxWidth={2000}
+                  maxHeight={1200}
                   autoFill
                 >
                   <CameraTile
@@ -1554,8 +2221,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                   // In offline X01, player is vs AI or practice
                   const currentThrower = isPlayerTurn ? (user?.username || 'You') : (ai === 'None' ? '—' : `${ai} AI`)
                   const currentRemaining = isPlayerTurn ? playerScore : (ai === 'None' ? 0 : aiScore)
-                  const last = isPlayerTurn ? playerLastDart : aiLastDart
-                  const lastScoreVisit = isPlayerTurn ? playerVisitSum : aiVisitSum
+                  const lastScoreDisplay = isPlayerTurn
+                    ? (playerVisitDarts > 0 ? playerVisitSum : (playerLastVisitScore ?? playerLastDart))
+                    : (aiVisitDarts > 0 ? aiVisitSum : (aiLastVisitScore ?? aiLastDart))
                   const dartsThrown = isPlayerTurn ? playerDartsThrown : aiDartsThrown
                   const scored = (x01Score - (isPlayerTurn ? playerScore : (ai === 'None' ? x01Score : aiScore)))
                   const avg3 = dartsThrown > 0 ? ((scored / dartsThrown) * 3) : 0
@@ -1572,7 +2240,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                       <div className="opacity-80">3-dart avg</div>
                       <div className="text-right font-mono">{avg3.toFixed(1)}</div>
                       <div className="opacity-80">Last score</div>
-                      <div className="text-right font-mono">{lastScoreVisit || last}</div>
+                      <div className="text-right font-mono">{lastScoreDisplay}</div>
                       <div className="opacity-80">Best leg</div>
                       <div className="text-right">{bestLegText}</div>
                     </div>
@@ -1595,6 +2263,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   </div>
                 )}
                 <div className="text-sm mt-1 opacity-90">Last dart: <span className="font-semibold">{ai === 'None' ? 0 : aiLastDart}</span></div>
+                <div className="text-sm opacity-90">Last score: <span className="font-semibold">{ai === 'None' ? '—' : (aiVisitDarts > 0 ? aiVisitSum : (aiLastVisitScore ?? aiLastDart))}</span></div>
                 <div className="text-sm opacity-90">3-Dart Avg: <span className="font-semibold">{ai !== 'None' ? (totalAiDarts>0 ? ((totalAiPoints/totalAiDarts)*3).toFixed(1) : '0.0') : '—'}</span></div>
                 {ai !== 'None' && (
                   <div className="text-xs opacity-70">Darts thrown: {aiDartsThrown}</div>
@@ -1613,7 +2282,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <>
                     <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{DOUBLE_PRACTICE_ORDER[dpIndex]?.label || '—'}</span></div>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} onAutoDart={(value, ring) => {
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} onAutoDart={(value, ring) => {
                         if (ring === 'DOUBLE' || ring === 'INNER_BULL') {
                           const hit = isDoubleHit(value, dpIndex)
                           if (hit) { const nh = dpHits + 1; const ni = dpIndex + 1; setDpHits(nh); setDpIndex(ni); if (nh >= DOUBLE_PRACTICE_ORDER.length) setTimeout(()=>{ setDpHits(0); setDpIndex(0) }, 250) }
@@ -1637,7 +2306,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <>
                     <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{ATC_ORDER[atcIndex] === 25 ? '25 (Outer Bull)' : ATC_ORDER[atcIndex] === 50 ? '50 (Inner Bull)' : (ATC_ORDER[atcIndex] || '—')}</span></div>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addAtcValue(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addAtcValue(value, r as any, info?.sector ?? null) }} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addAtcNumeric() }} />
@@ -1648,62 +2317,94 @@ export default function OfflinePlay({ user }: { user: any }) {
                       <button className="btn px-3 py-1 text-sm" onClick={addAtcManual}>Add</button>
                     </div>
                     {atcHits >= ATC_ORDER.length && (
-                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={()=>{ setAtcHits(0); setAtcIndex(0) }}>Reset</button></div>
+                      <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">Completed! <button className="ml-2 underline" onClick={() => {
+                        setAtcHits(0)
+                        setAtcIndex(0)
+                        resetDartCount('Around the Clock')
+                      }}>Reset</button></div>
                     )}
                   </>
                 )}
                 {selectedMode === 'Cricket' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addCricketAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addCricketAuto(value, r as any, info?.sector ?? null) }} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addCricketNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addCricketNumeric}>Add Dart</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setCricket(createCricketState()); setPracticeTurnDarts(0) }}>Reset</button>
+                      <button
+                        className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
+                        onClick={() => {
+                          setCricket(createCricketState())
+                          setPracticeTurnDarts(0)
+                          resetDartCount('Cricket')
+                        }}
+                      >Reset</button>
                     </div>
                   </>
                 )}
                 {selectedMode === 'Shanghai' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addShanghaiAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addShanghaiAuto(value, r as any, info?.sector ?? null) }} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addShanghaiNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addShanghaiNumeric}>Add Dart</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setShanghai(createShanghaiState()); setPracticeTurnDarts(0) }}>Reset</button>
+                      <button
+                        className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
+                        onClick={() => {
+                          setShanghai(createShanghaiState())
+                          setPracticeTurnDarts(0)
+                          resetDartCount('Shanghai')
+                        }}
+                      >Reset</button>
                     </div>
                   </>
                 )}
                 {selectedMode === 'Halve It' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHalveAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHalveAuto(value, r as any, info?.sector ?? null) }} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addHalveNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addHalveNumeric}>Add Dart</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setHalve(createDefaultHalveIt()); setPracticeTurnDarts(0) }}>Reset</button>
+                      <button
+                        className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
+                        onClick={() => {
+                          setHalve(createDefaultHalveIt())
+                          setPracticeTurnDarts(0)
+                          resetDartCount('Halve It')
+                        }}
+                      >Reset</button>
                     </div>
                   </>
                 )}
                 {selectedMode === 'High-Low' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHighLowAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHighLowAuto(value, r as any, info?.sector ?? null) }} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addHighLowNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addHighLowNumeric}>Add Dart</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setHighlow(createHighLow()); setPracticeTurnDarts(0) }}>Reset</button>
+                      <button
+                        className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
+                        onClick={() => {
+                          setHighlow(createHighLow())
+                          setPracticeTurnDarts(0)
+                          resetDartCount('High-Low')
+                        }}
+                      >Reset</button>
                     </div>
                   </>
                 )}
                 {selectedMode === "Bob's 27" && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addB27Auto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addB27Auto(value, r as any, info?.sector ?? null) }} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addB27Numeric() }} />
@@ -1715,12 +2416,20 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Count-Up' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value) => addCountUpAuto(value)} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value) => addCountUpAuto(value)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addCountUpAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
                       <button className="btn px-3 py-1 text-sm" onClick={()=>{ addCountUpAuto(playerDartPoints); setPlayerDartPoints(0) }}>Add Dart</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setCuRound(1); setCuScore(0); setCuDarts(0) }}>Reset</button>
+                      <button
+                        className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
+                        onClick={() => {
+                          setCuRound(1)
+                          setCuScore(0)
+                          setCuDarts(0)
+                          resetDartCount('Count-Up')
+                        }}
+                      >Reset</button>
                     </div>
                     <div className="text-xs text-slate-400">Round {cuRound}/{cuMaxRounds}</div>
                   </>
@@ -1728,12 +2437,20 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'High Score' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value) => addHighScoreAuto(value)} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value) => addHighScoreAuto(value)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addHighScoreAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
                       <button className="btn px-3 py-1 text-sm" onClick={()=>{ addHighScoreAuto(playerDartPoints); setPlayerDartPoints(0) }}>Add Dart</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setHsRound(1); setHsScore(0); setHsDarts(0) }}>Reset</button>
+                      <button
+                        className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
+                        onClick={() => {
+                          setHsRound(1)
+                          setHsScore(0)
+                          setHsDarts(0)
+                          resetDartCount('High Score')
+                        }}
+                      >Reset</button>
                     </div>
                     <div className="text-xs text-slate-400">Round {hsRound}/{hsMaxRounds}</div>
                   </>
@@ -1741,12 +2458,20 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Low Score' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value) => addLowScoreAuto(value)} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value) => addLowScoreAuto(value)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addLowScoreAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
                       <button className="btn px-3 py-1 text-sm" onClick={()=>{ addLowScoreAuto(playerDartPoints); setPlayerDartPoints(0) }}>Add Dart</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{ setLsRound(1); setLsScore(0); setLsDarts(0) }}>Reset</button>
+                      <button
+                        className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
+                        onClick={() => {
+                          setLsRound(1)
+                          setLsScore(0)
+                          setLsDarts(0)
+                          resetDartCount('Low Score')
+                        }}
+                      >Reset</button>
                     </div>
                     <div className="text-xs text-slate-400">Round {lsRound}/{lsMaxRounds}</div>
                   </>
@@ -1754,7 +2479,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Checkout 170' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring) => addCo170Auto(value, ring === 'MISS' ? undefined : ring)} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring) => addCo170Auto(value, ring === 'MISS' ? undefined : ring)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="text" placeholder="Manual (D16, T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addCoManual(true) }} />
@@ -1767,7 +2492,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Checkout 121' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring) => addCo121Auto(value, ring === 'MISS' ? undefined : ring)} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring) => addCo121Auto(value, ring === 'MISS' ? undefined : ring)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="text" placeholder="Manual (D16, T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addCoManual(false) }} />
@@ -1780,7 +2505,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Treble Practice' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addTrebleAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addTrebleAuto(value, r as any, info?.sector ?? null) }} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="text" placeholder="Manual (T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') { const v = parseManualDart(manualBox); if (v!=null) addTrebleAuto(v, undefined, undefined); setManualBox('') } }} />
@@ -1795,7 +2520,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Baseball' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addBaseballAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addBaseballAuto(value, r as any, info?.sector ?? null) }} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetBaseball}>Reset</button>
@@ -1805,7 +2530,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Golf' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addGolfAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addGolfAuto(value, r as any, info?.sector ?? null) }} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetGolf}>Reset</button>
@@ -1830,7 +2555,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                       ))}
                     </div>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => {
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => {
                         // Attempt to claim the currently tapped-looking cell not tracked; as a simple flow, map by round-robin preference or let user click a cell button above.
                         // No-op here; primary interaction is via buttons with prompt for now.
                       }} />
@@ -1843,7 +2568,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'American Cricket' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addAmCricketAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring==='MISS'?undefined:ring; addAmCricketAuto(value, r as any, info?.sector ?? null) }} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetAmCricket}>Reset</button>
@@ -1854,12 +2579,37 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <>
                     <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{SCAM_TARGET_NAMES[scamPlayer.targetIndex]}</span></div>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { setScamPlayer(addScamAuto(scamPlayer, value, ring as any)) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => {
+                        const r = ring === 'MISS' ? undefined : ring
+                        recordDart('Scam')
+                        setScamPlayer(addScamAuto(scamPlayer, value, r as any))
+                      }} />
                     </div>}
                     <div className="flex items-center gap-2">
-                      <input className="input w-24" type="number" min={1} max={25} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') setScamPlayer(addScamNumeric(scamPlayer, playerDartPoints)); setPlayerDartPoints(0) }} />
-                      <button className="btn px-3 py-1 text-sm" onClick={()=>{ setScamPlayer(addScamNumeric(scamPlayer, playerDartPoints)); setPlayerDartPoints(0) }}>Add Dart</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>setScamPlayer(resetScam())}>Reset</button>
+                      <input
+                        className="input w-24"
+                        type="number"
+                        min={1}
+                        max={25}
+                        value={playerDartPoints}
+                        onChange={e => setPlayerDartPoints(Number(e.target.value||0))}
+                        onKeyDown={e=>{
+                          if(e.key==='Enter') {
+                            recordDart('Scam')
+                            setScamPlayer(addScamNumeric(scamPlayer, playerDartPoints))
+                            setPlayerDartPoints(0)
+                          }
+                        }}
+                      />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>{
+                        recordDart('Scam')
+                        setScamPlayer(addScamNumeric(scamPlayer, playerDartPoints))
+                        setPlayerDartPoints(0)
+                      }}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{
+                        setScamPlayer(resetScam())
+                        resetDartCount('Scam')
+                      }}>Reset</button>
                     </div>
                     {scamPlayer.finished && <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">🎉 Finished in {scamPlayer.darts} darts!</div>}
                   </>
@@ -1868,12 +2618,36 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <>
                     <div className="font-semibold">Score: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{fivesPlayer.score}/{fivesPlayer.target}</span></div>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { setFivesPlayer(addFivesAuto(fivesPlayer, value, ring as any)) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => {
+                        recordDart('Fives')
+                        setFivesPlayer(addFivesAuto(fivesPlayer, value, ring as any))
+                      }} />
                     </div>}
                     <div className="flex items-center gap-2">
-                      <input className="input w-24" type="number" min={5} max={50} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') setFivesPlayer(addFivesNumeric(fivesPlayer, playerDartPoints)); setPlayerDartPoints(0) }} />
-                      <button className="btn px-3 py-1 text-sm" onClick={()=>{ setFivesPlayer(addFivesNumeric(fivesPlayer, playerDartPoints)); setPlayerDartPoints(0) }}>Add Dart</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>setFivesPlayer(resetFives(fivesPlayer.target))}>Reset</button>
+                      <input
+                        className="input w-24"
+                        type="number"
+                        min={5}
+                        max={50}
+                        value={playerDartPoints}
+                        onChange={e => setPlayerDartPoints(Number(e.target.value||0))}
+                        onKeyDown={e=>{
+                          if(e.key==='Enter') {
+                            recordDart('Fives')
+                            setFivesPlayer(addFivesNumeric(fivesPlayer, playerDartPoints))
+                            setPlayerDartPoints(0)
+                          }
+                        }}
+                      />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>{
+                        recordDart('Fives')
+                        setFivesPlayer(addFivesNumeric(fivesPlayer, playerDartPoints))
+                        setPlayerDartPoints(0)
+                      }}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{
+                        setFivesPlayer(resetFives(fivesPlayer.target))
+                        resetDartCount('Fives')
+                      }}>Reset</button>
                     </div>
                     <div className="text-xs text-slate-400">Valid scores: 5, 10, 15, 20, 25, 50 · Darts: {fivesPlayer.darts}</div>
                     {fivesPlayer.finished && <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">✓ Reached {fivesPlayer.target} in {fivesPlayer.darts} darts!</div>}
@@ -1883,12 +2657,36 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <>
                     <div className="font-semibold">Score: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{sevensPlayer.score}/{sevensPlayer.target}</span></div>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { setSevensPlayer(addSevensAuto(sevensPlayer, value, ring as any)) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => {
+                        recordDart('Sevens')
+                        setSevensPlayer(addSevensAuto(sevensPlayer, value, ring as any))
+                      }} />
                     </div>}
                     <div className="flex items-center gap-2">
-                      <input className="input w-24" type="number" min={7} max={21} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') setSevensPlayer(addSevensNumeric(sevensPlayer, playerDartPoints)); setPlayerDartPoints(0) }} />
-                      <button className="btn px-3 py-1 text-sm" onClick={()=>{ setSevensPlayer(addSevensNumeric(sevensPlayer, playerDartPoints)); setPlayerDartPoints(0) }}>Add Dart</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>setSevensPlayer(resetSevens(sevensPlayer.target))}>Reset</button>
+                      <input
+                        className="input w-24"
+                        type="number"
+                        min={7}
+                        max={21}
+                        value={playerDartPoints}
+                        onChange={e => setPlayerDartPoints(Number(e.target.value||0))}
+                        onKeyDown={e=>{
+                          if(e.key==='Enter') {
+                            recordDart('Sevens')
+                            setSevensPlayer(addSevensNumeric(sevensPlayer, playerDartPoints))
+                            setPlayerDartPoints(0)
+                          }
+                        }}
+                      />
+                      <button className="btn px-3 py-1 text-sm" onClick={()=>{
+                        recordDart('Sevens')
+                        setSevensPlayer(addSevensNumeric(sevensPlayer, playerDartPoints))
+                        setPlayerDartPoints(0)
+                      }}>Add Dart</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>{
+                        setSevensPlayer(resetSevens(sevensPlayer.target))
+                        resetDartCount('Sevens')
+                      }}>Reset</button>
                     </div>
                     <div className="text-xs text-slate-400">Valid scores: 7, 14, 21 · Darts: {sevensPlayer.darts}</div>
                     {sevensPlayer.finished && <div className="mt-2 text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 inline-block">✓ Reached {sevensPlayer.target} in {sevensPlayer.darts} darts!</div>}
@@ -1949,7 +2747,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                           })}
                         </div>
                         {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                          <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => {
+                          <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => {
                             if (killerWinnerId) return
                             const r = ring === 'MISS' ? undefined : ring
                             const sector = info?.sector ?? null
@@ -2051,7 +2849,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                         {/* Scoreboard */}
                         <div className="flex-shrink-0">
                           <GameScoreboard
-                            gameMode="X01"
+                            gameMode={selectedMode as any}
                             players={statsX01}
                             matchScore={`${playerLegs}-${aiLegs}`}
                           />
@@ -2059,64 +2857,78 @@ export default function OfflinePlay({ user }: { user: any }) {
 
                         {/* Manual Scoring Section */}
                         {isPlayerTurn && (
-                          <div className="p-2.5 rounded-xl glass text-white border border-white/10 flex-shrink-0">
-                            <div className="font-semibold mb-2 text-sm">Manual Scoring</div>
-                            <div className="flex flex-col gap-1.5 text-sm">
-                              {/* Single Dart Entry */}
-                              <div className="flex items-center gap-1.5">
+                          <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 text-slate-100 shadow-lg backdrop-blur-sm flex-shrink-0">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <h4 className="text-sm font-semibold tracking-wide uppercase text-indigo-200">Manual Scoring</h4>
+                              <span className="text-xs text-white/60">Override a visit or enter dart-by-dart scores.</span>
+                            </div>
+                            <div className="mt-3 space-y-3">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <label className="text-xs uppercase tracking-wide text-white/60">Single Dart</label>
                                 <input
-                                  className="input w-16 text-sm py-1"
+                                  className="input w-20 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
                                   type="number"
                                   min={0}
                                   max={60}
-                                  placeholder="0-60"
                                   value={playerDartPoints}
                                   onChange={e => setPlayerDartPoints(Number(e.target.value||0))}
-                                  onKeyDown={e => { if (e.key==='Enter') (e.shiftKey? replaceLast() : addDartNumeric()) }}
+                                  onKeyDown={e => { if (e.key === 'Enter') (e.shiftKey ? replaceLast() : addDartNumeric()) }}
+                                  placeholder="60"
                                 />
-                                <button className="btn px-2 py-1 text-sm flex-1" onClick={addDartNumeric}>Add</button>
+                                <button className="btn px-3 py-1 text-sm" onClick={addDartNumeric}>Add Dart</button>
                               </div>
 
-                              {/* Visit Total Entry */}
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <label className="text-xs uppercase tracking-wide text-white/60">Three Dart Edit</label>
                                 <input
-                                  className="input w-20 text-sm py-1"
+                                  className="input w-24 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
                                   type="number"
                                   min={0}
-                                  max={180}
-                                  placeholder="0-180"
+                                  max={playerScore <= 170 ? 170 : 180}
                                   value={visitTotalInput}
-                                  onChange={e=>setVisitTotalInput(e.target.value)}
+                                  onChange={e=>handleVisitTotalChange(e.target.value)}
                                   onKeyDown={e => { if (e.key==='Enter') addVisitTotal() }}
+                                  placeholder="100"
                                 />
-                                <button className="btn px-2 py-1 text-sm flex-1" onClick={addVisitTotal}>Commit</button>
+                                <button className="btn px-3 py-1 text-sm" onClick={addVisitTotal}>Commit Visit</button>
+                                <button className="btn btn--ghost px-3 py-1 text-sm" onClick={replaceLast}>Undo Visit</button>
                               </div>
 
-                              {/* Manual Notation */}
-                              <div className="flex items-center gap-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <label className="text-xs uppercase tracking-wide text-white/60">Manual</label>
                                 <input
-                                  className="input text-sm py-1 flex-1 min-w-0"
-                                  placeholder="T20, D16, 25, 50"
+                                  className="input w-28 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
                                   value={manualBox}
                                   onChange={e=>setManualBox(e.target.value)}
                                   onKeyDown={e => { if (e.key==='Enter') (e.shiftKey? replaceLastManual() : addManual()) }}
+                                  placeholder="T20"
                                 />
-                                <button className="btn px-1.5 py-1 text-sm" onClick={addManual}>✓</button>
+                                <button className="btn px-3 py-1 text-sm" onClick={addManual}>Apply</button>
+                                <button className="btn btn--ghost px-3 py-1 text-sm" onClick={replaceLastManual} disabled={playerVisitDarts===0}>Replace Last</button>
                               </div>
 
-                              {/* Batch Input */}
-                              <textarea
-                                className="input w-full h-14 resize-none text-sm py-1"
-                                placeholder="Line by line entry"
-                                value={manualTextarea}
-                                onChange={e=>setManualTextarea(e.target.value)}
-                              />
-                              <div className="flex gap-1">
-                                <button className="btn px-2 py-1 text-sm flex-1" onClick={addManualTextarea}>Add All</button>
-                                <button className="btn px-2 py-1 text-sm flex-1" onClick={() => setManualTextarea('')}>Clear</button>
+                              <div>
+                                <label className="text-xs uppercase tracking-wide text-white/60">Multi-entry (one per line)</label>
+                                <textarea
+                                  className="mt-2 w-full rounded-xl bg-slate-950/70 border border-white/10 text-sm text-slate-100 placeholder-white/40 p-3 focus:outline-none focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-500/30"
+                                  rows={3}
+                                  value={manualTextarea}
+                                  onChange={e=>setManualTextarea(e.target.value)}
+                                  placeholder={'T20\nD16\n25'}
+                                />
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  <button className="btn px-3 py-1 text-sm" onClick={addManualTextarea}>Apply All</button>
+                                  <button className="btn btn--ghost px-3 py-1 text-sm" onClick={() => setManualTextarea('')}>Clear</button>
+                                </div>
                               </div>
 
-                              <div className="text-sm text-slate-400">Enter to add | Shift+Enter to replace</div>
+                              <div className="pt-2 border-t border-white/10 mt-3">
+                                <button
+                                  className="btn bg-rose-600 hover:bg-rose-700 px-3 py-1 text-sm"
+                                  onClick={clearCurrentVisit}
+                                  disabled={playerVisitDarts === 0 && playerVisitSum === 0}
+                                >Clear Current Visit</button>
+                              </div>
                             </div>
                           </div>
                         )}
@@ -2127,10 +2939,22 @@ export default function OfflinePlay({ user }: { user: any }) {
                         <div className="basis-1/2 shrink-0 min-w-0 rounded-2xl overflow-hidden bg-black">
                           <CameraView
                             scoringMode="custom"
-                            showToolbar={false}
+                            showToolbar={cameraToolbarVisible}
                             immediateAutoCommit
                             onAutoDart={(value, ring) => {
-                              if (value > 0) applyDartValue(value)
+                              const ringLabel = ring ?? 'MISS'
+                              const safeValue = Number.isFinite(value) ? Math.max(0, value) : 0
+                              const now = Date.now()
+                              if (safeValue <= 0) {
+                                if (ringLabel !== 'MISS') return
+                                if (now - (lastBounceMissTsRef.current || 0) < 1200) {
+                                  return
+                                }
+                                lastBounceMissTsRef.current = now
+                              } else {
+                                lastBounceMissTsRef.current = 0
+                              }
+                              applyDartValue(safeValue)
                             }}
                           />
                         </div>
@@ -2140,7 +2964,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {(selectedMode as any) === 'X01' && !cameraEnabled && (
                   <>
                     <GameScoreboard
-                      gameMode="X01"
+                      gameMode={selectedMode as any}
                       players={statsX01}
                       matchScore={`${playerLegs}-${aiLegs}`}
                     />
@@ -2159,7 +2983,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <div className="rounded-2xl overflow-hidden bg-black">
                     <CameraView
                       scoringMode="custom"
-                      showToolbar={false}
+                      showToolbar={cameraToolbarVisible}
                       immediateAutoCommit
                       onAutoDart={(value, ring, info) => {
                         if (value > 0) {
@@ -2183,7 +3007,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <div className="rounded-2xl overflow-hidden bg-black">
                     <CameraView
                       scoringMode="custom"
-                      showToolbar={false}
+                      showToolbar={cameraToolbarVisible}
                       immediateAutoCommit
                       onAutoDart={(value, ring, info) => {
                         if (value > 0) {
@@ -2215,7 +3039,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <div className="rounded-2xl overflow-hidden bg-black">
                     <CameraView
                       scoringMode="custom"
-                      showToolbar={false}
+                      showToolbar={cameraToolbarVisible}
                       immediateAutoCommit
                       onAutoDart={(value, ring, info) => {
                         if (value > 0) {
@@ -2238,7 +3062,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <div className="rounded-2xl overflow-hidden bg-black">
                     <CameraView
                       scoringMode="custom"
-                      showToolbar={false}
+                      showToolbar={cameraToolbarVisible}
                       immediateAutoCommit
                       onAutoDart={(value, ring, info) => {
                         if (value > 0) {
@@ -2261,7 +3085,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <div className="rounded-2xl overflow-hidden bg-black">
                     <CameraView
                       scoringMode="custom"
-                      showToolbar={false}
+                      showToolbar={cameraToolbarVisible}
                       immediateAutoCommit
                       onAutoDart={(value, ring, info) => {
                         if (value > 0) {
@@ -2291,10 +3115,10 @@ export default function OfflinePlay({ user }: { user: any }) {
                       className="input w-28"
                       type="number"
                       min={0}
-                      max={180}
+                      max={playerScore <= 170 ? 170 : 180}
                       placeholder="Visit total (0–180)"
                       value={visitTotalInput}
-                      onChange={e=>setVisitTotalInput(e.target.value)}
+                      onChange={e=>handleVisitTotalChange(e.target.value)}
                       onKeyDown={e => { if (e.key==='Enter') addVisitTotal() }}
                     />
                     <button className="btn px-3 py-1 text-sm" onClick={addVisitTotal} title="Commit a full 3-dart total like 93">Commit Visit</button>
@@ -2371,6 +3195,103 @@ export default function OfflinePlay({ user }: { user: any }) {
           </div>
         </div>
       )}
+      {showCameraManager && typeof document !== 'undefined' ? createPortal(
+        <div className="fixed inset-0 bg-black/75 z-[200] flex items-center justify-center p-4" onClick={() => setShowCameraManager(false)}>
+          <ResizableModal
+            storageKey="ndn:modal:offline-camera-manager"
+            className="relative"
+            defaultWidth={640}
+            defaultHeight={520}
+            minWidth={480}
+            minHeight={420}
+            maxWidth={1200}
+            maxHeight={900}
+            initialFitHeight
+            onClose={() => setShowCameraManager(false)}
+          >
+            <div className="space-y-3" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-white/50">Camera Devices</div>
+                  <div className="text-xl font-semibold text-white mt-1">Manage Offline Camera Feeds</div>
+                </div>
+                <button className="btn bg-slate-800 hover:bg-slate-700 text-white" onClick={() => setShowCameraManager(false)}>Close</button>
+              </div>
+              <CameraTile
+                fill
+                user={user}
+                playerScore={playerScore}
+                aiScore={aiScore}
+                x01Score={x01Score}
+                inMatch={inMatch}
+                showWinPopup={showWinPopup}
+                pendingLegWinner={pendingLegWinner}
+                playerDartsThrown={playerDartsThrown}
+                aiDartsThrown={aiDartsThrown}
+                totalPlayerDarts={totalPlayerDarts}
+                totalAiDarts={totalAiDarts}
+                totalPlayerPoints={totalPlayerPoints}
+                totalAiPoints={totalAiPoints}
+                player180s={player180s}
+                player140s={player140s}
+                player100s={player100s}
+                ai180s={ai180s}
+                ai140s={ai140s}
+                ai100s={ai100s}
+                playerHighestCheckout={playerHighestCheckout}
+                aiHighestCheckout={aiHighestCheckout}
+                onClose={() => setShowCameraManager(false)}
+                onOpen={() => setShowCameraManager(true)}
+                layout={offlineLayout}
+              />
+            </div>
+          </ResizableModal>
+        </div>,
+        document.body
+      ) : null}
+      {legOverrideConfirm && typeof document !== 'undefined' ? createPortal((() => {
+        const { target, value, stage } = legOverrideConfirm
+        const targetName = target === 'player' ? humanName : aiDisplayName
+        const currentLegs = target === 'player' ? playerLegs : aiLegs
+        return (
+          <div className="fixed inset-0 bg-black/75 z-[240] flex items-center justify-center p-4" onClick={handleLegOverrideNo}>
+            <ResizableModal
+              storageKey="ndn:modal:offline-leg-override"
+              className="relative"
+              defaultWidth={360}
+              defaultHeight={240}
+              minWidth={280}
+              minHeight={200}
+              maxWidth={420}
+              maxHeight={360}
+              initialFitHeight
+              onClose={handleLegOverrideNo}
+            >
+              <div className="space-y-3 max-w-[18rem] mx-auto" onClick={e => e.stopPropagation()}>
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-white/50">Step {stage} of 2</div>
+                  <div className="text-xl font-semibold text-white mt-1">Override legs?</div>
+                </div>
+                <div className="text-sm text-slate-200 leading-relaxed">
+                  {stage === 1 ? (
+                    <>Set {targetName}&apos;s legs to <span className="font-semibold text-white">{value}</span>? Confirm to continue.</>
+                  ) : (
+                    <>Final confirmation: set {targetName}&apos;s legs to <span className="font-semibold text-white">{value}</span>. Select <span className="font-semibold text-emerald-200">Yes</span> to apply immediately.</>
+                  )}
+                </div>
+                <div className="rounded-xl bg-black/40 border border-white/10 p-3 text-sm">
+                  <div className="text-xs uppercase tracking-wide text-white/50 mb-1">Current legs</div>
+                  <div className="text-base font-semibold text-white">{currentLegs}</div>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button className="btn bg-rose-600 hover:bg-rose-700 text-white" onClick={handleLegOverrideNo}>No</button>
+                  <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleLegOverrideYes}>Yes</button>
+                </div>
+              </div>
+            </ResizableModal>
+          </div>
+        )
+      })(), document.body) : null}
         {showWinPopup && (
         <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
           <ResizableModal storageKey="ndn:modal:offline-win" className="w-full relative" defaultWidth={420} defaultHeight={360} minWidth={360} minHeight={300} maxWidth={800} maxHeight={700} initialFitHeight>

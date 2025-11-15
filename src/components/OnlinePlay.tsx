@@ -62,6 +62,11 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const msgs = useMessages()
   const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale, cameraFitMode = 'fill', setCameraFitMode, cameraEnabled, textSize, boxSize, autoscoreProvider, matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName, x01DoubleIn: defaultX01DoubleIn } = useUserSettings()
   const manualScoring = autoscoreProvider === 'manual'
+  useEffect(() => {
+    if (cameraFitMode !== 'fit') {
+      setCameraFitMode('fit')
+    }
+  }, [cameraFitMode, setCameraFitMode])
 
   // Button size classes for toolbar buttons
   const getButtonSizeClasses = (size: string) => {
@@ -1657,8 +1662,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
             {/* Ephemeral celebration overlay */}
             {celebration && (
               <div className="absolute inset-0 pointer-events-none flex items-start justify-center pt-8 z-20">
-                <div className={`px-4 py-2 rounded-full text-lg font-bold shadow ${celebration.kind==='leg' ? 'bg-indigo-500/20 border border-indigo-400/40 text-indigo-100' : 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-100'}`}>
-                  {celebration.kind==='leg' ? '­ƒÅü LEG WON ÔÇö ' : '­ƒÄ» ONE HUNDRED AND EIGHTY! ÔÇö '}{celebration.by}
+                <div className={`px-4 py-2 rounded-full text-lg font-bold shadow whitespace-nowrap ${celebration.kind==='leg' ? 'bg-indigo-500/20 border border-indigo-400/40 text-indigo-100' : 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-100'}`}>
+                  {celebration.kind==='leg' ? '­ƒÅü LEG WON ÔÇö ' : '­ƒÄ» 180! ÔÇö '}{celebration.by}
                 </div>
                 {/* Lightweight confetti for leg wins */}
                 {celebration.kind === 'leg' && (

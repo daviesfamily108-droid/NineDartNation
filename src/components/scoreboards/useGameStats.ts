@@ -18,6 +18,10 @@ export function useOfflineGameStats(
   aiLastDart?: number,
   playerVisitSum?: number,
   aiVisitSum?: number,
+  playerLastVisitScore?: number | null,
+  aiLastVisitScore?: number | null,
+  playerVisitDartCount?: number,
+  aiVisitDartCount?: number,
   playerDoublesHit?: number,
   playerDoublesAtt?: number,
   aiDoublesHit?: number,
@@ -57,12 +61,21 @@ export function useOfflineGameStats(
       }
 
       // Player card
+      const playerVisitDarts = playerVisitDartCount ?? 0
+      const playerCurrentVisitActive = playerVisitDarts > 0
+      const playerCurrentVisitSum = playerVisitSum ?? 0
+      const playerLastVisitTotal = playerLastVisitScore ?? null
+      const playerLastDartValue = playerLastDart ?? 0
+      const resolvedPlayerLastScore = playerCurrentVisitActive
+        ? playerCurrentVisitSum
+        : (playerLastVisitTotal ?? playerLastDartValue)
+
       players.push({
         name: 'You',
         isCurrentTurn: !!isPlayerTurn,
         legsWon: playerLegs || 0,
         score: playerScore || 0,
-        lastScore: playerVisitSum || playerLastDart || 0,
+        lastScore: resolvedPlayerLastScore,
         checkoutRate: playerDoublesAtt && playerDoublesAtt > 0 
           ? Math.round((playerDoublesHit || 0) / playerDoublesAtt * 100)
           : 0,
@@ -75,12 +88,21 @@ export function useOfflineGameStats(
 
       // AI card (if playing against AI)
       if (ai && ai !== 'None') {
+        const aiVisitDarts = aiVisitDartCount ?? 0
+        const aiCurrentVisitActive = aiVisitDarts > 0
+        const aiCurrentVisitSum = aiVisitSum ?? 0
+        const aiLastVisitTotal = aiLastVisitScore ?? null
+        const aiLastDartValue = aiLastDart ?? 0
+        const resolvedAiLastScore = aiCurrentVisitActive
+          ? aiCurrentVisitSum
+          : (aiLastVisitTotal ?? aiLastDartValue)
+
         players.push({
           name: `${ai} AI`,
           isCurrentTurn: !isPlayerTurn,
           legsWon: aiLegs || 0,
           score: aiScore || 0,
-          lastScore: aiVisitSum || aiLastDart || 0,
+          lastScore: resolvedAiLastScore,
           checkoutRate: aiDoublesAtt && aiDoublesAtt > 0 
             ? Math.round((aiDoublesHit || 0) / aiDoublesAtt * 100)
             : 0,
@@ -146,7 +168,9 @@ export function useOfflineGameStats(
     playerScore, aiScore,
     playerLegs, aiLegs,
     playerLastDart, aiLastDart,
-    playerVisitSum, aiVisitSum,
+  playerVisitSum, aiVisitSum,
+  playerLastVisitScore, aiLastVisitScore,
+  playerVisitDartCount, aiVisitDartCount,
     playerDoublesHit, playerDoublesAtt,
     aiDoublesHit, aiDoublesAtt,
     legStats,

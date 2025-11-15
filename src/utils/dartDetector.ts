@@ -36,7 +36,7 @@ export class DartDetector {
   private prevTip: Point | null = null
   private prevArea: number = 0
   private stableCount = 0
-  private requireStableN = 2
+  private requireStableN = 1
 
   constructor() {}
 

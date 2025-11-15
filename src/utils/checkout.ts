@@ -54,15 +54,34 @@ export function sayScore(name: string, scored: number, remaining: number, voiceN
     if (!synth) return
     const msg = new SpeechSynthesisUtterance()
     const isCheckout = remaining <= 170 && remaining > 0
-    if (opts?.checkoutOnly && !isCheckout) return
-    msg.text = isCheckout ? `${name}, you have ${remaining} remaining.` : `${scored}`
+    const isOneEighty = scored === 180
+    const shouldAnnounce = !opts?.checkoutOnly || isCheckout || isOneEighty
+    if (!shouldAnnounce) return
+
+    if (isOneEighty) {
+      msg.text = `${name}! One eighty!`
+      msg.rate = 1.04
+      msg.pitch = 1.15
+    } else if (isCheckout) {
+      msg.text = `${name}, ${remaining} remaining.`
+      msg.rate = 1.0
+      msg.pitch = 1.0
+    } else if (scored === 0) {
+      msg.text = `${name}, no score.`
+      msg.rate = 1.0
+      msg.pitch = 1.0
+    } else {
+      msg.text = `${name}, ${scored}.`
+      msg.rate = 1.0
+      msg.pitch = 1.0
+    }
     if (voiceName) {
       const v = synth.getVoices().find(v => v.name === voiceName)
       if (v) msg.voice = v
     }
     if (typeof opts?.volume === 'number') msg.volume = Math.max(0, Math.min(1, opts.volume))
-    msg.rate = 1.0
-    msg.pitch = 1.0
+    else msg.volume = 1
+    try { synth.cancel() } catch {}
     synth.speak(msg)
   } catch {}
 }

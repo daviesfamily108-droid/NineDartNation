@@ -11,8 +11,10 @@ export default function CameraStatusBadge() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef<number | null>(null)
 
-  const streaming = camera.isStreaming && camera.mode === 'phone'
   const videoEl = camera.getVideoElementRef()
+  const sessionStream = camera.getMediaStream?.()
+  const hasActivePhoneStream = !!(sessionStream || videoEl?.srcObject)
+  const streaming = camera.isStreaming && camera.mode === 'phone' && hasActivePhoneStream
 
   useEffect(() => {
     const canvas = canvasRef.current

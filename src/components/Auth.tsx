@@ -29,18 +29,28 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
     e.preventDefault();
     setError('');
     setLoading(true);
+    // Preload main app chunks so switching to the app is faster
+    try {
+      void import('./Home');
+      void import('./OnlinePlay');
+      void import('./OfflinePlay');
+      void import('./Scoreboard');
+      void import('./StatsPanel');
+    } catch {}
     if (!username || !password) {
       setError('Username and password required.');
       setLoading(false);
       return;
     }
     try {
+      console.time('Auth:signIn roundtrip');
       const res = await fetch(`${API_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(username.includes('@') ? { email: username, password } : { username, password })
       });
-      const data = await res.json();
+  const data = await res.json();
+  console.timeEnd('Auth:signIn roundtrip');
       if (res.ok && data?.user && data?.token) {
         localStorage.setItem('authToken', data.token);
         onAuth(data.user);

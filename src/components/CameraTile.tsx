@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { makeQrDataUrlWithLogo } from '../utils/qr'
 import { useUserSettings } from '../store/userSettings'
-import { useCameraSession } from '../store/cameraSession'
+import { useCameraSession, type CameraStreamMode } from '../store/cameraSession'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice, discoverUSBDevices, requestUSBDevice, connectToUSBDevice, type USBDevice } from '../utils/networkDevices'
 import { apiFetch } from '../utils/api'
 
@@ -13,11 +13,36 @@ type CameraTileProps = {
   aspect?: 'inherit' | 'wide' | 'square' | 'portrait' | 'classic' | 'free'
   style?: CSSProperties
   fill?: boolean
+  // Offline mode props
+  user?: any
+  playerScore?: number
+  aiScore?: number
+  x01Score?: number
+  inMatch?: boolean
+  showWinPopup?: boolean
+  pendingLegWinner?: "player" | "ai" | null
+  playerDartsThrown?: number
+  aiDartsThrown?: number
+  totalPlayerDarts?: number
+  totalAiDarts?: number
+  totalPlayerPoints?: number
+  totalAiPoints?: number
+  player180s?: number
+  player140s?: number
+  player100s?: number
+  ai180s?: number
+  ai140s?: number
+  ai100s?: number
+  playerHighestCheckout?: number
+  aiHighestCheckout?: number
+  onClose?: () => void
+  onOpen?: () => void
+  layout?: "classic" | "modern"
 }
 
 export default function CameraTile({
   label,
-  autoStart = false,
+  autoStart,
   scale: scaleOverride,
   className,
   aspect = 'inherit',
@@ -30,6 +55,26 @@ export default function CameraTile({
   const [ws, setWs] = useState<WebSocket | null>(null)
   const [pairCode, setPairCode] = useState<string | null>(null)
   const [pc, setPc] = useState<RTCPeerConnection | null>(null)
+  const lastRegisteredModeRef = useRef<CameraStreamMode | null>(null)
+  const registerStream = useCallback((stream: MediaStream | null, modeOverride: CameraStreamMode = 'local') => {
+    try {
+      if (stream) {
+        cameraSession.setMediaStream(stream)
+        if (videoRef.current) {
+          cameraSession.setVideoElementRef(videoRef.current)
+        }
+        cameraSession.setMode(modeOverride)
+        cameraSession.setStreaming(true)
+        lastRegisteredModeRef.current = modeOverride
+      } else if (lastRegisteredModeRef.current && lastRegisteredModeRef.current !== 'phone') {
+        cameraSession.setStreaming(false)
+        cameraSession.setMediaStream(null)
+        lastRegisteredModeRef.current = null
+      }
+    } catch (err) {
+      console.warn('[CameraTile] Failed to register stream with camera session:', err)
+    }
+  }, [cameraSession])
   
   // Initialize mode: prioritize phone camera if preferred, otherwise use localStorage
   const preferredCameraLabel = useUserSettings(s => s.preferredCameraLabel)
@@ -55,7 +100,8 @@ export default function CameraTile({
   const [discoveringWifi, setDiscoveringWifi] = useState<boolean>(false)
   const [usbDevices, setUsbDevices] = useState<USBDevice[]>([])
   const [discoveringUsb, setDiscoveringUsb] = useState<boolean>(false)
-  const autoscoreProvider = useUserSettings(s => s.autoscoreProvider)
+  const autoscoreProvider = useUserSettings(s => s.autoscoreProvider) as ('built-in' | 'external-ws' | 'manual' | undefined)
+  const cameraEnabledSetting = useUserSettings(s => s.cameraEnabled)
   const setPreferredCameraLocked = useUserSettings(s => s.setPreferredCameraLocked)
 
   if (autoscoreProvider === 'manual') {
@@ -148,12 +194,22 @@ export default function CameraTile({
   // This prevents a code expiring and the UI silently generating a new one while pairing.
 
   useEffect(() => {
+    if (!cameraEnabledSetting || autoscoreProvider === 'manual') return
+    if (autoStart === undefined) return
     if (autoStart) {
-      start().catch(()=>{})
-    } else {
-      stop()
+      let cancelled = false
+      const desiredLabel = preferredCameraLabel || 'default'
+      const timer = window.setTimeout(() => {
+        if (cancelled || streaming) return
+        start().catch(err => console.warn(`[CameraTile] Auto-start failed for ${desiredLabel}:`, err))
+      }, 200)
+      return () => {
+        cancelled = true
+        window.clearTimeout(timer)
+      }
     }
-  }, [autoStart, preferredCameraLabel])
+    stop()
+  }, [autoStart, streaming, cameraEnabledSetting, autoscoreProvider, preferredCameraLabel, start, stop])
 
   // If the user selected Phone Camera, bind the global stream into this tile
   useEffect(() => {
@@ -216,6 +272,7 @@ export default function CameraTile({
         videoRef.current.srcObject = stream
         await videoRef.current.play()
         setStreaming(true)
+        registerStream(stream, 'local')
       }
       // Camera started successfully - no automatic preference updates
     } catch {}
@@ -226,6 +283,7 @@ export default function CameraTile({
       tracks.forEach(t => t.stop())
       videoRef.current.srcObject = null
       setStreaming(false)
+      registerStream(null)
     }
   }
 
@@ -256,6 +314,7 @@ export default function CameraTile({
         videoRef.current.srcObject = stream
         await videoRef.current.play()
         setStreaming(true)
+        registerStream(stream, 'wifi')
         setWifiDevices(devices => devices.map(d => 
           d.id === device.id ? { ...d, status: 'online' as const } : d
         ))
@@ -306,6 +365,7 @@ export default function CameraTile({
         await videoRef.current.play()
         setStreaming(true)
         setMode('wifi') // Using wifi mode for USB devices too
+        registerStream(stream, 'wifi')
         setUsbDevices(devices => devices.map(d => 
           d.id === device.id ? { ...d, status: 'online' as const } : d
         ))
@@ -482,6 +542,81 @@ function CameraFrame(props: any) {
     fill,
   } = props
 
+  const modeDisplayName: Record<string, string> = {
+    local: 'Local',
+    phone: 'PhoneCam',
+    wifi: 'Wi-Fi/USB',
+  }
+
+  const reconnectOptions = useMemo(() => {
+    return [
+      {
+        id: 'local',
+        title: 'Local camera',
+        description: 'Use the desktop webcam or capture card.',
+        action: () => {
+          setMode('local')
+          start()
+        },
+      },
+      {
+        id: 'phone',
+        title: 'PhoneCam',
+        description: 'Stream from your phone via the mobile link.',
+        action: () => {
+          startPhonePairing()
+        },
+      },
+      {
+        id: 'wifi',
+        title: 'Wi-Fi',
+        description: 'Discover network scoring cameras and connect.',
+        action: () => {
+        <div className="mt-3 p-3 rounded-2xl bg-white border border-slate-200 shadow-sm text-slate-900">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-slate-500">Camera modes</div>
+              <div className="text-sm font-semibold text-slate-900">Reconnect camera</div>
+            </div>
+            <span className="text-xs text-slate-500">Current: {modeDisplayName[mode] || 'Local'}</span>
+          </div>
+          <p className="text-xs text-slate-500 mb-2">Tap a mode to restart the feed or switch inputs.</p>
+          <div className="grid grid-cols-2 gap-2">
+            {reconnectOptions.map(option => {
+              const isActive = option.id === 'usb'
+                ? usbActive
+                : option.id === mode
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={option.action}
+                  className={`text-left p-3 rounded-2xl border ${isActive ? 'border-emerald-500 bg-emerald-50 shadow' : 'border-slate-200 bg-white/80 hover:bg-slate-50'} transition`}
+                >
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{option.title}</div>
+                  <div className="text-[11px] text-slate-600 mt-1">{option.description}</div>
+                  {isActive && <div className="text-[10px] text-emerald-500 mt-2">Active</div>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+          setMode('wifi')
+          startWifiConnection()
+        },
+      },
+      {
+        id: 'usb',
+        title: 'USB',
+        description: 'Connect a USB capture device directly.',
+        action: () => {
+          setMode('wifi')
+          startUsbConnection()
+        },
+      },
+    ]
+  }, [setMode, start, startPhonePairing, startWifiConnection, startUsbConnection])
+
   const [copyFeedback, setCopyFeedback] = useState<'link' | 'code' | null>(null)
   const copyTimeoutRef = useRef<number | null>(null)
 
@@ -519,16 +654,18 @@ function CameraFrame(props: any) {
     : ''
 
   const containerBase = fill
-    ? 'rounded-2xl overflow-hidden bg-transparent w-full flex flex-col'
-    : 'rounded-2xl overflow-hidden bg-transparent w-full mx-auto flex flex-col'
+    ? 'rounded-3xl overflow-hidden bg-transparent w-full flex flex-col shadow-2xl border border-slate-700/30'
+    : 'rounded-3xl overflow-hidden bg-transparent w-full mx-auto flex flex-col shadow-2xl border border-slate-700/30'
   const containerClass = [containerBase, className].filter(Boolean).join(' ').trim()
   const containerStyle: CSSProperties = { ...(style || {}) }
 
-  const viewportClass = fill ? 'relative flex-1 min-h-[220px] bg-black' : 'relative w-full bg-black'
+  const viewportClass = fill ? 'relative flex-1 min-h-[420px] bg-black' : 'relative w-full bg-black'
 
   const commonVideoProps = {
     style: { transform: `scale(${scale})`, transformOrigin: 'center' as const },
   }
+
+  const usbActive = mode === 'wifi' && usbDevices.some(d => d.status === 'online')
 
   const videoElement = (() => {
     // Apply Fit/Fill preference (fill prop hard-overrides to full-bleed)
@@ -590,25 +727,25 @@ function CameraFrame(props: any) {
       <div className={viewportClass}>
         {videoElement}
         {(cameraSession.isStreaming && (mode==='phone')) && (
-          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 border border-rose-500/50 text-[10px] text-rose-200">
-            <span className="inline-block w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-            <span className="font-semibold">REC</span>
+          <div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/70 backdrop-blur border border-rose-500/60 text-xs text-rose-200 font-semibold shadow-lg">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+            <span>REC</span>
           </div>
         )}
       </div>
-  <div className="p-1 flex items-center justify-between bg-black/60 text-white text-[10px] gap-1">
-        <span className="truncate">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : mode==='wifi' ? 'WIFI LIVE' : 'LIVE') : 'Camera')}</span>
-        <div className="flex items-center gap-1">
+  <div className="px-3 py-2 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800 text-white text-[11px] gap-2 border-t border-slate-700/50">
+        <span className="truncate font-medium">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : mode==='wifi' ? 'WIFI LIVE' : 'LIVE') : 'Camera')}</span>
+        <div className="flex items-center gap-2">
           {!streaming && (
             <>
-              <button className={`px-1 py-0.5 rounded ${mode==='local'?'bg-emerald-600':'bg-slate-700'}`} onClick={() => { setMode('local'); start() }}>Local</button>
-              <button className={`px-1 py-0.5 rounded ${mode==='phone'?'bg-emerald-600':'bg-slate-700'}`} onClick={startPhonePairing}>Phone</button>
-              <button className={`px-1 py-0.5 rounded ${mode==='wifi'?'bg-emerald-600':'bg-slate-700'}`} onClick={() => { setMode('wifi'); startWifiConnection() }}>Wifi</button>
-              <button className={`px-1 py-0.5 rounded ${mode==='wifi'?'bg-emerald-600':'bg-slate-700'}`} onClick={() => { setMode('wifi'); startUsbConnection() }}>USB</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='local'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => { setMode('local'); start() }}>Local</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='phone'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={startPhonePairing}>Phone</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => { setMode('wifi'); startWifiConnection() }}>WiFi</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => { setMode('wifi'); startUsbConnection() }}>USB</button>
             </>
           )}
           {streaming ? (
-            <button className="px-1 py-0.5 rounded bg-rose-600" onClick={stopAll}>Stop</button>
+            <button className="px-2 py-1 rounded-md text-xs font-semibold bg-rose-500 text-white hover:bg-rose-600 transition-all" onClick={stopAll}>Stop</button>
           ) : null}
         </div>
       </div>
@@ -705,6 +842,7 @@ function CameraFrame(props: any) {
             )}
           </div>
 
+
           {/* USB Devices */}
           <div>
             <div className="font-medium mb-1">USB Devices</div>
@@ -743,6 +881,37 @@ function CameraFrame(props: any) {
                 <button className="px-1 py-0.5 rounded bg-slate-700 text-[9px]" onClick={startUsbConnection}>Scan USB</button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {!streaming && (
+        <div className="mt-3 p-3 rounded-2xl bg-white border border-slate-200 shadow-sm text-slate-900">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <div className="text-[10px] uppercase tracking-wide text-slate-500">Camera modes</div>
+              <div className="text-sm font-semibold text-slate-900">Reconnect camera</div>
+            </div>
+            <span className="text-xs text-slate-500">Current: {modeDisplayName[mode] || 'Local'}</span>
+          </div>
+          <p className="text-xs text-slate-500 mb-2">Tap a mode to restart the feed or switch inputs.</p>
+          <div className="grid grid-cols-2 gap-2">
+            {reconnectOptions.map(option => {
+              const isActive = option.id === 'usb'
+                ? usbActive
+                : option.id === mode
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={option.action}
+                  className={`text-left p-3 rounded-2xl border ${isActive ? 'border-emerald-500 bg-emerald-50 shadow' : 'border-slate-200 bg-white/80 hover:bg-slate-50'} transition`}
+                >
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{option.title}</div>
+                  <div className="text-[11px] text-slate-600 mt-1">{option.description}</div>
+                  {isActive && <div className="text-[10px] text-emerald-500 mt-2">Active</div>}
+                </button>
+              )
+            })}
           </div>
         </div>
       )}

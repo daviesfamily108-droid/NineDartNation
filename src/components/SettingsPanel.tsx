@@ -7,12 +7,12 @@ export default function SettingsPanel({ user }: { user?: any }) {
   const {
     favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, avgMode,
     autoStartOffline, rememberLastOffline, reducedMotion, compactHeader, allowSpectate,
-    cameraScale, cameraAspect, cameraFitMode, autoscoreProvider, autoscoreWsUrl, calibrationGuide,
+  cameraScale, cameraAspect, cameraFitMode, autoscoreProvider, autoscoreWsUrl, autoCommitMode, calibrationGuide,
     preferredCameraId, preferredCameraLabel, cameraEnabled, offlineLayout, textSize, boxSize,
     setFavoriteDouble, setCallerEnabled, setCallerVoice, setCallerVolume, setSpeakCheckoutOnly,
     setAvgMode, setAutoStartOffline, setRememberLastOffline, setReducedMotion, setCompactHeader,
-    setAllowSpectate, setCameraScale, setCameraAspect, setCameraFitMode, setAutoscoreProvider, setAutoscoreWsUrl,
-    setCalibrationGuide, setPreferredCamera, setCameraEnabled, setOfflineLayout, setTextSize, setBoxSize,
+  setAllowSpectate, setCameraScale, setCameraAspect, setCameraFitMode, setAutoscoreProvider, setAutoscoreWsUrl,
+  setAutoCommitMode, setCalibrationGuide, setPreferredCamera, setCameraEnabled, setOfflineLayout, setTextSize, setBoxSize,
     dartTimerEnabled, dartTimerSeconds, setDartTimerEnabled, setDartTimerSeconds,
     x01DoubleIn, setX01DoubleIn
   } = useUserSettings();
@@ -619,6 +619,21 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           className="input w-full text-xs"
                         />
                       )}
+                      {autoscoreProvider !== 'manual' && (
+                        <div>
+                          <label htmlFor="autoCommitMode" className="block text-sm mb-2">Turn Advance</label>
+                          <select
+                            id="autoCommitMode"
+                            value={autoCommitMode || 'wait-for-clear'}
+                            onChange={e => setAutoCommitMode(e.target.value as 'wait-for-clear' | 'immediate')}
+                            className="input w-full"
+                          >
+                            <option value="wait-for-clear">Wait for darts to be removed</option>
+                            <option value="immediate">Advance immediately after 3 darts/bust</option>
+                          </select>
+                          <p className="text-xs opacity-70 mt-1">Waiting prevents the turn from rotating until you clear the board (or 6.5s pass).</p>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -683,7 +698,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       </div>
                       <button
                         onClick={() => {
-                          const utterance = new SpeechSynthesisUtterance('Test voice. One hundred and eighty!');
+                          const utterance = new SpeechSynthesisUtterance('Test voice. 180!');
                           utterance.voice = availableVoices.find(v => v.voiceURI === callerVoice) || null;
                           utterance.volume = callerVolume || 1;
                           speechSynthesis.cancel();

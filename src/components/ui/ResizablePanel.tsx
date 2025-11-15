@@ -72,7 +72,7 @@ export default function ResizablePanel({
   function endResize() { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', endResize); startRef.current = null }
 
   const style: CSSProperties = {
-    width: size.width ? `${size.width}px` : undefined,
+    width: autoFill ? '100%' : (size.width ? `${size.width}px` : undefined),
     height: autoFill ? '100%' : (size.height ? `${size.height}px` : undefined),
     maxWidth: '100%',
     // Allow the panel to fill the parent when autoFill is enabled. Otherwise keep a sensible cap.

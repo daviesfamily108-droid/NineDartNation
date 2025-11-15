@@ -257,6 +257,15 @@ body {
   padding: 0.5rem;
 }
 
+.camera-fullwidth-card {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
 /* Positioning helper: allow an inner filling area to absolutely span the shell
    without changing the document flow of the header. Use together with a
    small wrapper element called .ndn-shell-body (added in components). */

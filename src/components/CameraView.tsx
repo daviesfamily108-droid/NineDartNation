@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useUserSettings } from '../store/userSettings'
 import { useCalibration } from '../store/calibration'
 import { useMatch } from '../store/match'
@@ -17,6 +17,36 @@ import { useAudit } from '../store/audit'
 
 // Shared ring type across autoscore/manual flows
 type Ring = 'MISS'|'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'
+
+const AUTO_COMMIT_MIN_FRAMES = 1
+const AUTO_COMMIT_HOLD_MS = 120
+const AUTO_COMMIT_COOLDOWN_MS = 400
+const AUTO_STREAM_IGNORE_MS = 450
+const DETECTION_ARM_DELAY_MS = 5000
+const AUTO_COMMIT_CONFIDENCE = 0.85
+const BOARD_CLEAR_GRACE_MS = 6500
+const DISABLE_CAMERA_OVERLAY = true
+
+type AutoCandidate = {
+  value: number
+  ring: Ring
+  label: string
+  sector: number | null
+  mult: 0|1|2|3
+  firstTs: number
+  frames: number
+}
+
+type DetectionLogEntry = {
+  ts: number
+  label: string
+  value: number
+  ring: Ring
+  confidence: number
+  ready: boolean
+  accepted: boolean
+  warmup: boolean
+}
 
 export default function CameraView({
   onVisitCommitted,
@@ -40,15 +70,26 @@ export default function CameraView({
   x01DoubleInOverride?: boolean
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const { preferredCameraId, preferredCameraLabel, setPreferredCamera, autoscoreProvider, autoscoreWsUrl, cameraAspect, cameraFitMode } = useUserSettings()
+  const { preferredCameraId, preferredCameraLabel, setPreferredCamera, autoscoreProvider, autoscoreWsUrl, cameraAspect, cameraFitMode, autoCommitMode = 'wait-for-clear', cameraEnabled, setCameraEnabled, preferredCameraLocked, hideCameraOverlay, setHideCameraOverlay } = useUserSettings()
   const manualOnly = autoscoreProvider === 'manual'
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const [streaming, setStreaming] = useState(false)
+  const cameraSession = useCameraSession()
+  const isPhoneCamera = preferredCameraLabel === 'Phone Camera'
+  const sessionStream = cameraSession.getMediaStream?.() || null
+  const sessionStreaming = cameraSession.isStreaming
+  const phoneFeedActive = isPhoneCamera && cameraSession.mode === 'phone' && sessionStreaming && !!sessionStream
+  const effectiveStreaming = streaming || sessionStreaming
   const [cameraStarting, setCameraStarting] = useState(false)
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null)
   const { H, imageSize, reset: resetCalibration, _hydrated } = useCalibration()
+  useEffect(() => {
+    if (preferredCameraLocked && !hideCameraOverlay) {
+      setHideCameraOverlay(true)
+    }
+  }, [preferredCameraLocked, hideCameraOverlay, setHideCameraOverlay])
   const [lastAutoScore, setLastAutoScore] = useState<string>('')
   const [manualScore, setManualScore] = useState<string>('')
   const [lastAutoValue, setLastAutoValue] = useState<number>(0)
@@ -58,6 +99,95 @@ export default function CameraView({
   const [pendingEntries, setPendingEntries] = useState<{ label: string; value: number; ring: Ring }[]>([])
   const [pendingPreOpenDarts, setPendingPreOpenDarts] = useState<number>(0)
   const [pendingDartsAtDouble, setPendingDartsAtDouble] = useState<number>(0)
+  const [awaitingClear, setAwaitingClear] = useState(false)
+  const pendingCommitRef = useRef<{ score: number; darts: number; finished: boolean } | null>(null)
+  const pendingCommitTimerRef = useRef<number | null>(null)
+  const shouldDeferCommit = !immediateAutoCommit && autoCommitMode !== 'immediate'
+  const [indicatorVersion, setIndicatorVersion] = useState(0)
+  const [indicatorEntryVersions, setIndicatorEntryVersions] = useState<number[]>([])
+  const autoCandidateRef = useRef<AutoCandidate | null>(null)
+  const detectionLogRef = useRef<DetectionLogEntry[]>([])
+  const lastAutoCommitRef = useRef<number>(0)
+  const streamingStartMsRef = useRef<number>(0)
+  const detectionArmedRef = useRef<boolean>(false)
+  const detectionArmTimerRef = useRef<number | null>(null)
+  const frameCountRef = useRef<number>(0)
+  const [detectionLog, setDetectionLog] = useState<DetectionLogEntry[]>([])
+  const [showDetectionLog, setShowDetectionLog] = useState(false)
+  const clearPendingCommitTimer = useCallback(() => {
+    if (pendingCommitTimerRef.current) {
+      clearTimeout(pendingCommitTimerRef.current)
+      pendingCommitTimerRef.current = null
+    }
+  }, [])
+
+  const captureDetectionLog = useCallback((entry: DetectionLogEntry) => {
+    const next = [...detectionLogRef.current.slice(-8), entry]
+    detectionLogRef.current = next
+    setDetectionLog(next)
+    try {
+      (window as any).ndnCameraDiagnostics = next
+    } catch {}
+  }, [])
+  const finalizePendingCommit = useCallback((_trigger: 'event' | 'timeout' | 'teardown') => {
+    const pending = pendingCommitRef.current
+    if (!pending) return
+    pendingCommitRef.current = null
+    clearPendingCommitTimer()
+    setAwaitingClear(false)
+    if (onVisitCommitted) {
+      try { onVisitCommitted(pending.score, pending.darts, pending.finished) } catch {}
+    }
+  }, [onVisitCommitted, clearPendingCommitTimer])
+  const enqueueVisitCommit = useCallback((payload: { score: number; darts: number; finished: boolean }) => {
+    if (!onVisitCommitted) return
+    if (!shouldDeferCommit) {
+      try { onVisitCommitted(payload.score, payload.darts, payload.finished) } catch {}
+      return
+    }
+    pendingCommitRef.current = payload
+    setAwaitingClear(true)
+    clearPendingCommitTimer()
+    pendingCommitTimerRef.current = window.setTimeout(() => finalizePendingCommit('timeout'), BOARD_CLEAR_GRACE_MS)
+  }, [onVisitCommitted, shouldDeferCommit, clearPendingCommitTimer, finalizePendingCommit])
+  const clearPendingManual = useCallback((reason: 'indicator' | 'toolbar') => {
+    setPendingDarts(0)
+    setPendingScore(0)
+    setPendingEntries([])
+    setPendingPreOpenDarts(0)
+    setPendingDartsAtDouble(0)
+    setHadRecentAuto(false)
+    try {
+      window.dispatchEvent(new CustomEvent('ndn:clear-visit-request', { detail: { source: 'camera-view', reason, ts: Date.now() } }))
+    } catch {}
+  }, [])
+  useEffect(() => {
+    if (!shouldDeferCommit) return
+    const handler = () => finalizePendingCommit('event')
+    window.addEventListener('ndn:darts-cleared', handler as EventListener)
+    return () => window.removeEventListener('ndn:darts-cleared', handler as EventListener)
+  }, [shouldDeferCommit, finalizePendingCommit])
+  useEffect(() => {
+    if (!shouldDeferCommit) finalizePendingCommit('timeout')
+  }, [shouldDeferCommit, finalizePendingCommit])
+  useEffect(() => () => finalizePendingCommit('teardown'), [finalizePendingCommit])
+  const handleIndicatorReset = useCallback(() => {
+    clearPendingManual('indicator')
+    setIndicatorVersion(v => v + 1)
+  }, [clearPendingManual])
+  const handleToolbarClear = useCallback(() => {
+    if (pendingDarts === 0 && pendingScore === 0) return
+    clearPendingManual('toolbar')
+    setIndicatorVersion(v => v + 1)
+  }, [clearPendingManual, pendingDarts, pendingScore])
+  const requestDeviceManager = useCallback(() => {
+    if (manualOnly) return
+    try {
+      window.dispatchEvent(new CustomEvent('ndn:open-camera-manager', { detail: { source: 'camera-view', ts: Date.now() } }))
+    } catch (err) {
+      console.warn('[CameraView] Failed to request camera manager:', err)
+    }
+  }, [manualOnly])
   // X01 Double-In handling: per-player opened state in this session
   const x01DoubleInSetting = useUserSettings(s => s.x01DoubleIn)
   const x01DoubleIn = (typeof x01DoubleInOverride === 'boolean') ? !!x01DoubleInOverride : !!x01DoubleInSetting
@@ -100,6 +230,13 @@ export default function CameraView({
   const detectorRef = useRef<DartDetector | null>(null)
   const rafRef = useRef<number | null>(null)
   const [detectorSeedVersion, setDetectorSeedVersion] = useState(0)
+  const handlePhoneReconnect = useCallback(() => {
+    try {
+      window.dispatchEvent(new CustomEvent('ndn:phone-camera-reconnect', { detail: { source: 'camera-view', ts: Date.now() } }))
+    } catch (err) {
+      console.warn('[CameraView] Phone camera reconnect dispatch failed:', err)
+    }
+  }, [])
   // Open Autoscore modal from parent via global event
   useEffect(() => {
     const onOpen = () => { if (!manualOnly) setShowAutoModal(true) }
@@ -120,6 +257,69 @@ export default function CameraView({
     window.addEventListener('ndn:open-scoring' as any, onOpen)
     return () => window.removeEventListener('ndn:open-scoring' as any, onOpen)
   }, [])
+
+  useEffect(() => {
+    const onDartsCleared = () => {
+      setIndicatorVersion(v => v + 1)
+      setPendingDarts(0)
+      setPendingScore(0)
+      setPendingEntries([])
+      setPendingPreOpenDarts(0)
+      setPendingDartsAtDouble(0)
+      setHadRecentAuto(false)
+    }
+    window.addEventListener('ndn:darts-cleared', onDartsCleared as EventListener)
+    return () => window.removeEventListener('ndn:darts-cleared', onDartsCleared as EventListener)
+  }, [])
+
+  useEffect(() => {
+    setIndicatorEntryVersions(prev => {
+      if (pendingEntries.length > prev.length) {
+        const diff = pendingEntries.length - prev.length
+        return [...prev, ...Array(diff).fill(indicatorVersion)]
+      }
+      if (pendingEntries.length < prev.length) {
+        return prev.slice(0, pendingEntries.length)
+      }
+      return prev
+    })
+  }, [pendingEntries, indicatorVersion])
+
+  useEffect(() => {
+    if (detectionArmTimerRef.current) {
+      clearTimeout(detectionArmTimerRef.current)
+      detectionArmTimerRef.current = null
+    }
+    if (manualOnly) {
+      detectionArmedRef.current = false
+      streamingStartMsRef.current = 0
+      autoCandidateRef.current = null
+      return
+    }
+    if (effectiveStreaming) {
+      streamingStartMsRef.current = performance.now()
+      autoCandidateRef.current = null
+      detectionArmedRef.current = false
+      frameCountRef.current = 0
+      detectionArmTimerRef.current = window.setTimeout(() => {
+        detectionArmedRef.current = true
+        detectionArmTimerRef.current = null
+      }, DETECTION_ARM_DELAY_MS)
+    } else {
+      streamingStartMsRef.current = 0
+      autoCandidateRef.current = null
+      detectionArmedRef.current = false
+      frameCountRef.current = 0
+    }
+    return () => {
+      if (detectionArmTimerRef.current) {
+        clearTimeout(detectionArmTimerRef.current)
+        detectionArmTimerRef.current = null
+      }
+      detectionArmedRef.current = false
+      frameCountRef.current = 0
+    }
+  }, [effectiveStreaming, manualOnly])
 
   // Enumerate devices on mount and when devices change so USB webcams appear quickly
   useEffect(() => {
@@ -245,14 +445,14 @@ export default function CameraView({
     return () => stopCamera()
   }, [])
 
+  const canFallbackToLocal = isPhoneCamera && !phoneFeedActive
+
   async function startCamera() {
     if (cameraStarting || streaming) return
     
-    // If phone camera is selected, don't try to start a local camera
-    // The phone camera is displayed via PhoneCameraOverlay in the game tabs
-    if (preferredCameraLabel === 'Phone Camera') {
-      console.log('[CAMERA] Phone camera is selected - skipping local camera startup')
-      console.log('[CAMERA] Phone camera feed shown via overlay in game tabs')
+    // Only skip local startup when the phone feed is actively streaming
+    if (isPhoneCamera && phoneFeedActive) {
+      console.log('[CAMERA] Phone camera stream active - leaving local camera idle')
       setCameraStarting(false)
       return
     }
@@ -308,6 +508,14 @@ export default function CameraView({
             }
           }, 100)
         }
+        try {
+          cameraSession.setVideoElementRef?.(videoRef.current)
+          cameraSession.setMediaStream?.(stream)
+          cameraSession.setMode?.('local')
+          cameraSession.setStreaming?.(true)
+        } catch (err) {
+          console.warn('[CAMERA] Failed to sync camera session with local stream:', err)
+        }
       } else {
         console.error('[CAMERA] Video element not found')
       }
@@ -338,10 +546,31 @@ export default function CameraView({
     }
   }
 
+  useEffect(() => {
+    const videoEl = videoRef.current
+    if (!videoEl) return
+    const sessionStream = cameraSession.getMediaStream?.() || null
+    const sessionVideo = cameraSession.getVideoElementRef?.() || null
+    const fallbackStream = (sessionVideo?.srcObject as MediaStream | null) || null
+    const activeStream = sessionStream || fallbackStream
+    if (!activeStream) return
+    if (videoEl.srcObject !== activeStream) {
+      videoEl.srcObject = activeStream
+    }
+    videoEl.muted = true
+    ;(videoEl as any).playsInline = true
+    try { videoEl.play?.() } catch {}
+    if (!streaming) setStreaming(true)
+  }, [cameraSession.mode, cameraSession.isStreaming, streaming, cameraSession])
+
   function capture() {
     try {
-      if (!videoRef.current || !canvasRef.current) return
-      const video = videoRef.current
+      if (!canvasRef.current) return
+      const primary = videoRef.current
+      const sessionVideo = cameraSession.getVideoElementRef?.() || null
+      const source = (primary && primary.videoWidth > 0 && primary.videoHeight > 0) ? primary : sessionVideo || primary
+      if (!source) return
+      const video = source
       const canvas = canvasRef.current
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
@@ -416,16 +645,32 @@ export default function CameraView({
   }
 
   function drawOverlay() {
+    if (DISABLE_CAMERA_OVERLAY) {
+      if (overlayRef.current) {
+        const ctx = overlayRef.current.getContext('2d')
+        if (ctx) ctx.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height)
+      }
+      return
+    }
     try {
-      if (!overlayRef.current || !videoRef.current || !H || !imageSize) return
+      // Only render overlays when calibration data exists and the phone stream isn't providing the image
+      if (!overlayRef.current || !videoRef.current || !H || !imageSize) {
+        if (overlayRef.current) {
+          const ctx = overlayRef.current.getContext('2d')
+          ctx?.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height)
+        }
+        return
+      }
+      if (isPhoneCamera) return
       const o = overlayRef.current
       const v = videoRef.current
       const w = v.clientWidth
       const h = v.clientHeight
       o.width = w; o.height = h
-      const ctx = o.getContext('2d')
-      if (!ctx) return
-      ctx.clearRect(0,0,w,h)
+  const ctx = o.getContext('2d')
+  if (!ctx) return
+  ctx.clearRect(0,0,w,h)
+  if (preferredCameraLocked || hideCameraOverlay) return
 
       // scale homography from calibration image size to current rendered size
       const sx = w / imageSize.w
@@ -433,7 +678,7 @@ export default function CameraView({
       const Hs = scaleHomography(H, sx, sy)
       const rings = [BoardRadii.bullInner, BoardRadii.bullOuter, BoardRadii.trebleInner, BoardRadii.trebleOuter, BoardRadii.doubleInner, BoardRadii.doubleOuter]
       for (const r of rings) {
-        const poly = sampleRing(Hs, r, 360)
+        const poly = sampleRing(Hs, r, 720)
         drawPolyline(ctx, poly, r === BoardRadii.doubleOuter ? '#22d3ee' : '#a78bfa', r === BoardRadii.doubleOuter ? 3 : 2)
       }
     } catch (e) {
@@ -443,11 +688,11 @@ export default function CameraView({
   }
 
   useEffect(() => {
-    if (manualOnly) return
+    if (manualOnly || DISABLE_CAMERA_OVERLAY) return
     const id = setInterval(drawOverlay, 250)
     return () => clearInterval(id)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [H, imageSize, streaming, manualOnly])
+  }, [H, imageSize, effectiveStreaming, manualOnly, isPhoneCamera, preferredCameraLocked, hideCameraOverlay])
 
   // Built-in autoscore loop (offline/local CV)
   useEffect(() => {
@@ -461,7 +706,7 @@ export default function CameraView({
     if (!H || !imageSize) return
 
     let canceled = false
-  const v = sourceVideo
+    const v = sourceVideo
     const proc = canvasRef.current
     if (!proc) return
 
@@ -471,15 +716,17 @@ export default function CameraView({
     const tick = () => {
       if (canceled) return
       try {
-  const vw = v.videoWidth || 0
-  const vh = v.videoHeight || 0
+        const vw = v.videoWidth || 0
+        const vh = v.videoHeight || 0
         if (!vw || !vh) { rafRef.current = requestAnimationFrame(tick); return }
         if (proc.width !== vw) proc.width = vw
         if (proc.height !== vh) proc.height = vh
-        const ctx = proc.getContext('2d')
+  const ctx = proc.getContext('2d', { willReadFrequently: true })
         if (!ctx) { rafRef.current = requestAnimationFrame(tick); return }
         ctx.drawImage(v, 0, 0, vw, vh)
         const frame = ctx.getImageData(0, 0, vw, vh)
+
+        frameCountRef.current++
 
         // Seed ROI from calibration homography (board center + double radius along X)
         const cImg = applyHomography(H, { x: 0, y: 0 })
@@ -499,81 +746,134 @@ export default function CameraView({
         }
 
         // Try to detect a new dart when not paused and visit has room
-        if (!paused && pendingDarts < 3) {
+  if (!paused && pendingDarts < 3 && detectionArmedRef.current && frameCountRef.current > 150) {
           const det = detector.detect(frame)
-          if (det && det.confidence >= 0.6) {
+          const nowPerf = performance.now()
+          if (autoCandidateRef.current && nowPerf - autoCandidateRef.current.firstTs > 900) {
+            autoCandidateRef.current = null
+          }
+          if (det && det.confidence >= AUTO_COMMIT_CONFIDENCE) {
+            const warmupActive = streamingStartMsRef.current > 0 && (nowPerf - streamingStartMsRef.current) < AUTO_STREAM_IGNORE_MS
             // Refine tip on gradients
             const tipRefined = refinePointSobel(proc, det.tip, 6)
             // Map to calibration image space before scoring
             const pCal = { x: tipRefined.x / sx, y: tipRefined.y / sy }
             const score = scoreFromImagePoint(H, pCal)
-            const s = `${score.ring} ${score.base > 0 ? score.base : ''}`.trim()
-            setLastAutoScore(s)
-            setLastAutoValue(score.base)
-            setLastAutoRing(score.ring as Ring)
+            const ring = score.ring as Ring
+            const value = score.base
+            const label = `${ring} ${value > 0 ? value : ''}`.trim()
+            const sector = (score.sector ?? null) as number | null
+            const mult = (Math.max(0, Number(score.mult) || 0) as 0|1|2|3)
+            let shouldAccept = false
+
+            setLastAutoScore(label)
+            setLastAutoValue(value)
+            setLastAutoRing(ring)
+
+            const applyAutoHit = (candidate: AutoCandidate) => {
+              if (candidate.value > 0) {
                 setHadRecentAuto(true)
-                // If this looks like a valid confirmed auto (non-miss, positive base), pulse the Manual pill briefly
-                try {
-                  const ok = !!score && score.ring !== 'MISS' && (score.base || 0) > 0
-                  if (ok) {
-                    setPulseManualPill(true)
-                    try { if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current) } catch {}
-                    pulseTimeoutRef.current = window.setTimeout(() => { setPulseManualPill(false); pulseTimeoutRef.current = null }, 1500)
-                    // AUTO-COMMIT the dart when high confidence is detected
-                    try { addDart(score.base, s, score.ring as Ring) } catch {}
-                  }
-                } catch {}
+                setPulseManualPill(true)
+                try { if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current) } catch {}
+                pulseTimeoutRef.current = window.setTimeout(() => { setPulseManualPill(false); pulseTimeoutRef.current = null }, 1500)
+                try { addDart(candidate.value, candidate.label, candidate.ring) } catch {}
+              } else {
+                setHadRecentAuto(false)
+              }
+              try { if (onAutoDart) onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult }) } catch {}
+            }
+
+            if (!warmupActive) {
+              if (ring === 'MISS' || value <= 0) {
+                autoCandidateRef.current = null
+                setHadRecentAuto(false)
+                try { if (onAutoDart) onAutoDart(value, ring, { sector, mult }) } catch {}
+                shouldAccept = true
+              } else {
+                const existing = autoCandidateRef.current
+                if (!existing || existing.value !== value || existing.ring !== ring) {
+                  autoCandidateRef.current = { value, ring, label, sector, mult, firstTs: nowPerf, frames: 1 }
+                } else {
+                  autoCandidateRef.current = { ...existing, label, frames: existing.frames + 1 }
+                }
+                const current = autoCandidateRef.current!
+                const holdMs = nowPerf - current.firstTs
+                const ready = current.frames >= AUTO_COMMIT_MIN_FRAMES || holdMs >= AUTO_COMMIT_HOLD_MS
+                const cooled = (nowPerf - lastAutoCommitRef.current) >= AUTO_COMMIT_COOLDOWN_MS
+                if (ready && cooled) {
+                  applyAutoHit(current)
+                  autoCandidateRef.current = null
+                  lastAutoCommitRef.current = nowPerf
+                  shouldAccept = true
+                }
+              }
+            } else {
+              autoCandidateRef.current = null
+              shouldAccept = true
+            }
+
+            captureDetectionLog({
+              ts: nowPerf,
+              label,
+              value,
+              ring,
+              confidence: det.confidence,
+              ready: shouldAccept,
+              accepted: shouldAccept && value > 0 && ring !== 'MISS',
+              warmup: warmupActive,
+            })
 
             // Draw debug tip and shaft axis on overlay (scaled to overlay canvas)
             try {
-              const o = overlayRef.current
-              if (o) {
-                const octx = o.getContext('2d')
-                if (octx) {
-                  // Maintain overlay size and clear a small area
-                  const ox = (tipRefined.x / vw) * o.width
-                  const oy = (tipRefined.y / vh) * o.height
-                  octx.save()
-                  octx.beginPath()
-                  octx.strokeStyle = '#f59e0b'
-                  octx.lineWidth = 2
-                  octx.arc(ox, oy, 6, 0, Math.PI * 2)
-                  octx.stroke()
-                  // axis line if available
-                  if ((det as any).axis) {
-                    const ax = (det as any).axis
-                    const ax1 = (ax.x1 / vw) * o.width
-                    const ay1 = (ax.y1 / vh) * o.height
-                    const ax2 = (ax.x2 / vw) * o.width
-                    const ay2 = (ax.y2 / vh) * o.height
+              const drawOverlayHint = value > 0 && ring !== 'MISS'
+              if (drawOverlayHint) {
+                const o = overlayRef.current
+                if (o) {
+                  const octx = o.getContext('2d')
+                  if (octx) {
+                    // Maintain overlay size and clear a small area
+                    const ox = (tipRefined.x / vw) * o.width
+                    const oy = (tipRefined.y / vh) * o.height
+                    octx.save()
                     octx.beginPath()
-                    octx.moveTo(ax1, ay1)
-                    octx.lineTo(ax2, ay2)
+                    octx.strokeStyle = '#f59e0b'
+                    octx.lineWidth = 2
+                    octx.arc(ox, oy, 6, 0, Math.PI * 2)
                     octx.stroke()
+                    // axis line if available
+                    if ((det as any).axis) {
+                      const ax = (det as any).axis
+                      const ax1 = (ax.x1 / vw) * o.width
+                      const ay1 = (ax.y1 / vh) * o.height
+                      const ax2 = (ax.x2 / vw) * o.width
+                      const ay2 = (ax.y2 / vh) * o.height
+                      octx.beginPath()
+                      octx.moveTo(ax1, ay1)
+                      octx.lineTo(ax2, ay2)
+                      octx.stroke()
+                    }
+                    // bbox
+                    if ((det as any).bbox) {
+                      const bx = ((det as any).bbox.x / vw) * o.width
+                      const by = ((det as any).bbox.y / vh) * o.height
+                      const bw = ((det as any).bbox.w / vw) * o.width
+                      const bh = ((det as any).bbox.h / vh) * o.height
+                      octx.strokeStyle = '#22d3ee'
+                      octx.strokeRect(bx, by, bw, bh)
+                    }
+                    octx.restore()
                   }
-                  // bbox
-                  if ((det as any).bbox) {
-                    const bx = ((det as any).bbox.x / vw) * o.width
-                    const by = ((det as any).bbox.y / vh) * o.height
-                    const bw = ((det as any).bbox.w / vw) * o.width
-                    const bh = ((det as any).bbox.h / vh) * o.height
-                    octx.strokeStyle = '#22d3ee'
-                    octx.strokeRect(bx, by, bw, bh)
-                  }
-                  octx.restore()
                 }
               }
             } catch {}
 
-            // Notify parent about each autoscore detection (non-committal)
-            try {
-              if (onAutoDart) {
-                onAutoDart(score.base, score.ring as Ring, { sector: (score.sector ?? null), mult: (score.mult as any) ?? 0 })
-              }
-            } catch {}
-
-            // Accept to avoid double-triggering on the same physical dart
-            detector.accept(frame, det)
+            if (shouldAccept) {
+              detector.accept(frame, det)
+            }
+          } else {
+            if (autoCandidateRef.current && (nowPerf - autoCandidateRef.current.firstTs) > 800) {
+              autoCandidateRef.current = null
+            }
           }
         }
       } catch (e) {
@@ -590,7 +890,23 @@ export default function CameraView({
       rafRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manualOnly, autoscoreProvider, streaming, H, imageSize, paused, pendingDarts, detectorSeedVersion])
+  }, [manualOnly, autoscoreProvider, effectiveStreaming, H, imageSize, paused, pendingDarts, detectorSeedVersion, captureDetectionLog])
+
+  const handleUseLocalCamera = useCallback(async () => {
+    try {
+      if (isPhoneCamera) {
+        const fallback = availableCameras.find(c => c.kind === 'videoinput')
+        if (fallback) {
+          setPreferredCamera(fallback.deviceId, fallback.label || '', true)
+        } else {
+          setPreferredCamera(undefined, '', true)
+        }
+      }
+      await startCamera()
+    } catch (err) {
+      console.warn('[CameraView] Local camera fallback failed:', err)
+    }
+  }, [availableCameras, isPhoneCamera, setPreferredCamera])
 
   // Update calibration audit status whenever homography or image size changes
   useEffect(() => {
@@ -603,6 +919,7 @@ export default function CameraView({
   useEffect(() => {
     if (autoscoreProvider !== 'external-ws' || !autoscoreWsUrl) return
     const sub = subscribeExternalWS(autoscoreWsUrl, (d) => {
+      if (!detectionArmedRef.current || performance.now() - streamingStartMsRef.current < 5000) return
       // Prefer parent hook if provided; otherwise add to visit directly
       if (onAutoDart) {
         try { onAutoDart(d.value, d.ring as any, { sector: d.sector ?? null, mult: (d.mult as any) ?? 0 }) } catch {}
@@ -668,6 +985,14 @@ export default function CameraView({
   }
 
   function addDart(value: number, label: string, ring: Ring) {
+    if (shouldDeferCommit && awaitingClear) {
+      if (!pulseManualPill) {
+        setPulseManualPill(true)
+        try { if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current) } catch {}
+        pulseTimeoutRef.current = window.setTimeout(() => { setPulseManualPill(false); pulseTimeoutRef.current = null }, 1200)
+      }
+      return
+    }
     // In generic mode, delegate to parent without X01 bust/finish rules
     if (scoringMode === 'custom') {
       if (onGenericDart) try { onGenericDart(value, ring, { label }) } catch {}
@@ -688,11 +1013,13 @@ export default function CameraView({
 
     // If a new dart arrives while 3 are pending, auto-commit previous visit and start a new one
     if (pendingDarts >= 3) {
+      const previousScore = pendingScore
+      const previousDarts = pendingDarts
       // Commit previous full visit
-      addVisit(pendingScore, pendingDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: false, visitTotal: pendingScore })
+      addVisit(previousScore, previousDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: false, visitTotal: previousScore })
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name
-        if (name) addSample(name, pendingDarts, pendingScore)
+        if (name) addSample(name, previousDarts, previousScore)
       } catch {}
       // Start next visit with this dart
       const willCount = !x01DoubleIn || isOpened || ring === 'DOUBLE' || ring === 'INNER_BULL'
@@ -705,7 +1032,7 @@ export default function CameraView({
       if (x01DoubleIn && !isOpened && (ring === 'DOUBLE' || ring === 'INNER_BULL')) {
         setOpened(true)
       }
-      if (onVisitCommitted) onVisitCommitted(pendingScore, pendingDarts, false)
+      enqueueVisitCommit({ score: previousScore, darts: previousDarts, finished: false })
       return
     }
     const newDarts = pendingDarts + 1
@@ -735,7 +1062,7 @@ export default function CameraView({
       addVisit(0, newDarts, { preOpenDarts: preOpenTotal, doubleWindowDarts: attemptsTotal, finishedByDouble: false, visitTotal: 0 })
       setPendingDarts(0); setPendingScore(0); setPendingEntries([]); setPendingPreOpenDarts(0)
       setPendingDartsAtDouble(0)
-      if (onVisitCommitted) onVisitCommitted(0, newDarts, false)
+      enqueueVisitCommit({ score: 0, darts: newDarts, finished: false })
       return
     }
 
@@ -759,18 +1086,19 @@ export default function CameraView({
       addVisit(newScore, newDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: true, visitTotal: newScore })
       endLeg(newScore)
       setPendingDarts(0); setPendingScore(0); setPendingEntries([]); setPendingPreOpenDarts(0); setPendingDartsAtDouble(0)
-      if (onVisitCommitted) onVisitCommitted(newScore, newDarts, true)
+      enqueueVisitCommit({ score: newScore, darts: newDarts, finished: true })
       return
     }
 
     if (newDarts >= 3) {
       addVisit(newScore, newDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: false, visitTotal: newScore })
       setPendingDarts(0); setPendingScore(0); setPendingEntries([]); setPendingPreOpenDarts(0); setPendingDartsAtDouble(0)
-      if (onVisitCommitted) onVisitCommitted(newScore, newDarts, false)
+      enqueueVisitCommit({ score: newScore, darts: newDarts, finished: false })
     }
   }
 
   function onAddAutoDart() {
+    if (shouldDeferCommit && awaitingClear) return
     if (lastAutoScore) {
       if (onAutoDart) {
         try { onAutoDart(lastAutoValue, lastAutoRing, undefined) } catch {}
@@ -783,6 +1111,7 @@ export default function CameraView({
   }
 
   function onApplyManual() {
+    if (shouldDeferCommit && awaitingClear) return
     const parsed = parseManual(manualScore)
     if (!parsed) { alert('Enter like T20, D16, 5, 25, 50'); return }
     // If autoscore didn't register recently, count toward recalibration
@@ -800,6 +1129,7 @@ export default function CameraView({
 
   // Replace the last pending dart with a manually typed correction
   function onReplaceManual() {
+    if (shouldDeferCommit && awaitingClear) return
     const parsed = parseManual(manualScore)
     if (!parsed) { alert('Enter like T20, D16, 5, 25, 50'); return }
     if (pendingDarts === 0 || pendingEntries.length === 0) {
@@ -844,7 +1174,7 @@ export default function CameraView({
         if (name) addSample(name, newDarts, 0)
       } catch {}
       setPendingDarts(0); setPendingScore(0); setPendingEntries([])
-      if (onVisitCommitted) onVisitCommitted(0, newDarts, false)
+      enqueueVisitCommit({ score: 0, darts: newDarts, finished: false })
       setManualScore('')
       setHadRecentAuto(false)
       return
@@ -862,7 +1192,7 @@ export default function CameraView({
         if (name) addSample(name, newDarts, newScore)
       } catch {}
       setPendingDarts(0); setPendingScore(0); setPendingEntries([])
-      if (onVisitCommitted) onVisitCommitted(newScore, newDarts, true)
+      enqueueVisitCommit({ score: newScore, darts: newDarts, finished: true })
       setManualScore('')
       setHadRecentAuto(false)
       return
@@ -875,7 +1205,7 @@ export default function CameraView({
         if (name) addSample(name, newDarts, newScore)
       } catch {}
       setPendingDarts(0); setPendingScore(0); setPendingEntries([])
-      if (onVisitCommitted) onVisitCommitted(newScore, newDarts, false)
+      enqueueVisitCommit({ score: newScore, darts: newDarts, finished: false })
     }
     setManualScore('')
     setHadRecentAuto(false)
@@ -912,7 +1242,7 @@ export default function CameraView({
 
   // Centralized quick-entry handler for S/D/T 1-20 buttons
   function onQuickEntry(num: number, mult: 'S'|'D'|'T') {
-    if (pendingDarts >= 3) return
+    if (pendingDarts >= 3 || (shouldDeferCommit && awaitingClear)) return
     const val = num * (mult==='S'?1:mult==='D'?2:3)
     const ring: Ring = mult==='S' ? 'SINGLE' : mult==='D' ? 'DOUBLE' : 'TRIPLE'
     // If autoscore didn't register recently, count toward recalibration
@@ -936,19 +1266,21 @@ export default function CameraView({
   }
 
   function onCommitVisit() {
-    if (pendingDarts === 0) return
+    if (pendingDarts === 0 || (shouldDeferCommit && awaitingClear)) return
     if (scoringMode === 'custom') {
       // For custom mode, simply clear local pending (parent maintains its own scoring)
       setPendingDarts(0); setPendingScore(0); setPendingEntries([])
       return
     }
-    addVisit(pendingScore, pendingDarts)
+    const visitScore = pendingScore
+    const visitDarts = pendingDarts
+    addVisit(visitScore, visitDarts)
     try {
       const name = matchState.players[matchState.currentPlayerIdx]?.name
-      if (name) addSample(name, pendingDarts, pendingScore)
+      if (name) addSample(name, visitDarts, visitScore)
     } catch {}
     setPendingDarts(0); setPendingScore(0); setPendingEntries([])
-    if (onVisitCommitted) onVisitCommitted(pendingScore, pendingDarts, false)
+    enqueueVisitCommit({ score: visitScore, darts: visitDarts, finished: false })
   }
 
   return (
@@ -975,60 +1307,105 @@ export default function CameraView({
         </div>
       )}
       {!hideInlinePanels && !manualOnly ? (
-        <div className="card relative">
+        <div className="card relative camera-fullwidth-card lg:col-span-2">
           <h2 className="text-xl font-semibold mb-3">Camera</h2>
-          <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={320} minHeight={240} maxWidth={1600} maxHeight={900} autoFill>
+          <ResizablePanel storageKey="ndn:camera:size" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={360} minHeight={270} maxWidth={800} maxHeight={600} autoFill>
             <CameraSelector />
-            {preferredCameraLabel === 'Phone Camera' ? (
-              <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
-                <div className="text-center">
-                  <div className="text-4xl mb-4">📱</div>
-                  <div className="text-lg font-semibold text-blue-100 mb-2">Phone Camera Active</div>
-                  <div className="text-sm text-slate-300 mb-4">Your phone camera feed is shown in the floating overlay</div>
-                  <div className="text-xs text-slate-400">Camera controls available in Calibrator tab</div>
-                </div>
-              </div>
-            ) : (
-              (() => {
-                const aspect = cameraAspect || (useUserSettings.getState().cameraAspect || 'wide')
-                const fit = (cameraFitMode || (useUserSettings.getState().cameraFitMode || 'fit')) === 'fit'
-                // For square aspect we left-align and cover so the video is clipped to the left portion
-                // This hides the right-side area (the red region in your screenshot) while keeping the board visible on the left.
-                const videoClass = (aspect === 'square')
-                  ? 'absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black'
-                  : (fit
-                    ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
-                    : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black')
-                // When square, limit the maximum width so the camera doesn't expand to fill the whole column
-                const containerClass = aspect === 'square'
-                  ? 'relative w-full max-w-[640px] mx-auto aspect-square bg-black'
-                  : 'relative w-full aspect-[4/3] bg-black'
-                return (
-                  <div className={containerClass}>
-                    <video ref={videoRef} className={videoClass} playsInline webkit-playsinline="true" muted autoPlay />
-                    <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
-                    {/* Visit status dots: green=counts, red=not counted/miss, gray=not yet thrown */}
-                    <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
-                      aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
-                    >
-                      {[0,1,2].map(i => {
-                        const e = pendingEntries[i] as any
-                        const isPending = !e
-                        const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
-                        const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
-                        return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
-                      })}
-                      {dartTimerEnabled && dartTimeLeft !== null && (
-                        <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
-                          {Math.max(0, dartTimeLeft)}s
-                        </span>
-                      )}
-                    </div>
+            {(() => {
+              const aspect = cameraAspect || (useUserSettings.getState().cameraAspect || 'wide')
+              const fit = (cameraFitMode || (useUserSettings.getState().cameraFitMode || 'fit')) === 'fit'
+              const videoClass = (aspect === 'square')
+                ? 'absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black'
+                : (fit
+                  ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
+                  : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black')
+              const containerClass = aspect === 'square'
+                ? 'relative w-full mx-auto aspect-square bg-black'
+                : 'relative w-full aspect-[4/3] bg-black'
+              const renderVideoSurface = () => (
+                <div className={containerClass}>
+                  <video ref={videoRef} className={videoClass} playsInline webkit-playsinline="true" muted autoPlay />
+                  <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                  <div
+                    className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 cursor-pointer select-none"
+                    onDoubleClick={handleIndicatorReset}
+                    aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
+                  >
+                    {[0,1,2].map(i => {
+                      const e = pendingEntries[i] as any
+                      const entrySeq = indicatorEntryVersions[i]
+                      const isPending = !e
+                      const isActive = !!e && entrySeq === indicatorVersion
+                      const hasPositiveValue = typeof e?.value === 'number' ? e.value > 0 : false
+                      const hasHitRing = (e?.ring && e.ring !== 'MISS') ?? false
+                      const isHit = isActive && (hasPositiveValue || hasHitRing)
+                      const color = !isActive ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+                      return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
+                    })}
+                    {dartTimerEnabled && dartTimeLeft !== null && (
+                      <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
+                        {Math.max(0, dartTimeLeft)}s
+                      </span>
+                    )}
                   </div>
-                )
-              })()
-            )}
+                  {shouldDeferCommit && awaitingClear ? (
+                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 bg-black/70 text-amber-200 text-xs font-semibold px-3 py-1 rounded-full shadow">
+                      Remove darts to continue
+                    </div>
+                  ) : null}
+                </div>
+              )
+              if (isPhoneCamera) {
+                if (!phoneFeedActive) {
+                  return (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
+                      <div className="text-center space-y-3 max-w-xs mx-auto">
+                        <div className="text-4xl">📱</div>
+                        <div className="text-lg font-semibold text-blue-100">Phone camera selected</div>
+                        <p className="text-sm text-slate-300">Start streaming from the Calibrator tab or reconnect below.</p>
+                        <div className="flex items-center justify-center gap-2 flex-wrap">
+                          <button className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm" onClick={handlePhoneReconnect}>Reconnect Phone</button>
+                          <button className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm" onClick={()=>{ try { cameraSession.setShowOverlay?.(true) } catch {} }}>Show Overlay</button>
+                          <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm" onClick={handleUseLocalCamera} disabled={!availableCameras.length}>Use Local Camera</button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                }
+                return renderVideoSurface()
+              }
+              return renderVideoSurface()
+            })()}
           </ResizablePanel>
+
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <button
+              className="btn btn--ghost px-3 py-1 text-xs font-semibold"
+              onClick={() => setShowDetectionLog(prev => !prev)}
+            >
+              {showDetectionLog ? 'Hide' : 'Show'} detection log
+            </button>
+            <span className="text-xs text-slate-400">Recent detections: {detectionLog.length}</span>
+          </div>
+          {showDetectionLog && (
+            <div className="mt-2 rounded-2xl border border-white/15 bg-slate-900/80 p-3 text-xs text-white font-mono max-h-36 overflow-y-auto space-y-1">
+              {detectionLog.length === 0 ? (
+                <div className="text-center text-slate-400">No autoscore detections yet.</div>
+              ) : (
+                detectionLog.slice().reverse().map(entry => (
+                  <div key={entry.ts} className="flex items-center justify-between gap-3">
+                    <span className="truncate flex-1" title={`Value ${entry.value} ${entry.ring}`}>
+                      {entry.label.padEnd(6, ' ')}
+                    </span>
+                    <span className="text-slate-400">{entry.confidence.toFixed(2)}</span>
+                    <span className={`px-2 rounded-full text-[10px] font-semibold ${entry.accepted ? 'bg-emerald-500/80' : entry.ready ? 'bg-amber-500/80' : 'bg-rose-500/80'}`}>
+                      {entry.accepted ? 'accepted' : entry.ready ? 'queued' : 'ignored'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
 
           {/* Small Manual pill in top-right of camera card so users in any game mode can open Manual Correction */}
           {inProgress ? (
@@ -1070,11 +1447,21 @@ export default function CameraView({
               }
             </div>
           ) : null}
-          <div className="flex gap-2 mt-3">
-            {preferredCameraLabel === 'Phone Camera' ? (
-              <div className="text-sm text-blue-200 px-3 py-2 rounded bg-blue-900/30 flex-1">
-                📱 Using phone camera from overlay
-              </div>
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            {isPhoneCamera ? (
+              <>
+                <div className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? 'bg-emerald-500/10 border-emerald-400/40 text-emerald-100' : 'bg-amber-500/10 border-amber-400/40 text-amber-100'}`}>
+                  {phoneFeedActive ? '📱 Phone camera stream active' : '📱 Waiting for phone camera stream'}
+                </div>
+                <button className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm" onClick={handlePhoneReconnect}>Reconnect Phone</button>
+                <button className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm" onClick={()=>{ try { cameraSession.setShowOverlay?.(!cameraSession.showOverlay) } catch {} }}>
+                  {cameraSession.showOverlay ? 'Hide Overlay' : 'Show Overlay'}
+                </button>
+                <button className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm" disabled={!phoneFeedActive} onClick={()=>{ try { cameraSession.clearSession?.() } catch {} }}>Stop Phone Feed</button>
+                {canFallbackToLocal && (
+                  <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm" onClick={handleUseLocalCamera} disabled={!availableCameras.length}>Use Local Camera</button>
+                )}
+              </>
             ) : (
               <>
                 {!streaming ? (
@@ -1084,15 +1471,36 @@ export default function CameraView({
                 ) : (
                   <button className="btn bg-rose-600 hover:bg-rose-700" onClick={stopCamera}>Stop Camera</button>
                 )}
-                {/* Removed Snapshot panel; Capture remains for future features (e.g., quick preview) */}
-                <button className="btn" onClick={capture} disabled={!streaming}>Capture Still</button>
-                <button className="btn bg-slate-700 hover:bg-slate-800" disabled={!streaming} onClick={()=>{
-                  // Reset/seed detector background on demand
-                  detectorRef.current = null
-                  setDetectorSeedVersion(v=>v+1)
-                }}>Reset Autoscore Background</button>
               </>
             )}
+            {!manualOnly && (
+              <button
+                className="btn bg-slate-700 hover:bg-slate-800"
+                onClick={requestDeviceManager}
+                title="Open phone, WiFi, and USB camera options"
+              >
+                Camera Devices
+              </button>
+            )}
+            <button
+              className="btn btn--ghost px-3 py-1 text-sm"
+              onClick={() => setHideCameraOverlay(!hideCameraOverlay)}
+              title="Toggle the board guide overlay"
+            >
+              {hideCameraOverlay ? 'Show board guides' : 'Hide board guides'}
+            </button>
+            <button
+              className={`btn ${cameraEnabled ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+              onClick={() => setCameraEnabled(!cameraEnabled)}
+              title="Toggle whether the camera is used for scoring"
+            >
+              {cameraEnabled ? 'Disable camera mode' : 'Enable camera mode'}
+            </button>
+            <button className="btn" onClick={capture} disabled={!effectiveStreaming}>Capture Still</button>
+            <button className="btn bg-slate-700 hover:bg-slate-800" disabled={!effectiveStreaming} onClick={()=>{
+              detectorRef.current = null
+              setDetectorSeedVersion(v=>v+1)
+            }}>Reset Autoscore Background</button>
             <button className="btn bg-slate-700 hover:bg-slate-800" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
           </div>
         </div>
@@ -1234,7 +1642,7 @@ export default function CameraView({
                   </div>
                   <div className="flex items-center gap-2 mb-2">
                     <input
-                      className="input flex-1"
+                      className="input flex-[1.2]"
                       placeholder="Manual (T20, D16, 5, 25, 50)"
                       value={manualScore}
                       onChange={e => setManualScore(e.target.value)}
@@ -1333,54 +1741,77 @@ export default function CameraView({
               {/* Camera section */}
               <div className="bg-black/30 rounded-2xl p-4">
                 <h2 className="text-lg font-semibold mb-3">Camera</h2>
-                <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={320} minHeight={240} maxWidth={1600} maxHeight={900}>
+                <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={360} minHeight={270} maxWidth={800} maxHeight={600}>
                   <CameraSelector />
-                  {preferredCameraLabel === 'Phone Camera' ? (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
-                      <div className="text-center">
-                        <div className="text-4xl mb-4">📱</div>
-                        <div className="text-lg font-semibold text-blue-100 mb-2">Phone Camera Active</div>
-                        <div className="text-sm text-slate-300 mb-4">Your phone camera feed is shown in the floating overlay</div>
-                        <div className="text-xs text-slate-400">Camera controls available in Calibrator tab</div>
-                      </div>
-                    </div>
-                  ) : (
-                    (() => {
-                      const fit = (useUserSettings.getState().cameraFitMode || 'fit') === 'fit'
-                      const videoClass = fit
-                        ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
-                        : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black'
-                      return (
-                        <div className="relative w-full aspect-[4/3] bg-black">
-                          <video ref={videoRef} className={videoClass} playsInline webkit-playsinline="true" muted autoPlay />
-                          <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
-                          {/* Visit status dots: green=counts, red=not counted/miss, gray=not yet thrown */}
-                          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
-                            aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
-                          >
-                            {[0,1,2].map(i => {
-                              const e = pendingEntries[i] as any
-                              const isPending = !e
-                              const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
-                              const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
-                              return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
-                            })}
-                            {dartTimerEnabled && dartTimeLeft !== null && (
-                              <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
-                                {Math.max(0, dartTimeLeft)}s
-                              </span>
-                            )}
-                          </div>
+                  {(() => {
+                    const fit = (useUserSettings.getState().cameraFitMode || 'fit') === 'fit'
+                    const videoClass = fit
+                      ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
+                      : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black'
+                    const renderVideoSurface = () => (
+                      <div className="relative w-full aspect-[4/3] bg-black">
+                        <video ref={videoRef} className={videoClass} playsInline webkit-playsinline="true" muted autoPlay />
+                        <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
+                          aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
+                        >
+                          {[0,1,2].map(i => {
+                            const e = pendingEntries[i] as any
+                            const isPending = !e
+                            const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
+                            const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+                            return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
+                          })}
+                          {dartTimerEnabled && dartTimeLeft !== null && (
+                            <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
+                              {Math.max(0, dartTimeLeft)}s
+                            </span>
+                          )}
                         </div>
-                      )
-                    })()
-                  )}
+                        {shouldDeferCommit && awaitingClear ? (
+                          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 bg-black/70 text-amber-200 text-xs font-semibold px-3 py-1 rounded-full shadow">
+                            Remove darts to continue
+                          </div>
+                        ) : null}
+                      </div>
+                    )
+                    if (isPhoneCamera) {
+                      if (!phoneFeedActive) {
+                        return (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
+                            <div className="text-center space-y-3 max-w-xs mx-auto">
+                              <div className="text-4xl">📱</div>
+                              <div className="text-lg font-semibold text-blue-100">Phone camera selected</div>
+                              <p className="text-sm text-slate-300">Start streaming from the Calibrator tab or reconnect below.</p>
+                              <div className="flex items-center justify-center gap-2 flex-wrap">
+                                <button className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm" onClick={handlePhoneReconnect}>Reconnect Phone</button>
+                                <button className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm" onClick={()=>{ try { cameraSession.setShowOverlay?.(true) } catch {} }}>Show Overlay</button>
+                                <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm" onClick={handleUseLocalCamera} disabled={!availableCameras.length}>Use Local Camera</button>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      }
+                      return renderVideoSurface()
+                    }
+                    return renderVideoSurface()
+                  })()}
                 </ResizablePanel>
-                <div className="flex gap-2 mt-3">
-                  {preferredCameraLabel === 'Phone Camera' ? (
-                    <div className="text-sm text-blue-200 px-3 py-2 rounded bg-blue-900/30 flex-1">
-                      📱 Using phone camera from overlay
-                    </div>
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  {isPhoneCamera ? (
+                    <>
+                      <div className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? 'bg-emerald-500/10 border-emerald-400/40 text-emerald-100' : 'bg-amber-500/10 border-amber-400/40 text-amber-100'}`}>
+                        {phoneFeedActive ? '📱 Phone camera stream active' : '📱 Waiting for phone camera stream'}
+                      </div>
+                      <button className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm" onClick={handlePhoneReconnect}>Reconnect Phone</button>
+                      <button className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm" onClick={()=>{ try { cameraSession.setShowOverlay?.(!cameraSession.showOverlay) } catch {} }}>
+                        {cameraSession.showOverlay ? 'Hide Overlay' : 'Show Overlay'}
+                      </button>
+                      <button className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm" disabled={!phoneFeedActive} onClick={()=>{ try { cameraSession.clearSession?.() } catch {} }}>Stop Phone Feed</button>
+                      {canFallbackToLocal && (
+                        <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm" onClick={handleUseLocalCamera} disabled={!availableCameras.length}>Use Local Camera</button>
+                      )}
+                    </>
                   ) : (
                     <>
                       {!streaming ? (
@@ -1388,10 +1819,10 @@ export default function CameraView({
                       ) : (
                         <button className="btn bg-gradient-to-r from-rose-600 to-rose-700 text-white font-bold" onClick={stopCamera}>Stop Camera</button>
                       )}
-                      <button className="btn bg-gradient-to-r from-indigo-500 to-indigo-700 text-white font-bold" onClick={capture} disabled={!streaming}>Capture Still</button>
-                      <button className="btn bg-gradient-to-r from-slate-600 to-slate-800 text-white font-bold" disabled={!streaming} onClick={()=>{ detectorRef.current = null; setDetectorSeedVersion(v=>v+1) }}>Reset Autoscore Background</button>
                     </>
                   )}
+                  <button className="btn bg-gradient-to-r from-indigo-500 to-indigo-700 text-white font-bold" onClick={capture} disabled={!effectiveStreaming}>Capture Still</button>
+                  <button className="btn bg-gradient-to-r from-slate-600 to-slate-800 text-white font-bold" disabled={!effectiveStreaming} onClick={()=>{ detectorRef.current = null; setDetectorSeedVersion(v=>v+1) }}>Reset Autoscore Background</button>
                   <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
                 </div>
               </div>
@@ -1421,7 +1852,7 @@ export default function CameraView({
                 <div className="flex gap-2">
                   <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={onUndoDart} disabled={pendingDarts===0}>Undo Dart</button>
                   <button className="btn bg-gradient-to-r from-emerald-500 to-emerald-700 text-white font-bold" onClick={onCommitVisit} disabled={pendingDarts===0}>Commit Visit</button>
-                  <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={()=>{setPendingDarts(0);setPendingScore(0);setPendingEntries([])}} disabled={pendingDarts===0}>Clear</button>
+                  <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={handleToolbarClear} disabled={pendingDarts===0}>Clear</button>
                 </div>
               </div>
             </div>

@@ -5,6 +5,7 @@ When deploying the frontend to Netlify, make sure the build-time environment var
 Recommended Environment Variables (Netlify build settings):
 - VITE_API_URL = https://ninedartnation-1.onrender.com
 - VITE_WS_URL = wss://ninedartnation-1.onrender.com
+- (optional) VITE_SHOW_DEBUG_BANNER = 1  # shows API URL + token status in the client footer for debugging
 
 Steps:
 1. Go to your Netlify site → Site settings → Build & deploy → Environment.
@@ -15,4 +16,5 @@ Optional: If you deploy auto-builds from GitHub, you can commit a small, non-fun
 
 Notes:
 - If you rely on Netlify preview deploys (PR deploys), add `https://ninedartnation.netlify.app` or `https://*.netlify.app` to `CORS_ORIGINS` on the Render service to allow preview domains.
+ - TIP: If you're still debugging CORS or token behavior, set `VITE_SHOW_DEBUG_BANNER = 1` in Netlify Environment and rebuild. This renders a small overlay showing the embedded API URL and whether an auth token exists in localStorage.
 - If you prefer not to use netlify.toml, set the environment variables directly in the Netlify UI under "Build & Deploy → Environment" to guarantee the right values are used during CI builds.

@@ -58,13 +58,13 @@ export default function GameScoreboard({ gameMode, players, matchScore, gameRule
               : 'border-slate-500/40 bg-slate-500/10'
           }`}
         >
-          <div className={`text-xs font-semibold mb-2 uppercase tracking-wide ${
+          <div className={`text-sm font-semibold mb-2 uppercase tracking-wide ${
             player.isCurrentTurn ? 'text-emerald-300' : 'text-slate-300'
           }`}>
             {player.name}
           </div>
 
-          <div className="space-y-1 text-xs">
+          <div className="space-y-1 text-sm">
             {/* X01 specific */}
             {gameMode === 'X01' && (
               <>

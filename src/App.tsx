@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, Suspense } from 'react'
 import { Sidebar, TabKey } from './components/Sidebar'
-import Home from './components/Home'
+const Home = React.lazy(() => import('./components/Home'))
 import ScrollFade from './components/ScrollFade'
 import Calibrator from './components/Calibrator'
-import OfflinePlay from './components/OfflinePlay'
-import Friends from './components/Friends'
+const OfflinePlay = React.lazy(() => import('./components/OfflinePlay'))
+const Friends = React.lazy(() => import('./components/Friends'))
 import Toaster from './components/Toaster'
 import AdminDashboard from './components/AdminDashboard'
 import SettingsPanel from './components/SettingsPanel'
@@ -16,22 +16,23 @@ import { getRollingAvg, getAllTimeAvg } from './store/profileStats'
 import { useUserSettings } from './store/userSettings'
 import { useCalibration } from './store/calibration'
 import './styles/premium.css'
-import Scoreboard from './components/Scoreboard'
-import CameraView from './components/CameraView'
-import OnlinePlay from './components/OnlinePlay'
+const Scoreboard = React.lazy(() => import('./components/Scoreboard'))
+const CameraView = React.lazy(() => import('./components/CameraView'))
+const OnlinePlay = React.lazy(() => import('./components/OnlinePlay'))
 import MatchSettings from './components/MatchSettings'
-import StatsPanel from './components/StatsPanel'
-import Tournaments from './components/Tournaments'
-import AdminAccess from './components/AdminAccess'
+const StatsPanel = React.lazy(() => import('./components/StatsPanel'))
+const Tournaments = React.lazy(() => import('./components/Tournaments'))
+const AdminAccess = React.lazy(() => import('./components/AdminAccess'))
 // AdminAccess already imported above
 import Drawer from './components/ui/Drawer'
 import { getDominantColorFromImage, stringToColor } from './utils/color'
-import OpsDashboard from './components/OpsDashboard'
+const OpsDashboard = React.lazy(() => import('./components/OpsDashboard'))
 import HelpAssistant from './components/HelpAssistant'
 import GlobalCameraLogger from './components/GlobalCameraLogger'
 import GlobalPhoneVideoSink from './components/GlobalPhoneVideoSink'
 import CameraStatusBadge from './components/CameraStatusBadge'
 import Footer from './components/Footer'
+import RuntimeDebugBanner from './components/RuntimeDebugBanner'
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -421,24 +422,32 @@ export default function App() {
             )}
             <main id="ndn-main-scroll" className="space-y-4 flex-1 overflow-y-auto pr-1 flex flex-col">
             {tab === 'settings' && (
+                <Suspense fallback={<div className="p-4">Loading settings…</div>}>
               <ScrollFade className="flex-1 min-h-0">
                 <SettingsPanel user={user} />
               </ScrollFade>
+                </Suspense>
             )}
             {tab === 'score' && (
-              <ScrollFade className="flex-1 min-h-0">
-                <Home user={user} />
-              </ScrollFade>
+              <Suspense fallback={<div className="p-4">Loading home…</div>}>
+                <ScrollFade className="flex-1 min-h-0">
+                  <Home user={user} />
+                </ScrollFade>
+              </Suspense>
             )}
             {tab === 'online' && (
-              <ScrollFade className="flex-1 min-h-0">
-                <OnlinePlay user={user} />
-              </ScrollFade>
+              <Suspense fallback={<div className="p-4">Loading online…</div>}>
+                <ScrollFade className="flex-1 min-h-0">
+                  <OnlinePlay user={user} />
+                </ScrollFade>
+              </Suspense>
             )}
             {tab === 'offline' && (
-              <ScrollFade className="flex-1 min-h-0">
-                <OfflinePlay user={user} />
-              </ScrollFade>
+              <Suspense fallback={<div className="p-4">Loading offline…</div>}>
+                <ScrollFade className="flex-1 min-h-0">
+                  <OfflinePlay user={user} />
+                </ScrollFade>
+              </Suspense>
             )}
             {/* Always keep Calibrator mounted to preserve phone camera stream, but hide when not active */}
             <div className={tab === 'calibrate' ? '' : 'hidden'}>
@@ -447,32 +456,42 @@ export default function App() {
               </ScrollFade>
             </div>
             {tab === 'friends' && (
-              <ScrollFade className="flex-1 min-h-0">
-                <Friends user={user} />
-              </ScrollFade>
+              <Suspense fallback={<div className="p-4">Loading friends…</div>}>
+                <ScrollFade className="flex-1 min-h-0">
+                  <Friends user={user} />
+                </ScrollFade>
+              </Suspense>
             )}
             {tab === 'stats' && (
-              <ScrollFade className="flex-1 min-h-0">
-                <StatsPanel user={user} />
-              </ScrollFade>
+              <Suspense fallback={<div className="p-4">Loading stats…</div>}>
+                <ScrollFade className="flex-1 min-h-0">
+                  <StatsPanel user={user} />
+                </ScrollFade>
+              </Suspense>
             )}
             {tab === 'tournaments' && (
-              <ScrollFade className="flex-1 min-h-0">
-                <Tournaments user={user} />
-              </ScrollFade>
+              <Suspense fallback={<div className="p-4">Loading tournaments…</div>}>
+                <ScrollFade className="flex-1 min-h-0">
+                  <Tournaments user={user} />
+                </ScrollFade>
+              </Suspense>
             )}
             {tab === 'admin' && (
-              <ScrollFade className="flex-1 min-h-0">
-                <div className="flex-1 min-h-0 space-y-6">
-                  <AdminDashboard user={user} />
-                  <OpsDashboard user={user} />
-                </div>
-              </ScrollFade>
+              <Suspense fallback={<div className="p-4">Loading admin…</div>}>
+                <ScrollFade className="flex-1 min-h-0">
+                  <div className="flex-1 min-h-0 space-y-6">
+                    <AdminDashboard user={user} />
+                    <OpsDashboard user={user} />
+                  </div>
+                </ScrollFade>
+              </Suspense>
             )}
             {tab === 'fullaccess' && (
-              <ScrollFade className="flex-1 min-h-0">
-                <AdminAccess user={user} />
-              </ScrollFade>
+              <Suspense fallback={<div className="p-4">Loading admin access…</div>}>
+                <ScrollFade className="flex-1 min-h-0">
+                  <AdminAccess user={user} />
+                </ScrollFade>
+              </Suspense>
             )}
             </main>
           </div>
@@ -483,6 +502,7 @@ export default function App() {
   <HelpAssistant />
   {/* App footer with legal notice */}
   <Footer />
+  <RuntimeDebugBanner />
   {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
   <GlobalCameraLogger />
       {/* Global phone camera overlay - visibility controlled by store */}

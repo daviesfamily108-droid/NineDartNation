@@ -913,18 +913,25 @@ export default function Calibrator() {
 		// If we have a homography, draw rings (precise, perspective-correct)
 		const Huse = HH || H
 		if (Huse) {
-			const rings = [BoardRadii.bullInner, BoardRadii.bullOuter, BoardRadii.trebleInner, BoardRadii.trebleOuter, BoardRadii.doubleInner, BoardRadii.doubleOuter]
-			for (const r of rings) {
-				// Use green for all rings when calibration is locked/perfect
-				const ringColor = locked ? '#10b981' : (r === BoardRadii.doubleOuter ? '#22d3ee' : '#a78bfa')
-				const ringWidth = locked ? 3 : (r === BoardRadii.doubleOuter ? 3 : 2)
-				const poly = sampleRing(Huse, r, 360)
-				drawPolyline(ctx, poly, ringColor, ringWidth)
-			}
+					const rings = [BoardRadii.bullInner, BoardRadii.bullOuter, BoardRadii.trebleInner, BoardRadii.trebleOuter, BoardRadii.doubleInner, BoardRadii.doubleOuter]
+					for (const r of rings) {
+						if (!Number.isFinite(r)) continue
+						// Use green for all rings when calibration is locked/perfect
+						const ringColor = locked ? '#10b981' : (r === BoardRadii.doubleOuter ? '#22d3ee' : '#a78bfa')
+						const ringWidth = locked ? 3 : (r === BoardRadii.doubleOuter ? 3 : 2)
+						try {
+							const poly = sampleRing(Huse, r, 360)
+							if (!poly.length || poly.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) continue
+							drawPolyline(ctx, poly, ringColor, ringWidth)
+						} catch (err) {
+							console.warn('[Calibrator] Skipped invalid ring overlay', { radius: r, err })
+						}
+					}
 		}
 		// Otherwise, if we have detected circles, draw them as previews (circles in image space)
 		if (!Huse && detected) {
 			const drawCircle = (r: number, color: string, w = 2) => {
+						if (!Number.isFinite(r) || r <= 0) return
 				ctx.save(); ctx.strokeStyle = color; ctx.lineWidth = w
 				ctx.beginPath(); ctx.arc(detected.cx, detected.cy, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore()
 			}
@@ -1251,6 +1258,16 @@ export default function Calibrator() {
 
 		if (!boardDetection.success || !boardDetection.homography || boardDetection.confidence < 50) {
 			alert(`❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click 5 points)`)
+			return
+		}
+
+		const homography = boardDetection.homography
+		const points = boardDetection.calibrationPoints || []
+		const pointsValid = Array.isArray(points) && points.length >= 4 && points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y))
+		const homographyValid = Array.isArray(homography) && homography.length === 9 && homography.every(Number.isFinite)
+		if (!pointsValid || !homographyValid) {
+			console.error('[Calibrator] Auto-calibration produced invalid data', { boardDetection })
+			alert('❌ Auto-calibration produced unstable results. Adjust camera framing or calibrate manually.')
 			return
 		}
 

@@ -53,8 +53,20 @@ export default function GlobalPhoneVideoSink() {
     const tick = () => {
       const v = vref.current
       const now = Date.now()
-      if (!v || !camera.isStreaming || camera.mode !== 'phone' || !v.srcObject) {
+      if (!v || !camera.isStreaming || camera.mode !== 'phone') {
         stallSecondsRef.current = 0
+        return
+      }
+      if (!v.srcObject) {
+        const minBackoff = [3000, 6000, 10000][Math.min(attemptRef.current, 2)]
+        if (now - lastReconnectAtRef.current >= minBackoff) {
+          lastReconnectAtRef.current = now
+          attemptRef.current = Math.min(attemptRef.current + 1, 3)
+          try {
+            window.dispatchEvent(new CustomEvent('ndn:phone-camera-reconnect', { detail: { reason: 'missing-stream', ts: now } }))
+            v.play().catch(() => {})
+          } catch {}
+        }
         return
       }
       const ct = (v as HTMLVideoElement).currentTime || 0

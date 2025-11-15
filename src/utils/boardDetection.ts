@@ -11,6 +11,9 @@
 
 import { BoardRadii, computeHomographyDLT, rmsError, type Homography, type Point } from './vision'
 
+const isFinitePoint = (p: Point | undefined): p is Point => !!p && Number.isFinite(p.x) && Number.isFinite(p.y)
+const isFiniteHomography = (H: Homography | null | undefined): H is Homography => Array.isArray(H) && H.length === 9 && H.every(Number.isFinite)
+
 export interface BoardDetectionResult {
   success: boolean
   cx: number              // Board center X in image
@@ -242,8 +245,12 @@ export function detectBoard(canvas: HTMLCanvasElement): BoardDetectionResult {
       confidence = Math.max(40, confidence)
     }
 
+    const pointsValid = calibrationPoints.every(isFinitePoint)
+    const homographyValid = isFiniteHomography(homography)
+    const success = !!homographyValid && pointsValid && confidence > 50
+
     return {
-      success: !!homography && confidence > 50,
+      success,
       cx: detected.cx,
       cy: detected.cy,
       bullInner: detected.bullInner,
@@ -253,10 +260,16 @@ export function detectBoard(canvas: HTMLCanvasElement): BoardDetectionResult {
       doubleInner: detected.doubleInner,
       doubleOuter: detected.doubleOuter,
       confidence,
-      homography,
-      errorPx,
-      calibrationPoints,
-      message: confidence > 80 ? '✅ High confidence detection' : confidence > 50 ? '⚠️ Detection found but could be better' : '❌ Low confidence - try better lighting',
+      homography: homographyValid ? homography : null,
+      errorPx: homographyValid ? errorPx : null,
+      calibrationPoints: pointsValid ? calibrationPoints : [],
+      message: !pointsValid || !homographyValid
+        ? '❌ Detection produced unstable calibration data. Adjust camera framing or calibrate manually.'
+        : confidence > 80
+          ? '✅ High confidence detection'
+          : confidence > 50
+            ? '⚠️ Detection found but could be better'
+            : '❌ Low confidence - try better lighting',
     }
   } catch (err) {
     return {

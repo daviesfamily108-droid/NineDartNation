@@ -12,6 +12,7 @@ type Props = {
   maxHeight?: number
   fullScreen?: boolean
   initialFitHeight?: boolean
+  onClose?: () => void
 }
 
 type Size = { width?: number; height?: number }
@@ -28,6 +29,7 @@ export default function ResizableModal({
   maxHeight = 900,
   fullScreen = false,
   initialFitHeight = false,
+  onClose,
 }: Props) {
   const [size, setSize] = useState<Size>(() => {
     if (!fullScreen) {

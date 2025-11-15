@@ -34,6 +34,17 @@ const app = express();
 try { app.set('trust proxy', 1) } catch {}
 
 // Global error handlers
+app.use((err, req, res, next) => {
+  try {
+    console.error('[UNHANDLED ERROR]', err && err.stack ? err.stack : err)
+  } catch (e) { }
+  try {
+    if (!res.headersSent) {
+      res.status(err && err.status ? err.status : 500).json({ error: err && err.message ? err.message : 'Internal Server Error' })
+    }
+  } catch (e) { }
+})
+
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
   // process.exit(1);
@@ -472,21 +483,69 @@ const redisHelpers = {
 
 // Security & performance
 // Configure CORS with a safe default allowlist (overridable via env CORS_ORIGINS)
-const RAW_ORIGINS = String(process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+// Read comma-separated list from CORS_ORIGINS (prefer) and fallback to CORS_ORIGIN (singular) for compatibility
+const RAW_ORIGINS = [String(process.env.CORS_ORIGINS || ''), String(process.env.CORS_ORIGIN || '')]
+  .filter(Boolean)
+  .join(',')
+  .split(',')
+  .map(s => (s || '').trim().replace(/^['"]|['"]$/g, ''))
+  .filter(Boolean)
 const DEFAULT_ORIGINS = [
   'http://localhost:5173', 'http://127.0.0.1:5173',
   'http://localhost:8787', 'http://127.0.0.1:8787',
   'https://ninedartnation.onrender.com',
+  'https://ninedartnation-1.onrender.com',
+  'https://ninedartnation.netlify.app',
+  'https://*.netlify.app',
 ]
-const ALLOWED_ORIGINS = (RAW_ORIGINS.length ? RAW_ORIGINS : DEFAULT_ORIGINS)
+let ALLOWED_ORIGINS = (RAW_ORIGINS.length ? RAW_ORIGINS : DEFAULT_ORIGINS)
+// If user supplied a specific netlify origin, also accept wildcard subdomains
+try {
+  const hasNetlifyExplicit = ALLOWED_ORIGINS.some(o => String(o || '').includes('.netlify.app'))
+  const hasNetlifyWildcard = ALLOWED_ORIGINS.some(o => String(o || '').includes('*.netlify.app'))
+  if (hasNetlifyExplicit && !hasNetlifyWildcard) {
+    ALLOWED_ORIGINS = [...ALLOWED_ORIGINS, 'https://*.netlify.app']
+    console.warn('[CORS] auto-added wildcard https://*.netlify.app to ALLOWED_ORIGINS based on detected netlify origin')
+  }
+} catch (e) {}
+// Show allow-list at startup so admins can confirm what the server sees
+try { console.log('[CORS] ALLOWED_ORIGINS:', ALLOWED_ORIGINS) } catch {}
+const _seenBlockedOrigins = new Set();
 function isAllowedOrigin(origin) {
-  if (!origin) return true // allow non-browser clients
+  if (!origin) return true // allow non-browser clients (no Origin header)
   try {
     const u = new URL(origin)
-    return ALLOWED_ORIGINS.some(allowed => {
-      try { return new URL(allowed).host === u.host && new URL(allowed).protocol === u.protocol } catch { return allowed === origin }
+    const matched = ALLOWED_ORIGINS.some(allowed => {
+      try {
+        if (!allowed) return false
+        const a = String(allowed).trim()
+        // Allow wildcard entries like "*.netlify.app" (no protocol) or "https://*.netlify.app"
+        const wildcard = a.includes('*')
+        if (wildcard) {
+          // Normalize: remove protocol if present
+          const protoMatch = a.match(/^(https?:)?\/\/(.+)$/)
+          const proto = protoMatch ? protoMatch[1] : ''
+          const hostPattern = (protoMatch ? protoMatch[2] : a).replace(/^\*\.?/, '')
+          const hostMatch = u.hostname.endsWith(hostPattern)
+          const protoMatchOk = !proto || (u.protocol === (proto === 'https:' ? 'https:' : proto))
+          return hostMatch && protoMatchOk
+        }
+        // Normal comparison by host + protocol (ignore trailing slashes or ports differences)
+        const au = new URL(a)
+        return (au.host === u.host) && (au.protocol === u.protocol)
+      } catch {
+        return String(allowed) === origin
+      }
     })
-  } catch { return false }
+    if (!matched && !_seenBlockedOrigins.has(origin)) {
+      _seenBlockedOrigins.add(origin)
+      console.warn('[CORS] blocked origin:', origin, 'allowed list:', ALLOWED_ORIGINS)
+    }
+    return matched
+  } catch (err) {
+    if (process.env.DEBUG_CORS === '1') console.warn('[CORS] invalid origin header:', origin)
+    return false
+  }
 }
 
 // Security headers with CSP; relax in dev for Vite
@@ -496,12 +555,13 @@ const cspDirectives = {
   baseUri: ["'self'"],
   frameAncestors: ["'none'"],
   imgSrc: ["'self'", 'data:', 'blob:'],
-  styleSrc: ["'self'", "'unsafe-inline'"],
-  connectSrc: ["'self'", 'ws:', 'wss:'],
+  styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://fonts.gstatic.com'],
+  connectSrc: ["'self'", 'ws:', 'wss:', 'https://ninedartnation.onrender.com', 'https://ninedartnation-1.onrender.com', 'https://ninedartnation.netlify.app', 'https://*.netlify.app'],
 }
 if (IS_DEV) {
   // Vite dev server
   cspDirectives.scriptSrc = ["'self'", "'unsafe-inline'", "'unsafe-eval'"]
+  cspDirectives.styleSrc = ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com']
 } else {
   cspDirectives.scriptSrc = ["'self'"]
 }
@@ -512,10 +572,45 @@ app.use(helmet({
   frameguard: { action: 'deny' },
 }))
 
-app.use(cors({
-  origin: (origin, cb) => cb(isAllowedOrigin(origin) ? null : new Error('CORS blocked'), isAllowedOrigin(origin)),
-  credentials: true,
-}))
+// Central CORS options delegate function for consistent behavior across preflight & normal requests
+const corsOptionsDelegate = (origin, cb) => {
+  try {
+    const allowed = isAllowedOrigin(origin)
+    if (process.env.DEBUG_CORS === '1' || process.env.LOG_LEVEL === 'debug') console.debug('[CORS] origin:', origin, 'allowed:', allowed)
+    return cb(null, allowed)
+  } catch (err) {
+    console.error('[CORS] origin check failure for:', origin, err && err.stack ? err.stack : err)
+    return cb(null, false)
+  }
+}
+
+if (process.env.DEBUG_CORS === '1') {
+  console.warn('[CORS] DEBUG_CORS enabled - allowing all origins for debugging (REMOVE IN PROD)')
+  // Preflight handler for explicit OPTIONS
+  app.options('*', cors({ origin: true, credentials: true }))
+  app.use(cors({ origin: true, credentials: true }))
+} else {
+  // Preflight handler for explicit OPTIONS using our delegate
+  app.options('*', cors({ origin: corsOptionsDelegate, credentials: true }))
+  app.use(cors({ origin: corsOptionsDelegate, credentials: true }))
+  // Log origin/method for debugging
+  app.use((req, res, next) => { try { if (process.env.LOG_LEVEL === 'debug' || process.env.DEBUG_CORS === '1') console.debug('[CORS] incoming', req.method, 'origin=', req.headers.origin) } catch {} ; next(); })
+  app.use(cors({
+    origin: (origin, cb) => {
+      try {
+        const allowed = isAllowedOrigin(origin)
+        if (process.env.DEBUG_CORS === '1' || process.env.LOG_LEVEL === 'debug') console.debug('[CORS] origin:', origin, 'allowed:', allowed)
+        // Avoid generating an Error into express; pass null so CORS middleware handles it gracefully
+        return cb(null, allowed)
+      } catch (err) {
+        console.error('[CORS] origin check failure for:', origin, err && err.stack ? err.stack : err)
+        // Reject origin, but don't throw an error object which could lead to 500.
+        return cb(null, false)
+      }
+    },
+    credentials: true,
+  }))
+}
 app.use(compression())
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
 app.use(limiter)
@@ -1179,6 +1274,11 @@ app.get('/metrics', async (req, res) => {
 
 // Liveness and readiness
 app.get('/healthz', (req, res) => res.json({ ok: true }))
+
+// Debug endpoint: returns the request headers the server receives (useful to confirm Origin)
+app.get('/api/debug/headers', (req, res) => {
+  try { res.json({ ok: true, headers: req.headers || {} }) } catch (e) { res.status(500).json({ ok: false, error: 'failed' }) }
+})
 app.get('/readyz', (req, res) => {
   // Basic readiness: HTTP up and WS server initialized; optionally include memory snapshot
   try {
