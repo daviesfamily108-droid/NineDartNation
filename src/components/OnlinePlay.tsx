@@ -1851,7 +1851,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   {!manualScoring && (
                     <button className={`btn ${buttonSizeClass}`} onClick={() => {
                       // Toggle local camera enable — prefer local camera start, fallback to cam-create pairing
-                      try { window.dispatchEvent(new Event('ndn:start-local-camera')) } catch (err) {
+                      try { window.dispatchEvent(new Event('ndn:start-camera')) } catch (err) {
                         console.warn('Enable camera event failed', err)
                         if (wsGlobal) wsGlobal.send({ type: 'cam-create' })
                         else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'cam-create' }))

@@ -163,15 +163,18 @@ export default function CameraTile({
   // This effect ensures CameraTile's UI reflects that selection
   useEffect(() => {
     const ignore = useUserSettings.getState().ignorePreferredCameraSync
-    console.log('[CAMERATILE] Checking camera selection sync: preferredCameraLabel=', preferredCameraLabel, 'mode=', mode, 'ignoreSync=', ignore)
+    console.log('[CAMERATILE] Checking camera selection sync: preferredCameraLabel=', preferredCameraLabel, 'mode=', mode, 'ignoreSync=', ignore, 'manualModeSetAt=', manualModeSetAt)
     if (ignore) return
+    // If user manually changed mode recently, avoid auto-syncing preferred camera
+    if (manualModeSetAt && Date.now() - manualModeSetAt < 30_000) return
     if (preferredCameraLabel === 'Phone Camera' && mode !== 'phone') {
       console.log('[CAMERATILE] Syncing mode to phone from Calibrator selection')
       setMode('phone')
     }
-  }, [preferredCameraLabel, mode])
+  }, [preferredCameraLabel, mode, manualModeSetAt])
   
   const [qrDataUrl, setQrDataUrl] = useState<string>('')
+  const [manualModeSetAt, setManualModeSetAt] = useState<number | null>(null)
   useEffect(() => {
     if (!pairCode) { setQrDataUrl(''); return }
     const logoPath = (import.meta as any).env?.VITE_QR_LOGO_URL || '/dart-thrower.svg'
@@ -215,7 +218,8 @@ export default function CameraTile({
   useEffect(() => {
     const apply = async () => {
       try {
-        if (preferredCameraLabel !== 'Phone Camera' && mode !== 'phone') return
+        const allowPhoneAttach = (preferredCameraLabel === 'Phone Camera' && (!manualModeSetAt || Date.now() - manualModeSetAt >= 30_000)) || mode === 'phone'
+        if (!allowPhoneAttach) return
         const s = cameraSession.getMediaStream()
         const v = videoRef.current
         if (!v || !s) return
@@ -356,14 +360,14 @@ export default function CameraTile({
 
   // Listen for global event to start local camera from other UI components
   useEffect(() => {
-    const onStartLocal = () => {
+    const onStart = () => {
       try {
-        setMode('local')
+        // Just start the camera according to the current mode; don't switch modes automatically
         start().catch(() => {})
       } catch {}
     }
-    window.addEventListener('ndn:start-local-camera' as any, onStartLocal as any)
-    return () => { window.removeEventListener('ndn:start-local-camera' as any, onStartLocal as any) }
+    window.addEventListener('ndn:start-camera' as any, onStart as any)
+    return () => { window.removeEventListener('ndn:start-camera' as any, onStart as any) }
   }, [start])
 
   async function connectToUsbDevice(device: USBDevice) {
@@ -392,6 +396,22 @@ export default function CameraTile({
       ))
     }
   }
+
+  const handleModeSelect = useCallback((newMode: 'local'|'phone'|'wifi'|'usb') => {
+    try {
+      setMode(newMode === 'usb' ? 'wifi' : newMode)
+      setManualModeSetAt(Date.now())
+      if (newMode === 'local') {
+        start().catch(() => {})
+      } else if (newMode === 'phone') {
+        startPhonePairing()
+      } else if (newMode === 'wifi') {
+        startWifiConnection()
+      } else if (newMode === 'usb') {
+        startUsbConnection()
+      }
+    } catch (err) { console.warn('[CameraTile] handleModeSelect failed', err) }
+  }, [start, startPhonePairing, startWifiConnection, startUsbConnection])
 
   // Phone pairing via WebRTC
   function ensureWS() {
@@ -750,10 +770,10 @@ function CameraFrame(props: any) {
         <div className="flex items-center gap-2">
           {!streaming && (
             <>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='local'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => { setMode('local'); start() }}>Local</button>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='phone'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={startPhonePairing}>Phone</button>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => { setMode('wifi'); startWifiConnection() }}>WiFi</button>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => { setMode('wifi'); startUsbConnection() }}>USB</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='local'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => handleModeSelect('local')}>Local</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='phone'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => handleModeSelect('phone')}>Phone</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => handleModeSelect('wifi')}>WiFi</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => handleModeSelect('usb')}>USB</button>
             </>
           )}
           {streaming ? (
