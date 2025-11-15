@@ -292,6 +292,75 @@ const buildRedisOptions = (rawUrl) => {
 
 let redisClient = null;
 
+// Helper: get user from Redis or Supabase quickly (fast path)
+async function fetchUserFromPersistence(rawId, timeoutMs = 1200) {
+  const idLower = (rawId || '').toLowerCase();
+  const useEmail = idLower.includes('@');
+  const keyEmail = `user:email:${idLower}`;
+  const keyUsername = `user:username:${rawId}`;
+
+  const attempt = async () => {
+    try {
+      // Try Redis first for fast lookup
+      if (redisClient) {
+        try {
+          const rKey = useEmail ? keyEmail : keyUsername;
+          const raw = await redisClient.get(rKey);
+          if (raw) {
+            try { return JSON.parse(raw); } catch { return null }
+          }
+        } catch (err) {
+          // Redis read failure — ignore and fall back
+          console.warn('[REDIS] Read failed (fast path):', err && err.message);
+        }
+      }
+
+      // Fallback: query Supabase synchronously for this request
+      if (supabase) {
+        const fetchBy = useEmail ? { col: 'email', val: idLower } : { col: 'username', val: rawId };
+        try {
+          const { data, error } = await supabase.from('users').select('*').eq(fetchBy.col, fetchBy.val).single();
+          if (!error && data) {
+            return data;
+          }
+        } catch (err) {
+          console.warn('[DB] Fast fetch failed:', err && err.message);
+        }
+      }
+    } catch (err) { console.warn('[PERSIST] fetchUserFromPersistence err', err) }
+    return null;
+  };
+
+  // Timeout wrapper so we don't block for too long
+  return Promise.race([
+    attempt(),
+    new Promise(resolve => setTimeout(() => resolve(null), timeoutMs))
+  ]);
+}
+
+// Helper: cache user in Redis + memory
+async function cacheUserPersistent(user) {
+  try {
+    if (!user || !user.email) return;
+    const u = { email: user.email, username: user.username, password: user.password || user.hashedPassword || user.hash || user?.password, admin: user.admin || false };
+    users.set(u.email, u);
+    if (redisClient) {
+      try {
+        // Key by email and username for quick lookups
+        const eKey = `user:email:${String(u.email).toLowerCase()}`;
+        const nKey = `user:username:${u.username}`;
+        await redisClient.set(eKey, JSON.stringify(u));
+        await redisClient.set(nKey, JSON.stringify(u));
+        // Expire after 1 day to keep cache fresh
+        await redisClient.expire(eKey, 60 * 60 * 24);
+        await redisClient.expire(nKey, 60 * 60 * 24);
+      } catch (err) { console.warn('[REDIS] Cache write failed:', err && err.message); }
+    }
+  } catch (err) {
+    console.warn('[CACHE] cacheUserPersistent failed', err && err.message);
+  }
+}
+
 const attemptConnection = (options) => new Promise((resolve, reject) => {
   const client = redis.createClient(options);
   const cleanup = () => {
@@ -782,10 +851,25 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }
 
-    // User not in memory - fetch from Supabase ASYNC (don't block login)
-    // Return error immediately, then cache in background for future logins
+    // User not found in memory - try fast persistence (Redis or Supabase) with a short timeout
+    try {
+      const persisted = await fetchUserFromPersistence(rawId, 1200);
+      if (persisted) {
+        const stored = String(persisted.password || persisted.hash || persisted.hashedPassword || '');
+        const isHashed = stored.startsWith('$2');
+        const ok = isHashed ? await bcrypt.compare(String(password), stored) : (stored === password);
+        if (ok) {
+          // Cache in-memory + redis for future
+          const uObj = { email: persisted.email, username: persisted.username, password: stored, admin: persisted.admin || false };
+          await cacheUserPersistent(uObj);
+          const token = jwt.sign({ username: uObj.username, email: uObj.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+          return res.json({ user: uObj, token });
+        }
+      }
+    } catch (err) { console.warn('[LOGIN] Fast path fetch failed:', err && err.message) }
+
+    // Nothing found or not a match - keep background caching and return error
     if (supabase) {
-      // Async fetch - doesn't block the response
       const fetchBy = idLower.includes('@') ? { col: 'email', val: idLower } : { col: 'username', val: rawId };
       supabase
         .from('users')
@@ -795,17 +879,14 @@ app.post('/api/auth/login', async (req, res) => {
         .then(async ({ data, error }) => {
           try {
             if (!error && data && data.password) {
-              const stored = String(data.password)
-              const isHashed = stored.startsWith('$2')
-              const ok = isHashed ? await bcrypt.compare(String(password), stored) : (stored === password)
+              const stored = String(data.password);
+              const isHashed = stored.startsWith('$2');
+              const ok = isHashed ? await bcrypt.compare(String(password), stored) : (stored === password);
               if (ok) {
-                users.set(data.email, {
-                  email: data.email,
-                  username: data.username,
-                  password: stored,
-                  admin: data.admin || false
-                });
-                console.log('[LOGIN] Cached user from Supabase:', data.username);
+                const uObj = { email: data.email, username: data.username, password: stored, admin: data.admin || false };
+                users.set(data.email, uObj);
+                await cacheUserPersistent(uObj);
+                console.log('[LOGIN] Cached user from Supabase (bg):', data.username);
               }
             }
           } catch {}
@@ -813,7 +894,6 @@ app.post('/api/auth/login', async (req, res) => {
         .catch(err => console.warn('[LOGIN] Background Supabase sync failed:', err));
     }
 
-    // Return invalid immediately (user not in cache, and we don't wait for DB)
     return res.status(401).json({ error: 'Invalid credentials.' });
   } catch (error) {
     console.error('[LOGIN] Error:', error);

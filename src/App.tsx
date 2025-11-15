@@ -44,6 +44,8 @@ export default function App() {
   const [isMobile, setIsMobile] = useState<boolean>(false)
   const [navOpen, setNavOpen] = useState<boolean>(false)
   const [user, setUser] = useState<any>(null)
+  const MINIMAL_UI = ((import.meta as any).env?.VITE_MINIMAL_AFTER_LOGIN || '').toString() === '1'
+  const [minimalUI, setMinimalUI] = useState<boolean>(false)
   const [allTimeAvg, setAllTimeAvg] = useState<number>(0)
   const { avgMode } = useUserSettings()
   const { H: calibH, locked: calibLocked, errorPx } = useCalibration()
@@ -51,6 +53,11 @@ export default function App() {
 
   // Restore user from token on mount
   useEffect(() => {
+    if (user && MINIMAL_UI) {
+      setMinimalUI(true)
+      const timer = setTimeout(() => setMinimalUI(false), 1500) // Delay heavy component mount
+      return () => clearTimeout(timer)
+    }
     const token = localStorage.getItem('authToken');
     if (token) {
       // Validate token with server
@@ -504,10 +511,10 @@ export default function App() {
   <Footer />
   <RuntimeDebugBanner />
   {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
-  <GlobalCameraLogger />
+  {!minimalUI && <GlobalCameraLogger />}
       {/* Global phone camera overlay - visibility controlled by store */}
   {/* Keep a hidden global video element alive across navigation */}
-  <GlobalPhoneVideoSink />
+  {!minimalUI && <GlobalPhoneVideoSink />}
     </ThemeProvider>
   )
 }
