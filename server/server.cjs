@@ -833,6 +833,7 @@ app.post('/api/auth/login', async (req, res) => {
   const idLower = rawId.toLowerCase();
 
   try {
+    const startTs = Date.now();
     // Check in-memory users FIRST (fastest path - no network, <1ms)
     for (const u of users.values()) {
       const uEmailLower = String(u.email||'').toLowerCase();
@@ -846,6 +847,7 @@ app.post('/api/auth/login', async (req, res) => {
         const ok = isHashed ? await bcrypt.compare(String(password), stored) : (stored === password)
         if (ok) {
           const token = jwt.sign({ username: u.username, email: u.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+          console.log('[LOGIN] Hit cache fast path for', u.username, 'latencyMs:', Date.now() - startTs);
           return res.json({ user: u, token }); // Return immediately - no Supabase call
         }
       }
@@ -863,6 +865,7 @@ app.post('/api/auth/login', async (req, res) => {
           const uObj = { email: persisted.email, username: persisted.username, password: stored, admin: persisted.admin || false };
           await cacheUserPersistent(uObj);
           const token = jwt.sign({ username: uObj.username, email: uObj.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+          console.log('[LOGIN] Fast path via persistent store for', uObj.username, 'latencyMs:', Date.now() - startTs);
           return res.json({ user: uObj, token });
         }
       }
