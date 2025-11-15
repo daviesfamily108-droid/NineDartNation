@@ -239,9 +239,11 @@ export default function CameraTile({
   }, [preferredCameraLabel, mode, cameraSession, cameraSession.isStreaming])
 
   async function start() {
+      console.log('[CameraTile] start() invoked with mode=', mode)
     if (mode === 'wifi') {
       return startWifiConnection()
     }
+  console.log('[CameraTile] Attempting to attach global stream for phone mode...')
 
     // If phone camera is selected and paired, don't try to start local camera
     if (preferredCameraLabel === 'Phone Camera' || mode === 'phone') {
@@ -254,7 +256,10 @@ export default function CameraTile({
           return
         } catch {}
       }
-      // If no global stream yet, fall through to default behavior
+      // If no global stream yet, for phone mode we should attempt pairing
+      if (mode === 'phone') {
+        try { await startPhonePairing(); return } catch {}
+      }
     }
 
     try {
@@ -588,7 +593,8 @@ function CameraFrame(props: any) {
         description: 'Use the desktop webcam or capture card.',
         action: () => {
           setMode('local')
-          start()
+          setManualModeSetAt(Date.now())
+          start().catch(() => {})
         },
       },
       {
@@ -596,53 +602,28 @@ function CameraFrame(props: any) {
         title: 'PhoneCam',
         description: 'Stream from your phone via the mobile link.',
         action: () => {
+          setMode('phone')
+          setManualModeSetAt(Date.now())
           startPhonePairing()
         },
       },
       {
         id: 'wifi',
-        title: 'Wi-Fi',
-        description: 'Discover network scoring cameras and connect.',
+        title: 'Wi-Fi/USB',
+        description: 'Connect to scoring devices on your local network.',
         action: () => {
-        <div className="mt-3 p-3 rounded-2xl bg-white border border-slate-200 shadow-sm text-slate-900">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <div className="text-[10px] uppercase tracking-wide text-slate-500">Camera modes</div>
-              <div className="text-sm font-semibold text-slate-900">Reconnect camera</div>
-            </div>
-            <span className="text-xs text-slate-500">Current: {modeDisplayName[mode] || 'Local'}</span>
-          </div>
-          <p className="text-xs text-slate-500 mb-2">Tap a mode to restart the feed or switch inputs.</p>
-          <div className="grid grid-cols-2 gap-2">
-            {reconnectOptions.map(option => {
-              const isActive = option.id === 'usb'
-                ? usbActive
-                : option.id === mode
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={option.action}
-                  className={`text-left p-3 rounded-2xl border ${isActive ? 'border-emerald-500 bg-emerald-50 shadow' : 'border-slate-200 bg-white/80 hover:bg-slate-50'} transition`}
-                >
-                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{option.title}</div>
-                  <div className="text-[11px] text-slate-600 mt-1">{option.description}</div>
-                  {isActive && <div className="text-[10px] text-emerald-500 mt-2">Active</div>}
-                </button>
-              )
-            })}
-          </div>
-        </div>
           setMode('wifi')
+          setManualModeSetAt(Date.now())
           startWifiConnection()
         },
       },
       {
         id: 'usb',
         title: 'USB',
-        description: 'Connect a USB capture device directly.',
+        description: 'Connect a USB capture device (treated like WiFi mode).',
         action: () => {
           setMode('wifi')
+          setManualModeSetAt(Date.now())
           startUsbConnection()
         },
       },
