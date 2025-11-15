@@ -1370,6 +1370,16 @@ app.get('/readyz', (req, res) => {
   }
 })
 
+// Debug: Show in-memory cache stats
+app.get('/api/debug/cache', (req, res) => {
+  try {
+    const keys = Array.from(users.keys()).slice(0, 200);
+    res.json({ ok: true, usersCount: users.size, users: keys });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'failed' });
+  }
+})
+
 // Report LAN IPv4 addresses for phone pairing convenience
 app.get('/api/hosts', (req, res) => {
   try {
