@@ -1659,7 +1659,7 @@ export default function Calibrator() {
 											<button
 												className={`btn px-3 py-1 ${mode === 'phone' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 hover:bg-slate-600'}`}
 												onClick={() => { setMode('phone'); stopCamera(false) }}
-												title="Pair phone camera"
+												title="Enable camera on this device"
 											>
 												Phone
 											</button>
@@ -1754,7 +1754,7 @@ export default function Calibrator() {
 										<p className="text-xs opacity-70">Start your camera or upload a photo to capture the board.</p>
 										<div className="mt-3 flex flex-col gap-2">
 											{mode === 'local' && <button className="btn" onClick={startCamera}>Enable camera</button>}
-											{mode === 'phone' && <button className="btn" onClick={() => { try { window.dispatchEvent(new Event('ndn:start-local-camera')) } catch { startPhonePairing() } }}>Enable camera</button>}
+											{mode === 'phone' && <button className="btn" title="Enable camera on this device" onClick={() => { try { window.dispatchEvent(new Event('ndn:start-local-camera')) } catch { startPhonePairing() } }}>Enable camera</button>}
 											{mode === 'wifi' && <button className="btn" onClick={startWifiConnection}>Connect wifi camera</button>}
 											<button className="btn" onClick={captureFrame} disabled={!streaming}>Capture frame</button>
 											<button className="btn" onClick={triggerUpload}>Upload photo</button>
