@@ -1850,15 +1850,14 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <button className={`btn ${buttonSizeClass}`} onClick={openManual}>Manual Correction</button>
                   {!manualScoring && (
                     <button className={`btn ${buttonSizeClass}`} onClick={() => {
-                      console.log('Sending cam-create')
-                      if (wsGlobal) {
-                        wsGlobal.send({ type: 'cam-create' })
-                      } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                        wsRef.current.send(JSON.stringify({ type: 'cam-create' }))
-                      } else {
-                        toast('Not connected to server', { type: 'error' })
+                      // Toggle local camera enable — prefer local camera start, fallback to cam-create pairing
+                      try { window.dispatchEvent(new Event('ndn:start-local-camera')) } catch (err) {
+                        console.warn('Enable camera event failed', err)
+                        if (wsGlobal) wsGlobal.send({ type: 'cam-create' })
+                        else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ type: 'cam-create' }))
+                        else toast('Not connected to server', { type: 'error' })
                       }
-                    }}>Pair Phone</button>
+                    }}>Enable camera</button>
                   )}
                   {!manualScoring && pairingCode && (
                     <div className="ml-2 text-sm bg-blue-900/50 p-2 rounded">

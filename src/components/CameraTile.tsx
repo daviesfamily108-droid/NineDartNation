@@ -354,6 +354,18 @@ export default function CameraTile({
     }
   }
 
+  // Listen for global event to start local camera from other UI components
+  useEffect(() => {
+    const onStartLocal = () => {
+      try {
+        setMode('local')
+        start().catch(() => {})
+      } catch {}
+    }
+    window.addEventListener('ndn:start-local-camera' as any, onStartLocal as any)
+    return () => { window.removeEventListener('ndn:start-local-camera' as any, onStartLocal as any) }
+  }, [start])
+
   async function connectToUsbDevice(device: USBDevice) {
     try {
       setUsbDevices(devices => devices.map(d => 
