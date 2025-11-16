@@ -103,6 +103,8 @@ export default function CameraTile({
   const autoscoreProvider = useUserSettings(s => s.autoscoreProvider) as ('built-in' | 'external-ws' | 'manual' | undefined)
   const cameraEnabledSetting = useUserSettings(s => s.cameraEnabled)
   const setPreferredCameraLocked = useUserSettings(s => s.setPreferredCameraLocked)
+  const setPreferredCamera = useUserSettings(s => s.setPreferredCamera)
+  const preferredCameraId = useUserSettings(s => s.preferredCameraId)
 
   if (autoscoreProvider === 'manual') {
     const fallbackBase = fill ? 'rounded-2xl overflow-hidden bg-black w-full flex flex-col' : 'rounded-2xl overflow-hidden bg-black w-full mx-auto'
@@ -365,15 +367,23 @@ export default function CameraTile({
 
   // Listen for global event to start local camera from other UI components
   useEffect(() => {
-    const onStart = () => {
+    const onStart = (ev: any) => {
       try {
-        // Just start the camera according to the current mode; don't switch modes automatically
-        start().catch(() => {})
+        const modeFromEvent = ev && ev.detail && ev.detail.mode
+        if (modeFromEvent && ['local', 'phone', 'wifi', 'usb'].includes(modeFromEvent)) {
+          // Respect explicit mode requests and treat as manual selection
+          handleModeSelect(modeFromEvent)
+          // Ensure start is invoked after selection is applied
+          start().catch(() => {})
+        } else {
+          // No explicit mode provided — just try to start current mode
+          start().catch(() => {})
+        }
       } catch {}
     }
     window.addEventListener('ndn:start-camera' as any, onStart as any)
     return () => { window.removeEventListener('ndn:start-camera' as any, onStart as any) }
-  }, [start])
+  }, [start, handleModeSelect])
 
   async function connectToUsbDevice(device: USBDevice) {
     try {
@@ -406,6 +416,19 @@ export default function CameraTile({
     try {
       setMode(newMode === 'usb' ? 'wifi' : newMode)
       setManualModeSetAt(Date.now())
+      // Persist the user's selection and lock it to avoid auto-switching
+      try {
+        if (newMode === 'local') {
+          try { setPreferredCamera(preferredCameraId, 'Local', true) } catch {}
+          try { setPreferredCameraLocked(true) } catch {}
+        } else if (newMode === 'phone') {
+          try { setPreferredCamera(undefined, 'Phone Camera', true) } catch {}
+          try { setPreferredCameraLocked(true) } catch {}
+        } else if (newMode === 'wifi' || newMode === 'usb') {
+          try { setPreferredCamera(undefined, 'WiFi/USB', true) } catch {}
+          try { setPreferredCameraLocked(true) } catch {}
+        }
+      } catch {}
       if (newMode === 'local') {
         start().catch(() => {})
       } else if (newMode === 'phone') {
@@ -416,7 +439,7 @@ export default function CameraTile({
         startUsbConnection()
       }
     } catch (err) { console.warn('[CameraTile] handleModeSelect failed', err) }
-  }, [start, startPhonePairing, startWifiConnection, startUsbConnection])
+  }, [start, startPhonePairing, startWifiConnection, startUsbConnection, setPreferredCamera, setPreferredCameraLocked, preferredCameraId])
 
   // Phone pairing via WebRTC
   function ensureWS() {
@@ -510,7 +533,7 @@ export default function CameraTile({
     if (pc) { try { pc.close() } catch {}; setPc(null) }
   }
   return (
-    <CameraFrame 
+  <CameraFrame 
       label={label} 
       autoStart={autoStart} 
       start={start} 
@@ -541,7 +564,8 @@ export default function CameraTile({
       aspect={aspect}
       style={style}
       fill={fill}
-    />
+        onModeSelect={handleModeSelect}
+      />
   )
 }
 
@@ -554,13 +578,14 @@ function CameraFrame(props: any) {
     stopAll,
     startPhonePairing,
     startWifiConnection,
-    startUsbConnection,
+  startUsbConnection,
     connectToWifiDevice,
     connectToUsbDevice,
     videoRef,
     streaming,
-    mode,
+  mode,
     setMode,
+  onModeSelect,
     pairCode,
     mobileUrl,
     ttl,
@@ -592,40 +617,32 @@ function CameraFrame(props: any) {
         title: 'Local camera',
         description: 'Use the desktop webcam or capture card.',
         action: () => {
-          setMode('local')
-          setManualModeSetAt(Date.now())
-          start().catch(() => {})
-        },
+            if (onModeSelect) onModeSelect('local')
+          },
       },
       {
         id: 'phone',
         title: 'PhoneCam',
         description: 'Stream from your phone via the mobile link.',
         action: () => {
-          setMode('phone')
-          setManualModeSetAt(Date.now())
-          startPhonePairing()
-        },
+            if (onModeSelect) onModeSelect('phone')
+          },
       },
       {
         id: 'wifi',
         title: 'Wi-Fi/USB',
         description: 'Connect to scoring devices on your local network.',
         action: () => {
-          setMode('wifi')
-          setManualModeSetAt(Date.now())
-          startWifiConnection()
-        },
+            if (onModeSelect) onModeSelect('wifi')
+          },
       },
       {
         id: 'usb',
         title: 'USB',
         description: 'Connect a USB capture device (treated like WiFi mode).',
         action: () => {
-          setMode('wifi')
-          setManualModeSetAt(Date.now())
-          startUsbConnection()
-        },
+            if (onModeSelect) onModeSelect('usb')
+          },
       },
     ]
   }, [setMode, start, startPhonePairing, startWifiConnection, startUsbConnection])
@@ -751,10 +768,10 @@ function CameraFrame(props: any) {
         <div className="flex items-center gap-2">
           {!streaming && (
             <>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='local'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => handleModeSelect('local')}>Local</button>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='phone'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => handleModeSelect('phone')}>Phone</button>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => handleModeSelect('wifi')}>WiFi</button>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => handleModeSelect('usb')}>USB</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='local'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => (onModeSelect||handleModeSelect)('local')}>Local</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='phone'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => (onModeSelect||handleModeSelect)('phone')}>Phone</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => (onModeSelect||handleModeSelect)('wifi')}>WiFi</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => (onModeSelect||handleModeSelect)('usb')}>USB</button>
             </>
           )}
           {streaming ? (
