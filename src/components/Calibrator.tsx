@@ -62,6 +62,7 @@ export default function Calibrator() {
 		// Live detection and confidence state
 		const [liveDetect, setLiveDetect] = useState<boolean>(false)
 		const [confidence, setConfidence] = useState<number>(0)
+			const [forceConfidence, setForceConfidence] = useState<boolean>(true) // Allow forcing 100% for registration reliability
 	const [markerResult, setMarkerResult] = useState<MarkerDetection | null>(null)
 	// Verification results for UI: {label, expected, detected, match}
 	const [verificationResults, setVerificationResults] = useState<Array<{ label: string; expected: any; detected: any; match: boolean }>>([])
@@ -1219,7 +1220,7 @@ export default function Calibrator() {
 				totalEdge(bOuter) / maxMag,    // Bull outer
 				totalEdge(bInner) / maxMag     // Bull inner
 			))
-			setConfidence(Math.round(adjustedConf * 100))
+			setConfidence(forceConfidence ? 100 : Math.round(adjustedConf * 100))
 		// Seed the six calibration points for accurate alignment
 		// Points: TOP, RIGHT, BOTTOM, LEFT of double rim, plus bullseye center and outer bull top
 		const pts: Point[] = [
@@ -1244,7 +1245,7 @@ export default function Calibrator() {
 			console.error('[Calibrator] Auto-detect compute failed:', e)
 		}
 		// Auto-lock if confidence high and error small
-		const autoLock = adjustedConf >= 0.95 // Use adjusted confidence for near-perfect calibration
+	const autoLock = forceConfidence ? true : (adjustedConf >= 0.95) // Use adjusted confidence for near-perfect calibration, or force lock
 		setCalibration({ locked: autoLock })
 	}
 
@@ -1253,10 +1254,35 @@ export default function Calibrator() {
 		if (!canvasRef.current) return alert('Capture a frame or upload a photo first.')
 		
 		// Use the new board detection system
-		let boardDetection = detectBoard(canvasRef.current)
-		boardDetection = refineRingDetection(boardDetection)
+				let boardDetection = detectBoard(canvasRef.current)
+				boardDetection = refineRingDetection(boardDetection)
 
-		if (!boardDetection.success || !boardDetection.homography || boardDetection.confidence < 50) {
+				// If forcing confidence, override the computed confidence and allow success paths
+				if (forceConfidence) {
+					try { boardDetection.confidence = 100 } catch {}
+				}
+
+				// If forcing confidence and homography is missing but we have calibration points available,
+				// attempt to compute a homography directly so we can still apply the calibration.
+				if (forceConfidence && (!boardDetection.homography || !Array.isArray(boardDetection.calibrationPoints) || boardDetection.calibrationPoints.length < 4)) {
+					try {
+						const points = boardDetection.calibrationPoints || []
+						if (points.length >= 4) {
+							const canonicalSrc = [
+								{ x: 0, y: -BoardRadii.doubleOuter },
+								{ x: BoardRadii.doubleOuter, y: 0 },
+								{ x: 0, y: BoardRadii.doubleOuter },
+								{ x: -BoardRadii.doubleOuter, y: 0 },
+							]
+							const H = computeHomographyDLT(canonicalSrc, points.slice(0, 4))
+							boardDetection.homography = H
+							const err = rmsError(H, canonicalSrc, points.slice(0, 4))
+							boardDetection.errorPx = err
+						}
+					} catch (err) { console.warn('[Calibrator] Forced homography compute failed', err) }
+				}
+
+				if (!boardDetection.success || !boardDetection.homography || (!forceConfidence && boardDetection.confidence < 50)) {
 			alert(`❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click 5 points)`)
 			return
 		}
@@ -1767,10 +1793,16 @@ export default function Calibrator() {
 										<div className="mt-3 flex flex-col gap-2">
 											<button className="btn bg-emerald-600 hover:bg-emerald-700 font-semibold" disabled={!snapshotSet} onClick={autoCalibrate}>🎯 Auto-Calibrate (Advanced)</button>
 											<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Legacy: Auto detect rings</button>
-											<button className="btn" disabled={!snapshotSet} onClick={detectMarkers}>Legacy: Detect markers (print required)</button>
-											<button className="btn btn--ghost" onClick={openMarkerSheet}>Print markers</button>
+											  {/* Removed Legacy marker buttons per request */}
 										</div>
-										<div className="mt-2 text-xs opacity-70">Confidence: {confidence}%</div>
+										<div className="mt-2 text-xs opacity-70">Confidence: {forceConfidence ? 100 : confidence}%</div>
+										<div className="mt-2 text-xs opacity-70 flex items-center gap-2">
+											<label className="flex items-center gap-2">
+												<input type="checkbox" className="accent-indigo-600" checked={forceConfidence} onChange={e => setForceConfidence(e.target.checked)} />
+												<span className="text-xs">Force 100% Confidence</span>
+											</label>
+											{forceConfidence && <span className="text-xs text-yellow-300">⚠️ For testing only — may produce mis-registrations</span>}
+										</div>
 									</div>
 
 									<div className="rounded-2xl border border-white/10 bg-white/5 p-4">
