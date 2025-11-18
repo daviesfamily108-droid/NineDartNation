@@ -35,7 +35,7 @@ export default function Calibrator() {
 	// Default to local or last-used mode, but allow user to freely change
 	const [mode, setMode] = useState<CamMode>(() => (localStorage.getItem('ndn:cal:mode') as CamMode) || 'local')
 	const [dstPoints, setDstPoints] = useState<Point[]>([]) // image points clicked in order D20 (top), D6 (right), D3 (bottom), D11 (left)
-	const [snapshotSet, setSnapshotSet] = useState(false)
+	const [hasSnapshot, setHasSnapshot] = useState(false)
 	// Track current frame (video/snapshot) size to preserve aspect ratio in the preview container
 	const [frameSize, setFrameSize] = useState<{ w: number, h: number } | null>(null)
 	// Zoom for pixel-perfect point picking (0.5x – 2.0x)
@@ -552,7 +552,7 @@ export default function Calibrator() {
 					if (inbound) {
 						console.log('[Calibrator] Assigning video stream (tracks:', inbound.getTracks().length, ') to video element')
 						// Ensure video element is visible
-						setSnapshotSet(false)
+						setHasSnapshot(false)
 						// Use setTimeout to ensure DOM updates before assigning stream
 						setTimeout(() => {
 							if (videoRef.current) {
@@ -875,7 +875,7 @@ export default function Calibrator() {
 				c.height = img.naturalHeight
 				const ctx = c.getContext('2d')!
 				ctx.drawImage(img, 0, 0, c.width, c.height)
-				setSnapshotSet(true)
+				setHasSnapshot(true)
 				setFrameSize({ w: c.width, h: c.height })
 				setPhase('select')
 				setDstPoints([])
@@ -898,7 +898,7 @@ export default function Calibrator() {
 		c.height = v.videoHeight
 		const ctx = c.getContext('2d')!
 		ctx.drawImage(v, 0, 0, c.width, c.height)
-		setSnapshotSet(true)
+	setHasSnapshot(true)
 		setFrameSize({ w: c.width, h: c.height })
 		setPhase('select')
 		setDstPoints([])
@@ -1096,7 +1096,7 @@ export default function Calibrator() {
 
 	function resetAll() {
 		setDstPoints([])
-		setSnapshotSet(false)
+	setHasSnapshot(false)
 		setPhase('camera')
 		drawOverlay([])
 		setMarkerResult(null)
@@ -1549,7 +1549,7 @@ async function autoCalibrate() {
 		useEffect(() => {
 			drawOverlay()
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		}, [snapshotSet, H])
+	}, [hasSnapshot, H])
 
 		// Live detection loop (runs only when streaming and liveDetect is on)
 		useEffect(() => {
@@ -1729,7 +1729,7 @@ async function autoCalibrate() {
 									try { setPreferredCamera(undefined, '', true) } catch {}
 								} else if (val === 'phone') {
 									try { setPreferredCamera(undefined, 'Phone Camera', true) } catch {}
-									try { setMode('phone'); setPhase('camera'); setStreaming(false); setSnapshotSet(false); } catch {}
+									try { setMode('phone'); setPhase('camera'); setStreaming(false); setHasSnapshot(false); } catch {}
 								} else {
 									const device = devices.find(d => d.deviceId === val)
 									if (device) {
@@ -1921,7 +1921,7 @@ async function autoCalibrate() {
 													if (v.videoWidth && v.videoHeight) setFrameSize({ w: v.videoWidth, h: v.videoHeight })
 												} catch {}
 											}}
-											className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${snapshotSet ? 'opacity-0 -z-10' : 'opacity-100 z-10'}`}
+											className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${hasSnapshot ? 'opacity-0 -z-10' : 'opacity-100 z-10'}`}
 											autoPlay
 											playsInline
 											muted
@@ -1947,7 +1947,7 @@ async function autoCalibrate() {
 												</button>
 											</div>
 										)}
-										<canvas ref={canvasRef} className={`absolute inset-0 h-full w-full transition-opacity duration-300 ${snapshotSet ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`} />
+										<canvas ref={canvasRef} className={`absolute inset-0 h-full w-full transition-opacity duration-300 ${hasSnapshot ? 'opacity-100 z-10' : 'opacity-0 -z-10'}`} />
 										<canvas ref={overlayRef} onClick={onClickOverlay} className="absolute inset-0 z-30 h-full w-full cursor-crosshair" />
 									</div>
 								</div>
@@ -1975,8 +1975,8 @@ async function autoCalibrate() {
 										<h3 className="text-sm font-semibold">Stage 2 · Auto-Calibrate</h3>
 										<p className="text-xs opacity-70">Automatically detect dartboard rings and compute calibration without any markers or clicking.</p>
 										<div className="mt-3 flex flex-col gap-2">
-											<button className="btn bg-emerald-600 hover:bg-emerald-700 font-semibold" disabled={!snapshotSet || autoCalibrating} onClick={autoCalibrate}>{autoCalibrating ? 'Auto-calibrating…' : '🎯 Auto-Calibrate (Advanced)'}</button>
-											<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Legacy: Auto detect rings</button>
+											<button className="btn bg-emerald-600 hover:bg-emerald-700 font-semibold" disabled={!hasSnapshot || autoCalibrating} onClick={autoCalibrate}>{autoCalibrating ? 'Auto-calibrating…' : '🎯 Auto-Calibrate (Advanced)'}</button>
+											<button className="btn" disabled={!hasSnapshot} onClick={autoDetectRings}>Legacy: Auto detect rings</button>
 											  {/* Removed Legacy marker buttons per request */}
 										</div>
 										<div className="mt-2 text-xs opacity-70">Confidence: {forceConfidence ? 100 : confidence}%</div>
