@@ -150,20 +150,21 @@ function gaussianSolve(M: number[][], v: number[]): number[] {
 }
 
 // Canonical calibration targets in board space (mm)
-// We ask the user to click the image positions for: 
-// 1. TOP, RIGHT, BOTTOM, LEFT of double outer rim (4 points for rim constraint)
-// Canonical calibration points in board space (mm)
-// 5-point system: TOP, RIGHT, BOTTOM, LEFT of double ring outer edge + CENTER bull
-// This matches the actual image points clicked/detected as cardinal directions
+// We now anchor the homography with four evenly spaced double-ring sectors:
+// D20 (top), D6 (right), D3 (bottom), and D11 (left).
 export function canonicalRimTargets(): Point[] {
 	const doubleR = BoardRadii.doubleOuter
-	return [
-		{ x: 0, y: -doubleR },        // TOP of double ring
-		{ x: doubleR, y: 0 },         // RIGHT of double ring
-		{ x: 0, y: doubleR },         // BOTTOM of double ring
-		{ x: -doubleR, y: 0 },        // LEFT of double ring
-		{ x: 0, y: 0 },               // CENTER (bullseye)
-	]
+	const targetSectors = [20, 6, 3, 11] as const
+	return targetSectors.map(sector => {
+		const idx = SectorOrder.indexOf(sector)
+		const angle = (idx / SectorOrder.length) * Math.PI * 2 - Math.PI / 2
+		const x = doubleR * Math.cos(angle)
+		const y = doubleR * Math.sin(angle)
+		return {
+			x: Math.abs(x) < 1e-9 ? 0 : x,
+			y: Math.abs(y) < 1e-9 ? 0 : y,
+		}
+	})
 }
 
 // Given a homography mapping board->image, produce polylines for overlay rings (in image px)

@@ -196,6 +196,46 @@ body {
   -webkit-line-break: auto;
   border: 1px solid rgba(143, 67, 238, 0.25);
 }
+/* Standardized card layout: used across UI to keep consistent padding and min-height
+   Keep these lightweight to avoid drastic visual shifts in existing pages */
+.card {
+  padding: 0.75rem; /* 12px */
+  border-radius: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 4.5rem; /* 72px sensible minimum */
+}
+
+/* Metric tile: used for small statistic tiles inside cards
+   Keeps a consistent size and provides a small transition for numeric updates */
+.metric-tile {
+  min-height: 7rem; /* 112px */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+
+/* Visit indicators — a tiny dot that animates in/out and lifts when active. */
+.visit-dot {
+  width: 0.625rem; /* 10px */
+  height: 0.625rem; /* 10px */
+  border-radius: 9999px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  transition: transform 140ms ease, opacity 120ms ease, background-color 120ms ease;
+  transform-origin: center;
+  opacity: 0.6;
+}
+.visit-dot.active {
+  transform: translateY(-3px) scale(1.08);
+  opacity: 1;
+}
+.visit-dot.inactive {
+  opacity: 0.28;
+  transform: translateY(0) scale(1);
+}
 
 .sidebar {
   background: transparent;

@@ -1,4 +1,5 @@
 import { LayoutDashboard, Camera, Users, Trophy, Settings, MessageCircle, Lock, PoundSterling, Bell } from 'lucide-react';
+import FocusLock from 'react-focus-lock'
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { getFreeRemaining } from '../utils/quota'
@@ -158,8 +159,9 @@ export function Sidebar({
       {showDiscord && createPortal(
         <div className="fixed inset-0 z-[1000]">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowDiscord(false)} onTouchStart={() => setShowDiscord(false)} />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div role="dialog" aria-modal="true" className="card max-w-md w-full relative text-left p-6 rounded-xl">
+            <div className="absolute inset-0 flex items-center justify-center p-4">
+              <FocusLock returnFocus>
+              <div role="dialog" aria-modal="true" className="card max-w-md w-full relative text-left p-6 rounded-xl">
               <button className="absolute -top-3 -right-3 btn px-3 py-1" aria-label="Close" onClick={() => setShowDiscord(false)}>✕</button>
               <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-[#8ea1e1]">
                 <MessageCircle className="w-6 h-6" /> BullseyeDartsLeague
@@ -174,6 +176,7 @@ export function Sidebar({
                 Join Discord
               </a>
             </div>
+            </FocusLock>
           </div>
         </div>,
         document.body
@@ -182,8 +185,9 @@ export function Sidebar({
       {showNDNDiscord && createPortal(
         <div className="fixed inset-0 z-[1000]">
           <div className="absolute inset-0 bg-black/50" onClick={() => setShowNDNDiscord(false)} onTouchStart={() => setShowNDNDiscord(false)} />
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <div role="dialog" aria-modal="true" className="card max-w-md w-full relative text-left p-6 rounded-xl">
+            <div className="absolute inset-0 flex items-center justify-center p-4">
+              <FocusLock returnFocus>
+              <div role="dialog" aria-modal="true" className="card max-w-md w-full relative text-left p-6 rounded-xl">
               <button className="absolute -top-3 -right-3 btn px-3 py-1" aria-label="Close" onClick={() => setShowNDNDiscord(false)}>✕</button>
               <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-[#8ea1e1]">
                 <MessageCircle className="w-6 h-6" /> NineDartNation
@@ -198,6 +202,7 @@ export function Sidebar({
                 Join Discord
               </a>
             </div>
+            </FocusLock>
           </div>
         </div>,
         document.body

@@ -5,6 +5,7 @@ import CameraTile from './CameraTile'
 import ResizablePanel from './ui/ResizablePanel'
 import { suggestCheckouts, sayScore } from '../utils/checkout'
 import { addSample, getAllTimeAvg } from '../store/profileStats'
+import MatchStartShowcase from './ui/MatchStartShowcase'
 import { getFreeRemaining, incOnlineUsage } from '../utils/quota'
 import { useUserSettings } from '../store/userSettings'
 import { useCalibration } from '../store/calibration'
@@ -176,6 +177,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
   // Online end-of-match summary modal (appears when inProgress flips from true->false)
   const [showX01EndSummary, setShowX01EndSummary] = useState(false)
   const endSummaryPrevRef = useRef<boolean>(!!useMatch.getState().inProgress)
+  const [showStartShowcase, setShowStartShowcase] = useState(false)
+  const startedShowcasedRef = useRef(false)
   useEffect(() => {
     const prev = endSummaryPrevRef.current
     const now = !!match.inProgress
@@ -184,6 +187,13 @@ export default function OnlinePlay({ user }: { user?: any }) {
       if (hasFinished) setShowX01EndSummary(true)
     }
     endSummaryPrevRef.current = now
+    // Reset the showcased flag when match ends
+    if (!now) startedShowcasedRef.current = false
+    // When match starts, show the start showcase once
+    if (now && !startedShowcasedRef.current) {
+      startedShowcasedRef.current = true
+      setShowStartShowcase(true)
+    }
   }, [match.inProgress, match.players])
   // Dev-only: auto-simulate a short X01 leg to validate double-out stats via ?autotest=doubleout
   useEffect(() => {
@@ -1301,6 +1311,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
 
   return (
     <div className="card ndn-game-shell relative overflow-hidden">
+      {showStartShowcase && <MatchStartShowcase players={match.players || []} onDone={() => setShowStartShowcase(false)} />}
       <h2 className="text-xl font-semibold mb-1">Online Play</h2>
       <div className="ndn-shell-body">
       {/* Pause overlay/banner */}
@@ -1328,6 +1339,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
             <button className="btn bg-rose-600 hover:bg-rose-700 shrink-0" onClick={connect}>Connect</button>
           )}
           <button className="btn shrink-0" onClick={sendState} disabled={!connected}>Sync</button>
+          {/* Demo button for previewing the Match Start Showcase (DEV only) */}
+          {(import.meta as any).env?.DEV ? (
+            <button className="btn btn-ghost text-xs py-1" onClick={() => setShowStartShowcase(true)}>Demo Start Showcase</button>
+          ) : null}
           {/* Pause controls */}
           {!paused && !pauseRequestedBy && (
             <div className="flex items-center gap-2">

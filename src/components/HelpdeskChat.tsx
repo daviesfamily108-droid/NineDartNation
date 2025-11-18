@@ -146,7 +146,7 @@ export default function HelpdeskChat({ request, user, onClose }: { request: any,
               <span className="text-xs px-2 py-1 rounded bg-emerald-600">Admin Connected</span>
             )}
           </div>
-          <button className="px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm" onClick={onClose}>
+          <button aria-label="Close" className="px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm" onClick={onClose}>
             <X className="w-4 h-4"/>
           </button>
         </div>
@@ -234,7 +234,7 @@ export default function HelpdeskChat({ request, user, onClose }: { request: any,
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg() } }}
             placeholder="Ask a question (e.g., 'How does calibration work?')..."
           />
-          <button className="btn bg-blue-600 hover:bg-blue-700 text-white" onClick={sendMsg}>
+          <button aria-label="Send message" className="btn bg-blue-600 hover:bg-blue-700 text-white" onClick={sendMsg}>
             <Send className="w-4 h-4"/>
           </button>
         </div>

@@ -28,13 +28,11 @@ describe('HelpdeskChat', () => {
 
   expect(screen.getByText('Hello')).toBeTruthy()
 
-    const input = screen.getByPlaceholderText('Write a message...') as HTMLInputElement
+  const input = screen.getByPlaceholderText(/Ask a question/i) as HTMLInputElement
     fireEvent.change(input, { target: { value: 'Reply from admin' } })
-  const btns = screen.getAllByRole('button')
-  // second button is the send button in the modal (first is close)
-  const btn = btns[1]
+  const sendBtn = screen.getByRole('button', { name: /send message/i })
   // Click send
-  fireEvent.click(btn)
+  fireEvent.click(sendBtn)
 
     // send should be called
     expect(mockSend).toHaveBeenCalled()

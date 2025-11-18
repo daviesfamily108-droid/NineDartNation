@@ -565,7 +565,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 	return (
 			<div className="space-y-4 ndn-game-shell">
 				{/* Top connection status strip */}
-				<div className="p-2 rounded-xl bg-white/10 border border-white/10 flex items-center justify-between gap-2 flex-wrap">
+				<div className="card p-2 rounded-xl bg-white/10 border border-white/10 flex items-center justify-between gap-2 flex-wrap">
 					<div className="flex items-center gap-2 text-sm">
 						<span className="font-semibold">Connection Status</span>
 						{ws ? (
@@ -847,7 +847,10 @@ export default function AdminDashboard({ user }: { user: any }) {
 								<div>
 									<div className="flex items-center justify-between mb-2">
 										<label className="font-semibold">Max Concurrent Users</label>
-										<span className="text-sm bg-blue-600 px-2 py-1 rounded">{clusterCapacity.toLocaleString()}</span>
+														<div className="flex gap-2">
+															<button className="btn" onClick={()=>setShowCreate(false)}>Close</button>
+															<button className="btn" onClick={broadcastTournaments} disabled={!isOwner || loading}>Force broadcast</button>
+														</div>
 									</div>
 									<input 
 										type="range" 
@@ -1281,3 +1284,18 @@ export default function AdminDashboard({ user }: { user: any }) {
 		</div>
 	)
 }
+
+	async function broadcastTournaments() {
+		setLoading(true)
+		try {
+			const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+			const res = await fetch('/api/admin/tournaments/broadcast', { method: 'POST', headers })
+			if (res.ok) {
+				toast('Tournaments broadcast triggered', { type: 'success' })
+			} else {
+				toast('Broadcast failed', { type: 'error' })
+			}
+		} catch (err) {
+			toast('Broadcast request failed', { type: 'error' })
+		} finally { setLoading(false) }
+	}

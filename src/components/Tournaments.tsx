@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
+import { useMatch } from '../store/match'
+import MatchCard from './MatchCard'
+import MatchStartShowcase from './ui/MatchStartShowcase'
 import ResizableModal from './ui/ResizableModal'
 import { useToast } from '../store/toast'
 import { useWS } from './WSProvider'
@@ -37,8 +40,27 @@ export default function Tournaments({ user }: { user: any }) {
   const [list, setList] = useState<Tournament[]>([])
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [lastRefresh, setLastRefresh] = useState<number | null>(null)
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [showDemoStart, setShowDemoStart] = useState(false)
+  const [showStartShowcase, setShowStartShowcase] = useState(false)
+  const startedShowcasedRef = useRef(false)
+  const match = useMatch()
+  const endSummaryPrevRef = useRef(!!useMatch.getState().inProgress)
+  useEffect(() => {
+    const prev = endSummaryPrevRef.current
+    const now = !!match.inProgress
+    // Reset the showcased flag when match ends
+    if (!now) startedShowcasedRef.current = false
+    // When match starts, show the start showcase once
+    if (now && !startedShowcasedRef.current) {
+      startedShowcasedRef.current = true
+      setShowStartShowcase(true)
+    }
+    endSummaryPrevRef.current = now
+  }, [match.inProgress, match.players])
   const [leaveAsk, setLeaveAsk] = useState<{ open: boolean; t: Tournament | null }>({ open: false, t: null })
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; t: Tournament | null }>({ open: false, t: null })
   const [form, setForm] = useState({
@@ -61,17 +83,33 @@ export default function Tournaments({ user }: { user: any }) {
     try {
       const res = await apiFetch('/api/tournaments')
       const data = await res.json()
-      setList(Array.isArray(data.tournaments) ? data.tournaments : [])
-    } catch {}
+  const newList = Array.isArray(data.tournaments) ? data.tournaments : []
+  setList(newList)
+  try { console.debug('[Tournaments] refresh fetched', newList.length, 'tournaments'); console.log('[Tournaments] fetched list:', newList) } catch {}
+      setFetchError(null)
+      setLastRefresh(Date.now())
+    } catch (err: any) {
+      try { setFetchError(String(err?.message || err)) } catch { setFetchError('unknown') }
+    }
   }
   useEffect(() => { refresh() }, [])
+
+  // Re-fetch tournaments when we have a fresh WS connection so clients resync after reconnects/server restarts
+  useEffect(() => {
+    try {
+      if (wsGlobal?.connected) refresh()
+    } catch {}
+  }, [wsGlobal?.connected])
 
   // Listen for WS push updates from global provider if available
   useEffect(() => {
     if (!wsGlobal) return
     const unsub = wsGlobal.addListener((msg) => {
       try {
-        if (msg.type === 'tournaments') setList(msg.tournaments || [])
+  if (msg.type === 'tournaments') { setList(msg.tournaments || []); setLastRefresh(Date.now()); }
+        if (msg.type === 'tournaments') {
+          try { console.debug('[Tournaments] WS tournaments update, num=', (msg.tournaments || []).length) } catch {}
+        }
         if (msg.type === 'tournament-win' && msg.message) {
           toast(msg.message, { type: 'success', timeout: 10000 }) // Show for 10 seconds
         }
@@ -79,6 +117,28 @@ export default function Tournaments({ user }: { user: any }) {
       } catch {}
     })
     return () => { unsub() }
+  }, [wsGlobal?.connected])
+
+  // If WS connects, ask for a fresh list via WS; this will prompt server to send a tournaments snapshot.
+  useEffect(() => {
+    try {
+      if (wsGlobal?.connected) {
+        try { wsGlobal.send({ type: 'list-tournaments' }) } catch {}
+        // Also ensure we refresh as a fallback
+        refresh()
+      }
+    } catch {}
+  }, [wsGlobal?.connected])
+
+  // Polling fallback: if WS is unavailable, poll the API every 10s to keep lobby up-to-date
+  useEffect(() => {
+    let iv: number | null = null
+    try {
+      if (!wsGlobal || !wsGlobal.connected) {
+        iv = window.setInterval(() => { refresh() }, 10000)
+      }
+    } catch {}
+    return () => { if (iv) clearInterval(iv) }
   }, [wsGlobal?.connected])
 
   const email = String(user?.email || '').toLowerCase()
@@ -218,7 +278,7 @@ export default function Tournaments({ user }: { user: any }) {
     setLoading(true)
     try {
       const start = new Date(form.startAt).getTime()
-      await apiFetch('/api/tournaments/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      const res = await apiFetch('/api/tournaments/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
         title: form.title,
         game: form.game,
         mode: form.mode,
@@ -232,6 +292,29 @@ export default function Tournaments({ user }: { user: any }) {
         creatorEmail: user?.email,
         creatorName: user?.username,
       }) })
+      if (!res.ok) {
+        let details = ''
+        try {
+          const data = await res.json()
+          if (data?.error) details = String(data.error)
+          else if (data?.details) details = String(data.details)
+        } catch {}
+        const msg = details ? `Create failed: ${details}` : 'Create failed. Please try again.'
+        setErrorMsg(msg)
+        toast(msg, { type: 'error' })
+        setTimeout(()=>setErrorMsg(''), 6000)
+        return
+      }
+      try {
+        const data = await res.json()
+        if (!data?.ok) {
+          const msg = data?.error ? `Create failed: ${String(data.error)}` : 'Create failed. Please try again.'
+          setErrorMsg(msg)
+          toast(msg, { type: 'error' })
+          setTimeout(()=>setErrorMsg(''), 6000)
+          return
+        }
+      } catch {}
       setShowCreate(false)
       toast('Tournament created', { type: 'success' })
       await refresh()
@@ -248,6 +331,7 @@ export default function Tournaments({ user }: { user: any }) {
 
   const official = useMemo(() => list.filter(t => t.official), [list])
   const community = useMemo(() => list.filter(t => !t.official), [list])
+  const created = useMemo(() => list.filter(t => t.status === 'scheduled'), [list])
   const nextOfficial = useMemo(() => {
     const upcoming = official
       .filter(t => t.status === 'scheduled')
@@ -262,6 +346,13 @@ export default function Tournaments({ user }: { user: any }) {
 
   return (
     <div className="card ndn-game-shell">
+      {/* Debug: quick indicator to help diagnose lobby state on deployed env */}
+      <div className="absolute top-3 right-6 text-xs opacity-80 p-2 rounded bg-black/30 text-white">
+        <div>Tournaments: {list.length}</div>
+        <div>Last refresh: {lastRefresh ? new Date(lastRefresh).toLocaleTimeString() : '—'}</div>
+        {fetchError && <div className="text-rose-300">Fetch err: {String(fetchError).slice(0,40)}</div>}
+        <div className="mt-1"><button className="btn btn-sm" onClick={() => refresh()}>Refresh</button></div>
+      </div>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-2xl font-bold">Tournaments</h2>
       </div>
@@ -273,9 +364,29 @@ export default function Tournaments({ user }: { user: any }) {
         </div>
         <div className="shrink-0">
           <button className="btn" onClick={()=>setShowCreate(true)}>Create Tournament +</button>
+          {(import.meta as any).env?.DEV && (
+            <button className="btn btn-ghost ml-2" onClick={() => setShowDemoStart(true)}>Demo Start Showcase</button>
+          )}
         </div>
       </div>
+  {/* DEV-only start showcase demo */}
+  {showDemoStart && <MatchStartShowcase players={[{ id: '0', name: 'Demo A', legsWon: 0, legs: [] }, { id: '1', name: 'Demo B', legsWon: 0, legs: [] }]} onDone={() => setShowDemoStart(false)} />}
+  {/* Show overlay when a tournament match starts while on the tournaments page */}
+  {showStartShowcase && <MatchStartShowcase players={(match.players || []) as any} onDone={() => setShowStartShowcase(false)} />}
   <div className="mb-2 text-sm font-semibold text-slate-300">World Lobby</div>
+      {/* Created Game Lobby: show all created tournaments (scheduled) */}
+      <div className="mb-3 p-3 rounded-xl border border-slate-700 bg-black/10">
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-semibold">Created Game Lobby</div>
+          <div className="text-xs opacity-60">All tournaments created by users and admins</div>
+        </div>
+        <ul className="space-y-2">
+          {created.length === 0 && <li className="text-sm opacity-60">No created tournaments yet.</li>}
+          {created.map(t => (
+            <MatchCard key={t.id} t={t} onJoin={(m)=>join(m)} onLeave={(m)=>leave(m)} joined={hasJoined(t)} disabled={loading || t.status!=='scheduled' || (!hasJoined(t) && (t.participants.length>=t.capacity))} />
+          ))}
+        </ul>
+      </div>
       {/* Persistent banner for next official weekly tournament */}
       {nextOfficial && (
         <div className="mb-4 p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">

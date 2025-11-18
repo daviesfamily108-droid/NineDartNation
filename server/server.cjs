@@ -291,6 +291,7 @@ const buildRedisOptions = (rawUrl) => {
 };
 
 let redisClient = null;
+let redisSubClient = null;
 
 // Helper: get user from Redis or Supabase quickly (fast path)
 async function fetchUserFromPersistence(rawId, timeoutMs = 1200) {
@@ -403,6 +404,33 @@ const connectRedis = async (rawUrl, allowDowngrade = true) => {
 
     console.log(`[REDIS] Connected (${tlsEnabled ? 'TLS' : 'plain'})`);
     redisClient = client;
+    // If supported, setup a duplicate subscriber to handle pub/sub events for cross-instance broadcasts
+    try {
+      const sub = client.duplicate();
+      await sub.connect();
+      redisSubClient = sub;
+      // Subscribe to tournament updates from other instances
+      try {
+        await sub.subscribe('ndn:tournaments', async (msg) => {
+          try {
+            const data = JSON.parse(msg || '{}')
+            if (!data || !data.type) return
+            if (data.type === 'tournaments') {
+              try { console.log('[Redis] Received tournaments pubsub message, broadcasting to local clients') } catch {}
+              if (typeof wss !== 'undefined' && wss && wss.clients) {
+                for (const client of wss.clients) { if (client.readyState === 1) client.send(JSON.stringify({ type: 'tournaments', tournaments: data.tournaments })) }
+              }
+            }
+          } catch (err) { /* ignore malformed messages */ }
+        })
+        console.log('[Redis] Subscribed to ndn:tournaments channel')
+      } catch (err) {
+        console.warn('[Redis] Failed to subscribe to ndn:tournaments channel:', err && err.message)
+      }
+    } catch (err) {
+      // duplication may fail on some Redis providers; continue without pubsub
+      console.warn('[Redis] Unable to create subscriber client:', err && err.message)
+    }
     return client;
   } catch (err) {
     console.error('[REDIS] Connection attempt failed:', err.message || err);
@@ -455,6 +483,59 @@ if (redisUrl) {
   })();
 } else {
   console.log('[STORAGE] No persistence configured - using in-memory storage only');
+}
+// Upstash REST subscribe loop: listen for published messages and re-broadcast to local WS clients
+async function startUpstashSubscriber(channel = 'ndn:tournaments') {
+  if (!upstashRestUrl || !upstashToken) return
+  const url = `${upstashRestUrl}/subscribe/${encodeURIComponent(channel)}`
+  // Reconnect loop
+  while (true) {
+    try {
+      console.log('[UPSTASH] Starting REST subscribe to', url)
+      const res = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${upstashToken}` } })
+      if (!res.ok) {
+        console.warn('[UPSTASH] subscribe returned status', res.status)
+        await new Promise(r => setTimeout(r, 3000))
+        continue
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buf = ''
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break
+        buf += decoder.decode(value, { stream: true })
+        let idx
+        while ((idx = buf.indexOf('\n\n')) !== -1) {
+          const chunk = buf.slice(0, idx).trim()
+          buf = buf.slice(idx + 2)
+          const lines = chunk.split('\n').map(l => l.trim()).filter(Boolean)
+          for (const line of lines) {
+            if (line.startsWith('data:')) {
+              const payloadStr = line.replace(/^data:\s*/,'')
+              try {
+                const parsed = JSON.parse(payloadStr)
+                if (parsed && parsed.type === 'tournaments') {
+                  try { console.log('[UPSTASH] Received tournaments via REST subscribe') } catch {}
+                  if (typeof wss !== 'undefined' && wss && wss.clients) {
+                    for (const client of wss.clients) { if (client.readyState === 1) client.send(JSON.stringify({ type: 'tournaments', tournaments: parsed.tournaments })) }
+                  }
+                }
+              } catch (err) { /* ignore bad payload */ }
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[UPSTASH] subscribe error:', err && err.message)
+    }
+    await new Promise(r => setTimeout(r, 3000))
+  }
+}
+
+// Only start Upstash REST subscriber if the REST URL/token are present and there's no REDIS_URL configured
+if (upstashRestUrl && upstashToken && !process.env.REDIS_URL) {
+  startUpstashSubscriber('ndn:tournaments').catch(err => console.warn('[UPSTASH] subscriber crashed', err && err.message))
 }
 // Observability: metrics registry
 const register = new client.Registry()
@@ -1273,7 +1354,7 @@ let subscription = { fullAccess: false };
 // Winner-based per-email premium grants (demo) email -> expiry (ms since epoch)
 const premiumWinners = new Map();
 // In-memory admin store (demo)
-const OWNER_EMAIL = 'daviesfamily108@gmail.com'
+const OWNER_EMAIL = 'daviesfamily108@gmail.com'.toLowerCase();
 const adminEmails = new Set([OWNER_EMAIL])
 // In-memory ops flags (demo)
 let maintenanceMode = false
@@ -1297,7 +1378,7 @@ app.get('/api/subscription', async (req, res) => {
   }
 
   // Owner/admins always have premium in this demo
-  if (adminEmails.has(email)) {
+  if (adminEmails.has(String(email || '').toLowerCase())) {
     return res.json({ fullAccess: true, source: 'admin' })
   }
   if (premiumWinners.has(email)) {
@@ -1506,7 +1587,7 @@ app.get('/api/admins', (req, res) => {
 
 app.get('/api/admins/check', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
-  res.json({ isAdmin: adminEmails.has(email) })
+  res.json({ isAdmin: adminEmails.has(String(email || '').toLowerCase()) })
 })
 
 app.post('/api/admins/grant', (req, res) => {
@@ -1515,7 +1596,7 @@ app.post('/api/admins/grant', (req, res) => {
   const { email } = req.body || {}
   const target = String(email || '').toLowerCase()
   if (!target) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
-  adminEmails.add(target)
+  adminEmails.add(String(target || '').toLowerCase())
   res.json({ ok: true, admins: Array.from(adminEmails) })
 })
 
@@ -1526,7 +1607,7 @@ app.post('/api/admins/revoke', (req, res) => {
   const target = String(email || '').toLowerCase()
   if (!target) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
   if (target === OWNER_EMAIL) return res.status(400).json({ ok: false, error: 'CANNOT_REVOKE_OWNER' })
-  adminEmails.delete(target)
+  adminEmails.delete(String(target || '').toLowerCase())
   res.json({ ok: true, admins: Array.from(adminEmails) })
 })
 
@@ -1625,6 +1706,215 @@ app.post('/api/admin/matches/delete', (req, res) => {
     if (client.readyState === 1) client.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
   }
   res.json({ ok: true })
+})
+
+// Admin persistence status endpoint (owner-only)
+app.get('/api/admin/persistence/status', (req, res) => {
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  res.json({ ok: true, supabase: !!supabase, redis: !!redisClient || (!!upstashRestUrl && !!upstashToken), lastTournamentPersistAt })
+})
+
+// Admin: force re-broadcast of tournaments to all instances
+app.post('/api/admin/tournaments/broadcast', (req, res) => {
+  const owner = getAdminFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  try {
+    const arr = Array.from(tournaments.values())
+    // Broadcast locally
+    for (const client of wss.clients) { if (client.readyState === 1) client.send(JSON.stringify({ type: 'tournaments', tournaments: arr })) }
+    // Publish cross-instance
+    publishTournamentUpdate(arr).catch(err => console.warn('[Tournaments] publishTournamentUpdate error:', err && err.message))
+    res.json({ ok: true })
+  } catch (err) {
+    console.warn('[Tournaments] force broadcast failed:', err && err.message)
+    res.status(500).json({ ok: false, error: 'BROADCAST_FAILED' })
+  }
+})
+
+// Tournaments HTTP API (demo)
+app.get('/api/tournaments', (req, res) => {
+  res.json({ ok: true, tournaments: Array.from(tournaments.values()) })
+})
+
+app.post('/api/tournaments/create', async (req, res) => {
+  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeAmount, currency, prizeNotes, requesterEmail, requireCalibration } = req.body || {}
+  const id = nanoid(10)
+  const isOwner = String(requesterEmail || '').toLowerCase() === OWNER_EMAIL
+  const isOfficial = !!official && isOwner
+  const pType = isOfficial ? (prizeType === 'cash' ? 'cash' : 'premium') : 'none'
+  const amount = (pType === 'cash' && isOwner) ? Math.max(0, Number(prizeAmount) || 0) : 0
+  const curr = (pType === 'cash' && isOwner) ? (String(currency || 'USD').toUpperCase()) : undefined
+  const notes = (isOwner && typeof prizeNotes === 'string') ? prizeNotes : ''
+  const isAdminCreator = adminEmails.has(String(requesterEmail || '').toLowerCase()) || isOwner
+  try { console.log('[Tournaments] create: requester=', String(requesterEmail || ''), 'isOwner=', isOwner, 'isAdminCreator=', isAdminCreator) } catch {}
+  const t = {
+    id,
+    title: String(title || 'Community Tournament'),
+    game: typeof game === 'string' ? game : 'X01',
+    mode: (mode === 'firstto' ? 'firstto' : 'bestof'),
+    value: Number(value) || 1,
+    description: String(description || ''),
+    startAt: Number(startAt) || (Date.now() + 60*60*1000),
+    checkinMinutes: Math.max(0, Number(checkinMinutes) || 30),
+    capacity: Math.min(64, Math.max(6, Number(capacity) || 8)),
+    participants: [],
+    official: isOfficial,
+    requireCalibration: !!requireCalibration,
+    prize: isOfficial ? (pType !== 'none') : false,
+    prizeType: pType,
+    prizeAmount: amount || undefined,
+    currency: curr,
+    payoutStatus: pType === 'cash' ? 'none' : 'none',
+    prizeNotes: notes,
+    status: 'scheduled',
+    winnerEmail: null,
+  creatorEmail: String(creatorEmail || ''),
+  creatorName: (isAdminCreator ? 'ADMIN' : String(creatorName || '')),
+    createdAt: Date.now(),
+    startingScore: (typeof startingScore === 'number' && startingScore>0) ? Math.floor(startingScore) : (String(game)==='X01' ? 501 : undefined),
+  }
+  try {
+    if (supabase) {
+      const payload = {
+        id: t.id,
+        title: t.title,
+        game: t.game,
+        mode: t.mode,
+        value: t.value,
+        description: t.description || null,
+        start_at: new Date(t.startAt).toISOString(),
+        checkin_minutes: t.checkinMinutes || null,
+        capacity: t.capacity || null,
+        official: !!t.official,
+        prize: !!t.prize || false,
+        prize_type: t.prizeType || null,
+        prize_amount: t.prizeAmount || null,
+        currency: t.currency || null,
+        payout_status: t.payoutStatus || null,
+        status: t.status || 'scheduled',
+        winner_email: t.winnerEmail || null,
+        starting_score: t.startingScore || null,
+        creator_email: t.creatorEmail || null,
+        creator_name: t.creatorName || null,
+        created_at: new Date(t.createdAt).toISOString()
+      }
+      // Use upsert to avoid conflicts and verify by selecting
+      const { error: upsertErr } = await supabase.from('tournaments').upsert(payload, { onConflict: 'id' })
+      if (upsertErr) {
+        console.warn('[Tournaments] Supabase upsert failed:', upsertErr.message || upsertErr)
+        return res.status(500).json({ ok: false, error: 'DB_PERSIST_FAILED', details: upsertErr.message || upsertErr })
+      }
+      try {
+        const { data: checkRows, error: checkErr } = await supabase.from('tournaments').select('*').eq('id', t.id).limit(1).single()
+        if (checkErr || !checkRows) {
+          console.warn('[Tournaments] Supabase verify failed:', checkErr || 'no row')
+          return res.status(500).json({ ok: false, error: 'DB_VERIFY_FAILED', details: (checkErr && checkErr.message) || 'no row' })
+        }
+      } catch (err) {
+        console.warn('[Tournaments] Supabase verify exception:', err && err.message)
+        return res.status(500).json({ ok: false, error: 'DB_VERIFY_FAILED', details: err && err.message })
+      }
+      upsertTournament({ ...t })
+      persistTournamentsToDisk()
+    } else {
+      upsertTournament({ ...t })
+      // Persist to disk
+      try { persistTournamentsToDisk() } catch (e) {}
+    }
+  } catch (err) {
+    console.warn('[Tournaments] Persist error:', err && err.message)
+    return res.status(500).json({ ok: false, error: 'PERSIST_ERROR' })
+  }
+  try { console.log(`[TOURNAMENT CREATED] id=${id} title=${t.title} official=${!!t.official} creator=${t.creatorEmail}`) } catch (e) {}
+  // Broadcast updated tournaments to all clients
+  try { console.log('[Tournaments] broadcasting updated tournaments to clients:', wss.clients && wss.clients.size) } catch {}
+  for (const client of wss.clients) { if (client.readyState === 1) client.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) })) }
+  // Publish tournament update to other instances (Redis or Upstash REST publish)
+  try { await publishTournamentUpdate(Array.from(tournaments.values())) } catch (err) { console.warn('[Tournaments] publishTournamentUpdate error:', err && err.message) }
+  const stored = tournaments.get(id) || t
+  res.json({ ok: true, tournament: stored })
+})
+
+app.post('/api/tournaments/join', async (req, res) => {
+  const { tournamentId, email, username } = req.body || {}
+  const t = tournaments.get(String(tournamentId || ''))
+  if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  if (t.status !== 'scheduled') return res.status(400).json({ ok: false, error: 'ALREADY_STARTED' })
+  const addr = String(email || '').toLowerCase()
+  if (!addr) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+  const already = t.participants.find(p => p.email === addr)
+  if (already) return res.json({ ok: true, joined: false, already: true, tournament: t })
+  if (t.participants.length >= t.capacity) return res.status(400).json({ ok: false, error: 'FULL' })
+  t.participants.push({ email: addr, username: String(username || addr) })
+  try {
+    if (supabase) {
+      const { error: insErr } = await supabase.from('tournament_participants').upsert([ { tournament_id: t.id, email: addr, username: String(username || addr) } ], { onConflict: 'tournament_id,email' })
+      if (insErr) {
+        console.warn('[Tournaments] Supabase join upsert failed:', insErr.message || insErr)
+        return res.status(500).json({ ok: false, error: 'DB_PERSIST_FAILED', details: insErr.message || insErr })
+      }
+      // Verify participant exists
+      try {
+        const { data: part, error: qErr } = await supabase.from('tournament_participants').select('*').eq('tournament_id', t.id).eq('email', addr).limit(1).single()
+        if (qErr || !part) {
+          console.warn('[Tournaments] Supabase join verify failed:', qErr || 'no row')
+          return res.status(500).json({ ok: false, error: 'DB_VERIFY_FAILED', details: (qErr && qErr.message) || 'no row' })
+        }
+      } catch (err) {
+        console.warn('[Tournaments] Supabase join verify exception:', err && err.message)
+        return res.status(500).json({ ok: false, error: 'DB_VERIFY_FAILED', details: err && err.message })
+      }
+    }
+    try { persistTournamentsToDisk() } catch (e) {}
+  } catch (err) { console.warn('[Tournaments] Persist participant failed:', err && err.message); return res.status(500).json({ ok: false, error: 'PERSIST_ERROR' }) }
+  try { console.log('[Tournaments] broadcasting join update to clients:', wss.clients && wss.clients.size) } catch {}
+  for (const client of wss.clients) { if (client.readyState === 1) client.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) })) }
+  try { await publishTournamentUpdate(Array.from(tournaments.values())) } catch (err) { console.warn('[Tournaments] publishTournamentUpdate error:', err && err.message) }
+  res.json({ ok: true, joined: true, tournament: t })
+})
+
+app.post('/api/tournaments/leave', async (req, res) => {
+  const { tournamentId, email } = req.body || {}
+  const t = tournaments.get(String(tournamentId || ''))
+  if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  if (t.status !== 'scheduled') return res.status(400).json({ ok: false, error: 'ALREADY_STARTED' })
+  const addr = String(email || '').toLowerCase()
+  if (!addr) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+  const before = t.participants.length
+  t.participants = t.participants.filter(p => p.email !== addr)
+  const left = t.participants.length < before
+  if (left) {
+    try {
+      if (supabase) {
+        const { error: delErr, data: delData } = await supabase.from('tournament_participants').delete().eq('tournament_id', t.id).eq('email', addr)
+        if (delErr) {
+          console.warn('[Tournaments] Supabase leave failed:', delErr)
+          return res.status(500).json({ ok: false, error: 'DB_PERSIST_FAILED', details: delErr.message || delErr })
+        }
+        // Optionally verify delete: ensure participant no longer exists
+        try {
+          const { data: rem, error: remErr } = await supabase.from('tournament_participants').select('*').eq('tournament_id', t.id).eq('email', addr).limit(1).single()
+          if (!rem && !remErr) {
+            // Good: no participant
+          } else if (remErr && remErr.code === 'PGRST116') {
+            // 'no rows' may be surfaced as a specific error; treat as success
+          } else if (rem) {
+            console.warn('[Tournaments] Supabase leave verify failed: still exists')
+            return res.status(500).json({ ok: false, error: 'DB_VERIFY_FAILED', details: 'still exists' })
+          }
+        } catch (err) {
+          // Non-blocking: log verify failure but don't block operation
+          console.warn('[Tournaments] Supabase leave verify exception:', err && err.message)
+        }
+      }
+      try { persistTournamentsToDisk() } catch (e) {}
+    } catch (err) { console.warn('[Tournaments] Persist participant removal failed:', err && err.message); return res.status(500).json({ ok: false, error: 'PERSIST_ERROR' }) }
+  }
+  if (left) for (const client of wss.clients) { if (client.readyState === 1) client.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) })) }
+  if (left) try { console.log('[Tournaments] broadcasting leave update to clients:', wss.clients && wss.clients.size) } catch {}
+  if (left) try { await publishTournamentUpdate(Array.from(tournaments.values())) } catch (err) { console.warn('[Tournaments] publishTournamentUpdate error:', err && err.message) }
+  res.json({ ok: true, left, tournament: t })
 })
 
 // Health check for quick connectivity tests
@@ -1896,6 +2186,24 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
   }
 }
 
+// Broadcast a message to all connected WebSocket clients (pre-stringified)
+function broadcastAll(data) {
+  if (!wss) return
+  const payload = (typeof data === 'string') ? data : JSON.stringify(data)
+  for (const client of wss.clients) {
+    try { if (client.readyState === 1) client.send(payload) } catch (e) {}
+  }
+}
+
+// Broadcast tournaments snapshot to local clients and optionally publish cross-instance via Redis/Upstash
+async function broadcastTournaments() {
+  try {
+    const arr = Array.from(tournaments.values())
+    broadcastAll({ type: 'tournaments', tournaments: arr })
+    try { await publishTournamentUpdate(arr) } catch (err) { console.warn('[Tournaments] publishTournamentUpdate error:', err && err.message) }
+  } catch (err) { console.warn('[Tournaments] broadcastTournaments error:', err && err.message) }
+}
+
 // Constrain ws payload size for safety
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
 console.log(`[WS] WebSocket attached to same server at path /ws`);
@@ -2053,13 +2361,13 @@ wss.on('connection', (ws, req) => {
           const kind = (data.kind === '180' ? '180' : (data.kind === 'leg' ? 'leg' : 'custom'))
           broadcastToRoom(ws._roomId, { type: 'celebration', kind, by: data.by || (ws._username || `user-${ws._id}`), ts: Date.now() }, null)
         }
-      } else if (data.type === 'cam-create') {
+  } else if (data.type === 'cam-create') {
         // Desktop requests a 4-letter pairing code
         const code = genCamCode()
         const camSession = { code, desktopId: ws._id, desktopWs: ws, phoneId: null, phoneWs: null, ts: Date.now() }
         await camSessions.set(code, camSession)
         try { ws.send(JSON.stringify({ type: 'cam-code', code, expiresAt: Date.now() + CAM_TTL_MS })) } catch {}
-      } else if (data.type === 'cam-join') {
+  } else if (data.type === 'cam-join') {
         // Phone joins with code
         const code = String(data.code || '').toUpperCase()
         const sess = await camSessions.get(code)
@@ -2078,6 +2386,8 @@ wss.on('connection', (ws, req) => {
           try { desktop.send(JSON.stringify({ type: 'cam-peer-joined', code })) } catch {}
         }
         try { ws.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
+      } else if (data.type === 'list-tournaments') {
+        try { ws.send(JSON.stringify({ type: 'tournaments', tournaments: Array.from(tournaments.values()) })) } catch {}
       } else if (data.type === 'cam-data') {
         // Forward camera data between desktop and phone
         const code = String(data.code || '').toUpperCase()
@@ -2093,7 +2403,7 @@ wss.on('connection', (ws, req) => {
         if (targetWs && targetWs.readyState === 1) {
           try { targetWs.send(JSON.stringify({ type: 'cam-data', code, payload: data.payload })) } catch {}
         }
-      } else if (data.type === 'cam-offer' || data.type === 'cam-answer' || data.type === 'cam-ice' || data.type === 'cam-calibration') {
+  } else if (data.type === 'cam-offer' || data.type === 'cam-answer' || data.type === 'cam-ice' || data.type === 'cam-calibration') {
         // Forward WebRTC signals and calibration between desktop and phone
         const code = String(data.code || '').toUpperCase()
         const sess = await camSessions.get(code)
@@ -2289,6 +2599,29 @@ wss.on('connection', (ws, req) => {
           }
         } catch {}
       }
+      else if (data.type === 'create-match') {
+        const game = typeof data.game === 'string' ? data.game : 'X01'
+        const id = nanoid(10)
+        const m = {
+          id,
+          creatorId: ws._id,
+          creatorName: ws._username || `user-${ws._id}`,
+          mode: data.mode === 'firstto' ? 'firstto' : 'bestof',
+          value: Number(data.value) || 1,
+          startingScore: Number(data.startingScore) || 501,
+          creatorAvg: Number(data.creatorAvg) || 0,
+          game,
+          requireCalibration: !!data.requireCalibration,
+          createdAt: Date.now(),
+        }
+        matches.set(id, m)
+        try { persistMatchesToDisk() } catch (e) {}
+        // Broadcast lobby list to all
+        const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+        for (const client of wss.clients) { if (client.readyState === 1) client.send(lobbyPayload) }
+      } else if (data.type === 'list-matches') {
+        ws.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
+      }
     } catch (e) {
       try { errorsTotal.inc({ scope: 'ws_message' }) } catch {}
       console.error('Invalid message:', e);
@@ -2381,6 +2714,35 @@ try {
 const rooms = new Map(); // roomId -> Set(ws)
 // Simple in-memory match lobby
 const matches = new Map(); // matchId -> { id, creatorId, creatorName, mode, value, startingScore, game, creatorAvg, createdAt }
+
+// Persist matches to disk (fallback if Supabase not configured)
+const MATCHES_FILE = path.join(__dirname, 'data', 'matches.json')
+function loadMatchesFromDisk() {
+  try {
+    if (!fs.existsSync(MATCHES_FILE)) return
+    const raw = fs.readFileSync(MATCHES_FILE, 'utf8') || ''
+    const arr = JSON.parse(raw || '[]')
+    if (Array.isArray(arr)) {
+      matches.clear()
+      for (const t of arr) {
+        matches.set(String(t.id), t)
+      }
+      console.log('[Matches] Loaded', matches.size, 'matches from disk')
+    }
+  } catch (err) { console.warn('[Matches] Failed to load from disk:', err && err.message) }
+}
+
+function persistMatchesToDisk() {
+  try {
+    const dir = path.dirname(MATCHES_FILE)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const arr = Array.from(matches.values())
+  fs.writeFileSync(MATCHES_FILE, JSON.stringify(arr, null, 2), 'utf8')
+  try { console.log(`[Matches] Persisted ${arr.length} matches to ${MATCHES_FILE}`) } catch (e) {}
+  } catch (err) { console.warn('[Matches] Failed to persist to disk:', err && err.message) }
+}
+
+loadMatchesFromDisk()
 const clients = new Map(); // wsId -> ws
 // WebRTC camera pairing sessions (code -> { code, desktopId, phoneId, ts })
 const camSessions = {
@@ -2474,6 +2836,235 @@ function genCamCode() {
 // { id, title, game, mode, value, description, startAt, checkinMinutes, capacity, participants: [{email, username}], official, prize, status: 'scheduled'|'running'|'completed', winnerEmail,
 //   prizeType: 'premium'|'cash'|'none', prizeAmount?: number, currency?: string, payoutStatus?: 'none'|'pending'|'paid', prizeNotes?: string, createdAt?: number, paidAt?: number }
 const tournaments = new Map();
+let lastTournamentPersistAt = null
+
+function normalizeTournament(raw) {
+  const row = raw || {}
+  const id = String(row.id || row.tournament_id || nanoid(10))
+  const startAt = (() => {
+    if (typeof row.startAt === 'number') return row.startAt
+    if (row.start_at) {
+      const ts = Date.parse(row.start_at)
+      if (!Number.isNaN(ts)) return ts
+    }
+    if (typeof row.start === 'number') return row.start
+    return Date.now() + 60 * 60 * 1000
+  })()
+  const createdAt = (() => {
+    if (typeof row.createdAt === 'number') return row.createdAt
+    if (row.created_at) {
+      const ts = Date.parse(row.created_at)
+      if (!Number.isNaN(ts)) return ts
+    }
+    return Date.now()
+  })()
+  const updatedAt = (() => {
+    if (typeof row.updatedAt === 'number') return row.updatedAt
+    if (row.updated_at) {
+      const ts = Date.parse(row.updated_at)
+      if (!Number.isNaN(ts)) return ts
+    }
+    return createdAt
+  })()
+
+  return {
+    id,
+    title: String(row.title || 'Community Tournament'),
+    game: typeof row.game === 'string' ? row.game : 'X01',
+    mode: row.mode === 'firstto' ? 'firstto' : 'bestof',
+    value: Number(row.value) || 1,
+    description: typeof row.description === 'string' ? row.description : '',
+    startAt,
+    checkinMinutes: Number(row.checkinMinutes ?? row.checkin_minutes ?? 15) || 0,
+    capacity: Number(row.capacity ?? 8) || 8,
+    participants: Array.isArray(row.participants) ? row.participants : [],
+    official: !!row.official,
+    requireCalibration: !!(row.requireCalibration ?? row.require_calibration),
+    prize: !!row.prize,
+    prizeType: row.prizeType || row.prize_type || 'none',
+    prizeAmount: row.prizeAmount ?? row.prize_amount ?? null,
+    currency: row.currency || null,
+    payoutStatus: row.payoutStatus || row.payout_status || 'none',
+    status: row.status || 'scheduled',
+    winnerEmail: row.winnerEmail ?? row.winner_email ?? null,
+    winnerName: row.winnerName ?? row.winner_name ?? null,
+    startingScore: row.startingScore ?? row.starting_score ?? null,
+    creatorEmail: row.creatorEmail ?? row.creator_email ?? null,
+    creatorName: row.creatorName ?? row.creator_name ?? null,
+    prizeNotes: row.prizeNotes ?? row.prize_notes ?? '',
+    createdAt,
+    updatedAt
+  }
+}
+
+function upsertTournament(raw) {
+  const normalized = normalizeTournament(raw)
+  tournaments.set(normalized.id, normalized)
+  return normalized
+}
+
+// Persist tournaments to disk (fallback if Supabase not configured)
+const TOURNAMENTS_FILE = path.join(__dirname, 'data', 'tournaments.json')
+function loadTournamentsFromDisk() {
+  try {
+    if (!fs.existsSync(TOURNAMENTS_FILE)) return
+    const raw = fs.readFileSync(TOURNAMENTS_FILE, 'utf8') || ''
+    const arr = JSON.parse(raw || '[]')
+    if (Array.isArray(arr)) {
+      tournaments.clear()
+      for (const t of arr) { upsertTournament(t) }
+      console.log('[Tournaments] Loaded', tournaments.size, 'tournaments from disk')
+    }
+  } catch (err) { console.warn('[Tournaments] Failed to load from disk:', err && err.message) }
+}
+
+function persistTournamentsToDisk() {
+  try {
+    const dir = path.dirname(TOURNAMENTS_FILE)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    const arr = Array.from(tournaments.values())
+  fs.writeFileSync(TOURNAMENTS_FILE, JSON.stringify(arr, null, 2), 'utf8')
+  try { lastTournamentPersistAt = Date.now() } catch {}
+  // Also persist into Redis/Upstash for cross-instance persistence if available
+  try { persistTournamentsToRedis(arr).catch(() => {}) } catch {}
+  } catch (err) { console.warn('[Tournaments] Failed to persist to disk:', err && err.message) }
+}
+
+// Persist tournaments to Redis or Upstash REST key for cross-instance persistence.
+async function persistTournamentsToRedis(arr) {
+  try {
+    if (redisClient) {
+      try {
+  await redisClient.set('ndn:tournaments:json', JSON.stringify(arr));
+  try { lastTournamentPersistAt = Date.now() } catch {}
+  return true
+      } catch (err) { console.warn('[Tournaments] Redis set failed:', err && err.message) }
+    }
+    if (upstashRestUrl && upstashToken) {
+      try {
+  await fetch(`${upstashRestUrl}/set/ndn:tournaments:json`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${upstashToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value: JSON.stringify(arr) })
+        })
+  try { lastTournamentPersistAt = Date.now() } catch {}
+  return true
+      } catch (err) { console.warn('[Tournaments] Upstash set failed:', err && err.message) }
+    }
+  } catch (err) { console.warn('[Tournaments] persistTournamentsToRedis error:', err && err.message) }
+  return false
+}
+
+// Load tournaments from persistence: prefer Supabase, then Redis/Upstash, then disk.
+async function loadTournamentsFromPersistence() {
+  try {
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('tournaments').select('*');
+        if (Array.isArray(data) && data.length) {
+          tournaments.clear()
+          for (const t of data) upsertTournament(t)
+          console.log('[Tournaments] Loaded', tournaments.size, 'tournaments from Supabase')
+          return
+        }
+      } catch (err) { console.warn('[Tournaments] Supabase load failed:', err && err.message) }
+    }
+    // try Redis/Upstash
+    try {
+      if (redisClient) {
+        const raw = await redisClient.get('ndn:tournaments:json')
+        if (raw) {
+          const arr = JSON.parse(raw || '[]')
+          if (Array.isArray(arr) && arr.length) {
+            tournaments.clear()
+            for (const t of arr) upsertTournament(t)
+            console.log('[Tournaments] Loaded', tournaments.size, 'tournaments from Redis')
+            return
+          }
+        }
+      } else if (upstashRestUrl && upstashToken) {
+        const res = await fetch(`${upstashRestUrl}/get/ndn:tournaments:json`, { headers: { 'Authorization': `Bearer ${upstashToken}` } })
+        const json = await res.json()
+        const raw = json.result
+        if (raw) {
+          const arr = JSON.parse(raw || '[]')
+          if (Array.isArray(arr) && arr.length) {
+            tournaments.clear()
+            for (const t of arr) upsertTournament(t)
+            console.log('[Tournaments] Loaded', tournaments.size, 'tournaments from Upstash')
+            return
+          }
+        }
+      }
+    } catch (err) { console.warn('[Tournaments] Redis/Upstash load failed:', err && err.message) }
+    // Fallback to disk
+    loadTournamentsFromDisk()
+  } catch (err) { console.warn('[Tournaments] loadTournamentsFromPersistence error:', err && err.message) }
+}
+
+async function publishTournamentUpdate(arr) {
+  const payload = { type: 'tournaments', tournaments: arr }
+  try {
+    // Prefer Redis TCP client publish if available
+    if (redisClient && typeof redisClient.publish === 'function') {
+      await redisClient.publish('ndn:tournaments', JSON.stringify(payload))
+      return
+    }
+  } catch (err) { console.warn('[Redis] Failed to publish via redis client:', err && err.message) }
+
+  // Fallback: Upstash REST publish
+  try {
+    if (upstashRestUrl && upstashToken) {
+      const res = await fetch(`${upstashRestUrl}/publish/ndn:tournaments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${upstashToken}` },
+        body: JSON.stringify({ message: JSON.stringify(payload) }),
+        signal: AbortSignal.timeout(5000)
+      })
+      try { const j = await res.json(); console.log('[UPSTASH] publish response', res.status, j); if (!res.ok) console.warn('[UPSTASH] publish response not ok', j) } catch (e) {}
+    }
+  } catch (err) { console.warn('[UPSTASH] Failed to publish tournament update:', err && err.message) }
+}
+
+// Load persisted tournaments at startup
+// Load persisted tournaments at startup (prefer Supabase -> Redis/Upstash -> disk)
+(async () => { await loadTournamentsFromPersistence().catch(err => console.warn('[Tournaments] initial load failed', err && err.message)) })()
+// Optional: if SUPABASE configured and NDN_AUTO_MIGRATE_TOURNAMENTS=1, upsert disk tournaments to Supabase
+if (supabase && String(process.env.NDN_AUTO_MIGRATE_TOURNAMENTS || '') === '1') {
+  try {
+    const raw = fs.existsSync(TOURNAMENTS_FILE) ? fs.readFileSync(TOURNAMENTS_FILE, 'utf8') : '[]'
+    const arr = JSON.parse(raw || '[]') || []
+    if (Array.isArray(arr) && arr.length) {
+      for (const t of arr) {
+        const payload = {
+          id: t.id,
+          title: t.title,
+          game: t.game,
+          mode: t.mode,
+          value: t.value,
+          description: t.description || null,
+          start_at: t.startAt ? new Date(t.startAt).toISOString() : null,
+          checkin_minutes: t.checkinMinutes || null,
+          capacity: t.capacity || null,
+          official: !!t.official,
+          prize: !!t.prize || false,
+          prize_type: t.prizeType || null,
+          prize_amount: t.prizeAmount || null,
+          currency: t.currency || null,
+          payout_status: t.payoutStatus || null,
+          status: t.status || 'scheduled',
+          winner_email: t.winnerEmail || null,
+          starting_score: t.startingScore || null,
+          creator_email: t.creatorEmail || null,
+          creator_name: t.creatorName || null,
+          created_at: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString()
+        }
+        await supabase.from('tournaments').upsert(payload, { onConflict: 'id' })
+      }
+      console.log('[Tournaments] Auto-migrated', arr.length, 'tournaments into Supabase')
+    }
+  } catch (err) { console.warn('[Tournaments] Auto-migrate failed', err && err.message) }
+}
 // Simple in-memory users and friendships (demo)
 // users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
 const users = new Map();

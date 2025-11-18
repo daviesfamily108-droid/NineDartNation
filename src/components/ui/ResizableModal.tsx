@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, type ReactNode, type CSSProperties } from 'react'
+import FocusLock from 'react-focus-lock'
 
 type Props = {
   storageKey: string
@@ -154,8 +155,10 @@ export default function ResizableModal({
   const baseClass = fullScreen ? 'card relative ndn-modal-full' : 'card relative'
   return (
     <div ref={containerRef} className={`${baseClass} ${className || ''}`} style={style}>
+      <FocusLock returnFocus>
       {/* Content */}
       {children}
+      </FocusLock>
       {/* Corner handles */}
       {!fullScreen && <div className="resizer resizer-nw" onMouseDown={(e)=>beginResize(e,'nw')} />}
       {!fullScreen && <div className="resizer resizer-ne" onMouseDown={(e)=>beginResize(e,'ne')} />}

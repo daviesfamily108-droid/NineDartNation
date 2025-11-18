@@ -36,15 +36,13 @@ describe('HelpdeskChat behavior', () => {
     expect(listener).toBeTruthy()
     listener({ type: 'help-typing', requestId: 'r-123', fromName: 'Admin' })
 
-    expect(await screen.findByText(/Admin typing.../i)).toBeTruthy()
+  expect(await screen.findByText(/Admin typing/i)).toBeTruthy()
 
     // send a new message and verify ws.send was called
-    const input = screen.getByPlaceholderText('Write a message...') as HTMLInputElement
+  const input = screen.getByPlaceholderText(/Ask a question/i) as HTMLInputElement
     fireEvent.change(input, { target: { value: 'Replying now' } })
-    const btns = screen.getAllByRole('button')
-    const sendBtn = btns.find(b => b.getAttribute('class')?.includes('bg-blue-600'))
-    expect(sendBtn).toBeTruthy()
-    fireEvent.click(sendBtn!)
+  const sendBtn = screen.getByRole('button', { name: /send message/i })
+  fireEvent.click(sendBtn)
 
     expect(mockSend).toHaveBeenCalled()
 

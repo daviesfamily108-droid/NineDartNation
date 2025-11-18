@@ -32,7 +32,6 @@ import GlobalCameraLogger from './components/GlobalCameraLogger'
 import GlobalPhoneVideoSink from './components/GlobalPhoneVideoSink'
 import CameraStatusBadge from './components/CameraStatusBadge'
 import Footer from './components/Footer'
-import RuntimeDebugBanner from './components/RuntimeDebugBanner'
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -509,7 +508,7 @@ export default function App() {
   <HelpAssistant />
   {/* App footer with legal notice */}
   <Footer />
-  <RuntimeDebugBanner />
+  {/* Debug banner removed - not shown to users in production builds */}
   {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
   {!minimalUI && <GlobalCameraLogger />}
       {/* Global phone camera overlay - visibility controlled by store */}

@@ -24,10 +24,16 @@ import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe';
 import { createScamState, addScamAuto, addScamNumeric, resetScam, getScamTarget, SCAM_TARGET_NAMES, ScamState, createFivesState, addFivesAuto, addFivesNumeric, resetFives, FivesState, createSevensState, addSevensAuto, addSevensNumeric, resetSevens, SevensState } from '../game/scamFivesSevens';
 import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS, hasClosedAllAm } from '../game/americanCricket';
 import ResizableModal from './ui/ResizableModal';
+import MatchStartShowcase from './ui/MatchStartShowcase'
 import { useAudit } from '../store/audit';
 import ResizablePanel from './ui/ResizablePanel';
 import GameHeaderBar from './ui/GameHeaderBar';
 import GameScoreboard, { type PlayerStats } from './scoreboards/GameScoreboard';
+import MatchControls from './MatchControls'
+import { makeOfflineAddVisitAdapter } from './matchControlAdapters'
+import { createOfflineMatchActions, UnifiedMatchActions } from '../logic/matchActions'
+import { useMatch } from '../store/match'
+import { createOfflineMatchActions, UnifiedMatchActions } from '../logic/matchActions'
 import { useOfflineGameStats } from './scoreboards/useGameStats';
 import { freeGames, premiumGames, allGames } from '../utils/games';
 
@@ -135,7 +141,12 @@ export default function OfflinePlay({ user }: { user: any }) {
   // Match format: First-to selector and leg counters
   const [firstTo, setFirstTo] = useState<number>(1)
   const [playerLegs, setPlayerLegs] = useState<number>(0)
+  const match = useMatch()
+  const [showStartShowcase, setShowStartShowcase] = useState(false)
+  const startedShowcasedRef = useRef(false)
   const [aiLegs, setAiLegs] = useState<number>(0)
+  // Placeholder for unified offline actions; once commitManualVisitTotal/endTurn defined, we'll assign
+  
   const [pendingLegWinner, setPendingLegWinner] = useState<'player'|'ai'|null>(null)
   const [doubleDarts, setDoubleDarts] = useState(1);
   const [checkoutDarts, setCheckoutDarts] = useState(1);
@@ -827,6 +838,13 @@ export default function OfflinePlay({ user }: { user: any }) {
     return () => cancelAnimationFrame(raf)
   }, [showMatchModal, isPlayerTurn, ai, aiScore])
 
+  useEffect(() => {
+    if (!match.inProgress) return
+    if (startedShowcasedRef.current) return
+    setShowStartShowcase(true)
+    startedShowcasedRef.current = true
+  }, [match.inProgress])
+
   function startMatch() {
     setInMatch(true);
     setPlayerScore(x01Score);
@@ -1145,6 +1163,9 @@ export default function OfflinePlay({ user }: { user: any }) {
     playerVisitDartsAtDoubleRef.current = 0
     return true
   }
+
+  // Once local commit and endTurn functions are defined, create the unified offline actions wrapper
+  const matchActions: UnifiedMatchActions = createOfflineMatchActions({ match, commitManualVisitTotal, endTurn })
 
   // Optional: Add a full-visit total (0–180) input for quick entry like "93"
   const [visitTotalInput, setVisitTotalInput] = useState<string>("")
@@ -1585,6 +1606,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
   return (
   <div className="card ndn-game-shell relative overflow-hidden">
+  {showStartShowcase && <MatchStartShowcase players={(match.players || []) as any} onDone={() => setShowStartShowcase(false)} />}
   <h2 className="text-2xl font-bold text-brand-700 mb-4">Offline Game Modes {offlineLayout==='classic' ? <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">Classic layout</span> : <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">Modern layout</span>}</h2>
       <div className="ndn-shell-body">
       <div className="mb-4 flex flex-col gap-3">
@@ -2084,7 +2106,16 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   <div className="space-y-2">
                                     <label className="text-xs uppercase tracking-wide text-white/50">Commit Visit</label>
                                     <div className="flex items-center gap-2">
-                                      <button className="btn px-3 py-1 text-sm" onClick={addVisitTotal}>Commit Visit</button>
+                                      <MatchControls
+                                        inProgress={true}
+                                        startingScore={x01Score}
+                                        onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)}
+                                        quickButtons={[180,140,100,60]}
+                                        onNextPlayer={() => matchActions?.nextPlayer()}
+                                        onEndLeg={() => { /* End leg handled via commitManualVisitTotal / addVisitTotal */ }}
+                                        onUndo={() => { /* offline undo not implemented here; optionally reset pending visit */ }}
+                                        showDartsSelect={true}
+                                      />
                                     </div>
                                   </div>
                                   <div className="space-y-2">
@@ -2287,7 +2318,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                           const hit = isDoubleHit(value, dpIndex)
                           if (hit) { const nh = dpHits + 1; const ni = dpIndex + 1; setDpHits(nh); setDpIndex(ni); if (nh >= DOUBLE_PRACTICE_ORDER.length) setTimeout(()=>{ setDpHits(0); setDpIndex(0) }, 250) }
                         }
-                      }} immediateAutoCommit />
+                      }} immediateAutoCommit onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-2">
@@ -2306,7 +2337,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <>
                     <div className="font-semibold">Target: <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">{ATC_ORDER[atcIndex] === 25 ? '25 (Outer Bull)' : ATC_ORDER[atcIndex] === 50 ? '50 (Inner Bull)' : (ATC_ORDER[atcIndex] || '—')}</span></div>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addAtcValue(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addAtcValue(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addAtcNumeric() }} />
@@ -2328,7 +2359,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Cricket' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addCricketAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addCricketAuto(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addCricketNumeric() }} />
@@ -2347,7 +2378,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Shanghai' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addShanghaiAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addShanghaiAuto(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addShanghaiNumeric() }} />
@@ -2366,7 +2397,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Halve It' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHalveAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHalveAuto(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addHalveNumeric() }} />
@@ -2385,7 +2416,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'High-Low' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHighLowAuto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHighLowAuto(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addHighLowNumeric() }} />
@@ -2404,7 +2435,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === "Bob's 27" && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addB27Auto(value, r as any, info?.sector ?? null) }} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addB27Auto(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addB27Numeric() }} />
@@ -2416,7 +2447,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Count-Up' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value) => addCountUpAuto(value)} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value) => addCountUpAuto(value)} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addCountUpAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
@@ -2437,7 +2468,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'High Score' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value) => addHighScoreAuto(value)} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value) => addHighScoreAuto(value)} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addHighScoreAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
@@ -2458,7 +2489,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Low Score' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value) => addLowScoreAuto(value)} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value) => addLowScoreAuto(value)} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') { addLowScoreAuto(playerDartPoints); setPlayerDartPoints(0) } }} />
@@ -2479,7 +2510,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Checkout 170' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring) => addCo170Auto(value, ring === 'MISS' ? undefined : ring)} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring) => addCo170Auto(value, ring === 'MISS' ? undefined : ring)} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="text" placeholder="Manual (D16, T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addCoManual(true) }} />
@@ -2492,7 +2523,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 {selectedMode === 'Checkout 121' && (
                   <>
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
-                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring) => addCo121Auto(value, ring === 'MISS' ? undefined : ring)} />
+                      <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring) => addCo121Auto(value, ring === 'MISS' ? undefined : ring)} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
                     <div className="flex items-center gap-2">
                       <input className="input w-24" type="text" placeholder="Manual (D16, T20)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addCoManual(false) }} />

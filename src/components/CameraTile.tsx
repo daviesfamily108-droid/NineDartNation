@@ -103,6 +103,7 @@ export default function CameraTile({
   const autoscoreProvider = useUserSettings(s => s.autoscoreProvider) as ('built-in' | 'external-ws' | 'manual' | undefined)
   const cameraEnabledSetting = useUserSettings(s => s.cameraEnabled)
   const setPreferredCameraLocked = useUserSettings(s => s.setPreferredCameraLocked)
+  const preferredCameraLocked = useUserSettings(s => s.preferredCameraLocked)
   const setPreferredCamera = useUserSettings(s => s.setPreferredCamera)
   const preferredCameraId = useUserSettings(s => s.preferredCameraId)
 
@@ -764,7 +765,7 @@ function CameraFrame(props: any) {
         )}
       </div>
   <div className="px-3 py-2 flex items-center justify-between bg-gradient-to-r from-slate-900 to-slate-800 text-white text-[11px] gap-2 border-t border-slate-700/50">
-        <span className="truncate font-medium">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : mode==='wifi' ? 'WIFI LIVE' : 'LIVE') : 'Camera')}</span>
+  <span className="truncate font-medium">{label || (streaming ? (mode==='phone' ? 'PHONE LIVE' : mode==='wifi' ? 'WIFI LIVE' : 'LIVE') : 'Camera')}{preferredCameraLocked && <span className="ml-2 text-xs opacity-80">🔒</span>}</span>
         <div className="flex items-center gap-2">
           {!streaming && (
             <>

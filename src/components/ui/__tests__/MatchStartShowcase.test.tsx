@@ -1,0 +1,111 @@
+// @vitest-environment jsdom
+import React from 'react'
+import { render, screen, act, within, fireEvent } from '@testing-library/react'
+vi.mock('../../../store/profileStats', () => ({
+  getAllTimeAvg: () => 37.0,
+  getAllTimeFirstNineAvg: () => 36.0,
+  getAllTimeBestCheckout: () => 116,
+  getAllTimeBestLeg: () => 9,
+  getAllTime: (name: string) => ({ darts: 3, scored: 180 }),
+  getAllTime180s: (name: string) => 5,
+}))
+import MatchStartShowcase from '../MatchStartShowcase'
+import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
+
+describe('MatchStartShowcase', () => {
+  beforeEach(() => {
+    // Ensure clean localStorage for tests
+    try { localStorage.removeItem('ndn_stats_Player1') } catch {}
+    vi.useFakeTimers()
+    // Ensure there's an app root element for aria-hidden toggling
+    const root = document.createElement('div')
+    root.id = 'root'
+    document.body.appendChild(root)
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    try { const root = document.getElementById('root'); if (root) document.body.removeChild(root) } catch {}
+  })
+
+  test('shows 15s countdown and calls onDone after completion; shows match/career 180s', () => {
+  // Mocked career stat happens via vi.mock above
+    const players = [
+      { id: '1', name: 'Player1', legsWon: 0, legs: [ { visits: [ { score: 180, darts: 3 } ], totalScoreStart: 501, totalScoreRemaining: 321, dartsThrown: 3, finished: true, checkoutScore: null, startTime: Date.now() - 5000 } ] },
+      { id: '2', name: 'Player2', legsWon: 0, legs: [] },
+    ] as any
+  const onDone = vi.fn()
+  let renderError: any
+  try { render(<MatchStartShowcase players={players} onDone={onDone} />) } catch (e) { renderError = e }
+  expect(renderError).toBeUndefined()
+  // Debug: snapshot output (no-op in CI) — removed console.log to reduce test verbosity
+
+  // Initial countdown shown
+  expect(screen.getByText('15')).toBeTruthy()
+  // Ensure 180s display matches match/career values upfront (1 match 180 / 5 career)
+  const p1Card = screen.getByText('Player1').parentElement as HTMLElement
+  const p2Card = screen.getByText('Player2').parentElement as HTMLElement
+  expect(within(p1Card).getByText((content) => typeof content === 'string' && content.includes('1/5'))).toBeTruthy()
+  expect(within(p2Card).getByText((content) => typeof content === 'string' && content.includes('0/5'))).toBeTruthy()
+
+    // Advance 15s to reach GO, then 1s for final "Game on" display.
+    act(() => { vi.advanceTimersByTime(15000) })
+    // Now should show GO
+    expect(screen.getByText('GO')).toBeTruthy()
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(onDone).toHaveBeenCalled()
+
+  // Ensure 180s display matches match/career values (1 match 180 / 5 career)
+  expect(within(p1Card).getByText((content) => typeof content === 'string' && content.includes('1/5'))).toBeTruthy()
+  expect(within(p2Card).getByText((content) => typeof content === 'string' && content.includes('0/5'))).toBeTruthy()
+  })
+
+  test('overlay is accessible with role dialog, aria-modal and focuses on mount', async () => {
+    const players = [
+      { id: '1', name: 'Player1', legsWon: 0, legs: [] },
+      { id: '2', name: 'Player2', legsWon: 0, legs: [] },
+    ] as any
+    const onDone = vi.fn()
+    render(<MatchStartShowcase players={players} onDone={onDone} />)
+    const dialog = screen.getByRole('dialog')
+  expect(dialog).toBeTruthy()
+  expect(dialog.getAttribute('aria-modal')).toBe('true')
+  // focus should be on the Start Now button (initial focus ref)
+  const startNow = screen.getByRole('button', { name: /start match now/i })
+  const closeBtn = screen.getByRole('button', { name: /close match start showcase/i })
+  expect(document.activeElement === startNow).toBeTruthy()
+    // Ensure root is aria-hidden during the overlay lifecycle
+    const root = document.getElementById('root')
+  expect(root?.getAttribute('aria-hidden')).toBe('true')
+  // Programmatic Tab behavior is handled by react-focus-lock; in JSDOM we assert Start Now is initially focused
+    // Simulate Escape to close and assert onDone called and aria-hidden reset
+  fireEvent.keyDown(document.activeElement || dialog, { key: 'Escape' })
+    // allow effects to run: advance fake timers to allow the cleanup to execute
+    vi.advanceTimersByTime(20)
+    // Debug: root aria after escape check removed to avoid console noise
+    expect(onDone).toHaveBeenCalled()
+    // root should have aria-hidden cleared (cleanup restored previous aria state)
+    const ariaVal = document.getElementById('root')?.getAttribute('aria-hidden')
+    expect(ariaVal === null || ariaVal === undefined || ariaVal === 'false').toBeTruthy()
+  })
+
+  test('Start now and Close buttons call onDone when clicked', async () => {
+    const players = [
+      { id: '1', name: 'Player1', legsWon: 0, legs: [] },
+      { id: '2', name: 'Player2', legsWon: 0, legs: [] },
+    ] as any
+    const onDone = vi.fn()
+  const { unmount } = render(<MatchStartShowcase players={players} onDone={onDone} />)
+  const startNow = screen.getByRole('button', { name: /start match now/i })
+  const closeBtn = screen.getByRole('button', { name: /close match start showcase/i })
+  // Click Start now
+  fireEvent.click(startNow)
+  expect(onDone).toHaveBeenCalled()
+  // Re-render to test Close (recreate component)
+  onDone.mockReset()
+  unmount()
+  const { unmount: unmount2 } = render(<MatchStartShowcase players={players} onDone={onDone} />)
+  const closeBtn2 = screen.getByRole('button', { name: /close match start showcase/i })
+  fireEvent.click(closeBtn2)
+    expect(onDone).toHaveBeenCalled()
+  })
+})

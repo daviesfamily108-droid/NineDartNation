@@ -9,6 +9,7 @@ import { addSample } from '../store/profileStats'
 import { subscribeExternalWS } from '../utils/scoring'
 import ResizablePanel from './ui/ResizablePanel'
 import ResizableModal from './ui/ResizableModal'
+import FocusLock from 'react-focus-lock'
 import useHeatmapStore from '../store/heatmap'
 import { usePendingVisit } from '../store/pendingVisit'
 import { useCameraSession } from '../store/cameraSession'
@@ -58,6 +59,8 @@ export default function CameraView({
   onGenericDart,
   onGenericReplace,
   x01DoubleInOverride,
+  onAddVisit,
+  onEndLeg,
 }: {
   onVisitCommitted?: (score: number, darts: number, finished: boolean) => void
   showToolbar?: boolean
@@ -68,6 +71,8 @@ export default function CameraView({
   onGenericDart?: (value: number, ring: Ring, meta: { label: string }) => void
   onGenericReplace?: (value: number, ring: Ring, meta: { label: string }) => void
   x01DoubleInOverride?: boolean
+  onAddVisit?: (score: number, darts: number, meta?: any) => void
+  onEndLeg?: (score?: number) => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const { preferredCameraId, preferredCameraLabel, setPreferredCamera, autoscoreProvider, autoscoreWsUrl, cameraAspect, cameraFitMode, autoCommitMode = 'wait-for-clear', cameraEnabled, setCameraEnabled, preferredCameraLocked, hideCameraOverlay, setHideCameraOverlay } = useUserSettings()
@@ -206,6 +211,9 @@ export default function CameraView({
   useEffect(() => () => { try { resetPendingVisit() } catch {} }, [resetPendingVisit])
   const addVisit = useMatch(s => s.addVisit)
   const endLeg = useMatch(s => s.endLeg)
+  // Prefer provided adapters (matchActions wrappers) when available
+  const callAddVisit = (score: number, darts: number, meta?: any) => { try { if (onAddVisit) onAddVisit(score, darts, meta); else addVisit(score, darts, meta) } catch { /* noop */ } }
+  const callEndLeg = (score?: number) => { try { if (onEndLeg) onEndLeg(score); else endLeg(score) } catch { /* noop */ } }
   const addHeatSample = useHeatmapStore(s => s.addSample)
   // Quick entry dropdown selections
   const [quickSelAuto, setQuickSelAuto] = useState('')
@@ -1016,7 +1024,7 @@ export default function CameraView({
       const previousScore = pendingScore
       const previousDarts = pendingDarts
       // Commit previous full visit
-      addVisit(previousScore, previousDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: false, visitTotal: previousScore })
+  callAddVisit(previousScore, previousDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: false, visitTotal: previousScore })
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name
         if (name) addSample(name, previousDarts, previousScore)
@@ -1059,7 +1067,7 @@ export default function CameraView({
   const postBefore = after + appliedValue
   const attemptsThisDart = ((postBefore > 50 && postAfter <= 50) || (postBefore <= 50)) ? 1 : 0
       const attemptsTotal = (pendingDartsAtDouble || 0) + attemptsThisDart
-      addVisit(0, newDarts, { preOpenDarts: preOpenTotal, doubleWindowDarts: attemptsTotal, finishedByDouble: false, visitTotal: 0 })
+  callAddVisit(0, newDarts, { preOpenDarts: preOpenTotal, doubleWindowDarts: attemptsTotal, finishedByDouble: false, visitTotal: 0 })
       setPendingDarts(0); setPendingScore(0); setPendingEntries([]); setPendingPreOpenDarts(0)
       setPendingDartsAtDouble(0)
       enqueueVisitCommit({ score: 0, darts: newDarts, finished: false })
@@ -1083,15 +1091,15 @@ export default function CameraView({
 
     if (isFinish) {
       // Commit visit with current total and end leg
-      addVisit(newScore, newDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: true, visitTotal: newScore })
-      endLeg(newScore)
+  callAddVisit(newScore, newDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: true, visitTotal: newScore })
+  callEndLeg(newScore)
       setPendingDarts(0); setPendingScore(0); setPendingEntries([]); setPendingPreOpenDarts(0); setPendingDartsAtDouble(0)
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: true })
       return
     }
 
     if (newDarts >= 3) {
-      addVisit(newScore, newDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: false, visitTotal: newScore })
+  callAddVisit(newScore, newDarts, { preOpenDarts: pendingPreOpenDarts || 0, doubleWindowDarts: pendingDartsAtDouble || 0, finishedByDouble: false, visitTotal: newScore })
       setPendingDarts(0); setPendingScore(0); setPendingEntries([]); setPendingPreOpenDarts(0); setPendingDartsAtDouble(0)
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: false })
     }
@@ -1168,7 +1176,7 @@ export default function CameraView({
     const isBust = after < 0 || after === 1 || (after === 0 && !isFinish)
 
     if (isBust) {
-      addVisit(0, newDarts)
+  callAddVisit(0, newDarts)
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name
         if (name) addSample(name, newDarts, 0)
@@ -1185,8 +1193,8 @@ export default function CameraView({
     setPendingEntries((e)=>[...e.slice(0,-1), { label: parsed.label, value: parsed.value, ring: parsed.ring }])
 
     if (isFinish) {
-      addVisit(newScore, newDarts)
-      endLeg(newScore)
+  callAddVisit(newScore, newDarts)
+  callEndLeg(newScore)
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name
         if (name) addSample(name, newDarts, newScore)
@@ -1199,7 +1207,7 @@ export default function CameraView({
     }
 
     if (newDarts >= 3) {
-      addVisit(newScore, newDarts)
+  callAddVisit(newScore, newDarts)
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name
         if (name) addSample(name, newDarts, newScore)
@@ -1274,7 +1282,7 @@ export default function CameraView({
     }
     const visitScore = pendingScore
     const visitDarts = pendingDarts
-    addVisit(visitScore, visitDarts)
+  callAddVisit(visitScore, visitDarts)
     try {
       const name = matchState.players[matchState.currentPlayerIdx]?.name
       if (name) addSample(name, visitDarts, visitScore)
@@ -1340,7 +1348,8 @@ export default function CameraView({
                       const hasHitRing = (e?.ring && e.ring !== 'MISS') ?? false
                       const isHit = isActive && (hasPositiveValue || hasHitRing)
                       const color = !isActive ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
-                      return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
+                      const activeState = isActive && !isPending
+                      return <span key={i} className={`visit-dot ${activeState ? 'active' : 'inactive'} ${color}`} />
                     })}
                     {dartTimerEnabled && dartTimeLeft !== null && (
                       <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
@@ -1617,6 +1626,7 @@ export default function CameraView({
       {showManualModal && (
         <div className="fixed inset-0 bg-black/60 z-[100]" role="dialog" aria-modal="true">
           <div className="absolute inset-0 flex flex-col">
+            <FocusLock returnFocus>
             <div className="p-3 md:p-4 flex items-center justify-between">
               <h3 className="text-xl md:text-2xl font-semibold">Manual Correction</h3>
               <div className="flex items-center gap-2">
@@ -1729,134 +1739,137 @@ export default function CameraView({
                 </div>
               </div>
             </div>
+            </FocusLock>
           </div>
         </div>
       )}
       {showScoringModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center">
-          <div className="card w-full max-w-4xl relative text-left bg-[#2d2250] text-white p-6 rounded-xl shadow-xl">
-            <button className="absolute top-2 right-2 btn px-2 py-1 bg-purple-500 text-white font-bold" onClick={()=>setShowScoringModal(false)}>Close</button>
-            <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">Scoring</h2>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Camera section */}
-              <div className="bg-black/30 rounded-2xl p-4">
-                <h2 className="text-lg font-semibold mb-3">Camera</h2>
-                <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={360} minHeight={270} maxWidth={800} maxHeight={600}>
-                  <CameraSelector />
-                  {(() => {
-                    const fit = (useUserSettings.getState().cameraFitMode || 'fit') === 'fit'
-                    const videoClass = fit
-                      ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
-                      : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black'
-                    const renderVideoSurface = () => (
-                      <div className="relative w-full aspect-[4/3] bg-black">
-                        <video ref={videoRef} className={videoClass} playsInline webkit-playsinline="true" muted autoPlay />
-                        <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
-                        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
-                          aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
-                        >
-                          {[0,1,2].map(i => {
-                            const e = pendingEntries[i] as any
-                            const isPending = !e
-                            const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
-                            const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
-                            return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
-                          })}
-                          {dartTimerEnabled && dartTimeLeft !== null && (
-                            <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
-                              {Math.max(0, dartTimeLeft)}s
-                            </span>
-                          )}
-                        </div>
-                        {shouldDeferCommit && awaitingClear ? (
-                          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 bg-black/70 text-amber-200 text-xs font-semibold px-3 py-1 rounded-full shadow">
-                            Remove darts to continue
+          <FocusLock returnFocus>
+            <div className="card w-full max-w-4xl relative text-left bg-[#2d2250] text-white p-6 rounded-xl shadow-xl" role="dialog" aria-modal="true">
+              <button className="absolute top-2 right-2 btn px-2 py-1 bg-purple-500 text-white font-bold" onClick={()=>setShowScoringModal(false)} aria-label="Close scoring dialog">Close</button>
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-white">Scoring</h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Camera section */}
+                <div className="bg-black/30 rounded-2xl p-4">
+                  <h2 className="text-lg font-semibold mb-3">Camera</h2>
+                  <ResizablePanel storageKey="ndn:camera:size:modal" className="relative rounded-2xl overflow-hidden bg-black" defaultWidth={480} defaultHeight={360} minWidth={360} minHeight={270} maxWidth={800} maxHeight={600}>
+                    <CameraSelector />
+                    {(() => {
+                      const fit = (useUserSettings.getState().cameraFitMode || 'fit') === 'fit'
+                      const videoClass = fit
+                        ? 'absolute inset-0 w-full h-full object-contain object-center bg-black'
+                        : 'absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black'
+                      const renderVideoSurface = () => (
+                        <div className="relative w-full aspect-[4/3] bg-black">
+                          <video ref={videoRef} className={videoClass} playsInline webkit-playsinline="true" muted autoPlay />
+                          <canvas ref={overlayRef} className="absolute inset-0 w-full h-full" onClick={onOverlayClick} />
+                          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3"
+                            aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[1] ? (pendingEntries[1].value>0?'hit':'miss') : 'pending'}, ${pendingEntries[2] ? (pendingEntries[2].value>0?'hit':'miss') : 'pending'}`}
+                          >
+                            {[0,1,2].map(i => {
+                              const e = pendingEntries[i] as any
+                              const isPending = !e
+                              const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
+                              const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+                              return <span key={i} className={`w-3 h-3 rounded-full shadow ${color}`} />
+                            })}
+                            {dartTimerEnabled && dartTimeLeft !== null && (
+                              <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
+                                {Math.max(0, dartTimeLeft)}s
+                              </span>
+                            )}
                           </div>
-                        ) : null}
-                      </div>
-                    )
-                    if (isPhoneCamera) {
-                      if (!phoneFeedActive) {
-                        return (
-                          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
-                            <div className="text-center space-y-3 max-w-xs mx-auto">
-                              <div className="text-4xl">📱</div>
-                              <div className="text-lg font-semibold text-blue-100">Phone camera selected</div>
-                              <p className="text-sm text-slate-300">Start streaming from the Calibrator tab or reconnect below.</p>
-                              <div className="flex items-center justify-center gap-2 flex-wrap">
-                                <button className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm" onClick={handlePhoneReconnect}>Reconnect Phone</button>
-                                <button className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm" onClick={()=>{ try { cameraSession.setShowOverlay?.(true) } catch {} }}>Show Overlay</button>
-                                <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm" onClick={handleUseLocalCamera} disabled={!availableCameras.length}>Use Local Camera</button>
+                          {shouldDeferCommit && awaitingClear ? (
+                            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 bg-black/70 text-amber-200 text-xs font-semibold px-3 py-1 rounded-full shadow">
+                              Remove darts to continue
+                            </div>
+                          ) : null}
+                        </div>
+                      )
+                      if (isPhoneCamera) {
+                        if (!phoneFeedActive) {
+                          return (
+                            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
+                              <div className="text-center space-y-3 max-w-xs mx-auto">
+                                <div className="text-4xl">📱</div>
+                                <div className="text-lg font-semibold text-blue-100">Phone camera selected</div>
+                                <p className="text-sm text-slate-300">Start streaming from the Calibrator tab or reconnect below.</p>
+                                <div className="flex items-center justify-center gap-2 flex-wrap">
+                                  <button className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm" onClick={handlePhoneReconnect}>Reconnect Phone</button>
+                                  <button className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm" onClick={()=>{ try { cameraSession.setShowOverlay?.(true) } catch {} }}>Show Overlay</button>
+                                  <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm" onClick={handleUseLocalCamera} disabled={!availableCameras.length}>Use Local Camera</button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )
+                          )
+                        }
+                        return renderVideoSurface()
                       }
                       return renderVideoSurface()
-                    }
-                    return renderVideoSurface()
-                  })()}
-                </ResizablePanel>
-                <div className="flex flex-wrap items-center gap-2 mt-3">
-                  {isPhoneCamera ? (
-                    <>
-                      <div className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? 'bg-emerald-500/10 border-emerald-400/40 text-emerald-100' : 'bg-amber-500/10 border-amber-400/40 text-amber-100'}`}>
-                        {phoneFeedActive ? '📱 Phone camera stream active' : '📱 Waiting for phone camera stream'}
-                      </div>
-                      <button className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm" onClick={handlePhoneReconnect}>Reconnect Phone</button>
-                      <button className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm" onClick={()=>{ try { cameraSession.setShowOverlay?.(!cameraSession.showOverlay) } catch {} }}>
-                        {cameraSession.showOverlay ? 'Hide Overlay' : 'Show Overlay'}
-                      </button>
-                      <button className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm" disabled={!phoneFeedActive} onClick={()=>{ try { cameraSession.clearSession?.() } catch {} }}>Stop Phone Feed</button>
-                      {canFallbackToLocal && (
-                        <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm" onClick={handleUseLocalCamera} disabled={!availableCameras.length}>Use Local Camera</button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {!streaming ? (
-                        <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={startCamera}>Connect Camera</button>
-                      ) : (
-                        <button className="btn bg-gradient-to-r from-rose-600 to-rose-700 text-white font-bold" onClick={stopCamera}>Stop Camera</button>
-                      )}
-                    </>
-                  )}
-                  <button className="btn bg-gradient-to-r from-indigo-500 to-indigo-700 text-white font-bold" onClick={capture} disabled={!effectiveStreaming}>Capture Still</button>
-                  <button className="btn bg-gradient-to-r from-slate-600 to-slate-800 text-white font-bold" disabled={!effectiveStreaming} onClick={()=>{ detectorRef.current = null; setDetectorSeedVersion(v=>v+1) }}>Reset Autoscore Background</button>
-                  <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
+                    })()}
+                  </ResizablePanel>
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    {isPhoneCamera ? (
+                      <>
+                        <div className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? 'bg-emerald-500/10 border-emerald-400/40 text-emerald-100' : 'bg-amber-500/10 border-amber-400/40 text-amber-100'}`}>
+                          {phoneFeedActive ? '📱 Phone camera stream active' : '📱 Waiting for phone camera stream'}
+                        </div>
+                        <button className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm" onClick={handlePhoneReconnect}>Reconnect Phone</button>
+                        <button className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm" onClick={()=>{ try { cameraSession.setShowOverlay?.(!cameraSession.showOverlay) } catch {} }}>
+                          {cameraSession.showOverlay ? 'Hide Overlay' : 'Show Overlay'}
+                        </button>
+                        <button className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm" disabled={!phoneFeedActive} onClick={()=>{ try { cameraSession.clearSession?.() } catch {} }}>Stop Phone Feed</button>
+                        {canFallbackToLocal && (
+                          <button className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm" onClick={handleUseLocalCamera} disabled={!availableCameras.length}>Use Local Camera</button>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        {!streaming ? (
+                          <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={startCamera}>Connect Camera</button>
+                        ) : (
+                          <button className="btn bg-gradient-to-r from-rose-600 to-rose-700 text-white font-bold" onClick={stopCamera}>Stop Camera</button>
+                        )}
+                      </>
+                    )}
+                    <button className="btn bg-gradient-to-r from-indigo-500 to-indigo-700 text-white font-bold" onClick={capture} disabled={!effectiveStreaming}>Capture Still</button>
+                    <button className="btn bg-gradient-to-r from-slate-600 to-slate-800 text-white font-bold" disabled={!effectiveStreaming} onClick={()=>{ detectorRef.current = null; setDetectorSeedVersion(v=>v+1) }}>Reset Autoscore Background</button>
+                    <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={()=>{ try{ window.dispatchEvent(new Event('ndn:camera-reset' as any)) }catch{} }}>Reset Camera Size</button>
+                  </div>
                 </div>
-              </div>
-              {/* Pending Visit section */}
-              <div className="bg-black/30 rounded-2xl p-4">
-                <h2 className="text-lg font-semibold mb-3">Pending Visit</h2>
-                <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
-                <div className="flex items-center gap-2 mb-2">
-                  {[0,1,2].map(i => {
-                    const e = pendingEntries[i] as any
-                    const isPending = !e
-                    const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
-                    const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
-                    return <span key={i} className={`w-2.5 h-2.5 rounded-full shadow ${color}`} />
-                  })}
-                  {dartTimerEnabled && dartTimeLeft !== null && (
-                    <span className="ml-2 px-2 py-0.5 rounded bg-black/40 text-white text-xs font-semibold">{Math.max(0, dartTimeLeft)}s</span>
-                  )}
-                </div>
-                <ul className="text-sm mb-2 list-disc pl-5">
-                  {pendingEntries.length === 0 ? <li className="opacity-60">No darts yet</li> : pendingEntries.map((e,i) => <li key={i}>{e.label}</li>)}
-                </ul>
-                <div className="flex items-center gap-4 mb-2">
-                  <div className="font-semibold">Darts: {pendingDarts}/3</div>
-                  <div className="font-semibold">Total: {pendingScore}</div>
-                </div>
-                <div className="flex gap-2">
-                  <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={onUndoDart} disabled={pendingDarts===0}>Undo Dart</button>
-                  <button className="btn bg-gradient-to-r from-emerald-500 to-emerald-700 text-white font-bold" onClick={onCommitVisit} disabled={pendingDarts===0}>Commit Visit</button>
-                  <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={handleToolbarClear} disabled={pendingDarts===0}>Clear</button>
+                {/* Pending Visit section */}
+                <div className="bg-black/30 rounded-2xl p-4">
+                  <h2 className="text-lg font-semibold mb-3">Pending Visit</h2>
+                  <div className="text-sm opacity-80 mb-2">Up to 3 darts per visit.</div>
+                  <div className="flex items-center gap-2 mb-2">
+                    {[0,1,2].map(i => {
+                      const e = pendingEntries[i] as any
+                      const isPending = !e
+                      const isHit = !!e && (typeof e.value === 'number' ? e.value > 0 : true)
+                      const color = isPending ? 'bg-gray-500/70' : (isHit ? 'bg-emerald-400' : 'bg-rose-500')
+                      return <span key={i} className={`w-2.5 h-2.5 rounded-full shadow ${color}`} />
+                    })}
+                    {dartTimerEnabled && dartTimeLeft !== null && (
+                      <span className="ml-2 px-2 py-0.5 rounded bg-black/40 text-white text-xs font-semibold">{Math.max(0, dartTimeLeft)}s</span>
+                    )}
+                  </div>
+                  <ul className="text-sm mb-2 list-disc pl-5">
+                    {pendingEntries.length === 0 ? <li className="opacity-60">No darts yet</li> : pendingEntries.map((e,i) => <li key={i}>{e.label}</li>)}
+                  </ul>
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="font-semibold">Darts: {pendingDarts}/3</div>
+                    <div className="font-semibold">Total: {pendingScore}</div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold" onClick={onUndoDart} disabled={pendingDarts===0}>Undo Dart</button>
+                    <button className="btn bg-gradient-to-r from-emerald-500 to-emerald-700 text-white font-bold" onClick={onCommitVisit} disabled={pendingDarts===0}>Commit Visit</button>
+                    <button className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold" onClick={handleToolbarClear} disabled={pendingDarts===0}>Clear</button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          </FocusLock>
         </div>
       )}
       {showRecalModal && (

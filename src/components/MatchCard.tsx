@@ -1,0 +1,33 @@
+import React from 'react'
+
+type Tournament = {
+  id: string
+  title: string
+  game: string
+  mode: 'bestof'|'firstto'
+  value: number
+  startAt: number
+  capacity: number
+  participants: { email: string, username: string }[]
+  creatorName?: string
+  creatorEmail?: string
+  official?: boolean
+}
+
+export default function MatchCard({ t, onJoin, onLeave, joined, disabled }: { t: Tournament, onJoin?: (t:any)=>void, onLeave?: (t:any)=>void, joined?: boolean, disabled?: boolean }) {
+  return (
+    <li className="p-3 rounded bg-black/10 flex items-center justify-between relative">
+      <div className="space-y-0.5">
+        <div className="font-semibold">
+          {t.title}
+          {t.official && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded bg-amber-500 text-black text-xs">Official</span>}
+        </div>
+        <div className="text-sm opacity-80">{t.game}{t.game==='X01' ? `/501` : ''} · {t.mode==='firstto' ? 'First to' : 'Best of'} {t.value} · {new Date(t.startAt).toLocaleString()} · Cap {t.capacity} · Joined {t.participants?.length || 0}</div>
+        <div className="text-xs opacity-60 mt-1">Created by: {t.creatorName || t.creatorEmail || 'Unknown'}</div>
+      </div>
+      <div className="flex items-center gap-2">
+        <button className={`btn ${joined ? 'bg-emerald-600 hover:bg-emerald-600' : ''}`} disabled={disabled} onClick={() => joined ? (onLeave && onLeave(t)) : (onJoin && onJoin(t))}>{joined ? 'Already Joined' : 'Join Now'}</button>
+      </div>
+    </li>
+  )
+}

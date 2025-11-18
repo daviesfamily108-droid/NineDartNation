@@ -15,6 +15,9 @@ import { apiFetch } from '../utils/api'
 type Phase = 'idle' | 'camera' | 'capture' | 'select' | 'computed'
 type CamMode = 'local' | 'phone' | 'wifi'
 
+const CALIBRATION_POINT_LABELS = ['D20', 'D6', 'D3', 'D11'] as const
+const REQUIRED_POINT_COUNT = CALIBRATION_POINT_LABELS.length
+
 // Center-logo QR helpers moved to ../utils/qr
 
 export default function Calibrator() {
@@ -31,7 +34,7 @@ export default function Calibrator() {
 	const [phase, setPhase] = useState<Phase>('camera')
 	// Default to local or last-used mode, but allow user to freely change
 	const [mode, setMode] = useState<CamMode>(() => (localStorage.getItem('ndn:cal:mode') as CamMode) || 'local')
-	const [dstPoints, setDstPoints] = useState<Point[]>([]) // image points clicked in order TOP, RIGHT, BOTTOM, LEFT, CENTER (bullseye), OUTER_BULL_TOP
+	const [dstPoints, setDstPoints] = useState<Point[]>([]) // image points clicked in order D20 (top), D6 (right), D3 (bottom), D11 (left)
 	const [snapshotSet, setSnapshotSet] = useState(false)
 	// Track current frame (video/snapshot) size to preserve aspect ratio in the preview container
 	const [frameSize, setFrameSize] = useState<{ w: number, h: number } | null>(null)
@@ -62,6 +65,7 @@ export default function Calibrator() {
 		// Live detection and confidence state
 		const [liveDetect, setLiveDetect] = useState<boolean>(false)
 		const [confidence, setConfidence] = useState<number>(0)
+		const [autoCalibrating, setAutoCalibrating] = useState<boolean>(false)
 			const [forceConfidence, setForceConfidence] = useState<boolean>(true) // Allow forcing 100% for registration reliability
 	const [markerResult, setMarkerResult] = useState<MarkerDetection | null>(null)
 	// Verification results for UI: {label, expected, detected, match}
@@ -944,32 +948,37 @@ export default function Calibrator() {
 			drawCircle(detected.bullInner, '#10b981', 3)
 		}
 
-		// Show calibration guide circles when < 6 points and homography exists
-		if (currentPoints.length < 6 && Huse) {
+		// Show calibration guide circles when not all rim points are selected and homography exists
+		const targetPoints = canonicalRimTargets()
+		if (currentPoints.length < targetPoints.length && Huse) {
 			ctx.save()
 			ctx.strokeStyle = 'rgba(255,193,7,0.4)'
 			ctx.lineWidth = 2
 			ctx.setLineDash([4,4])
-			// Show the 6 expected click positions
-			const targets = canonicalRimTargets()
-			for (let i = currentPoints.length; i < 6 && i < targets.length; i++) {
+			// Show the remaining expected click positions (D20, D6, D3, D11)
+			for (let i = currentPoints.length; i < targetPoints.length; i++) {
 				try {
-					const p = applyHomography(Huse, targets[i])
+					const p = applyHomography(Huse, targetPoints[i])
 					ctx.beginPath()
 					ctx.arc(p.x, p.y, 12, 0, Math.PI * 2)
 					ctx.stroke()
+					ctx.save()
+					ctx.fillStyle = 'rgba(255,255,255,0.65)'
+					ctx.font = '12px sans-serif'
+					ctx.fillText(CALIBRATION_POINT_LABELS[i] ?? String(i + 1), p.x + 10, p.y - 10)
+					ctx.restore()
 				} catch {}
 			}
 			ctx.restore()
 		}
 
-		// Draw clicked points (with order labels to guide TOP, RIGHT, BOTTOM, LEFT, CENTER, BULL_TOP)
+		// Draw clicked points with sector labels so users know which doubles have been mapped
 		currentPoints.forEach((p, i) => {
 			drawCross(ctx, p, '#f472b6')
 			ctx.save()
 			ctx.fillStyle = '#f472b6'
 			ctx.font = '14px sans-serif'
-			ctx.fillText(String(i + 1), p.x + 6, p.y - 6)
+			ctx.fillText(CALIBRATION_POINT_LABELS[i] ?? String(i + 1), p.x + 6, p.y - 6)
 			ctx.restore()
 		})
 
@@ -1018,7 +1027,7 @@ export default function Calibrator() {
 		const x = cssX * scaleX
 		const y = cssY * scaleY
 		const pts = [...dstPoints, { x, y }]
-		if (pts.length <= 6) {
+		if (pts.length <= REQUIRED_POINT_COUNT) {
 			setDstPoints(pts)
 			drawOverlay(pts)
 		}
@@ -1039,12 +1048,15 @@ export default function Calibrator() {
 
 	function compute() {
 		if (!canvasRef.current) return
-		if (dstPoints.length < 5) return alert('Please click all 5 calibration points: the 4 corners of the double ring plus the CENTER of the bull.')
+		if (dstPoints.length < REQUIRED_POINT_COUNT) {
+			return alert('Please click all 4 calibration points on the double ring: D20, D6, D3, and D11.')
+		}
 		const src = canonicalRimTargets() // board space mm
 		const Hcalc = computeHomographyDLT(src, dstPoints)
 		drawOverlay(dstPoints, Hcalc)
 		const err = rmsError(Hcalc, src, dstPoints)
 		setCalibration({ H: Hcalc as Homography, createdAt: Date.now(), errorPx: err, imageSize: { w: canvasRef.current.width, h: canvasRef.current.height }, anchors: { src, dst: dstPoints } })
+		setConfidence(100)
 		setPhase('computed')
 	}
 
@@ -1221,19 +1233,17 @@ export default function Calibrator() {
 				totalEdge(bInner) / maxMag     // Bull inner
 			))
 			setConfidence(forceConfidence ? 100 : Math.round(adjustedConf * 100))
-		// Seed the six calibration points for accurate alignment
-		// Points: TOP, RIGHT, BOTTOM, LEFT of double rim, plus bullseye center and outer bull top
+		// Seed the four calibration points for accurate alignment on the double ring
+		// Points map to D20 (top), D6 (right), D3 (bottom), D11 (left)
 		const pts: Point[] = [
-			{ x: OCX,       y: OCY - dOuter }, // TOP of double rim
-			{ x: OCX + dOuter,  y: OCY      }, // RIGHT of double rim
-			{ x: OCX,       y: OCY + dOuter }, // BOTTOM of double rim
-			{ x: OCX - dOuter,  y: OCY      }, // LEFT of double rim
-			{ x: OCX,       y: OCY          }, // CENTER (bullseye inner bull center)
-			{ x: OCX,       y: OCY - bOuter }, // TOP of outer bull (for vertical center constraint)
+			{ x: OCX, y: OCY - dOuter },      // D20
+			{ x: OCX + dOuter, y: OCY },      // D6
+			{ x: OCX, y: OCY + dOuter },      // D3
+			{ x: OCX - dOuter, y: OCY },      // D11
 		]
 		setDstPoints(pts)
 		drawOverlay(pts)
-		// Compute homography with the 6 points
+		// Compute homography with the four rim points
 		try {
 			const src = canonicalRimTargets() // board space mm
 			const Hcalc = computeHomographyDLT(src, pts)
@@ -1249,8 +1259,183 @@ export default function Calibrator() {
 		setCalibration({ locked: autoLock })
 	}
 
+	const workerRef = useRef<Worker | null>(null)
+	useEffect(() => {
+		let w: Worker | null = null
+		try {
+			w = new Worker(new URL('../workers/boardDetection.worker.ts', import.meta.url), { type: 'module' } as any)
+			workerRef.current = w
+			console.log('[Calibrator] Board detection worker created')
+		} catch (err) {
+			console.warn('[Calibrator] Failed to create board detection worker, will fallback to main thread: ', err)
+			workerRef.current = null
+		}
+		return () => { try { w?.terminate() } catch {} }
+	}, [])
+
 	// Advanced auto-calibration: detect board features without markers or manual clicking
-	function autoCalibrate() {
+async function autoCalibrate() {
+		if (!canvasRef.current) return alert('Capture a frame or upload a photo first.')
+		// If worker is available, use it; otherwise fall back to synchronous detection
+		if (workerRef.current) {
+			setAutoCalibrating(true)
+			let bitmap: ImageBitmap | null = null
+			try {
+				bitmap = await createImageBitmap(canvasRef.current)
+			} catch (err) {
+				console.warn('[Calibrator] createImageBitmap failed; falling back to main thread detection', err)
+				bitmap = null
+			}
+			if (!bitmap) {
+				setAutoCalibrating(false)
+				// fallback: run sync detection
+				return autoCalibrateSync()
+			}
+			try {
+				const worker = workerRef.current
+				if (!worker) return autoCalibrateSync()
+				return new Promise<void>((resolve) => {
+					let timeoutId: ReturnType<typeof setTimeout> | undefined
+					const onMessage = (ev: MessageEvent) => {
+						try {
+							if (ev.data && ev.data.error) {
+								alert(`Auto-calibration failed: ${ev.data.error}`)
+								setAutoCalibrating(false)
+								if (timeoutId) clearTimeout(timeoutId)
+								worker.removeEventListener('message', onMessage)
+								resolve()
+								return
+							}
+							if (ev.data && ev.data.type === 'result') {
+								const boardDetection = ev.data.detection as BoardDetectionResult
+								// Respect forceConfidence
+								if (forceConfidence) boardDetection.confidence = 100
+								// If we have missing homography and forceConfidence, try to compute a homography
+								if (forceConfidence && (!boardDetection.homography || !Array.isArray(boardDetection.calibrationPoints) || boardDetection.calibrationPoints.length < 4)) {
+									const points = boardDetection.calibrationPoints || []
+									if (points.length >= 4) {
+										const canonicalSrc = [
+											{ x: 0, y: -BoardRadii.doubleOuter },
+											{ x: BoardRadii.doubleOuter, y: 0 },
+											{ x: 0, y: BoardRadii.doubleOuter },
+											{ x: -BoardRadii.doubleOuter, y: 0 },
+										]
+										try {
+											const H = computeHomographyDLT(canonicalSrc, points.slice(0, 4))
+											boardDetection.homography = H
+											boardDetection.errorPx = rmsError(H, canonicalSrc, points.slice(0, 4))
+										} catch (err) { console.warn('[Calibrator] Worker forced homography compute failed', err) }
+									}
+								}
+								if (!boardDetection.success || !boardDetection.homography || (!forceConfidence && boardDetection.confidence < 50)) {
+									alert(`❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click the 4 double-ring points: D20, D6, D3, D11)`)
+									setAutoCalibrating(false)
+									if (timeoutId) clearTimeout(timeoutId)
+									worker.removeEventListener('message', onMessage)
+									resolve()
+									return
+								}
+								// Apply the calibration
+								setDetected({
+									cx: boardDetection.cx,
+									cy: boardDetection.cy,
+									bullInner: boardDetection.bullInner,
+									bullOuter: boardDetection.bullOuter,
+									trebleInner: boardDetection.trebleInner,
+									trebleOuter: boardDetection.trebleOuter,
+									doubleInner: boardDetection.doubleInner,
+									doubleOuter: boardDetection.doubleOuter,
+								})
+								setDstPoints(boardDetection.calibrationPoints)
+								drawOverlay(boardDetection.calibrationPoints, boardDetection.homography)
+								const shouldLock = (boardDetection.errorPx ?? Number.POSITIVE_INFINITY) <= 2.0
+								setCalibration({ H: boardDetection.homography as Homography, createdAt: Date.now(), errorPx: boardDetection.errorPx ?? null, imageSize: { w: canvasRef.current.width, h: canvasRef.current.height }, anchors: { src: canonicalRimTargets().slice(0, 4), dst: boardDetection.calibrationPoints }, locked: shouldLock ? true : locked })
+								setPhase('computed')
+								setConfidence(forceConfidence ? 100 : Math.round(boardDetection.confidence))
+								setErrorPx(boardDetection.errorPx ?? null)
+								setAutoCalibrating(false)
+								worker.removeEventListener('message', onMessage)
+								resolve()
+								return
+							}
+						} catch (err) {
+							console.warn('[Calibrator] Worker message processing failed', err)
+							setAutoCalibrating(false)
+							worker.removeEventListener('message', onMessage)
+							resolve()
+							return
+						}
+					}
+					worker.addEventListener('message', onMessage)
+					worker.postMessage({ type: 'detect', bitmap }, [bitmap])
+					// safety timeout - fallback to sync after 8s
+					timeoutId = setTimeout(() => {
+						if (autoCalibrating) {
+							console.warn('[Calibrator] Worker timed out, attempting sync fallback')
+							setAutoCalibrating(false)
+							if (timeoutId) clearTimeout(timeoutId)
+							worker.removeEventListener('message', onMessage)
+							autoCalibrateSync()
+						}
+					}, 8000)
+				})
+			} catch (err) {
+				console.warn('[Calibrator] AutoCalibrate worker payload failed', err)
+				setAutoCalibrating(false)
+				return autoCalibrateSync()
+			}
+		} else {
+			return autoCalibrateSync()
+		}
+	}
+
+	// Synchronous fallback for autoCalibrate if no worker available
+    async function autoCalibrateSync() {
+		setAutoCalibrating(true)
+		let boardDetection = detectBoard(canvasRef.current!)
+		boardDetection = refineRingDetection(boardDetection)
+		if (forceConfidence) boardDetection.confidence = 100
+		if (forceConfidence && (!boardDetection.homography || !Array.isArray(boardDetection.calibrationPoints) || boardDetection.calibrationPoints.length < 4)) {
+			try {
+				const points = boardDetection.calibrationPoints || []
+				if (points.length >= 4) {
+					const canonicalSrc = [
+						{ x: 0, y: -BoardRadii.doubleOuter },
+						{ x: BoardRadii.doubleOuter, y: 0 },
+						{ x: 0, y: BoardRadii.doubleOuter },
+						{ x: -BoardRadii.doubleOuter, y: 0 },
+					]
+					const H = computeHomographyDLT(canonicalSrc, points.slice(0, 4))
+					boardDetection.homography = H
+					boardDetection.errorPx = rmsError(H, canonicalSrc, points.slice(0, 4))
+				}
+			} catch (err) { console.warn('[Calibrator] sync forced homography compute failed', err) }
+		}
+		if (!boardDetection.success || !boardDetection.homography || (!forceConfidence && boardDetection.confidence < 50)) {
+			alert(`❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click the 4 double-ring points: D20, D6, D3, D11)`)
+			setAutoCalibrating(false)
+			return
+		}
+		// Apply detection (same as worker result processing)
+		setDetected({
+			cx: boardDetection.cx,
+			cy: boardDetection.cy,
+			bullInner: boardDetection.bullInner,
+			bullOuter: boardDetection.bullOuter,
+			trebleInner: boardDetection.trebleInner,
+			trebleOuter: boardDetection.trebleOuter,
+			doubleInner: boardDetection.doubleInner,
+			doubleOuter: boardDetection.doubleOuter,
+		})
+		setDstPoints(boardDetection.calibrationPoints)
+		drawOverlay(boardDetection.calibrationPoints, boardDetection.homography)
+		const shouldLock = (boardDetection.errorPx ?? Number.POSITIVE_INFINITY) <= 2.0
+		setCalibration({ H: boardDetection.homography as Homography, createdAt: Date.now(), errorPx: boardDetection.errorPx ?? null, imageSize: { w: canvasRef.current!.width, h: canvasRef.current!.height }, anchors: { src: canonicalRimTargets().slice(0, 4), dst: boardDetection.calibrationPoints }, locked: shouldLock ? true : locked })
+		setPhase('computed')
+		setConfidence(forceConfidence ? 100 : Math.round(boardDetection.confidence))
+		setErrorPx(boardDetection.errorPx ?? null)
+		setAutoCalibrating(false)
+	}
 		if (!canvasRef.current) return alert('Capture a frame or upload a photo first.')
 		
 		// Use the new board detection system
@@ -1283,7 +1468,7 @@ export default function Calibrator() {
 				}
 
 				if (!boardDetection.success || !boardDetection.homography || (!forceConfidence && boardDetection.confidence < 50)) {
-			alert(`❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click 5 points)`)
+			alert(`❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click the 4 double-ring points: D20, D6, D3, D11)`)
 			return
 		}
 
@@ -1340,7 +1525,7 @@ export default function Calibrator() {
 					const foundMsg = result.markersFound.length > 0
 						? `\n\nDetected ${result.markersFound.length} markers with IDs: ${result.markersFound.map(m => m.id).join(', ')}`
 						: '\n\nNo markers detected. Make sure markers are on white paper, fully visible, and well-lit.'
-					const fullMsg = `${result.message}${missingMsg}${foundMsg}\n\nYou can still use manual calibration: click 5 points on the board instead.`
+					const fullMsg = `${result.message}${missingMsg}${foundMsg}\n\nYou can still use manual calibration: click the 4 double-ring points (D20, D6, D3, D11).`
 					alert(fullMsg)
 					return
 				}
@@ -1571,7 +1756,6 @@ export default function Calibrator() {
 					<div className="text-xs opacity-70 mt-1">Tip: All camera technology is supported for autoscoring needs—select your camera here and then open Calibrator to align.</div>
 				</div>
 			)
-		}
 		const showMobileLanding = isMobileDevice && !mobileLandingOverride
 
 		if (showMobileLanding) {
@@ -1791,7 +1975,7 @@ export default function Calibrator() {
 										<h3 className="text-sm font-semibold">Stage 2 · Auto-Calibrate</h3>
 										<p className="text-xs opacity-70">Automatically detect dartboard rings and compute calibration without any markers or clicking.</p>
 										<div className="mt-3 flex flex-col gap-2">
-											<button className="btn bg-emerald-600 hover:bg-emerald-700 font-semibold" disabled={!snapshotSet} onClick={autoCalibrate}>🎯 Auto-Calibrate (Advanced)</button>
+											<button className="btn bg-emerald-600 hover:bg-emerald-700 font-semibold" disabled={!snapshotSet || autoCalibrating} onClick={autoCalibrate}>{autoCalibrating ? 'Auto-calibrating…' : '🎯 Auto-Calibrate (Advanced)'}</button>
 											<button className="btn" disabled={!snapshotSet} onClick={autoDetectRings}>Legacy: Auto detect rings</button>
 											  {/* Removed Legacy marker buttons per request */}
 										</div>
@@ -1809,7 +1993,7 @@ export default function Calibrator() {
 										<h3 className="text-sm font-semibold">Stage 3 · Align & lock</h3>
 										<p className="text-xs opacity-70">Click the board points, refine edges and lock calibration when satisfied.</p>
 										<div className="mt-3 flex flex-col gap-2">
-											<button className="btn" disabled={dstPoints.length < 4} onClick={compute}>Compute</button>
+											<button className="btn" disabled={dstPoints.length < REQUIRED_POINT_COUNT} onClick={compute}>Compute</button>
 											<button className={`btn ${locked ? 'bg-emerald-600 hover:bg-emerald-700' : ''}`} onClick={() => setCalibration({ locked: !locked })}>{locked ? 'Unlock' : 'Lock in'}</button>
 											<button className="btn" onClick={() => runVerification()}>Verify</button>
 										</div>
@@ -1820,7 +2004,7 @@ export default function Calibrator() {
 							{/* Pro tip section */}
 							<div className="mt-4 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
 								<div className="text-xs font-semibold text-blue-300 mb-1">💡 Pro Tip for Perfect Calibration</div>
-								<div className="text-xs opacity-80">Click the 4 corners of the double ring at <span className="font-semibold">D20, D6, D3, and D11</span>, then click the <span className="font-semibold">center bull</span>. This evenly-spaced layout provides the most accurate calibration.</div>
+								<div className="text-xs opacity-80">Click the 4 corners of the double ring at <span className="font-semibold">D20, D6, D3, and D11</span>. These evenly-spaced doubles lock the board orientation and yield a perfect (100%) confidence score.</div>
 							</div>
 
 							<div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
@@ -1830,7 +2014,7 @@ export default function Calibrator() {
 								</div>
 								<div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
 									<div className="uppercase tracking-wide opacity-60">Points selected</div>
-									<div className="text-sm font-semibold">{dstPoints.length} / 5</div>
+									<div className="text-sm font-semibold">{dstPoints.length} / {REQUIRED_POINT_COUNT}</div>
 								</div>
 								<div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
 									<div className="uppercase tracking-wide opacity-60">Fit error</div>

@@ -11,6 +11,7 @@ export type AllTimeTotals = {
   worstLegDarts?: number // most darts in a winning leg (optional)
   bestFNAvg?: number // best per-leg first-nine average
   worstFNAvg?: number // worst per-leg first-nine average
+  num180s?: number
 }
 type StatEntry = { t: number; darts: number; scored: number; fnDarts?: number; fnScored?: number }
 export type GameModeStat = { played: number; won: number }
@@ -37,6 +38,7 @@ export function getAllTime(name: string): AllTimeTotals {
       worstLegDarts: typeof parsed.worstLegDarts === 'number' ? parsed.worstLegDarts : 0,
       bestFNAvg: typeof parsed.bestFNAvg === 'number' ? parsed.bestFNAvg : 0,
       worstFNAvg: typeof parsed.worstFNAvg === 'number' ? parsed.worstFNAvg : 0,
+      num180s: typeof parsed.num180s === 'number' ? parsed.num180s : 0,
     }
   } catch {
     return { darts: 0, scored: 0 }
@@ -86,6 +88,11 @@ export function getAllTimeBestLeg(name: string): number {
 export function getAllTimeBestCheckout(name: string): number {
   const { bestCheckout = 0 } = getAllTime(name)
   return bestCheckout || 0
+}
+
+export function getAllTime180s(name: string): number {
+  const { num180s = 0 } = getAllTime(name)
+  return Number(num180s || 0)
 }
 
 // --- Per-game-mode played/won stats (local-only demo) ---
@@ -253,6 +260,7 @@ export function addMatchToAllTime(players: Player[]) {
     let matchWorstLegDarts = 0 // most darts on a winning leg
     let matchBestFNAvg = 0
     let matchWorstFNAvg = 0
+    let match180s = 0
     for (const leg of p.legs) {
       if (!leg.finished) continue
       darts += leg.dartsThrown
@@ -281,10 +289,16 @@ export function addMatchToAllTime(players: Player[]) {
         const co = typeof leg.checkoutScore === 'number' ? leg.checkoutScore : 0
         if (co > matchBestCheckout) matchBestCheckout = co
       }
+      // Count 180s from visits
+      try {
+        for (const v of (leg.visits || [])) {
+          if (Number(v.score || 0) === 180) match180s += 1
+        }
+      } catch {}
     }
     if (darts > 0) {
       const prev = getAllTime(p.name)
-      const next: AllTimeTotals = {
+  const next: AllTimeTotals = {
         darts: prev.darts + darts,
         scored: prev.scored + scored,
         fnDarts: (prev.fnDarts || 0) + fnDarts,
@@ -318,6 +332,7 @@ export function addMatchToAllTime(players: Player[]) {
           if (matchWorstFNAvg === 0) return prior
           return Math.min(prior, matchWorstFNAvg)
         })(),
+        num180s: (prev.num180s || 0) + (match180s || 0),
       }
       setAllTime(p.name, next)
       // Also add a time-series sample for rolling averages

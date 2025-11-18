@@ -143,7 +143,12 @@ const db = {
   // Tournaments
   async createTournament(tournament) {
     if (!supabase) return;
-    await supabase.from('tournaments').insert([tournament]);
+    const { error: upsertErr } = await supabase.from('tournaments').upsert(tournament, { onConflict: 'id' });
+    if (upsertErr) throw upsertErr;
+    // verify
+    const { data: checkRow, error: checkErr } = await supabase.from('tournaments').select('*').eq('id', tournament.id).limit(1).single();
+    if (checkErr) throw checkErr;
+    return checkRow;
   },
 
   async getTournaments() {
@@ -171,20 +176,26 @@ const db = {
 
   async addTournamentParticipant(tournamentId, email, username) {
     if (!supabase) return;
-    await supabase.from('tournament_participants').insert([{
+    const { error: insErr } = await supabase.from('tournament_participants').upsert([{ 
       tournament_id: tournamentId,
       email,
       username
-    }]);
+    }], { onConflict: 'tournament_id,email' });
+    if (insErr) throw insErr;
+    // Verify participant exists
+    const { data: part, error: qErr } = await supabase.from('tournament_participants').select('*').eq('tournament_id', tournamentId).eq('email', email).limit(1).single();
+    if (qErr) throw qErr;
+    return part;
   },
 
   async removeTournamentParticipant(tournamentId, email) {
     if (!supabase) return;
-    await supabase
+    const { error: delErr } = await supabase
       .from('tournament_participants')
       .delete()
       .eq('tournament_id', tournamentId)
       .eq('email', email);
+    if (delErr) throw delErr;
   },
 
   // Friendships
