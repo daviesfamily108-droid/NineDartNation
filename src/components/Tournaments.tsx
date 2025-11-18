@@ -477,7 +477,7 @@ export default function Tournaments({ user }: { user: any }) {
                     aria-label={hasJoined(t) ? 'Already Joined' : 'Join Now'}
                   >{hasJoined(t) ? 'Already Joined!' : 'Join Now'}</button>
                   {/* Delete button when you are the creator (owner-created official) and it hasn't started */}
-                  {(t.status==='scheduled' && email && t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) && (
+                  {(t.status==='scheduled' && email && ((t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) || email === 'daviesfamily108@gmail.com')) && (
                     <button
                       className="w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
                       title="Delete this tournament"
@@ -512,7 +512,7 @@ export default function Tournaments({ user }: { user: any }) {
                     onDoubleClick={()=> { if (!isTouch && hasJoined(t)) setLeaveAsk({ open: true, t }) }}
                   >{hasJoined(t) ? 'Already Joined' : 'Join Now'}</button>
                   {/* Delete button for creator to delete their own scheduled tournament */}
-                  {(t.status==='scheduled' && email && t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) && (
+                  {(t.status==='scheduled' && email && ((t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) || email === 'daviesfamily108@gmail.com')) && (
                     <button
                       className="w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
                       title="Delete this tournament"

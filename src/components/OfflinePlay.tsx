@@ -1698,7 +1698,7 @@ export default function OfflinePlay({ user }: { user: any }) {
             {/* Header bar with visible mode and actions; sheen is clipped to this area */}
             <div
               className="flex-1 min-h-0 overflow-x-hidden pr-1 pt-2 pb-2"
-              style={{ overflowY: fitAll && !fitOverflowing ? ('hidden' as const) : ('auto' as const) }}
+              style={{ overflowY: 'auto' }}
               ref={(el) => { (scrollerRef as any).current = el }}
             >
               <div ref={(el)=>{ (headerBarRef as any).current = el }}>

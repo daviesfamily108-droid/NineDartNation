@@ -1929,6 +1929,53 @@ app.post('/api/tournaments/leave', async (req, res) => {
   res.json({ ok: true, left, tournament: t })
 })
 
+// Admin: delete tournament
+app.post('/api/admin/tournaments/delete', (req, res) => {
+  const { tournamentId, requesterEmail } = req.body || {}
+  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
+  const id = String(tournamentId || '')
+  const t = tournaments.get(id)
+  if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  // Mark suppression window if official
+  if (t.official) lastOfficialDeleteAt = Date.now()
+  tournaments.delete(id)
+  try { persistTournamentsToDisk() } catch (e) {}
+  try { (async () => {
+    if (!supabase) return
+    await supabase.from('tournaments').delete().eq('id', id)
+    await supabase.from('tournament_participants').delete().eq('tournament_id', id)
+  })() } catch (err) { console.warn('[Tournaments] Supabase delete failed:', err && err.message) }
+  broadcastTournaments()
+  res.json({ ok: true })
+})
+
+// User: delete own tournament (only if scheduled and creator)
+app.post('/api/tournaments/delete', (req, res) => {
+  const { tournamentId, requesterEmail } = req.body || {}
+  const id = String(tournamentId || '')
+  const reqEmail = String(requesterEmail || '').toLowerCase()
+  const t = tournaments.get(id)
+  if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  // Only allowed if tournament is not started yet
+  if (t.status !== 'scheduled') return res.status(400).json({ ok: false, error: 'ALREADY_STARTED' })
+  // Permission: creator or owner can delete
+  const isOwner = reqEmail === OWNER_EMAIL
+  const isCreator = reqEmail && t.creatorEmail && reqEmail === String(t.creatorEmail).toLowerCase()
+  if (!isOwner && !isCreator) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  
+  tournaments.delete(id)
+  try { persistTournamentsToDisk() } catch (e) {}
+  try { (async () => {
+    if (!supabase) return
+    await supabase.from('tournaments').delete().eq('id', id)
+    await supabase.from('tournament_participants').delete().eq('tournament_id', id)
+  })() } catch (err) { console.warn('[Tournaments] Supabase delete failed:', err && err.message) }
+  broadcastTournaments()
+  res.json({ ok: true })
+})
+
 // Health check for quick connectivity tests
 app.get('/health', (req, res) => res.json({ ok: true }))
 // Surface whether HTTPS was configured so clients can prefer secure links
@@ -2848,6 +2895,7 @@ function genCamCode() {
 // { id, title, game, mode, value, description, startAt, checkinMinutes, capacity, participants: [{email, username}], official, prize, status: 'scheduled'|'running'|'completed', winnerEmail,
 //   prizeType: 'premium'|'cash'|'none', prizeAmount?: number, currency?: string, payoutStatus?: 'none'|'pending'|'paid', prizeNotes?: string, createdAt?: number, paidAt?: number }
 const tournaments = new Map();
+let lastOfficialDeleteAt = 0
 let lastTournamentPersistAt = null
 
 function normalizeTournament(raw) {
