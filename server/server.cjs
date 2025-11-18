@@ -649,6 +649,18 @@ const DEFAULT_ORIGINS = [
   'https://*.netlify.app',
 ]
 let ALLOWED_ORIGINS = (RAW_ORIGINS.length ? RAW_ORIGINS : DEFAULT_ORIGINS)
+
+// Ensure critical production origins are always allowed, even if env vars are restrictive
+const CRITICAL_ORIGINS = [
+  'https://ninedartnation.netlify.app',
+  'https://*.netlify.app'
+]
+CRITICAL_ORIGINS.forEach(origin => {
+  if (!ALLOWED_ORIGINS.includes(origin)) {
+    ALLOWED_ORIGINS.push(origin)
+  }
+})
+
 // If user supplied a specific netlify origin, also accept wildcard subdomains
 try {
   const hasNetlifyExplicit = ALLOWED_ORIGINS.some(o => String(o || '').includes('.netlify.app'))
