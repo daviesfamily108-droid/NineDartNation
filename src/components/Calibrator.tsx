@@ -1352,7 +1352,7 @@ async function autoCalibrate() {
 								setCalibration({ H: boardDetection.homography as Homography, createdAt: Date.now(), errorPx: boardDetection.errorPx ?? null, imageSize: { w: canvasRef.current.width, h: canvasRef.current.height }, anchors: { src: canonicalRimTargets().slice(0, 4), dst: boardDetection.calibrationPoints }, locked: shouldLock ? true : locked })
 								setPhase('computed')
 								setConfidence(forceConfidence ? 100 : Math.round(boardDetection.confidence))
-								setErrorPx(boardDetection.errorPx ?? null)
+								setCalibration({ errorPx: boardDetection.errorPx ?? null })
 								setAutoCalibrating(false)
 								worker.removeEventListener('message', onMessage)
 								resolve()
@@ -1433,86 +1433,10 @@ async function autoCalibrate() {
 		setCalibration({ H: boardDetection.homography as Homography, createdAt: Date.now(), errorPx: boardDetection.errorPx ?? null, imageSize: { w: canvasRef.current!.width, h: canvasRef.current!.height }, anchors: { src: canonicalRimTargets().slice(0, 4), dst: boardDetection.calibrationPoints }, locked: shouldLock ? true : locked })
 		setPhase('computed')
 		setConfidence(forceConfidence ? 100 : Math.round(boardDetection.confidence))
-		setErrorPx(boardDetection.errorPx ?? null)
+		setCalibration({ errorPx: boardDetection.errorPx ?? null })
 		setAutoCalibrating(false)
 	}
-		if (!canvasRef.current) return alert('Capture a frame or upload a photo first.')
-		
-		// Use the new board detection system
-				let boardDetection = detectBoard(canvasRef.current)
-				boardDetection = refineRingDetection(boardDetection)
 
-				// If forcing confidence, override the computed confidence and allow success paths
-				if (forceConfidence) {
-					try { boardDetection.confidence = 100 } catch {}
-				}
-
-				// If forcing confidence and homography is missing but we have calibration points available,
-				// attempt to compute a homography directly so we can still apply the calibration.
-				if (forceConfidence && (!boardDetection.homography || !Array.isArray(boardDetection.calibrationPoints) || boardDetection.calibrationPoints.length < 4)) {
-					try {
-						const points = boardDetection.calibrationPoints || []
-						if (points.length >= 4) {
-							const canonicalSrc = [
-								{ x: 0, y: -BoardRadii.doubleOuter },
-								{ x: BoardRadii.doubleOuter, y: 0 },
-								{ x: 0, y: BoardRadii.doubleOuter },
-								{ x: -BoardRadii.doubleOuter, y: 0 },
-							]
-							const H = computeHomographyDLT(canonicalSrc, points.slice(0, 4))
-							boardDetection.homography = H
-							const err = rmsError(H, canonicalSrc, points.slice(0, 4))
-							boardDetection.errorPx = err
-						}
-					} catch (err) { console.warn('[Calibrator] Forced homography compute failed', err) }
-				}
-
-				if (!boardDetection.success || !boardDetection.homography || (!forceConfidence && boardDetection.confidence < 50)) {
-			alert(`❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click the 4 double-ring points: D20, D6, D3, D11)`)
-			return
-		}
-
-		const homography = boardDetection.homography
-		const points = boardDetection.calibrationPoints || []
-		const pointsValid = Array.isArray(points) && points.length >= 4 && points.every(p => p && Number.isFinite(p.x) && Number.isFinite(p.y))
-		const homographyValid = Array.isArray(homography) && homography.length === 9 && homography.every(Number.isFinite)
-		if (!pointsValid || !homographyValid) {
-			console.error('[Calibrator] Auto-calibration produced invalid data', { boardDetection })
-			alert('❌ Auto-calibration produced unstable results. Adjust camera framing or calibrate manually.')
-			return
-		}
-
-		// Success! Apply the calibration
-		setDetected({
-			cx: boardDetection.cx,
-			cy: boardDetection.cy,
-			bullInner: boardDetection.bullInner,
-			bullOuter: boardDetection.bullOuter,
-			trebleInner: boardDetection.trebleInner,
-			trebleOuter: boardDetection.trebleOuter,
-			doubleInner: boardDetection.doubleInner,
-			doubleOuter: boardDetection.doubleOuter,
-		})
-
-		setDstPoints(boardDetection.calibrationPoints)
-		drawOverlay(boardDetection.calibrationPoints, boardDetection.homography)
-
-		const shouldLock = (boardDetection.errorPx ?? Number.POSITIVE_INFINITY) <= 2.0
-		setCalibration({
-			H: boardDetection.homography as Homography,
-			createdAt: Date.now(),
-			errorPx: boardDetection.errorPx ?? null,
-			imageSize: { w: canvasRef.current.width, h: canvasRef.current.height },
-			anchors: { src: canonicalRimTargets().slice(0, 4), dst: boardDetection.calibrationPoints },
-			locked: shouldLock ? true : locked,
-		})
-
-		setPhase('computed')
-
-		// Show success message
-		const confidenceLevel = boardDetection.confidence > 90 ? '🟢 Excellent' : boardDetection.confidence > 80 ? '🟢 Good' : boardDetection.confidence > 70 ? '🟡 Fair' : '🟡 Acceptable'
-		alert(`✅ Auto-Calibration Successful!\n\nConfidence: ${confidenceLevel} (${Math.round(boardDetection.confidence)}%)\nError: ${boardDetection.errorPx?.toFixed(2) ?? '?'} pixels\n\nCalibration has been ${shouldLock ? 'locked' : 'computed (not locked yet)'}.`)
-	}
 
 			function detectMarkers() {
 				if (!canvasRef.current) return alert('Capture a frame or upload a photo first.')
@@ -1756,6 +1680,7 @@ async function autoCalibrate() {
 					<div className="text-xs opacity-70 mt-1">Tip: All camera technology is supported for autoscoring needs—select your camera here and then open Calibrator to align.</div>
 				</div>
 			)
+		}
 		const showMobileLanding = isMobileDevice && !mobileLandingOverride
 
 		if (showMobileLanding) {
