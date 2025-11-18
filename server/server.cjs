@@ -3031,39 +3031,45 @@ async function publishTournamentUpdate(arr) {
 (async () => { await loadTournamentsFromPersistence().catch(err => console.warn('[Tournaments] initial load failed', err && err.message)) })()
 // Optional: if SUPABASE configured and NDN_AUTO_MIGRATE_TOURNAMENTS=1, upsert disk tournaments to Supabase
 if (supabase && String(process.env.NDN_AUTO_MIGRATE_TOURNAMENTS || '') === '1') {
-  try {
-    const raw = fs.existsSync(TOURNAMENTS_FILE) ? fs.readFileSync(TOURNAMENTS_FILE, 'utf8') : '[]'
-    const arr = JSON.parse(raw || '[]') || []
-    if (Array.isArray(arr) && arr.length) {
-      for (const t of arr) {
-        const payload = {
-          id: t.id,
-          title: t.title,
-          game: t.game,
-          mode: t.mode,
-          value: t.value,
-          description: t.description || null,
-          start_at: t.startAt ? new Date(t.startAt).toISOString() : null,
-          checkin_minutes: t.checkinMinutes || null,
-          capacity: t.capacity || null,
-          official: !!t.official,
-          prize: !!t.prize || false,
-          prize_type: t.prizeType || null,
-          prize_amount: t.prizeAmount || null,
-          currency: t.currency || null,
-          payout_status: t.payoutStatus || null,
-          status: t.status || 'scheduled',
-          winner_email: t.winnerEmail || null,
-          starting_score: t.startingScore || null,
-          creator_email: t.creatorEmail || null,
-          creator_name: t.creatorName || null,
-          created_at: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString()
+  (async () => {
+    try {
+      const raw = fs.existsSync(TOURNAMENTS_FILE) ? fs.readFileSync(TOURNAMENTS_FILE, 'utf8') : '[]'
+      const arr = JSON.parse(raw || '[]') || []
+      if (Array.isArray(arr) && arr.length) {
+        for (const t of arr) {
+          const payload = {
+            id: t.id,
+            title: t.title,
+            game: t.game,
+            mode: t.mode,
+            value: t.value,
+            description: t.description || null,
+            start_at: t.startAt ? new Date(t.startAt).toISOString() : null,
+            checkin_minutes: t.checkinMinutes || null,
+            capacity: t.capacity || null,
+            official: !!t.official,
+            prize: !!t.prize || false,
+            prize_type: t.prizeType || null,
+            prize_amount: t.prizeAmount || null,
+            currency: t.currency || null,
+            payout_status: t.payoutStatus || null,
+            status: t.status || 'scheduled',
+            winner_email: t.winnerEmail || null,
+            starting_score: t.startingScore || null,
+            creator_email: t.creatorEmail || null,
+            creator_name: t.creatorName || null,
+            created_at: t.createdAt ? new Date(t.createdAt).toISOString() : new Date().toISOString()
+          }
+          try {
+            await supabase.from('tournaments').upsert(payload, { onConflict: 'id' })
+          } catch (err) {
+            console.warn('[Tournaments] Auto-migrate upsert failed:', err && err.message)
+          }
         }
-        await supabase.from('tournaments').upsert(payload, { onConflict: 'id' })
+        console.log('[Tournaments] Auto-migrated', arr.length, 'tournaments into Supabase')
       }
-      console.log('[Tournaments] Auto-migrated', arr.length, 'tournaments into Supabase')
-    }
-  } catch (err) { console.warn('[Tournaments] Auto-migrate failed', err && err.message) }
+    } catch (err) { console.warn('[Tournaments] Auto-migrate failed', err && err.message) }
+  })().catch(err => console.warn('[Tournaments] Auto-migrate task crashed', err && err.message))
 }
 // Simple in-memory users and friendships (demo)
 // users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
