@@ -1651,6 +1651,17 @@ app.post('/api/admin/maintenance', (req, res) => {
   res.json({ ok: true, maintenance: maintenanceMode })
 })
 
+app.post('/api/admin/clustering', (req, res) => {
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const { enabled, capacity } = req.body || {}
+  if (typeof capacity === 'number') {
+    MAX_CLIENTS = Math.max(1, capacity)
+    console.log('[Admin] Updated max clients capacity to:', MAX_CLIENTS)
+  }
+  res.json({ ok: true, capacity: MAX_CLIENTS, enabled: false })
+})
+
 app.post('/api/admin/announce', (req, res) => {
   const owner = getOwnerFromReq(req)
   if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
@@ -2265,11 +2276,17 @@ async function broadcastTournaments() {
 
 // Constrain ws payload size for safety
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
+let MAX_CLIENTS = 50000; // Default capacity
 console.log(`[WS] WebSocket attached to same server at path /ws`);
 wsConnections.set(0)
 
 // WebSocket connection handler
 wss.on('connection', (ws, req) => {
+  // Check capacity
+  if (wss.clients.size > MAX_CLIENTS) {
+    try { ws.close(1013, 'Server full') } catch {}
+    return
+  }
   // Enforce origin allowlist for WS as well
   try {
     const origin = req?.headers?.origin || ''
