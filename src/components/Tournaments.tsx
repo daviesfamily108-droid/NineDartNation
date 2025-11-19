@@ -331,7 +331,7 @@ export default function Tournaments({ user }: { user: any }) {
 
   const official = useMemo(() => list.filter(t => t.official), [list])
   const community = useMemo(() => list.filter(t => !t.official), [list])
-  const created = useMemo(() => list.filter(t => t.status === 'scheduled'), [list])
+  const created = useMemo(() => list.filter(t => t.status === 'scheduled' && !t.official), [list])
   const nextOfficial = useMemo(() => {
     const upcoming = official
       .filter(t => t.status === 'scheduled')
@@ -364,7 +364,7 @@ export default function Tournaments({ user }: { user: any }) {
         </div>
         <div className="shrink-0">
           <button className="btn" onClick={()=>setShowCreate(true)}>Create Tournament +</button>
-          {(import.meta as any).env?.DEV && (
+          {((import.meta as any).env?.DEV || email === 'daviesfamily108@gmail.com') && (
             <button className="btn btn-ghost ml-2" onClick={() => setShowDemoStart(true)}>Demo Start Showcase</button>
           )}
         </div>
