@@ -1935,7 +1935,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 {currentGame === 'X01' && cameraEnabled && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                   <>
                     {/* Camera autoscore module; only render for current thrower */}
-                    <CameraView x01DoubleInOverride={x01DoubleInMatch} hideInlinePanels showToolbar={false} onVisitCommitted={(score, darts, finished) => {
+                    <CameraView x01DoubleInOverride={x01DoubleInMatch} hideInlinePanels showToolbar={false} immediateAutoCommit onVisitCommitted={(score, darts, finished) => {
                       if (callerEnabled) {
                         const p = match.players[match.currentPlayerIdx]
                         const leg = p?.legs[p.legs.length-1]
@@ -2408,7 +2408,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   <div className="font-semibold text-sm md:text-base">Current: {match.players[match.currentPlayerIdx]?.name || 'ÔÇö'}</div>
                   {currentGame === 'X01' && user?.username && match.players[match.currentPlayerIdx]?.name === user.username ? (
                     <>
-                      <CameraView x01DoubleInOverride={x01DoubleInMatch} hideInlinePanels showToolbar={false} onVisitCommitted={(score, darts, finished) => {
+                      <CameraView x01DoubleInOverride={x01DoubleInMatch} hideInlinePanels showToolbar={false} immediateAutoCommit onVisitCommitted={(score, darts, finished) => {
                         if (callerEnabled) {
                           const p = match.players[match.currentPlayerIdx]
                           const leg = p?.legs[p.legs.length-1]
