@@ -98,7 +98,7 @@ export default function CameraTile({
   const [discoveringWifi, setDiscoveringWifi] = useState<boolean>(false)
   const [usbDevices, setUsbDevices] = useState<USBDevice[]>([])
   const [discoveringUsb, setDiscoveringUsb] = useState<boolean>(false)
-  const autoscoreProvider = useUserSettings(s => s.autoscoreProvider) as ('built-in' | 'external-ws' | 'manual' | undefined)
+  const autoscoreProvider = useUserSettings(s => s.autoscoreProvider)
   const cameraEnabledSetting = useUserSettings(s => s.cameraEnabled)
   const setPreferredCameraLocked = useUserSettings(s => s.setPreferredCameraLocked)
   const preferredCameraLocked = useUserSettings(s => s.preferredCameraLocked)
@@ -181,7 +181,7 @@ export default function CameraTile({
   // This prevents a code expiring and the UI silently generating a new one while pairing.
 
   useEffect(() => {
-    if (!cameraEnabledSetting || autoscoreProvider === 'manual') return
+    if (!cameraEnabledSetting || (autoscoreProvider && autoscoreProvider !== 'built-in' && autoscoreProvider !== 'external-ws')) return
     if (autoStart === undefined) return
     if (autoStart) {
       let cancelled = false
@@ -347,26 +347,6 @@ export default function CameraTile({
     }
   }
 
-  // Listen for global event to start local camera from other UI components
-  useEffect(() => {
-    const onStart = (ev: any) => {
-      try {
-        const modeFromEvent = ev && ev.detail && ev.detail.mode
-        if (modeFromEvent && ['local', 'phone', 'wifi', 'usb'].includes(modeFromEvent)) {
-          // Respect explicit mode requests and treat as manual selection
-          handleModeSelect(modeFromEvent)
-          // Ensure start is invoked after selection is applied
-          start().catch(() => {})
-        } else {
-          // No explicit mode provided — just try to start current mode
-          start().catch(() => {})
-        }
-      } catch {}
-    }
-    window.addEventListener('ndn:start-camera' as any, onStart as any)
-    return () => { window.removeEventListener('ndn:start-camera' as any, onStart as any) }
-  }, [start, handleModeSelect])
-
   async function connectToUsbDevice(device: USBDevice) {
     try {
       setUsbDevices(devices => devices.map(d => 
@@ -394,6 +374,7 @@ export default function CameraTile({
     }
   }
 
+  // Listen for global event to start local camera from other UI components
   const handleModeSelect = useCallback((newMode: 'local'|'phone'|'wifi'|'usb') => {
     try {
       setMode(newMode === 'usb' ? 'wifi' : newMode)
@@ -422,6 +403,25 @@ export default function CameraTile({
       }
     } catch (err) { console.warn('[CameraTile] handleModeSelect failed', err) }
   }, [start, startPhonePairing, startWifiConnection, startUsbConnection, setPreferredCamera, setPreferredCameraLocked, preferredCameraId])
+
+  useEffect(() => {
+    const onStart = (ev: any) => {
+      try {
+        const modeFromEvent = ev && ev.detail && ev.detail.mode
+        if (modeFromEvent && ['local', 'phone', 'wifi', 'usb'].includes(modeFromEvent)) {
+          // Respect explicit mode requests and treat as manual selection
+          handleModeSelect(modeFromEvent)
+          // Ensure start is invoked after selection is applied
+          start().catch(() => {})
+        } else {
+          // No explicit mode provided — just try to start current mode
+          start().catch(() => {})
+        }
+      } catch {}
+    }
+    window.addEventListener('ndn:start-camera' as any, onStart as any)
+    return () => { window.removeEventListener('ndn:start-camera' as any, onStart as any) }
+  }, [start, handleModeSelect])
 
   // Phone pairing via WebRTC
   function ensureWS() {
@@ -545,6 +545,7 @@ export default function CameraTile({
       style={style}
       fill={fill}
         onModeSelect={handleModeSelect}
+      preferredCameraLocked={preferredCameraLocked}
       />
   )
 }
@@ -580,6 +581,7 @@ function CameraFrame(props: any) {
     aspect,
     style,
     fill,
+  preferredCameraLocked,
   } = props
 
   const modeDisplayName: Record<string, string> = {
@@ -673,7 +675,7 @@ function CameraFrame(props: any) {
     style: { transform: `scale(${scale})`, transformOrigin: 'center' as const },
   }
 
-  const usbActive = mode === 'wifi' && usbDevices.some(d => d.status === 'online')
+  const usbActive = mode === 'wifi' && usbDevices.some((d: USBDevice) => d.status === 'online')
 
   const videoElement = (() => {
     // Apply Fit/Fill preference (fill prop hard-overrides to full-bleed)
@@ -746,10 +748,10 @@ function CameraFrame(props: any) {
         <div className="flex items-center gap-2">
           {!streaming && (
             <>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='local'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => (onModeSelect||handleModeSelect)('local')}>Local</button>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='phone'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => (onModeSelect||handleModeSelect)('phone')}>Phone</button>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => (onModeSelect||handleModeSelect)('wifi')}>WiFi</button>
-              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => (onModeSelect||handleModeSelect)('usb')}>USB</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='local'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => onModeSelect('local')}>Local</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='phone'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => onModeSelect('phone')}>Phone</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => onModeSelect('wifi')}>WiFi</button>
+              <button className={`px-2 py-1 rounded-md text-xs font-semibold transition-all ${mode==='wifi'?'bg-emerald-500 text-white':'bg-slate-700 text-slate-200 hover:bg-slate-600'}`} onClick={() => onModeSelect('usb')}>USB</button>
             </>
           )}
           {streaming ? (

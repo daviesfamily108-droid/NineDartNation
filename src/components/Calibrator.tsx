@@ -1334,7 +1334,7 @@ async function autoCalibrate() {
 								setDstPoints(boardDetection.calibrationPoints)
 								drawOverlay(boardDetection.calibrationPoints, boardDetection.homography)
 								const shouldLock = (boardDetection.errorPx ?? Number.POSITIVE_INFINITY) <= 2.0
-								setCalibration({ H: boardDetection.homography as Homography, createdAt: Date.now(), errorPx: boardDetection.errorPx ?? null, imageSize: { w: canvasRef.current.width, h: canvasRef.current.height }, anchors: { src: canonicalRimTargets().slice(0, 4), dst: boardDetection.calibrationPoints }, locked: shouldLock ? true : locked })
+								setCalibration({ H: boardDetection.homography as Homography, createdAt: Date.now(), errorPx: boardDetection.errorPx ?? null, imageSize: { w: canvasRef.current?.width ?? 0, h: canvasRef.current?.height ?? 0 }, anchors: { src: canonicalRimTargets().slice(0, 4), dst: boardDetection.calibrationPoints }, locked: shouldLock ? true : locked })
 								setPhase('computed')
 								setConfidence(forceConfidence ? 100 : Math.round(boardDetection.confidence))
 								setCalibration({ errorPx: boardDetection.errorPx ?? null })
