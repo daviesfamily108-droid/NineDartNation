@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNod
 import ReactDOM from 'react-dom'
 import DartLoader from './DartLoader'
 
-import { makeQrDataUrlWithLogo } from '../utils/qr'
 import { useCalibration } from '../store/calibration'
 import { useCameraSession } from '../store/cameraSession'
 import { BoardRadii, canonicalRimTargets, computeHomographyDLT, drawCross, drawPolyline, rmsError, sampleRing, refinePointsSobel, applyHomography, imageToBoard, scoreAtBoardPoint, type Homography, type Point } from '../utils/vision'
@@ -116,7 +115,6 @@ export default function Calibrator() {
 				pairCodeRef.current = code
 			} catch {}
 		}
-	const [qrDataUrl, setQrDataUrl] = useState<string>('')
 	const [lanHost, setLanHost] = useState<string | null>(null)
 	const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null)
 	const [showTips, setShowTips] = useState<boolean>(true)
@@ -217,19 +215,6 @@ export default function Calibrator() {
 			window.removeEventListener('resize', detect)
 		}
 	}, [])
-
-	useEffect(() => {
-		if (!pairCode) { setQrDataUrl(''); return }
-		// Generate a crisp QR (H-level error correction) with centered logo and white mask
-		const logoPath = (import.meta as any).env?.VITE_QR_LOGO_URL || '/dart-thrower.svg'
-		makeQrDataUrlWithLogo(mobileUrl, {
-			width: 256,
-			margin: 2,
-			errorCorrectionLevel: 'H',
-			color: { dark: '#000000', light: '#ffffff' },
-			logo: { logoUrl: logoPath, logoScale: 0.2, mask: true, shape: 'circle' }
-		}).then(setQrDataUrl).catch(() => setQrDataUrl(''))
-	}, [mobileUrl, pairCode])
 
 	// Detect camera permission status where supported
 	useEffect(() => {
@@ -1982,7 +1967,6 @@ async function autoCalibrate() {
 											<span className="text-[10px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'code' ? 'Copied!' : 'Copy code'}</span>
 										</button>
 									)}
-									{qrDataUrl && <img className="mt-1 h-40 w-40 bg-white" alt="Scan to open" src={qrDataUrl} />}
 									<div className="flex items-center gap-2">
 										{ttl !== null && <span>Expires in {ttl}s</span>}
 										<button className="btn px-2 py-1 text-xs" onClick={regenerateCode}>Regenerate</button>

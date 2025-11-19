@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { makeQrDataUrlWithLogo } from '../utils/qr'
 import { useUserSettings } from '../store/userSettings'
 import { useCameraSession, type CameraStreamMode } from '../store/cameraSession'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice, discoverUSBDevices, requestUSBDevice, connectToUSBDevice, type USBDevice } from '../utils/networkDevices'
@@ -91,7 +90,6 @@ export default function CameraTile({
   })
   
   const [expiresAt, setExpiresAt] = useState<number | null>(null)
-  const [now, setNow] = useState<number>(Date.now())
   const [paired, setPaired] = useState<boolean>(false)
   const [lanHost, setLanHost] = useState<string | null>(null)
   const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null)
@@ -161,6 +159,8 @@ export default function CameraTile({
     localStorage.setItem('ndn:camera:mode', mode) 
   }, [mode])
   
+  const [manualModeSetAt, setManualModeSetAt] = useState<number | null>(null)
+  
   // Sync phone camera selection from Calibrator into CameraTile mode state
   // When user locks in phone camera in Calibrator, it updates preferredCameraLabel
   // This effect ensures CameraTile's UI reflects that selection
@@ -176,25 +176,6 @@ export default function CameraTile({
     }
   }, [preferredCameraLabel, mode, manualModeSetAt])
   
-  const [qrDataUrl, setQrDataUrl] = useState<string>('')
-  const [manualModeSetAt, setManualModeSetAt] = useState<number | null>(null)
-  useEffect(() => {
-    if (!pairCode) { setQrDataUrl(''); return }
-    const logoPath = (import.meta as any).env?.VITE_QR_LOGO_URL || '/dart-thrower.svg'
-    makeQrDataUrlWithLogo(mobileUrl, {
-      width: 160,
-      margin: 1,
-      errorCorrectionLevel: 'H',
-      color: { dark: '#000000', light: '#ffffff' },
-      logo: { logoUrl: logoPath, logoScale: 0.2, mask: true, shape: 'circle' }
-    }).then(setQrDataUrl).catch(() => setQrDataUrl(''))
-  }, [mobileUrl, pairCode])
-  useEffect(() => {
-    if (!expiresAt) return
-    const t = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(t)
-  }, [expiresAt])
-  const ttl = useMemo(() => expiresAt ? Math.max(0, Math.ceil((expiresAt - now)/1000)) : null, [expiresAt, now])
   // Intentionally disabled automatic regeneration of phone pairing codes.
   // Codes will only be created when the user explicitly requests it (button click).
   // This prevents a code expiring and the UI silently generating a new one while pairing.
@@ -550,8 +531,6 @@ export default function CameraTile({
       setMode={setMode} 
       pairCode={pairCode} 
       mobileUrl={mobileUrl} 
-      ttl={ttl} 
-      qrDataUrl={qrDataUrl} 
       regenerateCode={regenerateCode} 
       httpsInfo={httpsInfo} 
       showTips={showTips} 
@@ -589,8 +568,6 @@ function CameraFrame(props: any) {
   onModeSelect,
     pairCode,
     mobileUrl,
-    ttl,
-    qrDataUrl,
     regenerateCode,
     httpsInfo,
     showTips,
@@ -811,9 +788,7 @@ function CameraFrame(props: any) {
               <span className="text-[9px] uppercase tracking-wide whitespace-nowrap text-emerald-200">{copyFeedback === 'code' ? 'Copied!' : 'Copy'}</span>
             </button>
           </div>
-          {qrDataUrl && <img className="mt-1 w-[160px] h-[160px] bg-white rounded" alt="Scan to open" src={qrDataUrl} />}
           <div className="mt-1 flex items-center gap-2">
-            {ttl !== null && <span>Expires in {ttl}s</span>}
             <button className="px-1 py-0.5 rounded bg-slate-700" onClick={regenerateCode}>Regenerate</button>
           </div>
           {showTips && (
