@@ -2625,7 +2625,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <div className="flex items-center justify-between mb-3 sticky top-0 bg-slate-900/80 backdrop-blur border-b border-slate-700 z-10 px-2 py-2">
                 <h3 className="text-xl font-bold">Create Match</h3>
               </div>
-              <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 overflow-auto px-2" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+              <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 overflow-auto px-2 flex-1 min-h-0">
               <div className="col-span-1">
                 <label className="block text-sm text-slate-300 mb-1">Game</label>
                 <select className="input w-full" value={game} onChange={e=>setGame(e.target.value as any)}>
@@ -2887,6 +2887,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <button className="btn px-2 py-1 text-sm" onClick={()=>setShowMessages(false)}>Close</button>
             </div>
             <ChatList
+              className="flex-1 min-h-0"
               items={chat
                 .slice(-30)
                 .filter((m) => !blocklist.isBlocked(String(m.fromId || '')))
@@ -2916,12 +2917,12 @@ export default function OnlinePlay({ user }: { user?: any }) {
 }
 
 // Small, self-contained chat list with moderation affordances
-function ChatList({ items, onDelete, onReport, onBlock }: { items: { key: string; from: string; id?: string; text: string }[]; onDelete: (index: number) => void; onReport: (index: number) => void; onBlock?: (index: number) => void }) {
+function ChatList({ items, onDelete, onReport, onBlock, className }: { items: { key: string; from: string; id?: string; text: string }[]; onDelete: (index: number) => void; onReport: (index: number) => void; onBlock?: (index: number) => void; className?: string }) {
   const mobile = (() => { try { const ua = navigator.userAgent || ''; return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) } catch { return false } })()
   const [touch, setTouch] = useState<{ x: number; y: number; i: number; t: number } | null>(null)
   const [swiped, setSwiped] = useState<number | null>(null)
   return (
-    <div className="h-24 overflow-auto text-sm divide-y divide-slate-700/40">
+    <div className={`overflow-auto text-sm divide-y divide-slate-700/40 ${className || 'h-24'}`}>
       {items.length === 0 ? (
         <div className="opacity-60 py-1">No messages yet.</div>
       ) : items.map((m, i) => {

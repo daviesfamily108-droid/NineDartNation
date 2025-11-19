@@ -5,6 +5,7 @@ import MatchControls from './MatchControls'
 import { addMatchToAllTime } from '../store/profileStats'
 import { usePendingVisit } from '../store/pendingVisit'
 import type { UnifiedMatchActions } from '../logic/matchActions'
+import ResizableModal from './ui/ResizableModal'
 
 export default function Scoreboard({ matchActions }: { matchActions?: UnifiedMatchActions } = {}) {
   const { players, currentPlayerIdx, addVisit, undoVisit, endLeg, nextPlayer, endGame, inProgress, startingScore, bestLegThisMatch } = useMatch()
@@ -41,7 +42,9 @@ export default function Scoreboard({ matchActions }: { matchActions?: UnifiedMat
   }
 
   return (
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+    <ResizableModal storageKey="ndn:modal:scoreboard" className="w-full h-full relative" defaultWidth={1100} defaultHeight={720} minWidth={720} minHeight={480} maxWidth={1600} maxHeight={1200} initialFitHeight>
+      <div className="flex-1 min-h-0 overflow-y-auto p-3">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
       <div className="col-span-2 card">
         <h2 className="text-lg font-semibold mb-3">Score Input</h2>
         {inProgress ? (
@@ -138,5 +141,7 @@ export default function Scoreboard({ matchActions }: { matchActions?: UnifiedMat
         )}
       </div>
     </div>
+      </div>
+    </ResizableModal>
   )
 }
