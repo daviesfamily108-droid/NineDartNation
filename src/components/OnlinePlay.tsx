@@ -2298,7 +2298,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                       <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyKillerAuto(r, info?.sector ?? null) }} />
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} onKeyDown={e=>{ if(e.key==='Enter'){ applyKillerAuto('SINGLE', Math.max(0, visitScore|0)); setVisitScore(0) } }} />
                       <button className="btn px-2 py-0.5 text-xs" onClick={()=>{ applyKillerAuto('SINGLE', Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                     </div>
@@ -2306,7 +2306,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 ) : (user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
                   <div className="p-3 rounded-xl bg-black/20">
                     <div className="text-xs mb-1.5">{currentGame} (online) ÔÇö manual turn entry</div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <input className="input w-24 text-sm" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                       <button className="btn" onClick={() => {
                         const v = Math.max(0, visitScore|0)
@@ -2504,7 +2504,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                         <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyCricketAuto(value, r, info?.sector ?? null) }} />
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn" onClick={() => { applyCricketAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                       </div>
@@ -2519,7 +2519,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                         <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyShanghaiAuto(value, r, info?.sector ?? null) }} />
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn" onClick={() => { applyShanghaiAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                       </div>
@@ -2535,7 +2535,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                         <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyHalveAuto(value, r, info?.sector ?? null) }} />
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn" onClick={() => { applyHalveAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                       </div>
@@ -2550,7 +2550,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 mb-2">
                         <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyHighLowAuto(value, r, info?.sector ?? null) }} />
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn" onClick={() => { applyHighLowAuto(Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                       </div>
@@ -2578,7 +2578,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                       <div className="rounded-2xl overflow-hidden bg-black/60 border border-white/10 my-2">
                         <CameraView scoringMode="custom" showToolbar={false} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : (ring as 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL'); applyKillerAuto(r, info?.sector ?? null) }} />
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn" onClick={() => { applyKillerAuto('SINGLE', Math.max(0, visitScore|0)); setVisitScore(0) }}>Add Dart</button>
                       </div>
@@ -2587,7 +2587,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   ) : (user?.username && match.players[match.currentPlayerIdx]?.name === user.username) ? (
                     <div className="p-3 rounded-xl bg-black/20">
                       <div className="text-sm mb-2">{currentGame} (online) ÔÇö manual turn entry</div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <input className="input w-28" type="number" min={0} value={visitScore} onChange={e => setVisitScore(parseInt(e.target.value||'0'))} />
                         <button className="btn" onClick={() => {
                           const v = Math.max(0, visitScore|0)

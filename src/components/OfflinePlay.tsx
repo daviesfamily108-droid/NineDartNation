@@ -2104,7 +2104,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   <div className="text-sm font-semibold text-white">{humanName}</div>
                                   <div className="space-y-2">
                                     <label className="text-xs uppercase tracking-wide text-white/50">Commit Visit</label>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                       <MatchControls
                                         inProgress={true}
                                         startingScore={x01Score}
@@ -2119,7 +2119,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   </div>
                                   <div className="space-y-2">
                                     <label className="text-xs uppercase tracking-wide text-white/50">Legs Override</label>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                       <input
                                         className="input w-20 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
                                         type="number"
@@ -2137,7 +2137,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   <div className="text-sm font-semibold text-white">{aiDisplayName}</div>
                                   <div className="space-y-2">
                                     <label className="text-xs uppercase tracking-wide text-white/50">Three Dart Edit</label>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                       <input
                                         className="input w-24 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
                                         type="number"
@@ -2153,7 +2153,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   </div>
                                   <div className="space-y-2">
                                     <label className="text-xs uppercase tracking-wide text-white/50">Legs Override</label>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                       <input
                                         className="input w-20 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
                                         type="number"
@@ -2338,11 +2338,11 @@ export default function OfflinePlay({ user }: { user: any }) {
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addAtcValue(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addAtcNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addAtcNumeric}>Add Dart</button>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input className="input w-44" placeholder="Manual (T20, D5, 25, 50)" value={manualBox} onChange={e=>setManualBox(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') addAtcManual() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addAtcManual}>Add</button>
                     </div>
@@ -2360,7 +2360,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addCricketAuto(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addCricketNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addCricketNumeric}>Add Dart</button>
                       <button
@@ -2379,7 +2379,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addShanghaiAuto(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addShanghaiNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addShanghaiNumeric}>Add Dart</button>
                       <button
@@ -2398,7 +2398,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHalveAuto(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addHalveNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addHalveNumeric}>Add Dart</button>
                       <button
@@ -2417,7 +2417,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addHighLowAuto(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addHighLowNumeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addHighLowNumeric}>Add Dart</button>
                       <button
@@ -2436,7 +2436,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                     {cameraEnabled && <div className="rounded-2xl overflow-hidden bg-black">
                       <CameraView scoringMode="custom" showToolbar={cameraToolbarVisible} immediateAutoCommit onAutoDart={(value, ring, info) => { const r = ring === 'MISS' ? undefined : ring; addB27Auto(value, r as any, info?.sector ?? null) }} onAddVisit={makeOfflineAddVisitAdapter(commitManualVisitTotal)} onEndLeg={(s?: number) => matchActions.endLeg(s)} />
                     </div>}
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <input className="input w-24" type="number" min={0} value={playerDartPoints} onChange={e => setPlayerDartPoints(Number(e.target.value||0))} onKeyDown={e=>{ if(e.key==='Enter') addB27Numeric() }} />
                       <button className="btn px-3 py-1 text-sm" onClick={addB27Numeric}>Add Dart</button>
                       <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={resetB27}>Reset</button>

@@ -24,7 +24,7 @@ export default function MatchControls({ inProgress = true, startingScore = 501, 
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <input className="input w-32" type="number" value={score} onChange={e => setScore(parseInt(e.target.value || '0'))} placeholder="Score" />
         {showDartsSelect && (
           <select className="input" value={darts} onChange={e => setDarts(parseInt(e.target.value))}>
@@ -49,7 +49,7 @@ export default function MatchControls({ inProgress = true, startingScore = 501, 
           ))}
         </div>
       )}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button className="btn" onClick={() => { onEndLeg && onEndLeg(score); setScore(0); }}>End Leg (Checkout {score || 0})</button>
         <button className="btn bg-slate-700 hover:bg-slate-800" onClick={() => onNextPlayer && onNextPlayer()}>Next Player</button>
         <button className="btn bg-emerald-600 hover:bg-emerald-700" onClick={() => { onEndGame && onEndGame() }}>End Game</button>
