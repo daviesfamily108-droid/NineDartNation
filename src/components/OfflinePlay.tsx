@@ -1607,10 +1607,9 @@ export default function OfflinePlay({ user }: { user: any }) {
   return (
   <div className="card ndn-game-shell relative overflow-hidden">
   {showStartShowcase && <MatchStartShowcase players={(match.players || []) as any} onDone={() => setShowStartShowcase(false)} />}
-  <h2 className="text-2xl font-bold text-brand-700 mb-4">Offline Game Modes {offlineLayout==='classic' ? <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">Classic layout</span> : <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">Modern layout</span>}</h2>
+  <h2 className="text-3xl font-bold text-brand-700 mb-4">Offline Mode {offlineLayout==='classic' ? <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">Classic layout</span> : <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">Modern layout</span>}</h2>
       <div className="ndn-shell-body">
       <div className="mb-4 flex flex-col gap-3">
-        <label className="font-semibold">Select game mode:</label>
         <select className="input w-full" value={selectedMode} onChange={e => setSelectedMode(e.target.value)}>
           {freeGames.map(mode => <option key={mode} value={mode}>{mode}</option>)}
           {premiumGames.map(mode => (
@@ -1698,7 +1697,7 @@ export default function OfflinePlay({ user }: { user: any }) {
             {/* Header bar with visible mode and actions; sheen is clipped to this area */}
             <div
               className="flex-1 min-h-0 overflow-x-hidden pr-1 pt-2 pb-2"
-              style={{ overflowY: 'auto' }}
+              style={{ overflowY: 'scroll' }}
               ref={(el) => { (scrollerRef as any).current = el }}
             >
               <div ref={(el)=>{ (headerBarRef as any).current = el }}>

@@ -29,6 +29,8 @@ const JWT_EXPIRES = process.env.JWT_EXPIRES || '12h';
 // Track HTTPS runtime status and port
 let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
+let MAX_CLIENTS = 50000; // Default capacity
+let clusteringEnabled = false;
 const app = express();
 // Trust proxy when behind render/netlify or nginx
 try { app.set('trust proxy', 1) } catch {}
@@ -1651,15 +1653,45 @@ app.post('/api/admin/maintenance', (req, res) => {
   res.json({ ok: true, maintenance: maintenanceMode })
 })
 
+app.get('/api/admin/system-health', (req, res) => {
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  
+  const uptime = process.uptime()
+  const memUsage = process.memoryUsage()
+  
+  res.json({
+    ok: true,
+    health: {
+      database: true,
+      websocket: true,
+      https: process.env.NODE_ENV === 'production',
+      maintenance: maintenanceMode || false,
+      clustering: clusteringEnabled,
+      uptime: uptime,
+      memory: {
+        heapUsed: memUsage.heapUsed,
+        heapTotal: memUsage.heapTotal
+      },
+      version: '1.0.0'
+    }
+  })
+})
+
 app.post('/api/admin/clustering', (req, res) => {
   const owner = getOwnerFromReq(req)
   if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   const { enabled, capacity } = req.body || {}
+  
+  if (typeof enabled === 'boolean') {
+    clusteringEnabled = enabled
+  }
+
   if (typeof capacity === 'number') {
     MAX_CLIENTS = Math.max(1, capacity)
     console.log('[Admin] Updated max clients capacity to:', MAX_CLIENTS)
   }
-  res.json({ ok: true, capacity: MAX_CLIENTS, enabled: false })
+  res.json({ ok: true, capacity: MAX_CLIENTS, enabled: clusteringEnabled })
 })
 
 app.post('/api/admin/announce', (req, res) => {
@@ -2276,7 +2308,7 @@ async function broadcastTournaments() {
 
 // Constrain ws payload size for safety
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
-let MAX_CLIENTS = 50000; // Default capacity
+// MAX_CLIENTS and clusteringEnabled moved to top
 console.log(`[WS] WebSocket attached to same server at path /ws`);
 wsConnections.set(0)
 

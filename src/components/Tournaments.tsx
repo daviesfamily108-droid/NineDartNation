@@ -346,13 +346,6 @@ export default function Tournaments({ user }: { user: any }) {
 
   return (
     <div className="card ndn-game-shell">
-      {/* Debug: quick indicator to help diagnose lobby state on deployed env */}
-      <div className="absolute top-3 right-6 text-xs opacity-80 p-2 rounded bg-black/30 text-white">
-        <div>Tournaments: {list.length}</div>
-        <div>Last refresh: {lastRefresh ? new Date(lastRefresh).toLocaleTimeString() : '—'}</div>
-        {fetchError && <div className="text-rose-300">Fetch err: {String(fetchError).slice(0,40)}</div>}
-        <div className="mt-1"><button className="btn btn-sm" onClick={() => refresh()}>Refresh</button></div>
-      </div>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-2xl font-bold">Tournaments</h2>
       </div>

@@ -924,60 +924,6 @@ export default function AdminDashboard({ user }: { user: any }) {
 					</div>
 
 					<div className="card">
-						<h3 className="text-xl font-semibold mb-3">System Health</h3>
-						<div className="text-sm opacity-80 mb-3">Current status of system components and services.</div>
-						{systemHealth ? (
-							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-								<div className="space-y-2">
-									<div className="flex items-center justify-between">
-										<span>Database</span>
-										<span className={`px-2 py-1 rounded text-xs ${systemHealth.database ? 'bg-emerald-600' : 'bg-red-600'}`}>
-											{systemHealth.database ? 'Ready' : 'Down'}
-										</span>
-									</div>
-									<div className="flex items-center justify-between">
-										<span>WebSocket</span>
-										<span className={`px-2 py-1 rounded text-xs ${systemHealth.websocket ? 'bg-emerald-600' : 'bg-red-600'}`}>
-											{systemHealth.websocket ? 'Ready' : 'Down'}
-										</span>
-									</div>
-									<div className="flex items-center justify-between">
-										<span>HTTPS</span>
-										<span className={`px-2 py-1 rounded text-xs ${systemHealth.https ? 'bg-emerald-600' : 'bg-amber-600'}`}>
-											{systemHealth.https ? 'Enabled' : 'HTTP Only'}
-										</span>
-									</div>
-									<div className="flex items-center justify-between">
-										<span>Maintenance Mode</span>
-										<span className={`px-2 py-1 rounded text-xs ${!systemHealth.maintenance ? 'bg-emerald-600' : 'bg-red-600'}`}>
-											{!systemHealth.maintenance ? 'Normal' : 'Active'}
-										</span>
-									</div>
-								</div>
-								<div className="space-y-2">
-									<div className="text-sm">
-										<span className="font-semibold">Uptime:</span> {Math.floor(systemHealth.uptime / 3600)}h {Math.floor((systemHealth.uptime % 3600) / 60)}m
-									</div>
-									<div className="text-sm">
-										<span className="font-semibold">Memory:</span> {Math.round(systemHealth.memory.heapUsed / 1024 / 1024)}MB used
-									</div>
-									<div className="text-sm">
-										<span className="font-semibold">Version:</span> {systemHealth.version}
-									</div>
-									<div className="flex gap-2 mt-3">
-										<button className="btn" onClick={fetchSystemHealth}>Refresh</button>
-									</div>
-								</div>
-							</div>
-						) : (
-							<div className="text-center py-4">
-								<div className="text-sm opacity-60 mb-2">Loading system health...</div>
-								<button className="btn" onClick={fetchSystemHealth}>Load Health Status</button>
-							</div>
-						)}
-					</div>
-
-					<div className="card">
 						<h3 className="text-xl font-semibold mb-3">Open Matches</h3>
 						<ul className="space-y-1">
 							{(status?.matches || []).map((m: any) => (
