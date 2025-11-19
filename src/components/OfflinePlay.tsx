@@ -2045,6 +2045,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                             <CameraView 
                               scoringMode="x01"
                               showToolbar={cameraToolbarVisible}
+                              immediateAutoCommit
                               onAutoDart={(value, ring, info) => {
                                 applyDartValue(value)
                               }}
