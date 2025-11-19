@@ -403,7 +403,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   useEffect(() => () => clearPendingVisitTimer(), [clearPendingVisitTimer])
 
   useEffect(() => {
-    if (playerVisitDarts === 0 && lastVisitDartsRef.current > 0) {
+    if (playerVisitDarts === 0) {
       try {
         window.dispatchEvent(new CustomEvent('ndn:darts-cleared', { detail: { source: 'offline-play', ts: Date.now() } }))
       } catch {}
