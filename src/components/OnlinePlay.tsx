@@ -1439,7 +1439,14 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 </div>
               </div>
               {/* Pairing code UI removed; pairing still supported via Calibrator and server flows */}
-              <CameraView />
+              {match.inProgress ? (
+                <CameraView />
+              ) : (
+                <div className="rounded-2xl bg-slate-900/40 border border-white/10 p-4 text-slate-200 opacity-70">
+                  <div className="font-semibold mb-2">Camera Preview</div>
+                  <div className="text-sm">Camera is only available while a match is in progress. Join or create a match to enable camera pairing and live preview.</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
