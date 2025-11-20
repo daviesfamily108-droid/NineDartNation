@@ -1,3 +1,8 @@
+// --- REQUIRED FOR PREMIUM PAYMENTS ---
+// Set this in your Render environment variables:
+//   STRIPE_PREMIUM_PAYMENT_LINK=https://buy.stripe.com/your_live_payment_link
+// You can find this link in your Stripe dashboard under Payment Links.
+
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
 const upstashRestUrl = process.env.UPSTASH_REDIS_REST_URL;
@@ -1595,9 +1600,9 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
   try {
     // Use payment link instead of API to avoid exposing keys
     const premiumPaymentLink = process.env.STRIPE_PREMIUM_PAYMENT_LINK || 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE';
-    
-    if (premiumPaymentLink === 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE') {
-      return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED' })
+    if (!process.env.STRIPE_PREMIUM_PAYMENT_LINK || premiumPaymentLink === 'https://buy.stripe.com/YOUR_PREMIUM_LINK_HERE') {
+      console.error('[Stripe] STRIPE_PREMIUM_PAYMENT_LINK not set. Set this in your Render environment variables.');
+      return res.status(400).json({ ok: false, error: 'STRIPE_NOT_CONFIGURED', message: 'STRIPE_PREMIUM_PAYMENT_LINK not set on server.' })
     }
     
     const { email } = req.body || {}

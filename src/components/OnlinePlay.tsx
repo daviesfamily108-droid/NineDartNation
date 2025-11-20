@@ -1,23 +1,4 @@
-﻿// Modal state for in-game view (to match OfflinePlay)
-const [fitAll, setFitAll] = useState(false);
-const [fitScale, setFitScale] = useState(1);
-const [maximized, setMaximized] = useState(false);
-const [inMatch, setInMatch] = useState(false);
-const headerBarRef = useRef<HTMLDivElement>(null);
-const contentRef = useRef<HTMLDivElement>(null);
-
-// Sync fitScale with fitAll (simple example, can be improved)
-useEffect(() => {
-  if (fitAll) setFitScale(0.85);
-  else setFitScale(1);
-}, [fitAll]);
-
-// Dummy startMatch for Restart button (should reset match state as needed)
-function startMatch() {
-  // TODO: Implement actual match restart logic
-  window.location.reload();
-}
-import { useEffect, useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
 import { useMatch } from '../store/match'
 import CameraView from './CameraView'
 import CameraTile from './CameraTile'
@@ -61,8 +42,49 @@ import { useOnlineGameStats } from './scoreboards/useGameStats'
 export default function OnlinePlay({ user }: { user?: any }) {
   const API_URL = (import.meta as any).env?.VITE_API_URL || ''
   const toast = useToast();
-  const wsGlobal = (() => { try { return useWS() } catch { return null } })()
-  const blocklist = useBlocklist()
+  const match = useMatch();
+  const wsGlobal = useWS();
+  const wsRef = useRef<WebSocket | null>(null);
+  // forward-declare so handlers defined earlier can call it
+  let startMobileWebRTC: (code: string) => Promise<void> = async () => { return }
+  const blocklist = useBlocklist();
+
+  // ...existing code...
+
+  // ...existing code...
+
+  // Place this after all hooks/variables:
+  function sendState() {
+    try {
+      if (wsGlobal && (wsGlobal as any).connected) {
+        wsGlobal.send({ type: 'sync', match })
+      } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'sync', match }))
+      }
+    } catch (err) {
+      // Optionally log or toast error
+    }
+  }
+
+  // Request a mobile pairing code from server
+  function requestPairingCode(persistent = false) {
+    try {
+      const payload: any = { type: 'cam-create' }
+      if (persistent) payload.persistent = true
+      if (wsGlobal && (wsGlobal as any).connected) {
+        wsGlobal.send(payload)
+      } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify(payload))
+      } else {
+        // No WS available
+        toast?.('Not connected to server. Unable to request pairing code.', { type: 'error' })
+        return
+      }
+      toast?.('Requested pairing code — check the Camera panel for the code', { type: 'info' })
+    } catch (err) {
+      try { toast?.('Failed to request pairing code', { type: 'error' }) } catch {}
+    }
+  }
   const [roomId, setRoomId] = useState('room-1')
   const [connected, setConnected] = useState(false)
   const [chat, setChat] = useState<{from:string;message:string; fromId?: string}[]>([])
@@ -71,14 +93,12 @@ export default function OnlinePlay({ user }: { user?: any }) {
   // Track last locally-sent chat to avoid duplicating when the server echoes it back
   const lastSentChatRef = useRef<{ text: string; ts: number } | null>(null)
   const [selfId, setSelfId] = useState<string | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
   // Reconnect handling
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const shouldReconnectRef = useRef(true)
   const lastToastRef = useRef(0)
   const firstConnectDoneRef = useRef(false)
-  const match = useMatch()
   const msgs = useMessages()
   const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale, cameraFitMode = 'fill', setCameraFitMode, cameraEnabled, textSize, boxSize, autoscoreProvider, matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName, x01DoubleIn: defaultX01DoubleIn } = useUserSettings()
   const manualScoring = autoscoreProvider === 'manual'
@@ -102,6 +122,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
   // Turn-by-turn modal
   const [showMatchModal, setShowMatchModal] = useState(false)
   const [participants, setParticipants] = useState<string[]>([])
+  // Layout controls (mirror OfflinePlay)
+  const [maximized, setMaximized] = useState(false)
+  const [fitAll, setFitAll] = useState(false)
+  const [fitScale, setFitScale] = useState(1)
   const [turnIdx, setTurnIdx] = useState(0)
   const [visitScore, setVisitScore] = useState(0)
   // Double Practice (online) minimal state synchronized via WS state payload
@@ -122,6 +146,36 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [x01DoubleInMatch, setX01DoubleInMatch] = useState<boolean>(false)
   // Mobile camera pairing
   const [pairingCode, setPairingCode] = useState<string | null>(null)
+  const [pairingPending, setPairingPending] = useState(false)
+  const [pairingExpiryAt, setPairingExpiryAt] = useState<number | null>(null)
+  const pairingTimerRef = useRef<number | null>(null)
+  const pairingPendingTimeoutRef = useRef<number | null>(null)
+  // Copy pairing code to clipboard
+  async function copyPairingCode() {
+    if (!pairingCode) return
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(pairingCode)
+      } else {
+        const ta = document.createElement('textarea')
+        ta.value = pairingCode
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        ta.remove()
+      }
+      try { toast('Pairing code copied to clipboard', { type: 'success' }) } catch {}
+    } catch (err) {
+      try { toast('Failed to copy pairing code', { type: 'error' }) } catch {}
+    }
+  }
+  const [pairCountdown, setPairCountdown] = useState<number>(0)
+  useEffect(() => {
+    return () => {
+      try { if (pairingTimerRef.current) window.clearInterval(pairingTimerRef.current) } catch {}
+      try { if (pairingPendingTimeoutRef.current) window.clearTimeout(pairingPendingTimeoutRef.current) } catch {}
+    }
+  }, [])
   // Highlight auto-download UI
   const [highlightCandidate, setHighlightCandidate] = useState<any | null>(null)
   const [showHighlightModal, setShowHighlightModal] = useState(false)
@@ -182,6 +236,9 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [ttt, setTTT] = useState<ReturnType<typeof createTicTacToe>>(() => createTicTacToe())
   // Track darts this turn for non-X01 games to auto-advance after 3
   const [turnDarts, setTurnDarts] = useState(0)
+  // New: Track if all darts thrown and waiting for removal
+  const [awaitingDartRemoval, setAwaitingDartRemoval] = useState(false)
+  const dartRemovalTimerRef = useRef<NodeJS.Timeout | null>(null)
   // Pause state (synced over WS)
   const [paused, setPausedLocal] = useState<boolean>(false)
   const [pauseRequestedBy, setPauseRequestedBy] = useState<string | null>(null)
@@ -635,9 +692,27 @@ export default function OnlinePlay({ user }: { user?: any }) {
         const kind = data.kind === 'leg' ? 'leg' : '180'
         triggerCelebration(kind, who)
       } else if (data.type === 'cam-code') {
-        console.log('Received cam-code:', data.code)
-        setPairingCode(data.code)
-        toast(`Pairing code: ${data.code}`, { type: 'info' })
+            console.log('Received cam-code:', data.code)
+            setPairingCode(data.code)
+      setPairingPending(false)
+      try { if (pairingPendingTimeoutRef.current) window.clearTimeout(pairingPendingTimeoutRef.current) } catch {}
+            // expiry (2 minutes)
+            const expiryMs = 120 * 1000
+            const at = Date.now() + expiryMs
+            setPairingExpiryAt(at)
+            toast(`Pairing code: ${data.code}`, { type: 'info' })
+            // start countdown interval (clears any existing)
+            try { if (pairingTimerRef.current) window.clearInterval(pairingTimerRef.current) } catch {}
+            pairingTimerRef.current = window.setInterval(() => {
+              const rem = Math.max(0, Math.ceil((at - Date.now()) / 1000))
+              setPairCountdown(rem)
+              if (rem <= 0) {
+                try { if (pairingTimerRef.current) window.clearInterval(pairingTimerRef.current) } catch {}
+                pairingTimerRef.current = null
+                setPairingCode(null)
+                setPairingExpiryAt(null)
+              }
+            }, 1000) as unknown as number
       } else if (data.type === 'cam-peer-joined') {
         console.log('Mobile peer joined for code:', data.code)
         // Mobile camera connected, start WebRTC
@@ -732,6 +807,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
         </div>
       </div>
     );
+  }
   function addDpValue(dart: number) {
     const hit = isDoubleHit(dart, dpIndex)
     if (hit) {
@@ -902,9 +978,14 @@ export default function OnlinePlay({ user }: { user?: any }) {
     const nd = turnDarts + 1
     setTurnDarts(nd)
     if (nd >= 3) {
-      // end turn
-      setTurnDarts(0)
-      match.nextPlayer(); sendState()
+      setAwaitingDartRemoval(true)
+      // Start 10s timer for auto-switch
+      if (dartRemovalTimerRef.current) clearTimeout(dartRemovalTimerRef.current)
+      dartRemovalTimerRef.current = setTimeout(() => {
+        setAwaitingDartRemoval(false)
+        setTurnDarts(0)
+        match.nextPlayer(); sendState()
+      }, 10000)
     } else { sendState() }
   }
 
@@ -921,15 +1002,20 @@ export default function OnlinePlay({ user }: { user?: any }) {
     const nd = turnDarts + 1
     setTurnDarts(nd)
     if (nd >= 3) {
-      setShanghaiById(prev => {
-        const copy = { ...prev }
-        const st = { ...(copy[pid] || createShanghaiState()) }
-        endShanghaiTurn(st)
-        copy[pid] = st
-        return copy
-      })
-      setTurnDarts(0)
-      match.nextPlayer(); sendState()
+      setAwaitingDartRemoval(true)
+      if (dartRemovalTimerRef.current) clearTimeout(dartRemovalTimerRef.current)
+      dartRemovalTimerRef.current = setTimeout(() => {
+        setAwaitingDartRemoval(false)
+        setTurnDarts(0)
+        setShanghaiById(prev => {
+          const copy = { ...prev }
+          const st = { ...(copy[pid] || createShanghaiState()) }
+          endShanghaiTurn(st)
+          copy[pid] = st
+          return copy
+        })
+        match.nextPlayer(); sendState()
+      }, 10000)
     } else { sendState() }
   }
 
@@ -946,15 +1032,20 @@ export default function OnlinePlay({ user }: { user?: any }) {
     const nd = turnDarts + 1
     setTurnDarts(nd)
     if (nd >= 3) {
-      setHalveById(prev => {
-        const copy = { ...prev }
-        const st = { ...(copy[pid] || createDefaultHalveIt()) }
-        endHalveItTurn(st)
-        copy[pid] = st
-        return copy
-      })
-      setTurnDarts(0)
-      match.nextPlayer(); sendState()
+      setAwaitingDartRemoval(true)
+      if (dartRemovalTimerRef.current) clearTimeout(dartRemovalTimerRef.current)
+      dartRemovalTimerRef.current = setTimeout(() => {
+        setAwaitingDartRemoval(false)
+        setTurnDarts(0)
+        setHalveById(prev => {
+          const copy = { ...prev }
+          const st = { ...(copy[pid] || createDefaultHalveIt()) }
+          endHalveItTurn(st)
+          copy[pid] = st
+          return copy
+        })
+        match.nextPlayer(); sendState()
+      }, 10000)
     } else { sendState() }
   }
 
@@ -971,15 +1062,20 @@ export default function OnlinePlay({ user }: { user?: any }) {
     const nd = turnDarts + 1
     setTurnDarts(nd)
     if (nd >= 3) {
-      setHighlowById(prev => {
-        const copy = { ...prev }
-        const st = { ...(copy[pid] || createHighLow()) }
-        endHighLowTurn(st)
-        copy[pid] = st
-        return copy
-      })
-      setTurnDarts(0)
-      match.nextPlayer(); sendState()
+      setAwaitingDartRemoval(true)
+      if (dartRemovalTimerRef.current) clearTimeout(dartRemovalTimerRef.current)
+      dartRemovalTimerRef.current = setTimeout(() => {
+        setAwaitingDartRemoval(false)
+        setTurnDarts(0)
+        setHighlowById(prev => {
+          const copy = { ...prev }
+          const st = { ...(copy[pid] || createHighLow()) }
+          endHighLowTurn(st)
+          copy[pid] = st
+          return copy
+        })
+        match.nextPlayer(); sendState()
+      }, 10000)
     } else { sendState() }
   }
 
@@ -1000,7 +1096,15 @@ export default function OnlinePlay({ user }: { user?: any }) {
     })
     const nd = turnDarts + 1
     setTurnDarts(nd)
-    if (nd >= 3) { setTurnDarts(0); match.nextPlayer(); sendState() } else { sendState() }
+    if (nd >= 3) {
+      setAwaitingDartRemoval(true)
+      if (dartRemovalTimerRef.current) clearTimeout(dartRemovalTimerRef.current)
+      dartRemovalTimerRef.current = setTimeout(() => {
+        setAwaitingDartRemoval(false)
+        setTurnDarts(0)
+        match.nextPlayer(); sendState()
+      }, 10000)
+    } else { sendState() }
   }
 
   function applyAmCricketAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
@@ -1017,7 +1121,15 @@ export default function OnlinePlay({ user }: { user?: any }) {
     })
     const nd = turnDarts + 1
     setTurnDarts(nd)
-    if (nd >= 3) { setTurnDarts(0); match.nextPlayer(); sendState() } else { sendState() }
+    if (nd >= 3) {
+      setAwaitingDartRemoval(true)
+      if (dartRemovalTimerRef.current) clearTimeout(dartRemovalTimerRef.current)
+      dartRemovalTimerRef.current = setTimeout(() => {
+        setAwaitingDartRemoval(false)
+        setTurnDarts(0)
+        match.nextPlayer(); sendState()
+      }, 10000)
+    } else { sendState() }
   }
 
   function applyBaseballAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE', sector?: number | null) {
@@ -1032,7 +1144,15 @@ export default function OnlinePlay({ user }: { user?: any }) {
     })
     const nd = turnDarts + 1
     setTurnDarts(nd)
-    if (nd >= 3) { setTurnDarts(0); match.nextPlayer(); sendState() } else { sendState() }
+    if (nd >= 3) {
+      setAwaitingDartRemoval(true)
+      if (dartRemovalTimerRef.current) clearTimeout(dartRemovalTimerRef.current)
+      dartRemovalTimerRef.current = setTimeout(() => {
+        setAwaitingDartRemoval(false)
+        setTurnDarts(0)
+        match.nextPlayer(); sendState()
+      }, 10000)
+    } else { sendState() }
   }
 
   function applyGolfAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE', sector?: number | null) {
@@ -1047,7 +1167,15 @@ export default function OnlinePlay({ user }: { user?: any }) {
     })
     const nd = turnDarts + 1
     setTurnDarts(nd)
-    if (nd >= 3) { setTurnDarts(0); match.nextPlayer(); sendState() } else { sendState() }
+    if (nd >= 3) {
+      setAwaitingDartRemoval(true)
+      if (dartRemovalTimerRef.current) clearTimeout(dartRemovalTimerRef.current)
+      dartRemovalTimerRef.current = setTimeout(() => {
+        setAwaitingDartRemoval(false)
+        setTurnDarts(0)
+        match.nextPlayer(); sendState()
+      }, 10000)
+    } else { sendState() }
   }
 
   function applyTttAuto(cell: number, value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
@@ -1058,8 +1186,32 @@ export default function OnlinePlay({ user }: { user?: any }) {
     })
     const nd = turnDarts + 1
     setTurnDarts(nd)
-    if (nd >= 3) { setTurnDarts(0); match.nextPlayer(); sendState() } else { sendState() }
+    if (nd >= 3) {
+      setAwaitingDartRemoval(true)
+      if (dartRemovalTimerRef.current) clearTimeout(dartRemovalTimerRef.current)
+      dartRemovalTimerRef.current = setTimeout(() => {
+        setAwaitingDartRemoval(false)
+        setTurnDarts(0)
+        match.nextPlayer(); sendState()
+      }, 10000)
+    } else { sendState() }
   }
+  // Listen for dart removal event from CameraView
+  useEffect(() => {
+    function onDartsCleared() {
+      if (awaitingDartRemoval) {
+        setAwaitingDartRemoval(false)
+        setTurnDarts(0)
+        // End turn logic (advance player, send state)
+        match.nextPlayer(); sendState()
+        if (dartRemovalTimerRef.current) clearTimeout(dartRemovalTimerRef.current)
+      }
+    }
+    window.addEventListener('ndn:darts-cleared', onDartsCleared)
+    return () => window.removeEventListener('ndn:darts-cleared', onDartsCleared)
+  }, [awaitingDartRemoval])
+
+  // (Manual finalize removed — use camera auto-detect / server-driven events)
 
   // Open/close Manual Correction dialog in CameraView
   function openManual() { try { window.dispatchEvent(new Event('ndn:open-manual' as any)) } catch {} }
@@ -1137,7 +1289,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
   }
 
   // WebRTC for mobile camera
-  const startMobileWebRTC = async (code: string) => {
+  startMobileWebRTC = async (code: string) => {
     console.log('Starting WebRTC for code:', code)
     try {
       const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
@@ -1185,325 +1337,128 @@ export default function OnlinePlay({ user }: { user?: any }) {
   }
 
   return (
-  <div className="card ndn-game-shell relative overflow-hidden">
-    {showStartShowcase && <MatchStartShowcase players={match.players || []} user={user} onDone={() => setShowStartShowcase(false)} />}
-    <h2 className="text-xl font-semibold mb-1">Online Play</h2>
-    <div className="ndn-shell-body">
-      {/* Pause overlay/banner */}
-      {paused && (
-        <div className="absolute inset-0 z-40 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4">
-          <div className="text-2xl font-bold mb-2">Game Paused</div>
-          <div className="text-sm opacity-80 mb-4">Resumes {pauseEndsAt ? `in ${Math.max(0, Math.ceil((pauseEndsAt - Date.now())/1000))}s` : 'soon'}</div>
-          <div className="text-xs opacity-60">Both players can see this pause screen.</div>
-        </div>
-      )}
-      {unread > 0 && !match.inProgress && (
-        <div className="mb-3 text-sm px-3 py-2 rounded bg-amber-600/30 border border-amber-500/40">
-          You have {unread} unread message{unread>1?'s':''}. Check the Friends tab.
-        </div>
-      )}
-      <div className="relative">
-        <div className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
-          <div className="flex items-center gap-2">
-            <label className="text-xs opacity-70 shrink-0">Room</label>
-            <input className="input w-28" value={roomId} onChange={e => setRoomId(e.target.value)} placeholder="room-1" />
-          </div>
-          {connected ? (
-            <span className="text-[11px] px-2 py-1 rounded-full bg-emerald-600/20 text-emerald-200 border border-emerald-400/40 shrink-0">Connected</span>
-          ) : (
-            <button className="btn bg-rose-600 hover:bg-rose-700 shrink-0" onClick={connect}>Connect</button>
-          )}
-          <button className="btn shrink-0" onClick={sendState} disabled={!connected}>Sync</button>
-          {/* Demo button for previewing the Match Start Showcase (DEV only) */}
-          {(import.meta as any).env?.DEV ? (
-            <button className="btn btn-ghost text-xs py-1" onClick={() => setShowStartShowcase(true)}>Demo Start Showcase</button>
-          ) : null}
-          {/* Pause controls */}
-          {!paused && !pauseRequestedBy && (
-            <div className="flex items-center gap-2">
-              <label className="text-xs opacity-70">Pause (max 10m)</label>
-              <select className="input w-28" value={pauseDurationSec}
-                onChange={e => setPauseDurationSec(Math.max(60, Math.min(600, parseInt(e.target.value)||300)))}>
-                <option value={120}>2 min</option>
-                <option value={300}>5 min</option>
-                <option value={600}>10 min</option>
-              </select>
-              <button className="btn" disabled={!connected}
-                onClick={() => {
-                  const me = (user?.username || 'player')
-                  setPauseRequestedBy(me)
-                  setPauseAcceptedBy({ [me]: true })
-                  setPausedLocal(false); setPauseEndsAt(null)
-                  sendState()
-                }}
-              >Request Pause</button>
+    <div className="card ndn-game-shell relative overflow-hidden">
+      <h2 className="text-3xl font-bold text-brand-700 mb-4">Online Play</h2>
+      <div className="ndn-shell-body">
+        <div className="grid grid-cols-12 gap-4 min-h-[420px]">
+          {/* Left column: toolbar + lobby (scrollable) */}
+          <div className="col-span-12 md:col-span-4 flex flex-col gap-3">
+            <div className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-2 flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <label className="text-xs opacity-70 shrink-0">Room</label>
+                <input className="input w-28" value={roomId} onChange={e => setRoomId(e.target.value)} placeholder="room-1" />
+              </div>
+              {connected ? (
+                <span className="text-[11px] px-2 py-1 rounded-full bg-emerald-600/20 text-emerald-200 border border-emerald-400/40 shrink-0">Connected</span>
+              ) : (
+                <button className="btn bg-rose-600 hover:bg-rose-700 shrink-0" onClick={connect}>Connect</button>
+              )}
+              <button className="btn shrink-0" onClick={sendState} disabled={!connected}>Sync</button>
             </div>
-          )}
-          {!paused && pauseRequestedBy && !pauseAcceptedBy[(user?.username||'')] && (
-            <div className="flex items-center gap-2 text-xs">
-              <span className="opacity-80">{pauseRequestedBy} requested a {Math.round((pauseDurationSec||300)/60)}m pause</span>
-              <button className="btn bg-emerald-600 hover:bg-emerald-700"
-                onClick={() => {
-                  const me = (user?.username || '')
-                  const next: Record<string, boolean> = { ...pauseAcceptedBy, [me]: true }
-                  setPauseAcceptedBy(next)
-                  // If at least 2 unique acceptances (both players), start pause
-                  const acceptedCount = Object.keys(next).filter((k: string) => !!next[k]).length
-                  const required = Math.max(2, (participants?.length || 2))
-                  if (acceptedCount >= 2 || acceptedCount >= required) {
-                    const ends = Date.now() + Math.min(600, Math.max(60, pauseDurationSec||300)) * 1000
-                    setPausedLocal(true); setPauseEndsAt(ends)
-                    setPausedGlobal(true, ends)
-                  }
-                  sendState()
-                }}
-              >Accept</button>
-              <button className="btn bg-rose-600 hover:bg-rose-700"
-                onClick={() => { setPauseRequestedBy(null); setPauseAcceptedBy({}); setPausedLocal(false); setPauseEndsAt(null); setPausedGlobal(false, null); sendState() }}
-              >Decline</button>
-            </div>
-          )}
-          {paused && (
-            <span className="text-[11px] px-2 py-1 rounded-full bg-yellow-500/25 text-yellow-100 border border-yellow-400/40 shrink-0">
-              Paused · {Math.max(0, Math.ceil(((pauseEndsAt||Date.now()) - Date.now())/1000))}s
-            </span>
-          )}
-          {connected && (
-            <button className="btn shrink-0" onClick={() => setShowMatchModal(true)} disabled={locked} title={locked ? 'Weekly free games used' : ''}>Open Match</button>
-          )}
-        </div>
-      </div>
-      {/* Create Match+ box (top-right area) */}
-      <div
-        className={`mt-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-end ${(!connected || locked) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'}`}
-        role="button"
-        title={!connected ? 'Connect to the lobby first' : (locked ? 'Weekly free games used' : 'Create a new match')}
-        onClick={() => {
-          if (!connected || locked) return
-          setShowCreate(true)
-          if (wsGlobal) wsGlobal.send({ type: 'list-matches' })
-          else wsRef.current?.send(JSON.stringify({ type: 'list-matches' }))
-        }}
-      >
-        <button className="btn" disabled={!connected || locked}>Create Match +</button>
-      </div>
-      <p className="text-sm text-slate-600 mt-3">Open this app on another device and join the same Room ID to sync scores.</p>
-      {!user?.fullAccess && (
-        <div className="text-xs text-slate-400 mt-1">Weekly free online games remaining: {freeLeft === Infinity ? 'ÔÇö' : freeLeft}</div>
-      )}
-      {(!user?.fullAccess && freeLeft !== Infinity && freeLeft <= 0) && (
-        <div className="mt-2 p-2 rounded-lg bg-rose-700/30 border border-rose-600/40 text-rose-200 text-sm">You've used your 3 free online games this week. PREMIUM required to continue.</div>
-      )}
-      {errorMsg && (
-        <div className="mt-2 p-2 rounded-lg bg-rose-700/30 border border-rose-600/40 text-rose-200 text-sm font-semibold flex items-center gap-2">
-          <span className="material-icons text-rose-300">error_outline</span>
-          {errorMsg}
-        </div>
-      )}
-      {offerNewRoom && (
-        <div className="mt-2 p-2 rounded-lg bg-indigo-700/30 border border-indigo-600/40 text-indigo-100 text-sm flex items-center justify-between gap-2">
-          <div>That room is full or no longer available. Create a new clean room with the same settings?</div>
-          <div className="flex items-center gap-2">
-            <button className="btn px-3 py-1 text-sm" onClick={()=>{
-              const { game, mode, value, startingScore } = offerNewRoom
-              const creatorAvg = user?.username ? getAllTimeAvg(user.username) : 0
-              if (wsGlobal) {
-                wsGlobal.send({ type: 'create-match', game, mode, value, startingScore: startingScore || 501, creatorAvg })
-                wsGlobal.send({ type: 'list-matches' })
-              } else {
-                wsRef.current?.send(JSON.stringify({ type: 'create-match', game, mode, value, startingScore: startingScore || 501, creatorAvg }))
-                wsRef.current?.send(JSON.stringify({ type: 'list-matches' }))
-              }
-              setOfferNewRoom(null)
-            }}>Create New Match</button>
-            <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={()=>setOfferNewRoom(null)}>Dismiss</button>
-          </div>
-        </div>
-      )}
-      {/* Global toaster is mounted in App */}
-      {/* World Lobby with filters */}
-      {connected && (
-        <div className="mt-4 p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10 flex-1 overflow-auto">
-          <div className="flex items-center justify-between mb-3">
-            <div className="font-semibold">World Lobby</div>
-            <div className="flex items-center gap-2">
-              <div className="text-xs opacity-80">Matches: {filteredLobby.length}</div>
-              <button className="btn px-3 py-1 text-sm" onClick={()=> (wsGlobal ? wsGlobal.send({ type: 'list-matches' }) : wsRef.current?.send(JSON.stringify({ type: 'list-matches' })))}>Refresh</button>
-              <button
-                className="btn px-3 py-1 text-sm"
-                title={!connected ? 'Connect to the lobby first' : (locked ? 'Weekly free games used' : 'Create a new match')}
-                disabled={!connected || locked}
-                onClick={() => { if (!connected || locked) return; setShowCreate(true); (wsGlobal ? wsGlobal.send({ type: 'list-matches' }) : wsRef.current?.send(JSON.stringify({ type: 'list-matches' }))) }}
-              >Create Match +</button>
-            </div>
-          </div>
-          {/* Filters and rest of the lobby code remain as before */}
-        </div>
-      )}
-    </div>
-  
-  );
-        <div className="absolute inset-0 z-40 flex items-center justify-center">
-          <div className="absolute inset-0 backdrop-blur-sm bg-slate-900/40" />
-          <div className="relative z-10 p-4 rounded-xl bg-black/60 border border-slate-700 text-center">
-            <div className="text-3xl mb-2">🔒</div>
-            <div className="font-semibold">Online play locked</div>
-            <div className="text-sm text-slate-200/80">You’ve used your 3 free online games this week. Upgrade to PREMIUM to play all modes.</div>
-            <button 
-              onClick={async () => {
-                try {
-                  const res = await fetch(`${API_URL}/api/stripe/create-checkout-session`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: user?.email })
-                  })
-                  const data = await res.json()
-                  if (data.ok && data.url) {
-                    window.location.href = data.url
-                  } else {
-                    alert('Failed to create payment session: ' + (data.error || 'Unknown error'))
-                  }
-                } catch (e) {
-                  alert('Network error')
-                }
-              }}
-              className="btn mt-3 bg-gradient-to-r from-indigo-500 to-fuchsia-600 text-white font-bold"
-            >
-              Upgrade to PREMIUM = {formatPriceInCurrency(getUserCurrency(), 5)}
-            </button>
-          </div>
-        </div>
-      )}
 
-      {showMatchModal && (
-        <ResizableModal
-          className="relative flex flex-col overflow-hidden"
-          defaultWidth={1100}
-          defaultHeight={720}
-          minWidth={720}
-          minHeight={480}
-          maxWidth={1600}
-          maxHeight={1200}
-          initialFitHeight
-          fullScreen={maximized}
-        >
-          <div className="flex-1 min-h-0 overflow-x-hidden pr-1 pt-2 pb-2" style={{ overflowY: 'scroll' }}>
-            <div ref={(el)=>{ (headerBarRef as any).current = el }}>
+            <div className={`mt-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 ${(!connected || locked) ? 'opacity-60' : ''}`} role="button" title={!connected ? 'Connect to the lobby first' : (locked ? 'Weekly free games used' : 'Create a new match')} onClick={() => { if (!connected || locked) return; setShowCreate(true); if (wsGlobal) wsGlobal.send({ type: 'list-matches' }); else wsRef.current?.send(JSON.stringify({ type: 'list-matches' })) }}>
+              <button className="btn" disabled={!connected || locked}>Create Match +</button>
+            </div>
+
+            <div className="flex-1 overflow-auto rounded-xl border border-indigo-500/20 p-3 bg-indigo-500/8">
+              <div className="flex items-center justify-between mb-3">
+                <div className="font-semibold">World Lobby</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs opacity-80">Matches: {filteredLobby.length}</div>
+                  <button className="btn px-3 py-1 text-sm" onClick={()=> (wsGlobal ? wsGlobal.send({ type: 'list-matches' }) : wsRef.current?.send(JSON.stringify({ type: 'list-matches' })))}>Refresh</button>
+                </div>
+              </div>
+              <ul className="space-y-2">
+                {filteredLobby.map((m:any)=> (
+                  <li key={m.id} className="p-2 rounded bg-white/3 border border-white/6 flex items-center justify-between">
+                    <div className="text-sm">{m.game} · {m.mode} · {m.startingScore}</div>
+                    <div className="text-xs opacity-70">{m.creator || 'host'}</div>
+                  </li>
+                ))}
+                {filteredLobby.length === 0 && <li className="text-sm opacity-60">No matches found.</li>}
+              </ul>
+            </div>
+          </div>
+
+          {/* Center column: scoreboard / summary (match UI similar to Offline) */}
+          <div className="col-span-12 md:col-span-4">
+            <div className="flex flex-col gap-3">
               <GameHeaderBar
                 left={(
                   <>
                     <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">Game Mode</span>
-                    <span className="font-medium whitespace-nowrap">{currentGame}{currentGame==='X01' ? ` / ${match.startingScore}` : ''}</span>
-                    <span className="opacity-80 whitespace-nowrap">Legs {match.players?.[0]?.legsWon || 0}–{match.players?.[1]?.legsWon || 0}</span>
+                    <span className="font-medium whitespace-nowrap">{currentGame}{currentGame === 'X01' ? ` / ${match.startingScore}` : ''}</span>
+                    <span className="opacity-80 whitespace-nowrap">Players: {match.players?.length || 0}</span>
                   </>
                 )}
                 right={(
                   <>
-                    <span className="opacity-70 text-[10px]">Match</span>
-                    <select className={`btn ${buttonSizeClass}`} value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
-                      <option value="singles">Singles</option>
-                      <option value="doubles">Doubles</option>
-                    </select>
-                    <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
-                    <span className="opacity-50">vs</span>
-                    <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
-                    <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={() => setShowMatchModal(false)}>Close</button>
+                    <button className="btn btn--ghost px-3 py-1 text-sm" title={fitAll ? 'Actual Size' : 'Fit All'} onClick={() => setFitAll(v => !v)}>{fitAll ? 'Actual Size' : 'Fit All'}</button>
+                    <button className="btn btn--ghost px-3 py-1 text-sm" title={maximized ? 'Restore' : 'Maximize'} onClick={() => setMaximized(m => !m)}>{maximized ? 'Restore' : 'Maximize'}</button>
                   </>
                 )}
               />
-            </div>
-            <div
-              ref={(el) => { (contentRef as any).current = el }}
-              className="will-change-transform"
-              style={fitAll ? { transform: `scale(${fitScale})`, transformOrigin: 'top left', width: '100%', fontSize: `${Math.max(0.8, Math.min(1, fitScale))}em` } : undefined}
-            >
-              {/* Modern unified header bar, matching OfflinePlay */}
-              <div className="flex flex-wrap items-center gap-2 mb-2 text-xs">
-                <h3 className="text-xl font-bold leading-tight mr-2">{currentGame === 'X01' ? 'Online Match' : currentGame}</h3>
-                <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">Mode: {currentGame}</span>
-                <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">Start: {match.startingScore}</span>
-                <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">Legs: {match.players?.[0]?.legsWon || 0}–{match.players?.[1]?.legsWon || 0}</span>
-                <span className="ml-auto flex items-center gap-1 text-[10px] flex-wrap">
-                  <span className="opacity-70">Match</span>
-                  <select className={`btn ${buttonSizeClass}`} value={matchType} onChange={e=>setMatchType((e.target.value as 'singles'|'doubles'))}>
-                    <option value="singles">Singles</option>
-                    <option value="doubles">Doubles</option>
-                  </select>
-                  <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamAName} onChange={e=>setTeamAName(e.target.value)} placeholder="Team A" />
-                  <span className="opacity-50">vs</span>
-                  <input className={`input ${buttonSizeClass} w-[7.5rem]`} value={teamBName} onChange={e=>setTeamBName(e.target.value)} placeholder="Team B" />
-                </span>
+
+              <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-3 text-slate-100 shadow-lg backdrop-blur-sm">
+                {/* Build players list for GameScoreboard */}
+                {(() => {
+                  const players = (match.players || []).map((p:any, i:number) => {
+                    const leg = p.legs?.[p.legs.length-1]
+                    const remaining = leg ? leg.totalScoreRemaining : match.startingScore
+                    const last = leg?.visits?.[leg.visits.length-1]
+                    return {
+                      name: p.name || p.id || `Player ${i+1}`,
+                      isCurrentTurn: (match.currentPlayerIdx || 0) === i,
+                      legsWon: p.legsWon || 0,
+                      score: remaining,
+                      lastScore: last?.score ?? 0,
+                      matchAvg: undefined,
+                      allTimeAvg: undefined,
+                    }
+                  })
+                  const matchScore = (match.players && match.players.length === 2) ? `${match.players[0]?.legsWon||0}-${match.players[1]?.legsWon||0}` : undefined
+                  return <GameScoreboard gameMode={(currentGame as any)} players={players} matchScore={matchScore} />
+                })()}
               </div>
-              {/* Toolbar buttons, matching OfflinePlay */}
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <button className="btn btn--ghost px-3 py-1 text-sm" title={fitAll ? 'Actual Size' : 'Fit All'} onClick={() => setFitAll(v => !v)}>{fitAll ? 'Actual Size' : 'Fit All'}</button>
-                <button className="btn btn--ghost px-3 py-1 text-sm" title={maximized ? 'Restore' : 'Maximize'} onClick={() => setMaximized(m => !m)}>{maximized ? 'Restore' : 'Maximize'}</button>
-                <button className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm" onClick={() => { startMatch() }}>Restart</button>
-                <button className="btn bg-rose-600 hover:bg-rose-700 px-3 py-1 text-sm" onClick={() => { setShowMatchModal(false); setInMatch(false); }}>Quit</button>
-              </div>
-              {/* Summary area and all modal content */}
-              {/* ...existing summary and controls content... */}
-              {/* Place all the modal content here, up to the end of the modal */}
-              {/* The rest of the modal content is already present and will be closed below */}
             </div>
           </div>
-        </ResizableModal>
-      )}
-  </div>
-}
-// Small, self-contained chat list with moderation affordances
-function ChatList({ items, onDelete, onReport, onBlock, className }: { items: { key: string; from: string; id?: string; text: string }[]; onDelete: (index: number) => void; onReport: (index: number) => void; onBlock?: (index: number) => void; className?: string }) {
-  const mobile = (() => { try { const ua = navigator.userAgent || ''; return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) } catch { return false } })()
-  const [touch, setTouch] = useState<{ x: number; y: number; i: number; t: number } | null>(null)
-  const [swiped, setSwiped] = useState<number | null>(null)
-  return (
-    <div className={`overflow-auto text-sm divide-y divide-slate-700/40 ${className || 'h-24'}`}>
-      {items.length === 0 ? (
-        <div className="opacity-60 py-1">No messages yet.</div>
-      ) : items.map((m, i) => {
-        const text = censorProfanity(m.text)
-        const flagged = containsProfanity(m.text)
-        return (
-          <div
-            key={m.key}
-            className="relative group px-1 py-1 flex items-start gap-2"
-            onTouchStart={mobile ? (e) => { const t = e.touches[0]; setTouch({ x: t.clientX, y: t.clientY, i, t: Date.now() }) } : undefined}
-            onTouchMove={mobile ? (e) => { if (!touch || touch.i !== i) return; const t = e.touches[0]; const dx = t.clientX - touch.x; if (dx < -40) setSwiped(i) } : undefined}
-            onTouchEnd={mobile ? () => { const held = touch ? (Date.now() - touch.t) : 0; if (swiped === i || held > 600) { onDelete(i); setSwiped(null) } setTouch(null) } : undefined}
-          >
-            <span className="text-slate-400 shrink-0">[{m.from}]</span>
-            <span className="text-white break-words whitespace-pre-wrap flex-1">{text}</span>
-            {/* Desktop delete (red X) and Report/Block */}
-            {!mobile && (
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 ml-2">
-                <button
-                  className="w-5 h-5 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center"
-                  title="Delete message"
-                  aria-label="Delete message"
-                  onClick={() => onDelete(i)}
-                >├ù</button>
-                {onBlock && (
+
+          {/* Right column: camera / preview */}
+          <div className="col-span-12 md:col-span-4">
+            <div className="rounded-2xl p-3 border border-white/10 bg-black/5 h-full min-h-[200px]">
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-semibold">Camera Preview</div>
+                <div className="flex items-center gap-2">
                   <button
-                    className="px-1.5 py-0.5 rounded bg-slate-700 hover:bg-slate-800 text-slate-100 text-[11px]"
-                    onClick={() => onBlock(i)}
-                    title="Block sender"
-                  >Block</button>
-                )}
-                <button
-                  className="px-1.5 py-0.5 rounded bg-amber-600/40 hover:bg-amber-600/60 text-amber-100 text-[11px]"
-                  onClick={() => onReport(i)}
-                  title="Report message"
-                >Report</button>
+                    className="btn"
+                    disabled={pairingPending || !!pairingCode || !connected}
+                    onClick={() => {
+                      try { setPairingPending(true) } catch {}
+                      try { requestPairingCode(false) } catch {}
+                      // clear any existing pending timeout
+                      try { if (pairingPendingTimeoutRef.current) window.clearTimeout(pairingPendingTimeoutRef.current) } catch {}
+                      pairingPendingTimeoutRef.current = window.setTimeout(() => { try { setPairingPending(false) } catch {} }, 8000) as unknown as number
+                    }}
+                    title={(!connected ? 'Connect to server' : (pairingCode ? 'Pairing code active' : 'Pair mobile camera'))}
+                  >
+                    {pairingPending ? 'Requesting…' : (pairingCode ? 'Paired' : 'Pair')}
+                  </button>
+                </div>
               </div>
-            )}
-            {/* Flag badge if profanity detected */}
-            {flagged && <span className="ml-2 text-[10px] px-1 rounded bg-rose-600/30 text-rose-200 border border-rose-600/40">Filtered</span>}
+              {pairingCode && (
+                <div className="mb-2 p-2 rounded bg-white/5 border border-white/10 flex items-center justify-between">
+                  <div className="font-mono text-xl tracking-wider">{pairingCode}</div>
+                  <div className="flex items-center gap-2">
+                    <button className="btn btn--ghost" onClick={copyPairingCode}>Copy</button>
+                    <div className="text-sm opacity-70">Expires in {pairCountdown}s</div>
+                  </div>
+                </div>
+              )}
+              <CameraView />
+            </div>
           </div>
-        )
-      })}
-      
-      {/* Phone camera overlay moved to global App header for consistency */}
+        </div>
+      </div>
     </div>
-
-
+  )
 }

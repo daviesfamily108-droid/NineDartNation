@@ -35,6 +35,15 @@ export default function SettingsPanel({ user }: { user?: any }) {
     })));
   }, [user?.username]);
 
+  // Listen for external requests to open the Profile/User pill (from Home or elsewhere)
+  useEffect(() => {
+    function onOpenProfile(e: any) {
+      try { setExpandedPill('user') } catch {}
+    }
+    window.addEventListener('ndn:open-settings-profile', onOpenProfile as any)
+    return () => window.removeEventListener('ndn:open-settings-profile', onOpenProfile as any)
+  }, [])
+
   // Profile bio fields with edit mode
   const [isEditing, setIsEditing] = useState(false);
   const [favPlayer, setFavPlayer] = useState('');

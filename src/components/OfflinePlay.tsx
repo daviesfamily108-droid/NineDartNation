@@ -33,7 +33,6 @@ import MatchControls from './MatchControls'
 import { makeOfflineAddVisitAdapter } from './matchControlAdapters'
 import { createOfflineMatchActions, UnifiedMatchActions } from '../logic/matchActions'
 import { useMatch } from '../store/match'
-import { createOfflineMatchActions, UnifiedMatchActions } from '../logic/matchActions'
 import { useOfflineGameStats } from './scoreboards/useGameStats';
 import { freeGames, premiumGames, allGames } from '../utils/games';
 
