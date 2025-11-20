@@ -1342,7 +1342,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       <div className="ndn-shell-body">
         <div className="grid grid-cols-12 gap-4 min-h-[420px]">
           {/* Left column: minimal toolbar */}
-          <div className="col-span-12 md:col-span-2 flex flex-col gap-3">
+          <div className="col-span-12 md:col-span-4 flex flex-col gap-3">
             <div className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-2 flex items-center gap-2">
               <div className="flex items-center gap-2">
                 <label className="text-xs opacity-70 shrink-0">Room</label>
@@ -1360,13 +1360,16 @@ export default function OnlinePlay({ user }: { user?: any }) {
           </div>
 
           {/* Center column: main area - World Lobby or Scoreboard depending on match state */}
-          <div className="col-span-12 md:col-span-6">
+          <div className="col-span-12 md:col-span-4">
             {!match.inProgress ? (
               <div className="flex flex-col gap-3">
-                <div className={`p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 ${(!connected || locked) ? 'opacity-60' : ''}`} role="button" title={!connected ? 'Connect to the lobby first' : (locked ? 'Weekly free games used' : 'Create a new match')} onClick={() => { if (!connected || locked) return; setShowCreate(true); if (wsGlobal) wsGlobal.send({ type: 'list-matches' }); else wsRef.current?.send(JSON.stringify({ type: 'list-matches' })) }}>
-                  <button className="btn">Create Match +</button>
+                <div className={`p-3 rounded-2xl bg-slate-900/60 border border-white/10 p-3 text-slate-100 shadow-lg backdrop-blur-sm ${(!connected || locked) ? 'opacity-60' : ''}`} role="button" title={!connected ? 'Connect to the lobby first' : (locked ? 'Weekly free games used' : 'Create a new match')} onClick={() => { if (!connected || locked) return; setShowCreate(true); if (wsGlobal) wsGlobal.send({ type: 'list-matches' }); else wsRef.current?.send(JSON.stringify({ type: 'list-matches' })) }}>
+                  <div className="flex items-center gap-3">
+                    <button className="btn btn--primary">Create Match +</button>
+                    <div className="text-sm opacity-80 ml-auto">Matches: {filteredLobby.length}</div>
+                  </div>
                 </div>
-                <div className="rounded-2xl p-3 border border-indigo-500/20 bg-indigo-500/8">
+                <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-3 text-slate-100 shadow-lg backdrop-blur-sm">
                   <div className="flex items-center justify-between mb-3">
                     <div className="font-semibold">World Lobby</div>
                     <div className="flex items-center gap-2">
@@ -1432,31 +1435,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <div className="flex items-center justify-between mb-2">
                 <div className="font-semibold">Camera Preview</div>
                 <div className="flex items-center gap-2">
-                  <button
-                    className="btn"
-                    disabled={pairingPending || !!pairingCode || !connected}
-                    onClick={() => {
-                      try { setPairingPending(true) } catch {}
-                      try { requestPairingCode(false) } catch {}
-                      // clear any existing pending timeout
-                      try { if (pairingPendingTimeoutRef.current) window.clearTimeout(pairingPendingTimeoutRef.current) } catch {}
-                      pairingPendingTimeoutRef.current = window.setTimeout(() => { try { setPairingPending(false) } catch {} }, 8000) as unknown as number
-                    }}
-                    title={(!connected ? 'Connect to server' : (pairingCode ? 'Pairing code active' : 'Pair mobile camera'))}
-                  >
-                    {pairingPending ? 'Requesting…' : (pairingCode ? 'Paired' : 'Pair')}
-                  </button>
+                  {/* Pairing UI intentionally removed per request (helpers remain). */}
                 </div>
               </div>
-              {pairingCode && (
-                <div className="mb-2 p-2 rounded bg-white/5 border border-white/10 flex items-center justify-between">
-                  <div className="font-mono text-xl tracking-wider">{pairingCode}</div>
-                  <div className="flex items-center gap-2">
-                    <button className="btn btn--ghost" onClick={copyPairingCode}>Copy</button>
-                    <div className="text-sm opacity-70">Expires in {pairCountdown}s</div>
-                  </div>
-                </div>
-              )}
+              {/* Pairing code UI removed; pairing still supported via Calibrator and server flows */}
               <CameraView />
             </div>
           </div>
