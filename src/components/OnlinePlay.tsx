@@ -1341,8 +1341,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
       <h2 className="text-3xl font-bold text-brand-700 mb-4">Online Play</h2>
       <div className="ndn-shell-body">
         <div className="grid grid-cols-12 gap-4 min-h-[420px]">
-          {/* Left column: toolbar + lobby (scrollable) */}
-          <div className="col-span-12 md:col-span-4 flex flex-col gap-3">
+          {/* Left column: minimal toolbar */}
+          <div className="col-span-12 md:col-span-2 flex flex-col gap-3">
             <div className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-2 flex items-center gap-2">
               <div className="flex items-center gap-2">
                 <label className="text-xs opacity-70 shrink-0">Room</label>
@@ -1355,72 +1355,75 @@ export default function OnlinePlay({ user }: { user?: any }) {
               )}
               <button className="btn shrink-0" onClick={sendState} disabled={!connected}>Sync</button>
             </div>
-
-            <div className={`mt-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 ${(!connected || locked) ? 'opacity-60' : ''}`} role="button" title={!connected ? 'Connect to the lobby first' : (locked ? 'Weekly free games used' : 'Create a new match')} onClick={() => { if (!connected || locked) return; setShowCreate(true); if (wsGlobal) wsGlobal.send({ type: 'list-matches' }); else wsRef.current?.send(JSON.stringify({ type: 'list-matches' })) }}>
-              <button className="btn" disabled={!connected || locked}>Create Match +</button>
-            </div>
-
-            <div className="flex-1 overflow-auto rounded-xl border border-indigo-500/20 p-3 bg-indigo-500/8">
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-semibold">World Lobby</div>
-                <div className="flex items-center gap-2">
-                  <div className="text-xs opacity-80">Matches: {filteredLobby.length}</div>
-                  <button className="btn px-3 py-1 text-sm" onClick={()=> (wsGlobal ? wsGlobal.send({ type: 'list-matches' }) : wsRef.current?.send(JSON.stringify({ type: 'list-matches' })))}>Refresh</button>
-                </div>
-              </div>
-              <ul className="space-y-2">
-                {filteredLobby.map((m:any)=> (
-                  <li key={m.id} className="p-2 rounded bg-white/3 border border-white/6 flex items-center justify-between">
-                    <div className="text-sm">{m.game} · {m.mode} · {m.startingScore}</div>
-                    <div className="text-xs opacity-70">{m.creator || 'host'}</div>
-                  </li>
-                ))}
-                {filteredLobby.length === 0 && <li className="text-sm opacity-60">No matches found.</li>}
-              </ul>
-            </div>
+            {/* Keep a small space for optional quick tools */}
+            <div className="mt-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 opacity-60 text-center text-sm">Lobby tools</div>
           </div>
 
-          {/* Center column: scoreboard / summary (match UI similar to Offline) */}
-          <div className="col-span-12 md:col-span-4">
-            <div className="flex flex-col gap-3">
-              <GameHeaderBar
-                left={(
-                  <>
-                    <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">Game Mode</span>
-                    <span className="font-medium whitespace-nowrap">{currentGame}{currentGame === 'X01' ? ` / ${match.startingScore}` : ''}</span>
-                    <span className="opacity-80 whitespace-nowrap">Players: {match.players?.length || 0}</span>
-                  </>
-                )}
-                right={(
-                  <>
-                    <button className="btn btn--ghost px-3 py-1 text-sm" title={fitAll ? 'Actual Size' : 'Fit All'} onClick={() => setFitAll(v => !v)}>{fitAll ? 'Actual Size' : 'Fit All'}</button>
-                    <button className="btn btn--ghost px-3 py-1 text-sm" title={maximized ? 'Restore' : 'Maximize'} onClick={() => setMaximized(m => !m)}>{maximized ? 'Restore' : 'Maximize'}</button>
-                  </>
-                )}
-              />
-
-              <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-3 text-slate-100 shadow-lg backdrop-blur-sm">
-                {/* Build players list for GameScoreboard */}
-                {(() => {
-                  const players = (match.players || []).map((p:any, i:number) => {
-                    const leg = p.legs?.[p.legs.length-1]
-                    const remaining = leg ? leg.totalScoreRemaining : match.startingScore
-                    const last = leg?.visits?.[leg.visits.length-1]
-                    return {
-                      name: p.name || p.id || `Player ${i+1}`,
-                      isCurrentTurn: (match.currentPlayerIdx || 0) === i,
-                      legsWon: p.legsWon || 0,
-                      score: remaining,
-                      lastScore: last?.score ?? 0,
-                      matchAvg: undefined,
-                      allTimeAvg: undefined,
-                    }
-                  })
-                  const matchScore = (match.players && match.players.length === 2) ? `${match.players[0]?.legsWon||0}-${match.players[1]?.legsWon||0}` : undefined
-                  return <GameScoreboard gameMode={(currentGame as any)} players={players} matchScore={matchScore} />
-                })()}
+          {/* Center column: main area - World Lobby or Scoreboard depending on match state */}
+          <div className="col-span-12 md:col-span-6">
+            {!match.inProgress ? (
+              <div className="flex flex-col gap-3">
+                <div className={`p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 ${(!connected || locked) ? 'opacity-60' : ''}`} role="button" title={!connected ? 'Connect to the lobby first' : (locked ? 'Weekly free games used' : 'Create a new match')} onClick={() => { if (!connected || locked) return; setShowCreate(true); if (wsGlobal) wsGlobal.send({ type: 'list-matches' }); else wsRef.current?.send(JSON.stringify({ type: 'list-matches' })) }}>
+                  <button className="btn">Create Match +</button>
+                </div>
+                <div className="rounded-2xl p-3 border border-indigo-500/20 bg-indigo-500/8">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-semibold">World Lobby</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs opacity-80">Matches: {filteredLobby.length}</div>
+                      <button className="btn px-3 py-1 text-sm" onClick={()=> (wsGlobal ? wsGlobal.send({ type: 'list-matches' }) : wsRef.current?.send(JSON.stringify({ type: 'list-matches' })))}>Refresh</button>
+                    </div>
+                  </div>
+                  <ul className="space-y-2">
+                    {filteredLobby.map((m:any)=> (
+                      <li key={m.id} className="p-2 rounded bg-white/3 border border-white/6 flex items-center justify-between">
+                        <div className="text-sm">{m.game} · {m.mode} · {m.startingScore}</div>
+                        <div className="text-xs opacity-70">{m.creator || 'host'}</div>
+                      </li>
+                    ))}
+                    {filteredLobby.length === 0 && <li className="text-sm opacity-60">No matches found.</li>}
+                  </ul>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <GameHeaderBar
+                  left={(
+                    <>
+                      <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">Game Mode</span>
+                      <span className="font-medium whitespace-nowrap">{currentGame}{currentGame === 'X01' ? ` / ${match.startingScore}` : ''}</span>
+                      <span className="opacity-80 whitespace-nowrap">Players: {match.players?.length || 0}</span>
+                    </>
+                  )}
+                  right={(
+                    <>
+                      <button className="btn btn--ghost px-3 py-1 text-sm" title={fitAll ? 'Actual Size' : 'Fit All'} onClick={() => setFitAll(v => !v)}>{fitAll ? 'Actual Size' : 'Fit All'}</button>
+                      <button className="btn btn--ghost px-3 py-1 text-sm" title={maximized ? 'Restore' : 'Maximize'} onClick={() => setMaximized(m => !m)}>{maximized ? 'Restore' : 'Maximize'}</button>
+                    </>
+                  )}
+                />
+                <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-3 text-slate-100 shadow-lg backdrop-blur-sm">
+                  {(() => {
+                    const players = (match.players || []).map((p:any, i:number) => {
+                      const leg = p.legs?.[p.legs.length-1]
+                      const remaining = leg ? leg.totalScoreRemaining : match.startingScore
+                      const last = leg?.visits?.[leg.visits.length-1]
+                      return {
+                        name: p.name || p.id || `Player ${i+1}`,
+                        isCurrentTurn: (match.currentPlayerIdx || 0) === i,
+                        legsWon: p.legsWon || 0,
+                        score: remaining,
+                        lastScore: last?.score ?? 0,
+                        matchAvg: undefined,
+                        allTimeAvg: undefined,
+                      }
+                    })
+                    const matchScore = (match.players && match.players.length === 2) ? `${match.players[0]?.legsWon||0}-${match.players[1]?.legsWon||0}` : undefined
+                    return <GameScoreboard gameMode={(currentGame as any)} players={players} matchScore={matchScore} />
+                  })()}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Right column: camera / preview */}
