@@ -13,13 +13,74 @@ function StatBlock({ label, value, className = '', scale = 1 }: { label: string;
   )
 }
 
+function PlayerCalibrationPreview({ player, user, playerCalibrations }: { player: Player; user?: any; playerCalibrations: {[playerName: string]: any} }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const calib = playerCalibrations[player.name]
+  const isCalibrated = !!calib
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    // Draw a simple dartboard circle
+    const centerX = canvas.width / 2
+    const centerY = canvas.height / 2
+    const radius = Math.min(centerX, centerY) - 2
+
+    // Outer circle
+    ctx.strokeStyle = '#fff'
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI)
+    ctx.stroke()
+
+    // Bullseye
+    ctx.fillStyle = '#f00'
+    ctx.beginPath()
+    ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI)
+    ctx.fill()
+
+    // If calibrated, draw calibration points
+    if (isCalibrated) {
+      ctx.fillStyle = '#0f0'
+      // Draw some sample points (simplified)
+      const points = [
+        [centerX - radius * 0.5, centerY],
+        [centerX + radius * 0.5, centerY],
+        [centerX, centerY - radius * 0.5],
+        [centerX, centerY + radius * 0.5]
+      ]
+      points.forEach(([x, y]) => {
+        ctx.beginPath()
+        ctx.arc(x, y, 2, 0, 2 * Math.PI)
+        ctx.fill()
+      })
+    }
+  }, [isCalibrated])
+
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <canvas ref={canvasRef} width={40} height={40} className="border border-white/20 rounded" />
+      <span className={`text-xs ${isCalibrated ? 'text-green-400' : 'text-gray-400'}`}>
+        {isCalibrated ? 'Calibrated' : 'Not Calibrated'}
+      </span>
+    </div>
+  )
+}
+
 import FocusLock from 'react-focus-lock'
-export default function MatchStartShowcase({ players, onDone }: { players: Player[]; onDone?: () => void }) {
+export default function MatchStartShowcase({ players, user, onDone }: { players: Player[]; user?: any; onDone?: () => void }) {
   const [seconds, setSeconds] = useState(15)
   const [scaleState, setScaleState] = useState(1)
   const [visible, setVisible] = useState(true)
   const [showCalibration, setShowCalibration] = useState(false)
   const [calibrationSkipped, setCalibrationSkipped] = useState<{[playerId: string]: boolean}>({})
+  const [playerCalibrations, setPlayerCalibrations] = useState<{[playerName: string]: any}>({})
   const hostRef = useRef<HTMLDivElement | null>(null)
   const startNowRef = useRef<HTMLButtonElement | null>(null)
   const closeRef = useRef<HTMLButtonElement | null>(null)
@@ -64,6 +125,30 @@ export default function MatchStartShowcase({ players, onDone }: { players: Playe
     // Show calibration popup immediately when countdown starts
     if (seconds === 15 && !showCalibration) {
       setShowCalibration(true)
+      // Fetch calibrations for all players
+      const fetchCalibrations = async () => {
+        const calibs: {[playerName: string]: any} = {}
+        for (const player of players) {
+          if (user?.username && player.name === user.username) {
+            // Local user: use store
+            const { H, imageSize, locked } = useCalibration.getState()
+            if (H && locked) calibs[player.name] = { H, imageSize, locked }
+          } else {
+            // Remote user: fetch from server
+            try {
+              const res = await fetch(`/api/users/${encodeURIComponent(player.name)}/calibration`)
+              if (res.ok) {
+                const data = await res.json()
+                if (data.calibration) calibs[player.name] = data.calibration
+              }
+            } catch (err) {
+              console.warn('Failed to fetch calibration for', player.name, err)
+            }
+          }
+        }
+        setPlayerCalibrations(calibs)
+      }
+      fetchCalibrations()
     }
     // Only start countdown when all players have skipped calibration
     if (allPlayersSkipped) {
@@ -80,7 +165,7 @@ export default function MatchStartShowcase({ players, onDone }: { players: Playe
         }, 1000)
       }
     }
-  }, [seconds, onDone, visible, showCalibration, allPlayersSkipped])
+  }, [seconds, onDone, visible, showCalibration, allPlayersSkipped, players, user])
 
   const stats = useMemo(() => players.map(p => {
     const avg3 = getAllTimeAvg(p.name)
@@ -134,14 +219,20 @@ export default function MatchStartShowcase({ players, onDone }: { players: Playe
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-blue-500 flex items-center justify-center text-lg font-bold text-white">
                     {player.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                   </div>
-                  <span className="font-medium">{player.name}</span>
+                  <div className="flex flex-col">
+                    <span className="font-medium">{player.name}</span>
+                    {/* Show a tiny calibration preview if local calibration exists (remote calibs require server support) */}
+                    <PlayerCalibrationPreview player={player} user={user} playerCalibrations={playerCalibrations} />
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button 
                     className="btn btn-sm btn-ghost"
                     onClick={() => {
-                      // TODO: Open calibration interface
-                      alert('Calibration interface would open here')
+                      // Open the Calibrator tab (App listens for this custom event)
+                      try { window.dispatchEvent(new CustomEvent('ndn:change-tab', { detail: { tab: 'calibrate' } })) } catch {}
+                      // Close the showcase so user can focus on calibrator
+                      try { setVisible(false); setShowCalibration(false); onDone?.() } catch {}
                     }}
                   >
                     Bull Up

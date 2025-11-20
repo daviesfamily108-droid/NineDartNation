@@ -1177,9 +1177,9 @@ export default function AdminDashboard({ user }: { user: any }) {
 				<>
 					<div className="card">
 						<h3 className="text-lg font-semibold mb-2">Helpdesk Requests</h3>
-						<div className="text-sm opacity-80 mb-3">Incoming requests from users who asked to speak with an admin. Claim to take over the chat.</div>
+						<div className="text-sm opacity-80 mb-3">All help requests from users who asked to speak with an admin. Status is shown for each request.</div>
 						{helpRequests.length === 0 ? (
-							<div className="text-sm opacity-70">No open requests.</div>
+							<div className="text-sm opacity-70">No help requests.</div>
 						) : (
 							<div className="space-y-2">
 								{helpRequests.map(hr => (
@@ -1188,24 +1188,28 @@ export default function AdminDashboard({ user }: { user: any }) {
 											<div className="font-medium">{hr.username || 'Anonymous'}</div>
 											<div className="text-xs opacity-70">{new Date(hr.ts || 0).toLocaleString()}</div>
 											<div className="text-sm mt-1">{hr.message}</div>
+											<div className="mt-1">
+												<span className={`text-xs px-2 py-1 rounded-full mr-2 ${hr.status === 'open' ? 'bg-emerald-700/30 text-emerald-200' : hr.status === 'claimed' ? 'bg-amber-700/30 text-amber-200' : 'bg-slate-700/30 text-slate-200'}`}>{hr.status || 'unknown'}</span>
+												{hr.claimedBy && <span className="text-xs opacity-70">by {hr.claimedBy}</span>}
+											</div>
 											{helpTyping[hr.id] && (
 												<div className="text-xs text-amber-300 mt-1">{helpTyping[hr.id].who} typing...</div>
 											)}
 										</div>
 										<div className="flex items-center gap-2">
-											{hr.status === 'open' ? (
+											{hr.status === 'open' && (
 												<button className="btn" onClick={() => claimHelp(hr.id)}>Claim</button>
-											) : (
-												<span className="text-xs opacity-70">{hr.status} by {hr.claimedBy || '—'}</span>
 											)}
-											<button className="btn btn-ghost" onClick={() => resolveHelp(hr.id)}>Resolve</button>
+											{hr.status !== 'resolved' && (
+												<button className="btn btn-ghost" onClick={() => resolveHelp(hr.id)}>Resolve</button>
+											)}
 											<button className="btn" onClick={() => setSelectedRequest(hr)}>Chat</button>
 										</div>
 									</div>
 								))}
 							</div>
-							)}
-						</div>
+						)}
+					</div>
 				</>
 			)}
 

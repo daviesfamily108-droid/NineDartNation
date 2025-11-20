@@ -1078,6 +1078,25 @@ app.post('/api/user/calibration', (req, res) => {
   }
 });
 
+// Public calibration lookup (for match showcases)
+app.get('/api/users/:username/calibration', (req, res) => {
+  const { username } = req.params;
+  if (!username) return res.status(400).json({ error: 'Username required.' });
+  
+  // Find user by username
+  let user = null;
+  for (const u of users.values()) {
+    if (u.username === username) {
+      user = u;
+      break;
+    }
+  }
+  if (!user) return res.status(404).json({ error: 'User not found.' });
+  
+  const calibration = user.calibration || null;
+  return res.json({ calibration });
+});
+
 // User highlights storage (save notable visits: checkout >50 or visit >100)
 app.get('/api/user/highlights', async (req, res) => {
   const authHeader = req.headers.authorization;
