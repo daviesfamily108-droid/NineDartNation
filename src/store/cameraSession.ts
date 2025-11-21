@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { dlog } from '../utils/logger'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type CameraStreamMode = 'local' | 'phone' | 'wifi'
@@ -56,11 +57,11 @@ export const useCameraSession = create<CameraSessionState>()(persist((set, get) 
   showOverlay: true,
   
   setStreaming: (streaming) => {
-    console.log('[CAMERA_SESSION] setStreaming:', streaming)
+  dlog('[CAMERA_SESSION] setStreaming:', streaming)
     set({ isStreaming: streaming })
   },
   setMode: (mode) => {
-    console.log('[CAMERA_SESSION] setMode:', mode)
+  dlog('[CAMERA_SESSION] setMode:', mode)
     set({ mode })
   },
   setPairingCode: (code) => set({ pairingCode: code }),
@@ -89,18 +90,18 @@ export const useCameraSession = create<CameraSessionState>()(persist((set, get) 
   getVideoElementRef: () => {
     const ref = videoElementRefHolder
     if (!ref) {
-      console.warn('[cameraSession] ⚠️ getVideoElementRef called but ref is NULL')
+      dlog('[cameraSession] ⚠️ getVideoElementRef called but ref is NULL')
     }
     return ref
   },
   setVideoElementRef: (ref) => {
     if (ref) {
-      console.log('[cameraSession] ✅ setVideoElementRef called - storing HTMLVideoElement', {
+      dlog('[cameraSession] ✅ setVideoElementRef called - storing HTMLVideoElement', {
         tagName: ref.tagName,
         hasStream: !!ref.srcObject,
       })
     } else {
-      console.log('[cameraSession] 🛑 setVideoElementRef called - clearing ref')
+      dlog('[cameraSession] 🛑 setVideoElementRef called - clearing ref')
     }
     videoElementRefHolder = ref
   },

@@ -1561,7 +1561,7 @@ if (wss) {
           id,
           creatorId: ws._id,
           creatorName: ws._username || `user-${ws._id}`,
-          mode: data.mode === 'firstto' ? 'firstto' : 'bestof',
+          mode: (typeof data.mode === 'string' && data.mode.length > 0) ? data.mode : 'bestof',
           value: Number(data.value) || 1,
           startingScore: Number(data.startingScore) || 501,
           creatorAvg: Number(data.creatorAvg) || 0,
@@ -1718,7 +1718,7 @@ if (wss) {
       } else if (data.type === 'start-friend-match') {
         const toEmail = String(data.toEmail || '').toLowerCase()
         const game = typeof data.game === 'string' ? data.game : 'X01'
-        const mode = (data.mode === 'firstto') ? 'firstto' : 'bestof'
+  const mode = (typeof data.mode === 'string' && data.mode.length > 0) ? data.mode : 'bestof'
         const value = Number(data.value) || 1
         const startingScore = Number(data.startingScore) || 501
   const premiumGames = ['Around the Clock', 'Cricket', 'Halve It', 'Shanghai', 'High-Low', 'Killer']

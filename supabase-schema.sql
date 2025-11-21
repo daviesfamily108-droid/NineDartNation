@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS public.matches (
     id TEXT PRIMARY KEY,
     creator_id TEXT NOT NULL,
     creator_name TEXT NOT NULL,
-    mode TEXT NOT NULL, -- 'bestof' or 'firstto'
+    mode TEXT NOT NULL, -- game mode (e.g., 'bestof','firstto','innings','holes','rounds','practice')
     value INTEGER NOT NULL, -- number of legs/sets
     game TEXT NOT NULL, -- 'X01', 'Cricket', etc.
     starting_score INTEGER, -- for X01 games
@@ -63,7 +63,7 @@ CREATE TABLE IF NOT EXISTS public.tournaments (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     game TEXT NOT NULL,
-    mode TEXT NOT NULL, -- 'bestof' or 'firstto'
+    mode TEXT NOT NULL, -- game mode (e.g., 'bestof','firstto','innings','holes','rounds','practice')
     value INTEGER NOT NULL,
     description TEXT,
     start_at TIMESTAMP WITH TIME ZONE NOT NULL,

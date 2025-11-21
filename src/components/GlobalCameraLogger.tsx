@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { dlog } from '../utils/logger'
 import { useCameraSession } from '../store/cameraSession'
 
 // GlobalCameraLogger: attaches to the camera session and emits detailed logs
@@ -16,7 +17,7 @@ export default function GlobalCameraLogger() {
         const media = camera.getMediaStream()
         const pc = camera.getPcRef && camera.getPcRef()
         const ws = camera.getWsRef && camera.getWsRef()
-        console.log(prefix, {
+  dlog(prefix, {
           isStreaming: camera.isStreaming,
           mode: camera.mode,
           showOverlay: camera.showOverlay,
@@ -79,17 +80,17 @@ export default function GlobalCameraLogger() {
         }
         listenersRef.current.video = null
         if (v) {
-          const loadedmetadata = () => console.log('[GlobalCamera] video loadedmetadata', { videoWidth: v.videoWidth, videoHeight: v.videoHeight })
+          const loadedmetadata = () => dlog('[GlobalCamera] video loadedmetadata', { videoWidth: v.videoWidth, videoHeight: v.videoHeight })
           const playing = () => {
-            console.log('[GlobalCamera] video playing', { paused: v.paused })
+            dlog('[GlobalCamera] video playing', { paused: v.paused })
             try { camera.setStreaming(true) } catch {}
           }
           const pause = () => {
-            console.log('[GlobalCamera] video pause')
+            dlog('[GlobalCamera] video pause')
             try { camera.setStreaming(false) } catch {}
           }
           const ended = () => {
-            console.log('[GlobalCamera] video ended')
+            dlog('[GlobalCamera] video ended')
             try { camera.setStreaming(false) } catch {}
           }
           v.addEventListener('loadedmetadata', loadedmetadata)
@@ -111,7 +112,7 @@ export default function GlobalCameraLogger() {
         }
         listenersRef.current.pc = null
         if (pc) {
-          const connChange = () => console.log('[GlobalCamera] pc state change', { connectionState: pc.connectionState, iceState: (pc as any).iceConnectionState })
+          const connChange = () => dlog('[GlobalCamera] pc state change', { connectionState: pc.connectionState, iceState: (pc as any).iceConnectionState })
           pc.addEventListener('connectionstatechange', connChange)
           listenersRef.current.pc = { pc, connChange }
         }

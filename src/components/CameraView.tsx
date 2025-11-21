@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { dlog } from '../utils/logger'
 import { useUserSettings } from '../store/userSettings'
 import { useCalibration } from '../store/calibration'
 import { useMatch } from '../store/match'
@@ -460,32 +461,32 @@ export default function CameraView({
     
     // Only skip local startup when the phone feed is actively streaming
     if (isPhoneCamera && phoneFeedActive) {
-      console.log('[CAMERA] Phone camera stream active - leaving local camera idle')
+  dlog('[CAMERA] Phone camera stream active - leaving local camera idle')
       setCameraStarting(false)
       return
     }
     
     setCameraStarting(true)
-    console.log('[CAMERA] Starting camera...')
+  dlog('[CAMERA] Starting camera...')
     try {
       // If a preferred camera is set, request it; otherwise default to back camera on mobile
       const constraints: MediaStreamConstraints = preferredCameraId 
         ? { video: { deviceId: { exact: preferredCameraId } }, audio: false } 
         : { video: { facingMode: 'environment' }, audio: false } // Prefer back camera on mobile
-      console.log('[CAMERA] Using constraints:', constraints)
+  dlog('[CAMERA] Using constraints:', constraints)
       let stream: MediaStream
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints)
-        console.log('[CAMERA] Got stream:', !!stream)
+  dlog('[CAMERA] Got stream:', !!stream)
       } catch (err: any) {
         console.warn('[CAMERA] First attempt failed:', err)
         // Fallback if specific device isn't available or facingMode not supported
         const name = (err && (err.name || err.code)) || ''
         if (preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError')) {
-          console.log('[CAMERA] Trying fallback without deviceId')
+          dlog('[CAMERA] Trying fallback without deviceId')
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         } else if (!preferredCameraId && (name === 'OverconstrainedError' || name === 'NotFoundError' || name === 'NotSupportedError')) {
-          console.log('[CAMERA] Trying fallback for facingMode not supported')
+          dlog('[CAMERA] Trying fallback for facingMode not supported')
           // Fallback for devices that don't support facingMode
           stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         } else {
@@ -493,24 +494,24 @@ export default function CameraView({
         }
       }
       if (videoRef.current) {
-        console.log('[CAMERA] Setting stream to video element')
+  dlog('[CAMERA] Setting stream to video element')
         videoRef.current.srcObject = stream
-        console.log('[CAMERA] Stream tracks:', stream.getTracks().length, 'video tracks:', stream.getVideoTracks().length)
+  dlog('[CAMERA] Stream tracks:', stream.getTracks().length, 'video tracks:', stream.getVideoTracks().length)
         // Add event listeners for debugging
-        videoRef.current.addEventListener('loadeddata', () => console.log('[CAMERA] Video loadeddata'))
-        videoRef.current.addEventListener('canplay', () => console.log('[CAMERA] Video canplay'))
-        videoRef.current.addEventListener('play', () => console.log('[CAMERA] Video started playing'))
+  videoRef.current.addEventListener('loadeddata', () => dlog('[CAMERA] Video loadeddata'))
+  videoRef.current.addEventListener('canplay', () => dlog('[CAMERA] Video canplay'))
+  videoRef.current.addEventListener('play', () => dlog('[CAMERA] Video started playing'))
         videoRef.current.addEventListener('error', (e) => console.error('[CAMERA] Video error:', e))
         try {
           videoRef.current.play()
-          console.log('[CAMERA] Play called successfully')
+          dlog('[CAMERA] Play called successfully')
         } catch (playErr) {
           console.error('[CAMERA] Video play failed:', playErr)
           // Try again after a short delay
           setTimeout(() => {
             try {
               videoRef.current?.play()
-              console.log('[CAMERA] Retry play called')
+              dlog('[CAMERA] Retry play called')
             } catch (retryErr) {
               console.error('[CAMERA] Retry play failed:', retryErr)
             }
@@ -532,7 +533,7 @@ export default function CameraView({
       try {
         const list = await navigator.mediaDevices.enumerateDevices()
         setAvailableCameras(list.filter(d=>d.kind==='videoinput'))
-        console.log('[CAMERA] Found cameras:', list.filter(d=>d.kind==='videoinput').length)
+  dlog('[CAMERA] Found cameras:', list.filter(d=>d.kind==='videoinput').length)
       } catch (enumErr) {
         console.warn('[CAMERA] Failed to enumerate devices:', enumErr)
       }

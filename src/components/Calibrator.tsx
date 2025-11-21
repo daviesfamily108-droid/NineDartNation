@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { dlog } from '../utils/logger'
 import ReactDOM from 'react-dom'
 import DartLoader from './DartLoader'
 
@@ -125,7 +126,7 @@ export default function Calibrator() {
 	
 	// Log streaming state changes for debugging
 	useEffect(() => {
-		console.log('[Calibrator] 🔄 STREAMING STATE CHANGED:', { streaming, phase, videoRefExists: !!videoRef.current })
+		dlog('[Calibrator] 🔄 STREAMING STATE CHANGED:', { streaming, phase, videoRefExists: !!videoRef.current })
 	}, [streaming, phase])
 	
 	useEffect(() => {
@@ -356,7 +357,7 @@ export default function Calibrator() {
 	// Listen for reconnect requests from PhoneCameraOverlay
 	useEffect(() => {
 		const handleReconnectRequest = (event: any) => {
-			console.log('[Calibrator] Received reconnect request from PhoneCameraOverlay')
+			dlog('[Calibrator] Received reconnect request from PhoneCameraOverlay')
 			// If we're in phone mode and already paired, restart the pairing
 			if (mode === 'phone' && paired) {
 				stopCamera(false)
@@ -376,13 +377,13 @@ export default function Calibrator() {
 	// Sync video element to camera session so other components can access it
 	// CRITICAL: Run whenever streaming state changes to keep videoRef synced
 	useEffect(() => {
-		console.log('[Calibrator] 🔄 STREAMING CHANGED:', { streaming, videoRefAvailable: !!videoRef.current })
+		dlog('[Calibrator] 🔄 STREAMING CHANGED:', { streaming, videoRefAvailable: !!videoRef.current })
 		if (videoRef.current) {
-			console.log('[Calibrator] ✅ Syncing videoElementRef on streaming change')
+			dlog('[Calibrator] ✅ Syncing videoElementRef on streaming change')
 			cameraSession.setVideoElementRef(videoRef.current)
 			// Also capture media stream when available
 			if (videoRef.current.srcObject instanceof MediaStream) {
-				console.log('[Calibrator] ✅ Setting mediaStream from video element')
+				dlog('[Calibrator] ✅ Setting mediaStream from video element')
 				cameraSession.setMediaStream(videoRef.current.srcObject)
 			}
 		} else {
@@ -392,20 +393,20 @@ export default function Calibrator() {
 
 	// Also sync on mount to capture initial videoRef
 	useEffect(() => {
-		console.log('[Calibrator] 🚀 MOUNT: Initial mount - syncing videoRef')
-		console.log('[Calibrator] videoRef.current available:', !!videoRef.current)
-		console.log('[Calibrator] videoRef.current type:', videoRef.current?.constructor?.name)
+		dlog('[Calibrator] 🚀 MOUNT: Initial mount - syncing videoRef')
+		dlog('[Calibrator] videoRef.current available:', !!videoRef.current)
+		dlog('[Calibrator] videoRef.current type:', videoRef.current?.constructor?.name)
 		
 		if (videoRef.current) {
-			console.log('[Calibrator] ✅ Setting videoElementRef on mount')
-			console.log('[Calibrator] Video element:', {
+			dlog('[Calibrator] ✅ Setting videoElementRef on mount')
+			dlog('[Calibrator] Video element:', {
 				tagName: videoRef.current.tagName,
 				srcObject: !!videoRef.current.srcObject,
 				videoWidth: videoRef.current.videoWidth,
 				videoHeight: videoRef.current.videoHeight,
 			})
 			cameraSession.setVideoElementRef(videoRef.current)
-			console.log('[Calibrator] ✅ videoElementRef set successfully')
+			dlog('[Calibrator] ✅ videoElementRef set successfully')
 		} else {
 			console.error('[Calibrator] ❌ CRITICAL: videoRef.current is NULL at mount!')
 		}
@@ -416,7 +417,7 @@ export default function Calibrator() {
 	function ensureWS() {
 		// Return existing WebSocket if it's open or connecting
 		if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-			console.log('[Calibrator] ensureWS: Reusing existing WebSocket (state:', ws.readyState, ')')
+				dlog('[Calibrator] ensureWS: Reusing existing WebSocket (state:', ws.readyState, ')')
 			return ws
 		}
 		// Prefer configured WS endpoint; normalize to include '/ws'. Fallback to same-origin '/ws'.
@@ -431,7 +432,7 @@ export default function Calibrator() {
 			// prefer the known Render service as a fallback instead of Netlify same-origin.
 			const renderWS = `wss://ninedartnation.onrender.com/ws`
 			const url = normalizedEnv || (host.endsWith('onrender.com') ? sameOrigin : renderWS)
-			console.log('[Calibrator] ensureWS: Creating new WebSocket to:', url)
+				dlog('[Calibrator] ensureWS: Creating new WebSocket to:', url)
 			let socket: WebSocket = new WebSocket(url)
 		
 		// Set up handlers BEFORE storing the socket to avoid race conditions
@@ -440,7 +441,7 @@ export default function Calibrator() {
 			alert('Failed to connect to camera pairing service. Please check your internet connection and try again.')
 		}
 		socket.onclose = (event) => {
-			console.log('[Calibrator] WebSocket closed:', event.code, event.reason)
+				dlog('[Calibrator] WebSocket closed:', event.code, event.reason)
 			if (pcRef.current) {
 				try { pcRef.current.close() } catch {}
 				pcRef.current = null
@@ -475,12 +476,12 @@ export default function Calibrator() {
 		const socket = ensureWS()
 		// Send cam-create when socket is ready
 		if (socket.readyState === WebSocket.OPEN) {
-			console.log('[Calibrator] WebSocket open, sending cam-create')
+				dlog('[Calibrator] WebSocket open, sending cam-create')
 			socket.send(JSON.stringify({ type: 'cam-create' }))
 		} else {
-			console.log('[Calibrator] WebSocket connecting, will send cam-create on open')
+				dlog('[Calibrator] WebSocket connecting, will send cam-create on open')
 			socket.onopen = () => {
-				console.log('[Calibrator] WebSocket now open, sending cam-create')
+					dlog('[Calibrator] WebSocket now open, sending cam-create')
 				socket.send(JSON.stringify({ type: 'cam-create' }))
 			}
 		}
@@ -501,7 +502,7 @@ export default function Calibrator() {
 						const imgSize = canvasRef.current ? { w: canvasRef.current.width, h: canvasRef.current.height } : null
 						const payload = { H, imageSize: imgSize, errorPx: (errorPx ?? null), createdAt: Date.now() }
 						socket.send(JSON.stringify({ type: 'cam-calibration', code: codeForSession, payload }))
-						console.log('[Calibrator] Sent calibration to joined phone for code', codeForSession)
+						dlog('[Calibrator] Sent calibration to joined phone for code', codeForSession)
 					}
 				} catch (e) {
 					console.warn('[Calibrator] Failed to send calibration on peer join', e)
@@ -514,13 +515,13 @@ export default function Calibrator() {
 				
 				// Add connection state monitoring
 				peer.onconnectionstatechange = () => {
-					console.log('WebRTC connection state:', peer.connectionState)
+						dlog('WebRTC connection state:', peer.connectionState)
 					if (peer.connectionState === 'failed' || peer.connectionState === 'disconnected') {
 						console.error('WebRTC connection failed')
 						alert('Camera connection lost. Please try pairing again.')
 						stopCamera(false)
 					} else if (peer.connectionState === 'connected') {
-						console.log('WebRTC connection established')
+						dlog('WebRTC connection established')
 					}
 				}
 				
@@ -531,17 +532,17 @@ export default function Calibrator() {
 				}
 				
 			peer.ontrack = (ev) => {
-				console.log('[Calibrator] WebRTC ontrack received:', ev.streams?.length, 'streams, track kind:', ev.track?.kind)
+						dlog('[Calibrator] WebRTC ontrack received:', ev.streams?.length, 'streams, track kind:', ev.track?.kind)
 				if (videoRef.current) {
 					const inbound = ev.streams?.[0]
 					if (inbound) {
-						console.log('[Calibrator] Assigning video stream (tracks:', inbound.getTracks().length, ') to video element')
+						dlog('[Calibrator] Assigning video stream (tracks:', inbound.getTracks().length, ') to video element')
 						// Ensure video element is visible
 						setHasSnapshot(false)
 						// Use setTimeout to ensure DOM updates before assigning stream
 						setTimeout(() => {
 							if (videoRef.current) {
-										console.log('[Calibrator] Setting srcObject and attempting play')
+										dlog('[Calibrator] Setting srcObject and attempting play')
 										// Clean up any existing stream before assigning new one
 										if (videoRef.current.srcObject) {
 											const existingTracks = (videoRef.current.srcObject as MediaStream).getTracks()
@@ -551,7 +552,7 @@ export default function Calibrator() {
 										videoRef.current.muted = true // Ensure muted for autoplay policy
 										videoRef.current.playsInline = true // Mobile/iOS support
 										videoRef.current.play().then(() => {
-											console.log('[Calibrator] Video playback started successfully')
+											dlog('[Calibrator] Video playback started successfully')
 											// Mark that we're streaming from the phone and transition to capture
 											setStreaming(true)
 											setPhase('capture')
@@ -588,7 +589,7 @@ export default function Calibrator() {
 			try {
 				const offer = await peer.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: true })
 					await peer.setLocalDescription(offer)
-					console.log('[Calibrator] Sending cam-offer for code:', codeForSession)
+						dlog('[Calibrator] Sending cam-offer for code:', codeForSession)
 					if (codeForSession) socket.send(JSON.stringify({ type: 'cam-offer', code: codeForSession, payload: offer }))
 					else console.warn('[Calibrator] Missing pairing code when sending offer')
 			} catch (err) {
@@ -597,20 +598,20 @@ export default function Calibrator() {
 					stopCamera(false)
 				}
 			} else if (data.type === 'cam-answer') {
-				console.log('[Calibrator] Received cam-answer')
+						dlog('[Calibrator] Received cam-answer')
 				const peer = pcRef.current
 				if (peer) {
 					try {
 						await peer.setRemoteDescription(new RTCSessionDescription(data.payload))
-						console.log('[Calibrator] Remote description set (answer)')
+							dlog('[Calibrator] Remote description set (answer)')
 						
 						// Process any pending ICE candidates that arrived before the answer
 						const pending = pendingIceCandidatesRef.current
-						console.log(`[Calibrator] Processing ${pending.length} pending ICE candidates`)
+						dlog(`[Calibrator] Processing ${pending.length} pending ICE candidates`)
 						for (const candidate of pending) {
 							try {
 								await peer.addIceCandidate(candidate)
-								console.log('[Calibrator] Queued ICE candidate added')
+								dlog('[Calibrator] Queued ICE candidate added')
 							} catch (err) {
 								console.error('Failed to add queued ICE candidate:', err)
 							}
@@ -625,7 +626,7 @@ export default function Calibrator() {
 					console.warn('[Calibrator] Received cam-answer but no peer connection exists')
 				}
 			} else if (data.type === 'cam-ice') {
-				console.log('[Calibrator] Received cam-ice')
+					dlog('[Calibrator] Received cam-ice')
 				const peer = pcRef.current
 				if (peer) {
 					// Only add ICE candidate if remote description is already set
@@ -633,12 +634,12 @@ export default function Calibrator() {
 					if (peer.remoteDescription) {
 						try {
 							await peer.addIceCandidate(data.payload)
-							console.log('[Calibrator] ICE candidate added')
+							dlog('[Calibrator] ICE candidate added')
 						} catch (err) {
 							console.error('Failed to add ICE candidate:', err)
 						}
 					} else {
-						console.log('[Calibrator] Remote description not set yet, queuing ICE candidate')
+						dlog('[Calibrator] Remote description not set yet, queuing ICE candidate')
 						pendingIceCandidatesRef.current.push(data.payload)
 					}
 				} else {
@@ -650,7 +651,7 @@ export default function Calibrator() {
 				stopCamera(false)
 			} else if (data.type === 'cam-calibration') {
 				// Desktop receives calibration from phone (via server) or phone receives from desktop
-				console.log('[Calibrator] Received calibration from peer:', data.payload)
+						dlog('[Calibrator] Received calibration from peer:', data.payload)
 				try {
 					if (data.payload && data.payload.H && Array.isArray(data.payload.H)) {
 						// Apply the received calibration
@@ -661,7 +662,7 @@ export default function Calibrator() {
 							imageSize: data.payload.imageSize,
 							locked: true // Assume locked since peer sent it
 						})
-						console.log('[Calibrator] Applied received calibration')
+						dlog('[Calibrator] Applied received calibration')
 					}
 				} catch (e) {
 					console.error('[Calibrator] Failed to apply received calibration', e)
@@ -722,19 +723,19 @@ export default function Calibrator() {
 	async function startCamera() {
 		if (mode === 'phone') return startPhonePairing()
 		if (mode === 'wifi') return startWifiConnection()
-		console.log('[Calibrator] 🎬 START_CAMERA: mode=', mode, 'preferredCameraId=', preferredCameraId)
+		dlog('[Calibrator] 🎬 START_CAMERA: mode=', mode, 'preferredCameraId=', preferredCameraId)
 		try {
 			let stream: MediaStream | null = null
 			
 			// Step 1: Try with preferred camera ID if available
 			if (preferredCameraId) {
 				try {
-					console.log('[Calibrator] 📹 Attempt 1: Using preferred camera ID:', preferredCameraId)
+					dlog('[Calibrator] 📹 Attempt 1: Using preferred camera ID:', preferredCameraId)
 					stream = await navigator.mediaDevices.getUserMedia({
 						video: { deviceId: { exact: preferredCameraId } },
 						audio: false
 					})
-					console.log('[Calibrator] ✅ SUCCESS with preferred camera:', stream.getTracks().length, 'tracks')
+					dlog('[Calibrator] ✅ SUCCESS with preferred camera:', stream.getTracks().length, 'tracks')
 				} catch (err: any) {
 					console.warn('[Calibrator] ⚠️ Preferred camera failed:', err?.name, err?.message)
 				}
@@ -743,9 +744,9 @@ export default function Calibrator() {
 			// Step 2: If preferred didn't work, try any camera
 			if (!stream) {
 				try {
-					console.log('[Calibrator] 📹 Attempt 2: Using ANY available camera')
+					dlog('[Calibrator] 📹 Attempt 2: Using ANY available camera')
 					stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
-					console.log('[Calibrator] ✅ SUCCESS with fallback camera:', stream.getTracks().length, 'tracks')
+					dlog('[Calibrator] ✅ SUCCESS with fallback camera:', stream.getTracks().length, 'tracks')
 				} catch (err: any) {
 					console.error('[Calibrator] ❌ BOTH attempts failed:', err?.name, err?.message)
 					throw err
@@ -761,24 +762,24 @@ export default function Calibrator() {
 				throw new Error('Video element ref is null')
 			}
 			
-			console.log('[Calibrator] 📺 Assigning stream to video element')
+			dlog('[Calibrator] 📺 Assigning stream to video element')
 			videoRef.current.srcObject = stream
 			
-			console.log('[Calibrator] ▶️ Calling play()')
+			dlog('[Calibrator] ▶️ Calling play()')
 			try {
 				await videoRef.current.play()
-				console.log('[Calibrator] ✅ Play succeeded')
+				dlog('[Calibrator] ✅ Play succeeded')
 			} catch (playErr: any) {
 				console.warn('[Calibrator] ⚠️ Play failed, retrying in 100ms:', playErr?.message)
 				await new Promise(r => setTimeout(r, 100))
 				await videoRef.current.play()
-				console.log('[Calibrator] ✅ Play succeeded on retry')
+				dlog('[Calibrator] ✅ Play succeeded on retry')
 			}
 			
-			console.log('[Calibrator] 🟢 Setting streaming = true')
+			dlog('[Calibrator] 🟢 Setting streaming = true')
 			setStreaming(true)
 			setPhase('capture')
-			console.log('[Calibrator] 🟢 State updated')
+			dlog('[Calibrator] 🟢 State updated')
 		} catch (e: any) {
 			console.error('[Calibrator] 🔴 FATAL:', e?.message || e)
 			alert(`Camera failed: ${e?.message || 'Unknown error'}`)

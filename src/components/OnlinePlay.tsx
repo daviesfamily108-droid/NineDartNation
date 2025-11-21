@@ -11,7 +11,7 @@ import { useUserSettings } from '../store/userSettings'
 import { useCalibration } from '../store/calibration'
 import GameCalibrationStatus from './GameCalibrationStatus'
 import MatchSummaryModal from './MatchSummaryModal'
-import { freeGames, premiumGames, allGames, type GameKey } from '../utils/games'
+import { freeGames, premiumGames, allGames, type GameKey, getStartOptionsForGame, getModeOptionsForGame, getModeValueOptionsForGame, labelForMode, type ModeKey } from '../utils/games'
 import { getUserCurrency, formatPriceInCurrency } from '../utils/config'
 import ResizableModal from './ui/ResizableModal'
 import GameHeaderBar from './ui/GameHeaderBar'
@@ -42,6 +42,8 @@ import { useOnlineGameStats } from './scoreboards/useGameStats'
 export default function OnlinePlay({ user }: { user?: any }) {
   const API_URL = (import.meta as any).env?.VITE_API_URL || ''
   const toast = useToast();
+  const isDev = (import.meta as any).env?.DEV || false
+  function dlog(...args: any[]) { if (isDev) console.debug(...args) }
   const match = useMatch();
   const wsGlobal = useWS();
   const wsRef = useRef<WebSocket | null>(null);
@@ -255,6 +257,25 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const endSummaryPrevRef = useRef<boolean>(!!useMatch.getState().inProgress)
   const [showStartShowcase, setShowStartShowcase] = useState(false)
   const startedShowcasedRef = useRef(false)
+  const [prestartRoomId, setPrestartRoomId] = useState<string | null>(null)
+  const [prestartEndsAt, setPrestartEndsAt] = useState<number | null>(null)
+  const [prestartTimeLeft, setPrestartTimeLeft] = useState<number | null>(null)
+  const [prestartChoices, setPrestartChoices] = useState<Record<string, string>>({})
+  const [prestartBullActive, setPrestartBullActive] = useState(false)
+  const [prestartBullTie, setPrestartBullTie] = useState(false)
+  useEffect(() => {
+    let preTimer: any = null
+    if (prestartEndsAt) {
+      setPrestartTimeLeft(Math.max(0, Math.ceil((prestartEndsAt - Date.now()) / 1000)))
+      preTimer = setInterval(() => {
+        setPrestartTimeLeft(Math.max(0, Math.ceil((prestartEndsAt - Date.now()) / 1000)))
+      }, 1000)
+    } else {
+      setPrestartTimeLeft(null)
+    }
+    return () => { if (preTimer) clearInterval(preTimer) }
+  }, [prestartEndsAt])
+
   useEffect(() => {
     const prev = endSummaryPrevRef.current
     const now = !!match.inProgress
@@ -381,10 +402,11 @@ export default function OnlinePlay({ user }: { user?: any }) {
   // Lobby & create-match state
   const [showCreate, setShowCreate] = useState(false)
   const [lobby, setLobby] = useState<any[]>([])
-  const [mode, setMode] = useState<'bestof'|'firstto'>('bestof')
+  const [mode, setMode] = useState<ModeKey>('bestof')
   const [modeValue, setModeValue] = useState<number>(5)
   const [startScore, setStartScore] = useState<number>(501)
   const [pendingInvite, setPendingInvite] = useState<any | null>(null)
+  const [inviteCountdown, setInviteCountdown] = useState<number>(60)
   const [errorMsg, setErrorMsg] = useState<string>('')
   // Stripe checkout error handler
   function handleStripeError(msg: string) {
@@ -393,7 +415,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
     try { toast(msg || 'Stripe checkout failed', { type: 'error' }) } catch {}
   }
   const [lastJoinIntent, setLastJoinIntent] = useState<any | null>(null)
-  const [offerNewRoom, setOfferNewRoom] = useState<null | { game: string; mode: 'bestof'|'firstto'; value: number; startingScore?: number }>(null)
+  const [offerNewRoom, setOfferNewRoom] = useState<null | { game: string; mode: ModeKey; value: number; startingScore?: number }>(null)
   // Game selection
   const [game, setGame] = useState<GameKey>('X01')
   const [currentGame, setCurrentGame] = useState<GameKey>('X01')
@@ -405,25 +427,69 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const freeLeft = user?.username && !user?.fullAccess ? getFreeRemaining(user.username) : Infinity
   const locked = !user?.fullAccess && (freeLeft <= 0)
   // World Lobby filters
-  const [filterMode, setFilterMode] = useState<'all'|'bestof'|'firstto'>('all')
-  const [filterStart, setFilterStart] = useState<'all'|301|501|701>('all')
+  const [filterMode, setFilterMode] = useState<'all'|ModeKey>('all')
+  const [filterStart, setFilterStart] = useState<'all'|number>('all')
   const [filterGame, setFilterGame] = useState<'all'|GameKey>('all')
+  const [filterModeValue, setFilterModeValue] = useState<number | null>(null)
   const [nearAvg, setNearAvg] = useState(false)
   const [avgTolerance, setAvgTolerance] = useState<number>(10)
+  // Applied filters (only used when the user clicks Apply)
+  const [appliedFilters, setAppliedFilters] = useState<{
+    game: 'all'|GameKey
+    start: 'all'|number
+    mode: 'all'|ModeKey
+    modeValue: number | null
+    nearAvg: boolean
+    avgTolerance: number
+  }>(() => ({ game: 'all', start: 'all', mode: 'all', modeValue: null, nearAvg: false, avgTolerance: 10 }))
   const { H: calibH } = useCalibration()
   const myAvg = user?.username ? getAllTimeAvg(user.username) : 0
   const unread = useMessages(s => s.unread)
   const filteredLobby = (lobby || []).filter((m:any) => {
-    if (filterMode !== 'all' && m.mode !== filterMode) return false
-    if (filterStart !== 'all' && Number(m.startingScore) !== Number(filterStart)) return false
-    if (filterGame !== 'all' && m.game !== filterGame) return false
-    if (nearAvg) {
+    const af = appliedFilters
+    if (af.mode !== 'all' && m.mode !== af.mode) return false
+    if (af.start !== 'all' && Number(m.startingScore) !== Number(af.start)) return false
+    if (af.game !== 'all' && m.game !== af.game) return false
+    if (af.mode !== 'all' && af.modeValue && Number(m.value) !== Number(af.modeValue)) return false
+    if (af.nearAvg) {
       if (!myAvg || !m.creatorAvg) return false
       const diff = Math.abs(Number(m.creatorAvg) - Number(myAvg))
-      if (diff > avgTolerance) return false
+      if (diff > af.avgTolerance) return false
     }
     return true
   })
+
+  // Use shared labelForMode from games utils
+
+  // Helper getStartOptionsForGame and getModeOptionsForGame are imported from utils/games
+
+  function applyFilters() {
+    setAppliedFilters({ game: filterGame, start: filterStart, mode: filterMode, modeValue: filterModeValue, nearAvg: nearAvg, avgTolerance: avgTolerance })
+    try { if (wsGlobal) wsGlobal.send({ type: 'list-matches' }); else wsRef.current?.send(JSON.stringify({ type: 'list-matches' })) } catch {}
+  }
+
+  // Create match handler (for create modal)
+  async function createMatch() {
+    try {
+      const creatorAvg = user?.username ? getAllTimeAvg(user.username) : 0
+      const payload: any = { type: 'create-match', game, mode, value: modeValue, startingScore: game === 'X01' ? startScore : undefined, creatorAvg }
+      // Include calibration requirement if set
+      if (requireCalibration) payload.requireCalibration = true
+      // Include toggle for X01 double-in at creation-time (server currently ignores, but it's useful for clients)
+      if (game === 'X01' && typeof createX01DoubleIn === 'boolean') payload._x01DoubleIn = createX01DoubleIn
+      // Include treble max darts for Treble Practice (client-side only flag)
+      if (game === 'Treble Practice' && Number.isFinite(createTrebleMaxDarts)) payload._trebleMaxDarts = Number(createTrebleMaxDarts)
+      if (wsGlobal) wsGlobal.send(payload)
+      else wsRef.current?.send(JSON.stringify(payload))
+      // Close the create panel and refresh lobby
+      setShowCreate(false)
+      try { if (wsGlobal) wsGlobal.send({ type: 'list-matches' }); else wsRef.current?.send(JSON.stringify({ type: 'list-matches' })) } catch {}
+    } catch (e) {
+      console.warn('Failed to create match', e)
+      setErrorMsg('Failed to create match')
+      setTimeout(()=>setErrorMsg(''), 3000)
+    }
+  }
 
   // Removed tournaments banner from Online; tournaments live in Tournaments tab only
 
@@ -432,7 +498,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
     const handler = (e: any) => {
       const d = e?.detail || {}
       if (d.game) setGame(d.game)
-      if (d.mode === 'bestof' || d.mode === 'firstto') setMode(d.mode)
+  if (typeof d.mode === 'string' && d.mode.length > 0) setMode(d.mode)
       if (typeof d.value === 'number' && isFinite(d.value)) setModeValue(Math.max(1, Math.floor(d.value)))
       if (typeof d.start === 'number' && isFinite(d.start)) setStartScore(Math.max(1, Math.floor(d.start)))
       setShowCreate(true)
@@ -523,6 +589,24 @@ export default function OnlinePlay({ user }: { user?: any }) {
     window.addEventListener('ndn:spectate-room', onSpectate as any)
     return () => window.removeEventListener('ndn:spectate-room', onSpectate as any)
   }, [wsGlobal])
+
+  // When we receive a pendingInvite, start a 60s countdown
+  useEffect(() => {
+    let t: any = null
+    if (pendingInvite) {
+      setInviteCountdown(60)
+      t = setInterval(() => setInviteCountdown(c => Math.max(0, c - 1)), 1000)
+    } else {
+      setInviteCountdown(60)
+    }
+    return () => { if (t) clearInterval(t) }
+  }, [pendingInvite])
+
+  function respondToInvite(accept: boolean) {
+    if (!pendingInvite) return
+    try { if (wsGlobal) wsGlobal.send({ type: 'invite-response', matchId: pendingInvite.matchId, accept, toId: pendingInvite.fromId }); else wsRef.current?.send(JSON.stringify({ type: 'invite-response', matchId: pendingInvite.matchId, accept, toId: pendingInvite.fromId })) } catch {}
+    setPendingInvite(null)
+  }
 
   function connect() {
     if (wsGlobal) {
@@ -646,6 +730,22 @@ export default function OnlinePlay({ user }: { user?: any }) {
         setLobby(Array.isArray(data.matches) ? data.matches : [])
       } else if (data.type === 'invite') {
         setPendingInvite({ matchId: data.matchId, fromId: data.fromId, fromName: data.fromName, calibrated: !!data.calibrated, boardPreview: data.boardPreview || null, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore })
+      } else if (data.type === 'match-prestart') {
+        // Received prestart: show pregame stats and start prestart countdown
+        setRoomId(data.roomId)
+        setPrestartRoomId(data.roomId)
+        setPrestartEndsAt(Number(data.prestartEndsAt) || (Date.now() + 15000))
+        setShowStartShowcase(true)
+        setShowCreate(false)
+        try {
+          // Populate the local match players with minimal details so prestart stats can show
+          const creatorName = (data.match && data.match.creatorName) ? data.match.creatorName : (match.players?.[0]?.name || 'Host')
+          const guestName = (pendingInvite && pendingInvite.fromName) ? pendingInvite.fromName : 'Opponent'
+          const players = [{ id: '0', name: creatorName, legsWon: 0, legs: [] }, { id: '1', name: guestName, legsWon: 0, legs: [] }]
+          match.importState({ roomId: data.roomId, players, currentPlayerIdx: 0, startingScore: data.match?.startingScore || 501, inProgress: false })
+        } catch (e) {
+          console.warn('Failed to seed prestart match players', e)
+        }
       } else if (data.type === 'match-start') {
         // Both parties received a room id to join
         setRoomId(data.roomId)
@@ -660,6 +760,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
         }
       } else if (data.type === 'declined') {
         toast('Invite declined', { type: 'info' })
+      } else if (data.type === 'invite-expired') {
+        toast('Invite expired', { type: 'info' })
       } else if (data.type === 'error') {
         const msg = typeof data.message === 'string' ? data.message : 'Action not allowed'
         setErrorMsg(msg)
@@ -677,7 +779,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
         // auto-clear after a bit
         setTimeout(()=>setErrorMsg(''), 3500)
       } else if (data.type === 'friend-invite') {
-        const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}). Accept?`)
+  const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${labelForMode(data.mode)} ${data.value||1}). Accept?`)
         if (accept) {
           ws.send(JSON.stringify({ type: 'start-friend-match', toEmail: data.fromEmail, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore }))
         } else {
@@ -692,7 +794,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
         const kind = data.kind === 'leg' ? 'leg' : '180'
         triggerCelebration(kind, who)
       } else if (data.type === 'cam-code') {
-            console.log('Received cam-code:', data.code)
+        dlog('Received cam-code:', data.code)
             setPairingCode(data.code)
       setPairingPending(false)
       try { if (pairingPendingTimeoutRef.current) window.clearTimeout(pairingPendingTimeoutRef.current) } catch {}
@@ -713,16 +815,29 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 setPairingExpiryAt(null)
               }
             }, 1000) as unknown as number
+      } else if (data.type === 'prestart-choice-notify') {
+        // data: { roomId, playerId, choice }
+        setPrestartChoices(prev => ({ ...prev, [String(data.playerId)]: data.choice }))
+      } else if (data.type === 'prestart-bull') {
+        setPrestartBullActive(true)
+      } else if (data.type === 'prestart-bull-tie') {
+        setPrestartBullTie(true)
+      } else if (data.type === 'prestart-bull-winner') {
+        setPrestartBullActive(false)
+        setPrestartBullTie(false)
+        try { toast(`${data.winnerId ? data.winnerId : 'Player'} wins bull-up`) } catch {}
+        // Use voice caller to announce (try/catch optional)
+        try { if (callerEnabled) sayScore(data.winnerId?.toString() || 'Player', 0, 0, callerVoice, { volume: callerVolume }) } catch {}
       } else if (data.type === 'cam-peer-joined') {
-        console.log('Mobile peer joined for code:', data.code)
+  dlog('Mobile peer joined for code:', data.code)
         // Mobile camera connected, start WebRTC
         startMobileWebRTC(data.code)
       } else if (data.type === 'cam-answer') {
-        console.log('Received cam-answer')
+  dlog('Received cam-answer')
         const pc = (window as any).mobilePC
         if (pc) pc.setRemoteDescription(new RTCSessionDescription(data.payload))
       } else if (data.type === 'cam-ice') {
-        console.log('Received cam-ice')
+  dlog('Received cam-ice')
         const pc = (window as any).mobilePC
         if (pc) pc.addIceCandidate(data.payload)
       }
@@ -1255,6 +1370,19 @@ export default function OnlinePlay({ user }: { user?: any }) {
     try { toast('Report submitted', { type: 'info' }) } catch {}
   }
 
+  function sendPrestartChoice(choice: 'bull'|'skip') {
+    const r = prestartRoomId || roomId
+    if (!r) return
+    const payload: any = { type: 'prestart-choice', roomId: r, choice }
+    try { if (wsGlobal) wsGlobal.send(payload); else wsRef.current?.send(JSON.stringify(payload)) } catch {}
+  }
+
+  function sendPrestartBullThrow(score: number) {
+    const r = prestartRoomId || roomId
+    if (!r) return
+    try { if (wsGlobal) wsGlobal.send({ type: 'prestart-bull-throw', roomId: r, score }) ; else wsRef.current?.send(JSON.stringify({ type: 'prestart-bull-throw', roomId: r, score })) } catch {}
+  }
+
   function isMobileLike() {
     if (typeof navigator === 'undefined') return false
     const ua = navigator.userAgent || ''
@@ -1290,20 +1418,20 @@ export default function OnlinePlay({ user }: { user?: any }) {
 
   // WebRTC for mobile camera
   startMobileWebRTC = async (code: string) => {
-    console.log('Starting WebRTC for code:', code)
+  dlog('Starting WebRTC for code:', code)
     try {
       const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
       pc.ontrack = (event) => {
-        console.log('Received track:', event.streams[0])
+        dlog('Received track:', event.streams[0])
         setMobileStream(event.streams[0])
         if (mobileVideoRef.current) {
           mobileVideoRef.current.srcObject = event.streams[0]
-          console.log('Set video srcObject')
+          dlog('Set video srcObject')
         }
       }
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log('Sending ICE candidate')
+          dlog('Sending ICE candidate')
           if (wsGlobal) {
             wsGlobal.send({ type: 'cam-ice', code, payload: event.candidate })
           } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -1311,19 +1439,19 @@ export default function OnlinePlay({ user }: { user?: any }) {
           }
         }
       }
-      pc.onconnectionstatechange = () => console.log('Connection state:', pc.connectionState)
+  pc.onconnectionstatechange = () => dlog('Connection state:', pc.connectionState)
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
-      console.log('Sending offer')
+  dlog('Sending offer')
       // Try WebSocket first, otherwise fall back to REST POST
       if (wsGlobal) {
-        console.log('Sending offer via wsGlobal')
+  dlog('Sending offer via wsGlobal')
         wsGlobal.send({ type: 'cam-offer', code, payload: offer })
       } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        console.log('Sending offer via wsRef')
+  dlog('Sending offer via wsRef')
         wsRef.current.send(JSON.stringify({ type: 'cam-offer', code, payload: offer }))
       } else {
-        console.log('WS not available, POSTing offer to /cam/signal')
+  dlog('WS not available, POSTing offer to /cam/signal')
         try {
           await apiFetch(`/cam/signal/${code}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'cam-offer', payload: offer, source: 'desktop' }) })
         } catch (e) { console.warn('REST offer failed', e) }
@@ -1369,6 +1497,143 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     <div className="text-sm opacity-80 ml-auto">Matches: {filteredLobby.length}</div>
                   </div>
                 </div>
+                {showCreate && (
+                  <div className="mb-4">
+                    <div className="card relative">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-xl font-semibold">Create Match</h3>
+                        <button className="btn" onClick={()=>setShowCreate(false)}>Close</button>
+                      </div>
+                      <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 pr-1">
+                        <div>
+                          <label htmlFor="create-game" className="block text-sm font-semibold mb-1">Game</label>
+                          <select id="create-game" className="input w-full" value={game} onChange={e => {
+                            const g = e.target.value as GameKey
+                            setGame(g)
+                            const mo = getModeOptionsForGame(g)[0] as ModeKey
+                            setMode(mo || 'bestof')
+                            const vals = getModeValueOptionsForGame(g, mo || 'bestof')
+                            setModeValue(vals && vals.length ? vals[0] : 1)
+                            const starts = getStartOptionsForGame(g)
+                            setStartScore(starts && starts.length ? Number(starts[0]) : 501)
+                          }}>
+                            {allGames.map((g) => <option key={g} value={g}>{g}</option>)}
+                          </select>
+                        </div>
+                        {game === 'X01' && (
+                          <div>
+                            <label htmlFor="create-start" className="block text-sm font-semibold mb-1">X01 Starting Score</label>
+                            <select id="create-start" className="input w-full" value={String(startScore)} onChange={e => setStartScore(Number(e.target.value))}>
+                              {getStartOptionsForGame('X01').map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>
+                        )}
+                        <div>
+                          <label htmlFor="create-mode" className="block text-sm font-semibold mb-1">Mode</label>
+                          <select id="create-mode" className="input w-full" value={mode} onChange={e => {
+                            const m = e.target.value as ModeKey
+                            setMode(m)
+                            const vals = getModeValueOptionsForGame(game, m)
+                            setModeValue(vals && vals.length ? vals[0] : 1)
+                          }}>
+                            {getModeOptionsForGame(game).map(o => <option key={String(o)} value={String(o)}>{labelForMode(String(o))}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label htmlFor="create-value" className="block text-sm font-semibold mb-1">Number</label>
+                          {(() => {
+                            const vals = getModeValueOptionsForGame(game, mode)
+                            if (vals && vals.length) {
+                              return (
+                                <select id="create-value" className="input w-full" value={String(modeValue)} onChange={e => setModeValue(Number(e.target.value))}>
+                                  {vals.map(v => <option key={v} value={v}>{v}</option>)}
+                                </select>
+                              )
+                            } else {
+                              return (
+                                <input id="create-value" className="input w-full" type="number" min={1} value={modeValue} onChange={e => setModeValue(Math.max(1, Number(e.target.value) || 1))} />
+                              )
+                            }
+                          })()}
+                        </div>
+                        {game === 'X01' && (
+                          <div>
+                            <label className="inline-flex items-center gap-2 text-sm">
+                              <input type="checkbox" className="accent-purple-500" checked={createX01DoubleIn} onChange={e=>setCreateX01DoubleIn(!!e.target.checked)} />
+                              <span className="font-semibold">X01 Double-In</span>
+                            </label>
+                          </div>
+                        )}
+                        {game === 'Treble Practice' && (
+                          <div>
+                            <label className="block text-sm font-semibold mb-1">Max Darts</label>
+                            <input className="input w-full" type="number" min={1} value={createTrebleMaxDarts} onChange={e => setCreateTrebleMaxDarts(Math.max(1, Number(e.target.value) || 1))} />
+                          </div>
+                        )}
+                        <div>
+                          <label className="inline-flex items-center gap-2 text-sm">
+                            <input type="checkbox" className="accent-purple-500" checked={requireCalibration} onChange={e=>setRequireCalibration(!!e.target.checked)} />
+                            <span className="font-semibold">Require calibration</span>
+                          </label>
+                          <div className="text-xs opacity-70 mt-1">If checked, players must have a calibrated board to join this match.</div>
+                        </div>
+                        <div className="flex justify-end col-span-2">
+                          <div className="mr-2 text-xs text-slate-400">Preview: {game} · {labelForMode(mode)} {modeValue}{game==='X01' ? ` · ${startScore}` : ''}</div>
+                          <button className="btn" onClick={()=>setShowCreate(false)}>Close</button>
+                          <button className="btn bg-emerald-600 hover:bg-emerald-700 ml-2" onClick={createMatch}>Create</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                  {/* Secondary filter row: World Lobby (room) + filters */}
+                  <div className="rounded-2xl bg-slate-900/40 border border-white/10 p-3 text-slate-100 shadow-lg backdrop-blur-sm flex flex-col gap-2">
+                    <div className="flex items-center gap-3">
+                      <div className="font-semibold">World Lobby</div>
+                      <div className="text-sm opacity-80">Room: {roomId}</div>
+                      <div className="ml-auto flex items-center gap-2">
+                        <div className="text-xs opacity-80">Filter:</div>
+                        <select className="input input--small bg-white text-black" value={filterGame} onChange={(e) => setFilterGame((e.target.value as any) || 'all')}>
+                          <option value="all">All Games</option>
+                          {allGames.map((g: any) => <option key={g} value={g}>{g}</option>)}
+                        </select>
+                        <select className="input input--small bg-white text-black" value={String(filterStart)} onChange={(e) => setFilterStart((e.target.value === 'all' ? 'all' : Number(e.target.value) as any))}>
+                          <option value="all">All Starts</option>
+                          {getStartOptionsForGame(filterGame).map((s) => (
+                            <option key={s} value={String(s)}>{s}</option>
+                          ))}
+                        </select>
+                        <select className="input input--small bg-white text-black" value={filterMode} onChange={(e) => setFilterMode(e.target.value as any)}>
+                          {getModeOptionsForGame(filterGame).map(opt => (
+                            <option key={String(opt)} value={String(opt)}>{labelForMode(String(opt))}</option>
+                          ))}
+                        </select>
+                        {filterMode !== 'all' && (() => {
+                          const modeVals = getModeValueOptionsForGame(filterGame, filterMode as ModeKey)
+                          if (modeVals && modeVals.length > 0) {
+                            return (
+                              <select className="input input--small bg-white text-black" value={filterModeValue ?? ''} onChange={e => setFilterModeValue(e.target.value ? Number(e.target.value) : null)}>
+                                <option value="">Any</option>
+                                {modeVals.map(v => <option key={v} value={String(v)}>{v}</option>)}
+                              </select>
+                            )
+                          }
+                          return (
+                            <input type="number" className="input input--small w-24 bg-white text-black" min={1} value={filterModeValue ?? ''} placeholder="Value" onChange={(e) => setFilterModeValue(e.target.value ? Number(e.target.value) : null)} />
+                          )
+                        })()}
+                        <label className="flex items-center gap-1 text-xs opacity-80">
+                          <input type="checkbox" checked={nearAvg} onChange={(e) => setNearAvg(e.target.checked)} />
+                          Avg ±
+                        </label>
+                        {nearAvg && (
+                          <input type="number" className="input input--small w-20 bg-white text-black" value={avgTolerance} min={1} onChange={(e) => setAvgTolerance(Number(e.target.value || 0))} />
+                        )}
+                        <button className="btn btn-ghost" onClick={() => { setFilterGame('all'); setFilterStart('all'); setFilterMode('all'); setFilterModeValue(null); setNearAvg(false); setAvgTolerance(10); setAppliedFilters({ game: 'all', start: 'all', mode: 'all', modeValue: null, nearAvg: false, avgTolerance: 10 }) }}>Default</button>
+                        <button className="btn btn-primary" onClick={applyFilters}>Apply</button>
+                      </div>
+                    </div>
+                  </div>
                 <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-3 text-slate-100 shadow-lg backdrop-blur-sm">
                   <div className="flex items-center justify-between mb-3">
                     <div className="font-semibold">World Lobby</div>
@@ -1381,7 +1646,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
                     {filteredLobby.map((m:any)=> (
                       <li key={m.id} className="p-2 rounded bg-white/3 border border-white/6 flex items-center justify-between">
                         <div className="text-sm">{m.game} · {m.mode} · {m.startingScore}</div>
-                        <div className="text-xs opacity-70">{m.creator || 'host'}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="text-xs opacity-70">{m.creator || 'host'}</div>
+                          <button className="btn btn-sm" onClick={() => { try { const payload = { type: 'join-match', matchId: m.id, calibrated: !!calibH, boardPreview: null }; if (wsGlobal) wsGlobal.send(payload); else wsRef.current?.send(JSON.stringify(payload)); setLastJoinIntent({ game: m.game, mode: m.mode, value: m.value, startingScore: m.startingScore }); } catch {} }}>Join</button>
+                        </div>
                       </li>
                     ))}
                     {filteredLobby.length === 0 && <li className="text-sm opacity-60">No matches found.</li>}
@@ -1439,7 +1707,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
                 </div>
               </div>
               {/* Pairing code UI removed; pairing still supported via Calibrator and server flows */}
-              {match.inProgress ? (
+              {(match.inProgress || (prestartEndsAt && prestartTimeLeft !== null && prestartTimeLeft <= 10)) ? (
                 <CameraView />
               ) : (
                 <div className="rounded-2xl bg-slate-900/40 border border-white/10 p-4 text-slate-200 opacity-70">
@@ -1451,6 +1719,19 @@ export default function OnlinePlay({ user }: { user?: any }) {
           </div>
         </div>
       </div>
+  <MatchStartShowcase open={showStartShowcase} players={(match.players || []) as any} user={user} initialSeconds={prestartTimeLeft ?? 15} roomId={prestartRoomId ?? roomId} onDone={() => { setShowStartShowcase(false); setPrestartRoomId(null); setPrestartEndsAt(null); setPrestartTimeLeft(null); setPrestartChoices({}); setPrestartBullActive(false); setPrestartBullTie(false); }} onRequestClose={() => { setShowStartShowcase(false); }} onChoice={(choice) => { sendPrestartChoice(choice) }} choices={prestartChoices} bullActive={prestartBullActive} onBullThrow={(score) => { sendPrestartBullThrow(score) }} showCalibrationDefault={true} disableEscClose={true} />
+      {pendingInvite && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4">
+          <div className="bg-slate-800 border border-slate-600 rounded-2xl p-6 max-w-lg w-full">
+            <div className="text-lg font-bold mb-2">Join Request</div>
+            <div className="opacity-80 mb-4">{pendingInvite.fromName || 'Player'} wants to join your match ({pendingInvite.game}). Accept?</div>
+            <div className="flex items-center gap-3">
+              <button className="btn btn-primary" onClick={() => respondToInvite(true)}>Accept ({inviteCountdown}s)</button>
+              <button className="btn btn-ghost" onClick={() => respondToInvite(false)}>Decline</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

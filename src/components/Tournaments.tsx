@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
+import { getModeOptionsForGame, getModeValueOptionsForGame, labelForMode, type ModeKey } from '../utils/games'
 import { useMatch } from '../store/match'
 import MatchCard from './MatchCard'
 import MatchStartShowcase from './ui/MatchStartShowcase'
@@ -12,7 +13,7 @@ type Tournament = {
   id: string
   title: string
   game: string
-  mode: 'bestof'|'firstto'
+  mode: ModeKey
   value: number
   description: string
   startAt: number
@@ -66,7 +67,7 @@ export default function Tournaments({ user }: { user: any }) {
   const [form, setForm] = useState({
     title: 'Community X01 Tournament',
     game: 'X01',
-    mode: 'bestof' as 'bestof'|'firstto',
+    mode: 'bestof' as ModeKey,
     value: 3,
     description: '',
     startAt: new Date(Date.now() + 2*60*60*1000).toISOString().slice(0,16), // local yyyy-mm-ddThh:mm
@@ -387,7 +388,7 @@ export default function Tournaments({ user }: { user: any }) {
             <div>
               <div className="text-sm uppercase tracking-wide text-indigo-300 font-semibold">Weekly Official Tournament</div>
               <div className="font-bold">{nextOfficial.title}</div>
-                  <div className="text-sm opacity-80">{nextOfficial.game}{nextOfficial.game==='X01' && nextOfficial.startingScore?`/${nextOfficial.startingScore}`:''} · {nextOfficial.mode==='firstto'?'First to':'Best of'} {nextOfficial.value} · Starts {fmt(nextOfficial.startAt)} · Cap {nextOfficial.capacity} · Joined {nextOfficial.participants.length}</div>
+                  <div className="text-sm opacity-80">{nextOfficial.game}{nextOfficial.game==='X01' && nextOfficial.startingScore?`/${nextOfficial.startingScore}`:''} · {labelForMode(nextOfficial.mode)} {nextOfficial.value} · Starts {fmt(nextOfficial.startAt)} · Cap {nextOfficial.capacity} · Joined {nextOfficial.participants.length}</div>
               {nextOfficial.prize && (
                 <div className="text-xs mt-1">
                   Prize: {nextOfficial.prizeType === 'cash' && nextOfficial.prizeAmount ? `${nextOfficial.currency||'USD'} ${nextOfficial.prizeAmount}` : '3 months PREMIUM'}
@@ -443,7 +444,7 @@ export default function Tournaments({ user }: { user: any }) {
                       >i</span>
                     </span>
                   )}</div>
-                  <div className="text-sm opacity-80">{t.game}{t.game==='X01' && t.startingScore?`/${t.startingScore}`:''} · {t.mode==='firstto'?'First to':'Best of'} {t.value} · {fmt(t.startAt)} · Cap {t.capacity} · Joined {t.participants.length}</div>
+                  <div className="text-sm opacity-80">{t.game}{t.game==='X01' && t.startingScore?`/${t.startingScore}`:''} · {labelForMode(t.mode)} {t.value} · {fmt(t.startAt)} · Cap {t.capacity} · Joined {t.participants.length}</div>
                   {t.prize && (
                     <div className="text-xs">
                       Prize: {t.prizeType === 'cash' && t.prizeAmount ? `${t.currency||'USD'} ${t.prizeAmount}` : '3 months PREMIUM'}
@@ -492,7 +493,7 @@ export default function Tournaments({ user }: { user: any }) {
               <li key={t.id} className="p-3 rounded bg-black/10 flex items-center justify-between relative">
                 <div className="space-y-0.5">
                   <div className="font-semibold">{t.title}</div>
-                  <div className="text-sm opacity-80">{t.game}{t.game==='X01' && t.startingScore?`/${t.startingScore}`:''} · {t.mode==='firstto'?'First to':'Best of'} {t.value} · {fmt(t.startAt)} · Cap {t.capacity} · Joined {t.participants.length}</div>
+                  <div className="text-sm opacity-80">{t.game}{t.game==='X01' && t.startingScore?`/${t.startingScore}`:''} · {labelForMode(t.mode)} {t.value} · {fmt(t.startAt)} · Cap {t.capacity} · Joined {t.participants.length}</div>
                   {t.description && <div className="text-xs opacity-80">{t.description}</div>}
                   {hasJoined(t) && <div className="text-xs text-emerald-400 font-semibold">Already Joined</div>}
                 </div>
@@ -543,8 +544,9 @@ export default function Tournaments({ user }: { user: any }) {
                 <div>
                   <label className="block text-sm font-semibold mb-1">Mode</label>
                   <select className="input w-full" value={form.mode} onChange={e=>setForm(f=>({ ...f, mode: e.target.value as any }))}>
-                    <option value="bestof">Best of</option>
-                    <option value="firstto">First to</option>
+                    {getModeOptionsForGame(form.game).map(o => (
+                      <option key={String(o)} value={String(o)}>{labelForMode(String(o))}</option>
+                    ))}
                   </select>
                 </div>
                 <div>

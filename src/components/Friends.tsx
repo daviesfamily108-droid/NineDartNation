@@ -3,6 +3,7 @@ import { useToast } from '../store/toast'
 import { useMessages } from '../store/messages'
 import { censorProfanity } from '../utils/profanity'
 import TabPills from './ui/TabPills'
+import { labelForMode } from '../utils/games'
 
 type Friend = { email: string, username?: string, status?: 'online'|'offline'|'ingame', lastSeen?: number, roomId?: string|null, match?: { game: string, mode: string, value: number, startingScore?: number } | null }
 
@@ -212,7 +213,7 @@ export default function Friends({ user }: { user?: any }) {
                     <span className="font-semibold">{f.username || f.email}</span>
                     <span className="text-xs opacity-70">{f.status || 'offline'}{(f.status!=='online' && f.lastSeen) ? ` · ${timeAgo(f.lastSeen)}` : ''}</span>
                     {f.status==='ingame' && f.match && (
-                      <span className="text-[10px] opacity-70 px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-600/30">{f.match.game} {f.match.mode==='firstto'?'FT':'BO'} {f.match.value}{f.match.game==='X01' && f.match.startingScore ? ` · ${f.match.startingScore}`:''}</span>
+                      <span className="text-[10px] opacity-70 px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-600/30">{f.match.game} {labelForMode(f.match.mode)} {f.match.value}{f.match.game==='X01' && f.match.startingScore ? ` · ${f.match.startingScore}`:''}</span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">

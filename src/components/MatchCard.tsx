@@ -1,10 +1,11 @@
 import React from 'react'
+import { labelForMode, type ModeKey } from '../utils/games'
 
 type Tournament = {
   id: string
   title: string
   game: string
-  mode: 'bestof'|'firstto'
+  mode: ModeKey
   value: number
   startAt: number
   capacity: number
@@ -22,7 +23,7 @@ export default function MatchCard({ t, onJoin, onLeave, joined, disabled }: { t:
           {t.title}
           {t.official && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded bg-amber-500 text-black text-xs">Official</span>}
         </div>
-        <div className="text-sm opacity-80">{t.game}{t.game==='X01' ? `/501` : ''} · {t.mode==='firstto' ? 'First to' : 'Best of'} {t.value} · {new Date(t.startAt).toLocaleString()} · Cap {t.capacity} · Joined {t.participants?.length || 0}</div>
+          <div className="text-sm opacity-80">{t.game}{t.game==='X01' ? `/501` : ''} · {labelForMode(t.mode)} {t.value} · {new Date(t.startAt).toLocaleString()} · Cap {t.capacity} · Joined {t.participants?.length || 0}</div>
         <div className="text-xs opacity-60 mt-1">Created by: {t.creatorName || t.creatorEmail || 'Unknown'}</div>
       </div>
       <div className="flex items-center gap-2">

@@ -27,6 +27,15 @@ let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
 const app = express();
 
+// Prestart duration (seconds) used between acceptance and match start (clients will show pregame stats)
+const PRESTART_SECONDS = Number(process.env.PRESTART_SECONDS) || 20;
+
+// Keep a map of invite timers to auto-expire join invites sent via join-match
+const inviteTimers = new Map();
+
+// Pending prestart sessions keyed by roomId
+const pendingPrestarts = new Map();
+
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -1583,6 +1592,27 @@ wss.on('connection', (ws, req) => {
             value: m.value,
             startingScore: m.startingScore,
           }))
+          // Start a 60-second timer; if creator does not respond, expire the match
+          try {
+            if (inviteTimers.has(m.id)) {
+              try { clearTimeout(inviteTimers.get(m.id)) } catch {}
+            }
+          } catch {}
+          const t = setTimeout(() => {
+            if (matches.has(m.id)) {
+              const reqClient = clients.get(ws._id)
+              try { if (reqClient && reqClient.readyState === 1) reqClient.send(JSON.stringify({ type: 'invite-expired', matchId: m.id })) } catch {}
+              matches.delete(m.id)
+              persistMatchesToDisk()
+              // broadcast updated lobby
+              const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+              for (const c of wss.clients) {
+                if (c.readyState === 1) try { c.send(lobbyPayload) } catch {}
+              }
+            }
+            inviteTimers.delete(m.id)
+          }, 60 * 1000)
+          inviteTimers.set(m.id, t)
         }
       } else if (data.type === 'invite-response') {
         const { matchId, accept, toId } = data
@@ -1590,16 +1620,33 @@ wss.on('connection', (ws, req) => {
         if (!m) return
         const requester = clients.get(toId)
         if (accept) {
-          // Start a room using matchId and notify both sides
+          // clear invite timer if present
+          try { if (inviteTimers.has(matchId)) { clearTimeout(inviteTimers.get(matchId)); inviteTimers.delete(matchId) } } catch {}
+          // Create a prestart session and notify both players; then after PRESTART_SECONDS start the match
           const roomId = matchId
-          // tell both clients to join this room
           const creator = clients.get(m.creatorId)
-          const payload = { type: 'match-start', roomId, match: m }
+          const payload = { type: 'match-prestart', roomId, match: m, prestartEndsAt: Date.now() + (PRESTART_SECONDS * 1000) }
           if (creator && creator.readyState === 1) creator.send(JSON.stringify(payload))
           if (requester && requester.readyState === 1) requester.send(JSON.stringify(payload))
           matches.delete(matchId)
           persistMatchesToDisk()
           try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch (err) { console.warn('[Matches] Supabase delete failed:', err && err.message) }
+          // Setup a pending prestart session so we can collect prestart choices (skip/bull) and bull-up throws
+          try {
+            const pre = { roomId, match: m, players: [m.creatorId, requester._id], choices: {}, bullRound: 0, bullThrows: {}, timer: null }
+            pendingPrestarts.set(roomId, pre)
+            // Start a countdown to finalize match start if no special choices are made
+            pre.timer = setTimeout(() => {
+              try {
+                const startPayload = { type: 'match-start', roomId, match: m }
+                const cr = clients.get(m.creatorId)
+                const rq = clients.get(requester._id)
+                if (cr && cr.readyState === 1) cr.send(JSON.stringify(startPayload))
+                if (rq && rq.readyState === 1) rq.send(JSON.stringify(startPayload))
+              } catch (err) { console.warn('[Prestart] auto-start failed', err) }
+              pendingPrestarts.delete(roomId)
+            }, PRESTART_SECONDS * 1000)
+          } catch (err) { console.warn('[Prestart] setup failed', err) }
           // Mark both players as in-game and store match metadata for friends list
           try {
             const creatorEmail = creator?._email || ''
@@ -1628,6 +1675,98 @@ wss.on('connection', (ws, req) => {
         for (const client of wss.clients) {
           if (client.readyState === 1) client.send(lobbyPayload2)
         }
+      } else if (data.type === 'prestart-choice') {
+        const roomId = String(data.roomId || '')
+        const sess = pendingPrestarts.get(roomId)
+        if (!sess) return
+        const playerId = ws._id
+        sess.choices[playerId] = data.choice
+        // Notify both players about the choice
+        const notify = { type: 'prestart-choice-notify', roomId, playerId, choice: data.choice }
+        for (const pid of sess.players) {
+          const c = clients.get(pid)
+          if (c && c.readyState === 1) c.send(JSON.stringify(notify))
+        }
+        // If both chosen and both chose skip -> start match
+        const allChosen = sess.players.every(pid => !!sess.choices[pid])
+        if (allChosen) {
+          const choices = Object.values(sess.choices)
+          const unique = Array.from(new Set(choices))
+          if (unique.length === 1 && unique[0] === 'skip') {
+            const startPayload = { type: 'match-start', roomId, match: sess.match }
+            for (const pid of sess.players) {
+              const c = clients.get(pid)
+              if (c && c.readyState === 1) c.send(JSON.stringify(startPayload))
+            }
+            try { if (sess.timer) clearTimeout(sess.timer) } catch {}
+            pendingPrestarts.delete(roomId)
+          } else if (unique.length === 1 && unique[0] === 'bull') {
+            // Start bull-up round
+            const payload = { type: 'prestart-bull', roomId }
+            for (const pid of sess.players) {
+              const c = clients.get(pid)
+              if (c && c.readyState === 1) c.send(JSON.stringify(payload))
+            }
+          }
+        }
+      } else if (data.type === 'prestart-bull-throw') {
+        const roomId = String(data.roomId || '')
+        const sess = pendingPrestarts.get(roomId)
+        if (!sess) return
+        const pid = ws._id
+        const score = Math.max(0, Number(data.score || 0))
+        sess.bullThrows[pid] = sess.bullThrows[pid] || []
+        sess.bullThrows[pid].push(score)
+        // If both players submitted a throw for this round
+        const haveBoth = sess.players.every(p => (sess.bullThrows[p] || []).length > 0)
+        if (!haveBoth) return
+        // Evaluate last throw
+        const p0 = sess.players[0]
+        const p1 = sess.players[1]
+        const s0 = sess.bullThrows[p0][sess.bullThrows[p0].length - 1] || 0
+        const s1 = sess.bullThrows[p1][sess.bullThrows[p1].length - 1] || 0
+        const hit0 = s0 === 50
+        const hit1 = s1 === 50
+        if (hit0 && !hit1) {
+          const payload = { type: 'prestart-bull-winner', roomId, winnerId: p0 }
+          for (const pid of sess.players) {
+            const c = clients.get(pid)
+            if (c && c.readyState === 1) c.send(JSON.stringify(payload))
+          }
+          const startPayload = { type: 'match-start', roomId, match: sess.match, firstPlayerId: p0 }
+          for (const pid of sess.players) {
+            const c = clients.get(pid)
+            if (c && c.readyState === 1) c.send(JSON.stringify(startPayload))
+          }
+          try { if (sess.timer) clearTimeout(sess.timer) } catch {}
+          pendingPrestarts.delete(roomId)
+          matches.delete(sess.match.id)
+          persistMatchesToDisk()
+        } else if (hit1 && !hit0) {
+          const payload = { type: 'prestart-bull-winner', roomId, winnerId: p1 }
+          for (const pid of sess.players) {
+            const c = clients.get(pid)
+            if (c && c.readyState === 1) c.send(JSON.stringify(payload))
+          }
+          const startPayload = { type: 'match-start', roomId, match: sess.match, firstPlayerId: p1 }
+          for (const pid of sess.players) {
+            const c = clients.get(pid)
+            if (c && c.readyState === 1) c.send(JSON.stringify(startPayload))
+          }
+          try { if (sess.timer) clearTimeout(sess.timer) } catch {}
+          pendingPrestarts.delete(roomId)
+          matches.delete(sess.match.id)
+          persistMatchesToDisk()
+        } else {
+          // Tie (both hit or both missed), tell clients to repeat the round
+          const tiePayload = { type: 'prestart-bull-tie', roomId }
+          for (const pid of sess.players) {
+            const c = clients.get(pid)
+            if (c && c.readyState === 1) c.send(JSON.stringify(tiePayload))
+          }
+          // Keep bullThrows arrays; next round will push additional entries
+        }
+      }
       } else if (data.type === 'cancel-match') {
         const id = String(data.matchId || '')
         const m = matches.get(id)

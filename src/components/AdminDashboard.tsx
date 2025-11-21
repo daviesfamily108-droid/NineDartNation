@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import BarChart from './BarChart'
 import TabPills from './ui/TabPills'
 import { getGameModeStats } from '../store/profileStats'
-import { allGames } from '../utils/games'
+import { allGames, labelForMode, getModeOptionsForGame, getModeValueOptionsForGame } from '../utils/games'
 import { useWS } from './WSProvider'
 import StatusDot from './ui/StatusDot'
 import CameraStatusBadge from './CameraStatusBadge'
@@ -931,7 +931,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 									<div className="flex items-center gap-3">
 										<span className="font-mono text-xs">{m.id}</span>
 										<span className="opacity-80">{m.creatorName}</span>
-										<span className="opacity-60">{m.game} {m.mode==='firstto'?'FT':'BO'} {m.value} {m.game==='X01'?`/${m.startingScore}`:''}</span>
+										<span className="opacity-60">{m.game} {labelForMode(m.mode)} {m.value} {m.game==='X01'?`/${m.startingScore}`:''}</span>
 									</div>
 									<button className="btn bg-rose-600 hover:bg-rose-700" disabled={loading} onClick={()=>deleteMatch(m.id)}>Remove</button>
 								</li>
@@ -955,7 +955,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 												<div className="font-semibold">{t.title}</div>
 												<div className="opacity-70">{t.status}</div>
 											</div>
-											<div className="opacity-80">{t.game} · {t.mode==='firstto'?'FT':'BO'} {t.value}</div>
+											<div className="opacity-80">{t.game} · {labelForMode(t.mode)} {t.value}</div>
 											<div className="mt-2">
 												<button className="btn bg-red-600 hover:bg-red-700 text-xs" disabled={loading} onClick={()=>deleteTournament(t.id)}>Delete Tournament</button>
 											</div>
@@ -1044,10 +1044,21 @@ export default function AdminDashboard({ user }: { user: any }) {
 									{['X01','Around the Clock','Cricket','Halve It','Shanghai','High-Low'].map((g)=> <option key={g} value={g}>{g}</option>)}
 								</select>
 								<select className="input" value={createForm.mode} onChange={e=>setCreateForm((f:any)=>({ ...f, mode: e.target.value }))}>
-									<option value="bestof">Best of</option>
-									<option value="firstto">First to</option>
+									{getModeOptionsForGame(createForm.game).map(opt => (
+										<option key={String(opt)} value={String(opt)}>{labelForMode(String(opt))}</option>
+									))}
 								</select>
-								<input className="input" type="number" min={1} value={createForm.value} onChange={e=>setCreateForm((f:any)=>({ ...f, value: Number(e.target.value) }))} />
+								{(() => {
+									const vals = getModeValueOptionsForGame(createForm.game, createForm.mode)
+									if (vals && vals.length > 0) {
+										return (
+											<select className="input" value={String(createForm.value)} onChange={e=>setCreateForm((f:any)=>({ ...f, value: Number(e.target.value) }))}>
+												{vals.map(v => <option key={v} value={String(v)}>{v}</option>)}
+											</select>
+										)
+									}
+									return <input className="input" type="number" min={1} value={createForm.value} onChange={e=>setCreateForm((f:any)=>({ ...f, value: Number(e.target.value) }))} />
+								})()}
 							</div>
 							<textarea className="input w-full" rows={2} placeholder="Description" value={createForm.description} onChange={e=>setCreateForm((f:any)=>({ ...f, description: e.target.value }))} />
 							<div className="grid grid-cols-2 gap-2">
@@ -1138,7 +1149,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 									<div className="flex items-center justify-between mb-2">
 										<div>
 											<div className="font-semibold">{t.title}</div>
-											<div className="opacity-80">{t.game} · {t.mode==='firstto'?'First to':'Best of'} {t.value}</div>
+											<div className="opacity-80">{t.game} · {labelForMode(t.mode)} {t.value}</div>
 										</div>
 										<div className={`px-2 py-1 rounded text-xs font-semibold ${
 											t.status === 'scheduled' ? 'bg-blue-600' :

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { dlog } from '../utils/logger'
 import { useUserSettings } from '../store/userSettings'
 import { useCameraSession, type CameraStreamMode } from '../store/cameraSession'
 import { discoverNetworkDevices, connectToNetworkDevice, type NetworkDevice, discoverUSBDevices, requestUSBDevice, connectToUSBDevice, type USBDevice } from '../utils/networkDevices'
@@ -80,12 +81,12 @@ export default function CameraTile({
   const [mode, setMode] = useState<'local'|'phone'|'wifi'>(() => {
     // If phone camera is selected, start in phone mode
     if (preferredCameraLabel === 'Phone Camera') {
-      console.log('[CAMERATILE] Initializing mode to phone (from preferred camera selection)')
+    dlog('[CAMERATILE] Initializing mode to phone (from preferred camera selection)')
       return 'phone'
     }
     // Otherwise use saved mode or default to local
     const saved = localStorage.getItem('ndn:camera:mode') as any
-    console.log('[CAMERATILE] Initializing mode to', saved || 'local', '(from localStorage)')
+  dlog('[CAMERATILE] Initializing mode to', saved || 'local', '(from localStorage)')
     return saved || 'local'
   })
   
@@ -155,7 +156,7 @@ export default function CameraTile({
     return `${proto}://${host}:${port}/mobile-cam.html?code=${code}`
   }, [pairCode, lanHost, httpsInfo])
   useEffect(() => { 
-    console.log('[CAMERATILE] Mode changed to:', mode, '- persisting to localStorage')
+  dlog('[CAMERATILE] Mode changed to:', mode, '- persisting to localStorage')
     localStorage.setItem('ndn:camera:mode', mode) 
   }, [mode])
   
@@ -166,12 +167,12 @@ export default function CameraTile({
   // This effect ensures CameraTile's UI reflects that selection
   useEffect(() => {
     const ignore = useUserSettings.getState().ignorePreferredCameraSync
-    console.log('[CAMERATILE] Checking camera selection sync: preferredCameraLabel=', preferredCameraLabel, 'mode=', mode, 'ignoreSync=', ignore, 'manualModeSetAt=', manualModeSetAt)
+  dlog('[CAMERATILE] Checking camera selection sync: preferredCameraLabel=', preferredCameraLabel, 'mode=', mode, 'ignoreSync=', ignore, 'manualModeSetAt=', manualModeSetAt)
     if (ignore) return
     // If user manually changed mode recently, avoid auto-syncing preferred camera
     if (manualModeSetAt && Date.now() - manualModeSetAt < 30_000) return
     if (preferredCameraLabel === 'Phone Camera' && mode !== 'phone') {
-      console.log('[CAMERATILE] Syncing mode to phone from Calibrator selection')
+  dlog('[CAMERATILE] Syncing mode to phone from Calibrator selection')
       setMode('phone')
     }
   }, [preferredCameraLabel, mode, manualModeSetAt])
@@ -223,11 +224,11 @@ export default function CameraTile({
   }, [preferredCameraLabel, mode, cameraSession, cameraSession.isStreaming])
 
   async function start() {
-      console.log('[CameraTile] start() invoked with mode=', mode)
+    dlog('[CameraTile] start() invoked with mode=', mode)
     if (mode === 'wifi') {
       return startWifiConnection()
     }
-  console.log('[CameraTile] Attempting to attach global stream for phone mode...')
+  dlog('[CameraTile] Attempting to attach global stream for phone mode...')
 
     // If phone camera is selected and paired, don't try to start local camera
     if (preferredCameraLabel === 'Phone Camera' || mode === 'phone') {

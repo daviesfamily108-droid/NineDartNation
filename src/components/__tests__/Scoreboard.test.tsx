@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react'
-import { render, screen, fireEvent, within, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, within, cleanup, act } from '@testing-library/react'
 import Scoreboard from '../Scoreboard'
 import { useMatch } from '../../store/match'
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -28,7 +28,7 @@ describe('Scoreboard', () => {
   // Also spy on the store addVisit to ensure the prop is used instead
   useMatch.getState().addVisit = vi.fn() as any
     // Setup a minimal in-progress match so MatchControls renders
-    useMatch.getState().newMatch(['Alice', 'Bob'], 501)
+  await act(async () => { useMatch.getState().newMatch(['Alice', 'Bob'], 501) })
     render(<Scoreboard matchActions={matchActions} />)
     // Click a quick 180 button located in the Score Input card to avoid collisions
   const headings = await screen.findAllByText('Score Input')

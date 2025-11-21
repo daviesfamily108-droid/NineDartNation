@@ -1831,7 +1831,7 @@ app.post('/api/tournaments/create', async (req, res) => {
     id,
     title: String(title || 'Community Tournament'),
     game: typeof game === 'string' ? game : 'X01',
-    mode: (mode === 'firstto' ? 'firstto' : 'bestof'),
+  mode: (typeof mode === 'string' && mode.length > 0) ? mode : 'bestof',
     value: Number(value) || 1,
     description: String(description || ''),
     startAt: Number(startAt) || (Date.now() + 60*60*1000),
