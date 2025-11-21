@@ -9,23 +9,23 @@ const patterns: RegExp[] = [
   /\b(d+[\W_]*a+[\W_]*m+[\W_]*n+)\b/gi,
   /\b(c+[\W_]*r+[\W_]*a+[\W_]*p+)\b/gi,
   /\b(p+[\W_]*i+[\W_]*s+[\W_]*s+)\b/gi,
-]
+];
 
 function starify(match: string) {
   // Preserve whitespace/punct positions; just replace letters/numbers with *
-  return match.replace(/[\p{L}\p{N}]/gu, '*')
+  return match.replace(/[\p{L}\p{N}]/gu, "*");
 }
 
 export function censorProfanity(input: string): string {
-  if (!input) return input
-  let out = input
+  if (!input) return input;
+  let out = input;
   for (const re of patterns) {
-    out = out.replace(re, (m) => starify(m))
+    out = out.replace(re, (m) => starify(m));
   }
-  return out
+  return out;
 }
 
 export function containsProfanity(input: string): boolean {
-  if (!input) return false
-  return patterns.some((re) => re.test(input))
+  if (!input) return false;
+  return patterns.some((re) => re.test(input));
 }

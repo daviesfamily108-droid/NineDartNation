@@ -2,10 +2,10 @@
  * Hook to convert OfflinePlay game state to GameScoreboard format
  */
 
-import { useMemo } from 'react';
-import type { PlayerStats } from './GameScoreboard';
-import type { GameMode } from './GameScoreboard';
-import { getAllTimeAvg } from '../../store/profileStats';
+import { useMemo } from "react";
+import type { PlayerStats } from "./GameScoreboard";
+import type { GameMode } from "./GameScoreboard";
+import { getAllTimeAvg } from "../../store/profileStats";
 
 export function useOfflineGameStats(
   gameMode: GameMode,
@@ -38,12 +38,12 @@ export function useOfflineGameStats(
   killerPlayers?: Array<any>,
   killerStates?: Record<string, any>,
   killerAssigned?: Record<string, number>,
-  killerTurnIdx?: number
+  killerTurnIdx?: number,
 ): PlayerStats[] {
   return useMemo(() => {
     const players: PlayerStats[] = [];
 
-    if (gameMode === 'X01') {
+    if (gameMode === "X01") {
       // Calculate player match average
       let playerMatchAvg = 0;
       let playerDarts = 0;
@@ -61,41 +61,43 @@ export function useOfflineGameStats(
       }
 
       // Player card
-      const playerVisitDarts = playerVisitDartCount ?? 0
-      const playerCurrentVisitActive = playerVisitDarts > 0
-      const playerCurrentVisitSum = playerVisitSum ?? 0
-      const playerLastVisitTotal = playerLastVisitScore ?? null
-      const playerLastDartValue = playerLastDart ?? 0
+      const playerVisitDarts = playerVisitDartCount ?? 0;
+      const playerCurrentVisitActive = playerVisitDarts > 0;
+      const playerCurrentVisitSum = playerVisitSum ?? 0;
+      const playerLastVisitTotal = playerLastVisitScore ?? null;
+      const playerLastDartValue = playerLastDart ?? 0;
       const resolvedPlayerLastScore = playerCurrentVisitActive
         ? playerCurrentVisitSum
-        : (playerLastVisitTotal ?? playerLastDartValue)
+        : (playerLastVisitTotal ?? playerLastDartValue);
 
       players.push({
-        name: 'You',
+        name: "You",
         isCurrentTurn: !!isPlayerTurn,
         legsWon: playerLegs || 0,
         score: playerScore || 0,
         lastScore: resolvedPlayerLastScore,
-        checkoutRate: playerDoublesAtt && playerDoublesAtt > 0 
-          ? Math.round((playerDoublesHit || 0) / playerDoublesAtt * 100)
-          : 0,
-        bestLeg: legStats && legStats.length > 0 
-          ? `${Math.min(...legStats.map(l => l.doubleDarts + (l.checkoutDarts || 0))) || 0} darts`
-          : '—',
+        checkoutRate:
+          playerDoublesAtt && playerDoublesAtt > 0
+            ? Math.round(((playerDoublesHit || 0) / playerDoublesAtt) * 100)
+            : 0,
+        bestLeg:
+          legStats && legStats.length > 0
+            ? `${Math.min(...legStats.map((l) => l.doubleDarts + (l.checkoutDarts || 0))) || 0} darts`
+            : "—",
         matchAvg: playerMatchAvg,
-        allTimeAvg: getAllTimeAvg('You') || 0
+        allTimeAvg: getAllTimeAvg("You") || 0,
       });
 
       // AI card (if playing against AI)
-      if (ai && ai !== 'None') {
-        const aiVisitDarts = aiVisitDartCount ?? 0
-        const aiCurrentVisitActive = aiVisitDarts > 0
-        const aiCurrentVisitSum = aiVisitSum ?? 0
-        const aiLastVisitTotal = aiLastVisitScore ?? null
-        const aiLastDartValue = aiLastDart ?? 0
+      if (ai && ai !== "None") {
+        const aiVisitDarts = aiVisitDartCount ?? 0;
+        const aiCurrentVisitActive = aiVisitDarts > 0;
+        const aiCurrentVisitSum = aiVisitSum ?? 0;
+        const aiLastVisitTotal = aiLastVisitScore ?? null;
+        const aiLastDartValue = aiLastDart ?? 0;
         const resolvedAiLastScore = aiCurrentVisitActive
           ? aiCurrentVisitSum
-          : (aiLastVisitTotal ?? aiLastDartValue)
+          : (aiLastVisitTotal ?? aiLastDartValue);
 
         players.push({
           name: `${ai} AI`,
@@ -103,53 +105,54 @@ export function useOfflineGameStats(
           legsWon: aiLegs || 0,
           score: aiScore || 0,
           lastScore: resolvedAiLastScore,
-          checkoutRate: aiDoublesAtt && aiDoublesAtt > 0 
-            ? Math.round((aiDoublesHit || 0) / aiDoublesAtt * 100)
-            : 0,
-          bestLeg: '—'
+          checkoutRate:
+            aiDoublesAtt && aiDoublesAtt > 0
+              ? Math.round(((aiDoublesHit || 0) / aiDoublesAtt) * 100)
+              : 0,
+          bestLeg: "—",
         });
       }
     }
 
-    if (gameMode === 'Cricket') {
+    if (gameMode === "Cricket") {
       players.push({
-        name: 'You',
+        name: "You",
         isCurrentTurn: !!isPlayerTurn,
         closed: cricket?.marks || {},
-        points: cricket?.points || 0
+        points: cricket?.points || 0,
       });
 
-      if (ai && ai !== 'None') {
+      if (ai && ai !== "None") {
         players.push({
           name: `${ai} AI`,
           isCurrentTurn: !isPlayerTurn,
           closed: {},
-          points: 0
+          points: 0,
         });
       }
     }
 
-    if (gameMode === 'Shanghai') {
+    if (gameMode === "Shanghai") {
       players.push({
-        name: 'You',
+        name: "You",
         isCurrentTurn: !!isPlayerTurn,
         round: shanghai?.round || 1,
         target: shanghai?.target || 1,
-        score: shanghai?.score || 0
+        score: shanghai?.score || 0,
       });
 
-      if (ai && ai !== 'None') {
+      if (ai && ai !== "None") {
         players.push({
           name: `${ai} AI`,
           isCurrentTurn: !isPlayerTurn,
           round: shanghai?.round || 1,
           target: shanghai?.target || 1,
-          score: 0
+          score: 0,
         });
       }
     }
 
-    if (gameMode === 'Killer' && killerPlayers && killerPlayers.length > 0) {
+    if (gameMode === "Killer" && killerPlayers && killerPlayers.length > 0) {
       killerPlayers.forEach((p, idx) => {
         const state = killerStates?.[p.id];
         players.push({
@@ -157,7 +160,7 @@ export function useOfflineGameStats(
           isCurrentTurn: idx === killerTurnIdx,
           number: killerAssigned?.[p.id],
           lives: state?.lives || 0,
-          eliminated: state?.eliminated || false
+          eliminated: state?.eliminated || false,
         });
       });
     }
@@ -165,26 +168,38 @@ export function useOfflineGameStats(
     return players;
   }, [
     gameMode,
-    playerScore, aiScore,
-    playerLegs, aiLegs,
-    playerLastDart, aiLastDart,
-  playerVisitSum, aiVisitSum,
-  playerLastVisitScore, aiLastVisitScore,
-  playerVisitDartCount, aiVisitDartCount,
-    playerDoublesHit, playerDoublesAtt,
-    aiDoublesHit, aiDoublesAtt,
+    playerScore,
+    aiScore,
+    playerLegs,
+    aiLegs,
+    playerLastDart,
+    aiLastDart,
+    playerVisitSum,
+    aiVisitSum,
+    playerLastVisitScore,
+    aiLastVisitScore,
+    playerVisitDartCount,
+    aiVisitDartCount,
+    playerDoublesHit,
+    playerDoublesAtt,
+    aiDoublesHit,
+    aiDoublesAtt,
     legStats,
-    isPlayerTurn, ai,
+    isPlayerTurn,
+    ai,
     cricket,
     shanghai,
-    killerPlayers, killerStates, killerAssigned, killerTurnIdx
+    killerPlayers,
+    killerStates,
+    killerAssigned,
+    killerTurnIdx,
   ]);
 }
 
 export function useOnlineGameStats(
   gameMode: GameMode,
   matchState?: any, // From useMatch() store
-  participants?: string[]
+  participants?: string[],
 ): PlayerStats[] {
   return useMemo(() => {
     const players: PlayerStats[] = [];
@@ -195,8 +210,8 @@ export function useOnlineGameStats(
 
     matchState.players.forEach((player: any, idx: number) => {
       const isCurrentTurn = idx === matchState.currentPlayerIdx;
-      
-      if (gameMode === 'X01') {
+
+      if (gameMode === "X01") {
         // Calculate match average for this player
         let matchAvg = 0;
         let totalDarts = 0;
@@ -206,7 +221,8 @@ export function useOnlineGameStats(
           for (const leg of player.legs) {
             if (leg.finished) {
               const legDarts = leg.dartsThrown || 0;
-              const legScored = Math.max(0, leg.totalScoreStart - leg.totalScoreRemaining) || 0;
+              const legScored =
+                Math.max(0, leg.totalScoreStart - leg.totalScoreRemaining) || 0;
               totalDarts += legDarts;
               totalScored += legScored;
             }
@@ -223,31 +239,32 @@ export function useOnlineGameStats(
           legsWon: player.legsWon || 0,
           score: player.score || 0,
           lastScore: player.lastVisitScore || 0,
-          checkoutRate: player.doublesAttempted > 0 
-            ? Math.round((player.doublesHit / player.doublesAttempted) * 100)
-            : 0,
-          bestLeg: player.bestLegDarts ? `${player.bestLegDarts} darts` : '—',
+          checkoutRate:
+            player.doublesAttempted > 0
+              ? Math.round((player.doublesHit / player.doublesAttempted) * 100)
+              : 0,
+          bestLeg: player.bestLegDarts ? `${player.bestLegDarts} darts` : "—",
           matchAvg: matchAvg,
-          allTimeAvg: player.name ? getAllTimeAvg(player.name) : 0
+          allTimeAvg: player.name ? getAllTimeAvg(player.name) : 0,
         });
       }
 
-      if (gameMode === 'Cricket') {
+      if (gameMode === "Cricket") {
         players.push({
           name: player.name || `Player ${idx + 1}`,
           isCurrentTurn,
           closed: player.cricket?.marks || {},
-          points: player.cricket?.points || 0
+          points: player.cricket?.points || 0,
         });
       }
 
-      if (gameMode === 'Killer') {
+      if (gameMode === "Killer") {
         players.push({
           name: player.name || `Player ${idx + 1}`,
           isCurrentTurn,
           number: player.killerNumber || null,
           lives: player.killerLives || 3,
-          eliminated: player.killerEliminated || false
+          eliminated: player.killerEliminated || false,
         });
       }
     });

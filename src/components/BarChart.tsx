@@ -1,6 +1,6 @@
-import React from 'react'
+import React from "react";
 
-type Datum = { label: string | number; value: number }
+type Datum = { label: string | number; value: number };
 
 export default function BarChart({
   data,
@@ -9,34 +9,47 @@ export default function BarChart({
   gap = 6,
   showValues = false,
 }: {
-  data: Datum[]
-  height?: number
-  barWidth?: number
-  gap?: number
-  showValues?: boolean
+  data: Datum[];
+  height?: number;
+  barWidth?: number;
+  gap?: number;
+  showValues?: boolean;
 }) {
-  const max = Math.max(1, ...data.map(d => d.value))
-  const totalWidth = data.length * (barWidth + gap)
+  const max = Math.max(1, ...data.map((d) => d.value));
+  const totalWidth = data.length * (barWidth + gap);
   return (
     <div className="w-full overflow-x-auto">
-      <div className="relative" style={{ height, width: Math.max(600, totalWidth) }}>
+      <div
+        className="relative"
+        style={{ height, width: Math.max(600, totalWidth) }}
+      >
         <div className="absolute inset-0 flex items-end">
           {data.map((d, i) => {
-            const h = Math.round((d.value / max) * (height - 40)) // leave room for labels
+            const h = Math.round((d.value / max) * (height - 40)); // leave room for labels
             return (
-              <div key={i} className="flex flex-col items-center justify-end" style={{ width: barWidth, marginRight: gap }}>
+              <div
+                key={i}
+                className="flex flex-col items-center justify-end"
+                style={{ width: barWidth, marginRight: gap }}
+              >
                 <div
                   className="w-full rounded-t-md bg-gradient-to-b from-indigo-400 to-fuchsia-500 shadow-sm"
                   style={{ height: h }}
                   title={`${d.label}: ${d.value}`}
                 />
-                {showValues && <div className="text-sm mt-1 text-indigo-200 font-semibold">{d.value}</div>}
-                <div className="text-sm mt-1 text-slate-200 font-medium select-none">{d.label}</div>
+                {showValues && (
+                  <div className="text-sm mt-1 text-indigo-200 font-semibold">
+                    {d.value}
+                  </div>
+                )}
+                <div className="text-sm mt-1 text-slate-200 font-medium select-none">
+                  {d.label}
+                </div>
               </div>
-            )
+            );
           })}
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -37,7 +37,7 @@ describe('tournaments integration', () => {
 
     // Connect WebSocket and listen for tournaments broadcast
     const ws = new WebSocket(WS_URL)
-  let msgTournaments: any[] | null = null
+  let msgTournaments: any = null
     await new Promise((res, rej) => {
       const timeout = setTimeout(() => rej(new Error('WS connect timeout')), 5000)
       ws.on('open', () => { clearTimeout(timeout); res(null) })
@@ -74,11 +74,11 @@ describe('tournaments integration', () => {
     const tid = j.tournament.id
     const deadline = Date.now() + 3000
     while (Date.now() < deadline) {
-      if (msgTournaments && msgTournaments.find(t => t.id === tid)) break
+      if (Array.isArray(msgTournaments) && msgTournaments.some((t: any) => t.id === tid)) break
       await new Promise(r => setTimeout(r, 100))
     }
     expect(msgTournaments && Array.isArray(msgTournaments)).toBeTruthy()
-    expect(msgTournaments.find(t => t.id === tid)).toBeTruthy()
+  expect(Array.isArray(msgTournaments) && msgTournaments.some((t: any) => t.id === tid)).toBeTruthy()
 
     // Confirm persisted file contains the tournament
     const dataFile = path.join(process.cwd(), 'server', 'data', 'tournaments.json')
@@ -97,7 +97,7 @@ describe('tournaments integration', () => {
     const deadline2 = Date.now() + 3000
     let sawJoin = false
     while (Date.now() < deadline2) {
-      if (msgTournaments && msgTournaments.find(t => t.id === tid && t.participants && t.participants.find(p => p.email === 'player1@example.com'))) { sawJoin = true; break }
+      if (Array.isArray(msgTournaments) && msgTournaments.some((t: any) => t.id === tid && Array.isArray(t.participants) && (t.participants as any[]).some((p: any) => p.email === 'player1@example.com'))) { sawJoin = true; break }
       await new Promise(r => setTimeout(r, 100))
     }
     expect(sawJoin).toBeTruthy()
