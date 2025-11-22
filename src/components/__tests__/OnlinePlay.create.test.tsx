@@ -61,4 +61,38 @@ describe("OnlinePlay create modal", () => {
     const startSelect = await screen.findByLabelText(/X01 Starting Score/i);
     expect(startSelect).toBeTruthy();
   });
+
+  test("mode pills set legs and focus the legs input", async () => {
+    const user = { email: "a@example.com", username: "Alice" };
+    await act(async () => {
+      render(<OnlinePlay user={user} />);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // Open modal
+    const createButton = await screen.findByText("Create Match +");
+    await act(async () => {
+      fireEvent.click(createButton);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    // Switch to First To, set legs to 2
+    const firstTo = await screen.findByText(/First To/i);
+    await act(async () => {
+      fireEvent.click(firstTo);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  const legsInputFirst = await screen.findByRole('spinbutton', { name: /First To/i });
+    await act(async () => {
+      fireEvent.change(legsInputFirst, { target: { value: '2' } });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect((legsInputFirst as HTMLInputElement).value).toBe('2');
+    // Now click Best Of and assert legs becomes odd (2 -> 3)
+    const bestOf = await screen.findByText(/Best Of/i);
+    await act(async () => {
+      fireEvent.click(bestOf);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  const legsInputBest = await screen.findByRole('spinbutton', { name: /Best Of/i });
+    expect((legsInputBest as HTMLInputElement).value).toBe('3');
+  });
 });
