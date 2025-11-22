@@ -10,6 +10,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [joinTimer, setJoinTimer] = useState(30);
 
   const currentRoom = rooms[currentRoomIdx];
+  const maxMatchesPerRoom = 8;
   const worldLobby = useMemo(() => rooms.flatMap((r) => r.matches.map((m) => ({ ...m, roomName: r.name }))), [rooms]);
 
   const handleCreateMatch = (payload: any) => {
@@ -28,9 +29,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const newRoom = () => {
     setRooms((prev) => {
       const id = prev.length + 1;
-      return [...prev, { id, name: `room-${id}`, matches: [] }];
+      const newRooms = [...prev, { id, name: `room-${id}`, matches: [] }];
+      setCurrentRoomIdx(newRooms.length - 1);
+      return newRooms;
     });
-    setCurrentRoomIdx(rooms.length);
   };
 
   // Join timer
@@ -56,12 +58,13 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             <div className="flex items-center gap-4 mb-4">
               <div className="flex items-center gap-2">
                 <div className="text-sm opacity-80">Room</div>
-                <div className="px-3 py-1 bg-white/5 rounded border border-white/10">{currentRoom?.name}</div>
+                <div className="px-3 py-1 bg-white/5 rounded border border-white/10">Room ({currentRoom?.id})</div>
                 <div style={{ width: 12 }} />
                 <button className="btn btn-ghost" onClick={newRoom}>New Room</button>
               </div>
               <div className="ml-auto">
-                <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>Create Match +</button>
+                <button className="btn btn-primary" onClick={() => setShowCreateModal(true)} disabled={(currentRoom?.matches?.length || 0) >= maxMatchesPerRoom}>Create Match +</button>
+                {((currentRoom?.matches?.length || 0) >= maxMatchesPerRoom) && <div className="text-xs text-rose-400 mt-1">Room full — create a new room</div>}
               </div>
             </div>
 
