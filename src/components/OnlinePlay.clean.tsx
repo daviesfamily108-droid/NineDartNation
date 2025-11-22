@@ -206,7 +206,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         )}
         <h2 className="text-3xl font-bold text-brand-700 mb-4">Online Play</h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3">
-          <div className="rounded-2xl bg-white/5 border border-white/10 p-4 h-full min-h-[320px] overflow-auto">
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-4 flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Top row: Room, New Room, Create Match */}
             <div className="flex items-center gap-4 mb-4">
               <div className="flex items-center gap-2">
@@ -222,8 +222,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             </div>
 
             <p className="mb-2" />
-            <h3 className="font-semibold underline mb-3">Matches in this Room</h3>
-            <div className="space-y-3 mb-4">
+            <div className="flex-1 overflow-auto">
+              <h3 className="font-semibold underline mb-3">Matches in this Room</h3>
+              <div className="space-y-3 mb-4">
               {(currentRoom?.matches?.length || 0) === 0 ? (
                 <div className="text-sm opacity-60">No matches in this room yet.</div>
               ) : (
@@ -242,10 +243,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   </div>
                 ))
               )}
-            </div>
-            <h3 className="font-semibold underline mb-3">World Lobby</h3>
+              </div>
+              <h3 className="font-semibold underline mb-3">World Lobby</h3>
 
-            <div className="space-y-3">
+              <div className="space-y-3">
               {worldLobby.length === 0 ? (
                 <div className="text-sm opacity-60">No matches found.</div>
               ) : (
@@ -264,6 +265,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   </div>
                 ))
               )}
+              </div>
             </div>
           </div>
         </div>
@@ -298,7 +300,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 </div>
                 <div className="text-xs opacity-70 mt-2">{joinChoice ? `You chose: ${joinChoice}` : "Please choose Bull Up or Skip before accepting"}</div>
                 {Object.keys(remoteChoices).length > 0 && (
-                  <div className="text-xs opacity-70 mt-2">{
+                  <div className="text-xs opacity-70 mt-2" role="status" aria-live="polite">{
                     Object.entries(remoteChoices).map(([pid, choice]) => (
                       <div key={pid}>{(participants[pid] || pid)} chose: {choice}</div>
                     ))
@@ -326,7 +328,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   </div>
                 )}
                 {bullThrown && (
-                  <div className="text-sm font-semibold mt-2">You threw: {bullLocalThrow ?? 50}</div>
+                  <div className="text-sm font-semibold mt-2 animate-pulse">You threw: {bullLocalThrow ?? 50}</div>
                 )}
                 {bullWinner && (
                   <div className="text-sm font-semibold mt-2">Bull winner: {bullWinner}</div>
