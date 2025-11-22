@@ -69,6 +69,24 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             </div>
 
             <p className="mb-2" />
+            <h3 className="font-semibold underline mb-3">Matches in this Room</h3>
+            <div className="space-y-3 mb-4">
+              {(currentRoom?.matches?.length || 0) === 0 ? (
+                <div className="text-sm opacity-60">No matches in this room yet.</div>
+              ) : (
+                currentRoom.matches.map((m:any) => (
+                  <div key={m.id} className="p-3 rounded bg-white/3 border flex items-center justify-between">
+                    <div>
+                      <div className="font-semibold text-sm">{m.game} {m.modeType === 'bestof' ? '(Best Of)' : '(First To)'} - {m.legs} legs</div>
+                      <div className="text-xs opacity-70">Created by: {m.createdBy}</div>
+                    </div>
+                    <div className="ml-4">
+                      <button className="btn btn-sm" onClick={() => setJoinMatch(m)}>Join Now!</button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
             <h3 className="font-semibold underline mb-3">World Lobby</h3>
 
             <div className="space-y-3">
