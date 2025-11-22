@@ -1,20 +1,42 @@
 import React, { useState, useMemo, useEffect } from "react";
 import CreateMatchModal from "./ui/CreateMatchModal";
 import GameCalibrationStatus from "./GameCalibrationStatus";
+import MatchStartShowcase from "./ui/MatchStartShowcase";
+import { useMatch } from "../store/match";
+import { useWS } from "./WSProvider";
 
 export default function OnlinePlayClean({ user }: { user?: any }) {
   const username = user?.username || "You";
   const [currentRoomIdx, setCurrentRoomIdx] = useState(0);
   const [rooms, setRooms] = useState(() => [{ id: 1, name: "room-1", matches: [] as any[] }]);
+  const wsGlobal = (() => { try { return useWS() } catch { return null } })()
+  const [serverMatches, setServerMatches] = useState<any[]>([]);
+  const inProgress = useMatch((s) => s.inProgress);
+  const players = useMatch((s) => s.players);
+  const [showStartShowcase, setShowStartShowcase] = useState<boolean>(false);
+  const startedShowcasedRef = React.useRef(false);
+  useEffect(() => {
+    if (!inProgress) return;
+    if (startedShowcasedRef.current) return;
+    startedShowcasedRef.current = true;
+    setShowStartShowcase(true);
+  }, [inProgress]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joinMatch, setJoinMatch] = useState<any | null>(null);
   const [joinTimer, setJoinTimer] = useState(30);
+  const serverPrestartRef = React.useRef(false);
   const [joinChoice, setJoinChoice] = useState<null | "bull" | "skip">(null);
-  const [opponentChoice, setOpponentChoice] = useState<null | "bull" | "skip">(null);
+  const [remoteChoices, setRemoteChoices] = useState<Record<string, "bull" | "skip">>({});
+  const [bullActive, setBullActive] = useState(false);
+  const [bullThrow, setBullThrow] = useState<number | null>(null);
+  const [bullWinner, setBullWinner] = useState<string | null>(null);
 
   const currentRoom = rooms[currentRoomIdx];
   const maxMatchesPerRoom = 8;
-  const worldLobby = useMemo(() => rooms.flatMap((r) => r.matches.map((m) => ({ ...m, roomName: r.name }))), [rooms]);
+  const worldLobby = useMemo(() => {
+    if (serverMatches && serverMatches.length) return serverMatches as any[];
+    return rooms.flatMap((r) => r.matches.map((m) => ({ ...m, roomName: r.name })));
+  }, [rooms, serverMatches]);
 
   const handleCreateMatch = (payload: any) => {
     const newMatch = {
@@ -26,7 +48,14 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       startingScore: payload.startingScore,
       createdAt: Date.now(),
     };
+    // Optimistically add to current room
     setRooms((prev) => prev.map((r, idx) => (idx === currentRoomIdx ? { ...r, matches: [newMatch, ...r.matches] } : r)));
+    // If we have a server WS connection, send a create-match message
+    try {
+      if (wsGlobal?.connected) {
+        wsGlobal.send({ type: 'create-match', game: payload.game, mode: payload.modeType, value: payload.legs, startingScore: payload.startingScore, creatorAvg: payload.avgChoice || 0 });
+      }
+    } catch {}
   };
 
   const newRoom = () => {
@@ -38,24 +67,117 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     });
   };
 
+  // WS: subscribe to lobby and prestart events
+  useEffect(() => {
+    if (!wsGlobal) return;
+    if (wsGlobal.connected) wsGlobal.send({ type: 'list-matches' });
+    const unsub = wsGlobal.addListener((msg) => {
+      try {
+        if (msg?.type === 'matches') {
+          setServerMatches(msg.matches || []);
+        }
+  if (msg?.type === 'match-prestart') {
+          // Someone accepted the invite; show prestart and update join match if it matches
+          const m = msg.match || null;
+          if (m) m.prestartEndsAt = msg.prestartEndsAt;
+          serverPrestartRef.current = true;
+          setJoinMatch(m);
+          const endsAt = msg.prestartEndsAt || Date.now();
+          setJoinTimer(Math.max(0, Math.ceil(((endsAt || Date.now()) - Date.now()) / 1000)));
+          setTimeout(() => { serverPrestartRef.current = false; }, 0);
+          // store on joinMatch as prestartEndsAt
+          // reset diffuse state
+          setJoinChoice(null);
+          setRemoteChoices({});
+          setBullActive(false);
+          setBullThrow(null);
+          setBullWinner(null);
+        }
+        if (msg?.type === 'match-start') {
+          // If the started match matches our current join request, close the modal
+          if (joinMatch && msg.roomId === joinMatch.id) {
+            setJoinMatch(null);
+            setJoinChoice(null);
+            setRemoteChoices({});
+            // (joinPrestart ends were attached to joinMatch; no-op)
+          }
+        }
+        if (msg?.type === 'prestart-choice-notify') {
+          const { roomId, playerId, choice } = msg;
+          if (!roomId || !choice) return;
+          setRemoteChoices((prev) => ({ ...(prev || {}), [playerId]: choice }));
+        }
+        if (msg?.type === 'prestart-bull') {
+          setBullActive(true);
+        }
+        if (msg?.type === 'prestart-bull-winner') {
+          setBullWinner(msg.winnerId || null);
+          setBullActive(false);
+        }
+        if (msg?.type === 'prestart-bull-tie') {
+          // reset to allow another round
+          setBullWinner(null);
+          setBullActive(false);
+        }
+      } catch (err) {}
+    });
+    return unsub;
+  }, [wsGlobal, joinChoice]);
+
   // Join timer
   useEffect(() => {
     if (!joinMatch) return;
+    if (serverPrestartRef.current) return;
+    // If a server-supplied prestart exists, do not override joinTimer
+    if ((joinMatch as any).prestartEndsAt) return;
     setJoinTimer(30);
     setJoinChoice(null);
-    setOpponentChoice(null);
+    setRemoteChoices({});
     const t = setInterval(() => setJoinTimer((v) => Math.max(0, v - 1)), 1000);
     return () => clearInterval(t);
   }, [joinMatch]);
 
   const handleJoinAccept = () => {
-    // For now, just close modal; in real app we'd start the match
-    setJoinMatch(null);
+    // Send accept (invite-response) to server if we have a match prestart
+    try {
+      if (wsGlobal?.connected && joinMatch?.id) {
+        wsGlobal.send({ type: 'invite-response', matchId: joinMatch.id, accept: true, toId: joinMatch.creatorId });
+      }
+    } catch {}
+  setJoinMatch(null);
   };
+
+  const requestJoin = (m: any) => {
+    setJoinMatch(m);
+    try {
+      if (wsGlobal?.connected) {
+        wsGlobal.send({ type: 'join-match', matchId: m.id, calibrated: true });
+      }
+    } catch {}
+  }
+
+  const sendPrestartChoice = (choice: 'bull' | 'skip') => {
+    setJoinChoice(choice);
+    try {
+      if (wsGlobal?.connected && joinMatch?.id) {
+        wsGlobal.send({ type: 'prestart-choice', roomId: joinMatch.id, choice });
+      }
+    } catch {}
+  }
+
+  // No local state for the start showcase; MatchStartShowcase reads from `match.inProgress` directly
 
   return (
     <div className="flex-1 min-h-0" style={{ position: "relative", marginTop: 0 }}>
       <div className="card ndn-game-shell relative overflow-hidden h-full flex flex-col">
+        {showStartShowcase && (
+          <MatchStartShowcase
+            players={(players || []) as any}
+            user={user}
+            onDone={() => setShowStartShowcase(false)}
+            onRequestClose={() => setShowStartShowcase(false)}
+          />
+        )}
         <h2 className="text-3xl font-bold text-brand-700 mb-4">Online Play</h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3">
           <div className="rounded-2xl bg-white/5 border border-white/10 p-4 h-full min-h-[320px] overflow-auto">
@@ -89,7 +211,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       <div className="text-xs opacity-70">Created by: {m.createdBy}</div>
                     </div>
                     <div className="ml-4">
-                      <button className="btn btn-sm" onClick={() => setJoinMatch(m)}>Join Now!</button>
+                      <button className="btn btn-sm" onClick={() => requestJoin(m)}>Join Now!</button>
                     </div>
                   </div>
                 ))
@@ -111,7 +233,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       <div className="text-xs opacity-70">Created by: {m.createdBy} • Room: {m.roomName}</div>
                     </div>
                     <div className="ml-4">
-                      <button className="btn btn-sm" onClick={() => setJoinMatch(m)}>Join Now!</button>
+                      <button className="btn btn-sm" onClick={() => requestJoin(m)}>Join Now!</button>
                     </div>
                   </div>
                 ))
@@ -134,24 +256,49 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
               {joinMatch.startingScore && (
                 <div className="mb-3">Starting score: <span className="font-mono">{joinMatch.startingScore}</span></div>
               )}
+                {/* Match start showcase overlay */}
+                <MatchStartShowcase
+                  open={showStartShowcase}
+                  players={players as any}
+                  user={user}
+                  onRequestClose={() => {}}
+                  onDone={() => {}}
+                />
               <div className="mb-3">Timer: <span className="font-mono">{joinTimer}s</span></div>
-              {joinTimer <= 15 && (
+              {(joinTimer <= 15 || (joinMatch as any)?.prestartEndsAt) && (
                 <div className="mb-3">Choose: <div className="flex gap-2">
-                  <button className={`btn ${joinChoice === "bull" ? "btn-primary" : "btn-ghost"}`} onClick={() => setJoinChoice("bull")}>Bull Up</button>
-                  <button className={`btn ${joinChoice === "skip" ? "btn-primary" : "btn-ghost"}`} onClick={() => setJoinChoice("skip")}>Skip</button>
+                  <button className={`btn ${joinChoice === "bull" ? "btn-primary" : "btn-ghost"}`} onClick={() => sendPrestartChoice("bull")}>Bull Up</button>
+                  <button className={`btn ${joinChoice === "skip" ? "btn-primary" : "btn-ghost"}`} onClick={() => sendPrestartChoice("skip")}>Skip</button>
                 </div>
                 <div className="text-xs opacity-70 mt-2">{joinChoice ? `You chose: ${joinChoice}` : "Please choose Bull Up or Skip before accepting"}</div>
+                {Object.keys(remoteChoices).length > 0 && (
+                  <div className="text-xs opacity-70 mt-2">Opponent chose: {Object.values(remoteChoices).join(', ')}</div>
+                )}
                 {joinChoice === "skip" && (
                   <div className="text-xs opacity-70 mt-2">Skip requires both players to click Skip. Waiting for other player…</div>
                 )}
-                {joinChoice === "skip" && opponentChoice === "skip" && (
+                {joinChoice === "skip" && Object.values(remoteChoices).some((c) => c === "skip") && (
                   <div className="text-sm font-semibold mt-2">Both players skipped — Left player throws first</div>
+                )}
+                {bullActive && (
+                  <div className="text-xs opacity-70 mt-2">Bull Up active — throw to win the bull!</div>
+                )}
+                {bullActive && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <input className="input input-sm" type="number" min={0} max={50} value={bullThrow ?? 50} onChange={(e) => setBullThrow(Math.max(0, Math.min(50, Number(e.target.value || 0))))} />
+                    <button className="btn btn-primary" onClick={() => {
+                      try { if (wsGlobal?.connected && joinMatch?.id) wsGlobal.send({ type: 'prestart-bull-throw', roomId: joinMatch.id, score: bullThrow ?? 50 }) } catch {}
+                    }}>Throw Bull</button>
+                  </div>
+                )}
+                {bullWinner && (
+                  <div className="text-sm font-semibold mt-2">Bull winner: {bullWinner}</div>
                 )}
                 </div>
               )}
               <div className="flex items-center gap-2">
                 <button className="btn btn-primary" onClick={handleJoinAccept} disabled={joinTimer <= 15 && !joinChoice}>Accept</button>
-                <button className="btn btn-ghost" onClick={() => setJoinMatch(null)}>Cancel</button>
+                <button className="btn btn-ghost" onClick={() => { setJoinMatch(null); }}>Cancel</button>
               </div>
             </div>
           </div>
