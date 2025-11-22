@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useState } from "react";
+import React, { useLayoutEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   allGames,
@@ -18,6 +18,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
   const [game, setGame] = useState<GameKey>("X01");
   const [modeType, setModeType] = useState<"bestof" | "firstto">("bestof");
   const [legs, setLegs] = useState<number>(3);
+  const legsRef = useRef<HTMLInputElement | null>(null);
   const [avgChoice, setAvgChoice] = useState<number>(0);
   const [startingScore, setStartingScore] = useState<number | undefined>(() => {
     const opts = getStartOptionsForGame(game);
@@ -130,7 +131,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
           ) : null}
           <div>
             <div className="text-sm opacity-80">Mode</div>
-            <div className="flex gap-2 mt-1">
+            <div className="flex gap-2 mt-1 justify-center">
               <label
                 className={`btn ${modeType === "bestof" ? "btn-primary" : "btn-ghost"}`}
               >
@@ -139,7 +140,15 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                   name="mode"
                   value="bestof"
                   checked={modeType === "bestof"}
-                  onChange={() => setModeType("bestof")}
+                  onChange={() => {
+                    setModeType("bestof");
+                    setLegs((prev) => {
+                      const base = Math.max(1, prev || 3);
+                      // Ensure odd for Best Of
+                      return base % 2 === 1 ? base : base + 1;
+                    });
+                    setTimeout(() => legsRef.current?.focus(), 0);
+                  }}
                   className="sr-only"
                 />{" "}
                 Best Of
@@ -152,7 +161,11 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                   name="mode"
                   value="firstto"
                   checked={modeType === "firstto"}
-                  onChange={() => setModeType("firstto")}
+                  onChange={() => {
+                    setModeType("firstto");
+                    setLegs((prev) => Math.max(1, prev || 3));
+                    setTimeout(() => legsRef.current?.focus(), 0);
+                  }}
                   className="sr-only"
                 />{" "}
                 First To
@@ -161,7 +174,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
           </div>
           <div>
             <label className="text-sm opacity-80" htmlFor="match-legs">
-              Legs
+              {modeType === "bestof" ? "Best Of" : "First To"}
             </label>
             <input
               id="match-legs"
@@ -171,6 +184,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
               onChange={(e) =>
                 setLegs(Math.max(1, Number(e.target.value || 1)))
               }
+              ref={legsRef}
               className="w-full p-2 border border-white/10 bg-white/5 rounded text-white"
             />
           </div>
