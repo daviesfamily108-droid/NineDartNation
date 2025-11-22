@@ -205,31 +205,32 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           />
         )}
   <h2 className="text-3xl font-bold text-black dark:text-white mb-4">Online Play</h2>
-        <div className="ndn-shell-body flex-1 overflow-hidden p-3">
-          <div className="rounded-2xl bg-white/5 border border-white/10 p-4 flex-1 min-h-0 overflow-hidden flex flex-col">
+  <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
+          <div className="rounded-xl border border-slate-700 bg-black/10 p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Top row: Room, New Room, Create Match */}
-            <div className="flex items-center gap-4 mb-4">
-              <div className="flex items-center gap-2">
+            <div className="mb-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-between gap-2 flex-wrap">
+                <div className="min-w-0">
                 <div className="text-sm opacity-80">Room</div>
                 <div className="px-3 py-1 bg-white/5 rounded border border-white/10">Room ({currentRoom?.id})</div>
                 <div style={{ width: 12 }} />
                 <button className="btn btn-ghost" onClick={newRoom}>New Room</button>
               </div>
-              <div className="ml-auto">
-                <button className="btn btn-primary" onClick={() => setShowCreateModal(true)} disabled={(currentRoom?.matches?.length || 0) >= maxMatchesPerRoom}>Create Match +</button>
-                {((currentRoom?.matches?.length || 0) >= maxMatchesPerRoom) && <div className="text-xs text-rose-400 mt-1">Room full — create a new room</div>}
-              </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  <button className="btn btn-primary" onClick={() => setShowCreateModal(true)} disabled={(currentRoom?.matches?.length || 0) >= maxMatchesPerRoom}>Create Match +</button>
+                  {((currentRoom?.matches?.length || 0) >= maxMatchesPerRoom) && <div className="text-xs text-rose-400 mt-1">Room full — create a new room</div>}
+                </div>
             </div>
 
             <p className="mb-2" />
-            <div className="flex-1 overflow-auto">
+              <div className="flex-1 overflow-auto">
               <h3 className="font-semibold underline mb-3">Matches in this Room</h3>
+              <div className="mb-3 p-3 rounded-xl border border-slate-700 bg-black/10">
               <div className="space-y-3 mb-4">
               {(currentRoom?.matches?.length || 0) === 0 ? (
                 <div className="text-sm opacity-60">No matches in this room yet.</div>
               ) : (
                 currentRoom.matches.map((m:any) => (
-                  <div key={m.id} className="p-3 rounded bg-white/3 border flex items-center justify-between">
+                  <div key={m.id} className="p-3 rounded border bg-black/10 flex items-center justify-between">
                     <div>
                       <div className="font-semibold text-sm">{m.game} {m.modeType === 'bestof' ? '(Best Of)' : '(First To)'} - {m.legs} legs</div>
                       {m.startingScore && (
@@ -244,14 +245,16 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 ))
               )}
               </div>
+              </div>
               <h3 className="font-semibold underline mb-3">World Lobby</h3>
 
-              <div className="space-y-3">
+              <div className="mb-3 p-3 rounded-xl border border-slate-700 bg-black/10">
               {worldLobby.length === 0 ? (
                 <div className="text-sm opacity-60">No matches found.</div>
               ) : (
-                worldLobby.map((m) => (
-                  <div key={m.id} className="p-3 rounded bg-white/3 border flex items-center justify-between">
+                <ul className="space-y-2">
+                {worldLobby.map((m) => (
+                  <li key={m.id} className="p-3 rounded border bg-black/10 flex items-center justify-between">
                     <div>
                       <div className="font-semibold text-sm">{m.game} {m.modeType === 'bestof' ? '(Best Of)' : '(First To)'} - {m.legs} legs</div>
                       {m.startingScore && (
@@ -262,8 +265,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                     <div className="ml-4">
                       <button className="btn btn-sm" onClick={() => requestJoin(m)}>Join Now!</button>
                     </div>
-                  </div>
-                ))
+                  </li>
+                ))}
+                </ul>
               )}
               </div>
             </div>
