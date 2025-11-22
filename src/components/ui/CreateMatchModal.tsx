@@ -62,7 +62,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
   if (!portalEl) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
+  <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
       {/* A dedicated, accessible button covers the backdrop to capture clicks and keyboard input */}
       <button
         aria-label="Close dialog"
@@ -70,21 +70,21 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
         onClick={onClose}
       />
       <div
-        className="bg-white rounded-xl p-6 max-w-lg w-full relative"
+        className="card rounded-xl p-6 max-w-lg w-full relative text-white"
         role="dialog"
       >
         <button
           aria-label="Close"
-          className="absolute top-3 right-3 text-red-600 font-bold"
+          className="absolute top-3 right-3 text-rose-400 font-bold"
           onClick={onClose}
         >
           ✕
         </button>
         <h2 className="text-lg font-semibold mb-3">Create Match</h2>
-        <div className="grid grid-cols-1 gap-3">
+  <div className="grid grid-cols-1 gap-3">
           <div>
             <div className="text-sm opacity-80">Created By</div>
-            <div className="mt-1 p-2 bg-gray-100 rounded">{user}</div>
+            <div className="mt-1 p-2 bg-white/5 rounded text-white">{user}</div>
           </div>
           <div>
             <label className="text-sm opacity-80" htmlFor="match-game">
@@ -92,7 +92,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
             </label>
             <select
               id="match-game"
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border border-white/10 bg-white/5 rounded text-white"
               value={game}
               onChange={(e) => {
                 const v = e.target.value as GameKey;
@@ -116,7 +116,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
               >{`${game} Starting Score`}</label>
               <select
                 id="match-start"
-                className="w-full p-2 border rounded"
+                className="w-full p-2 border border-white/10 bg-white/5 rounded text-white"
                 value={startingScore}
                 onChange={(e) => setStartingScore(Number(e.target.value))}
               >
@@ -171,7 +171,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
               onChange={(e) =>
                 setLegs(Math.max(1, Number(e.target.value || 1)))
               }
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border border-white/10 bg-white/5 rounded text-white"
             />
           </div>
           <div>
@@ -183,7 +183,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
               type="number"
               value={avgChoice}
               onChange={(e) => setAvgChoice(Number(e.target.value || 0))}
-              className="w-full p-2 border rounded"
+              className="w-full p-2 border border-white/10 bg-white/5 rounded text-white"
             />
           </div>
         </div>

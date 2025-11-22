@@ -204,7 +204,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             onRequestClose={() => setShowStartShowcase(false)}
           />
         )}
-        <h2 className="text-3xl font-bold text-brand-700 mb-4">Online Play</h2>
+  <h2 className="text-3xl font-bold text-black dark:text-white mb-4">Online Play</h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3">
           <div className="rounded-2xl bg-white/5 border border-white/10 p-4 flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Top row: Room, New Room, Create Match */}
