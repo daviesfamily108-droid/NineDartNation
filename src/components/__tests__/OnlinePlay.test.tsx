@@ -70,24 +70,28 @@ describe("OnlinePlay", () => {
       render(<OnlinePlay user={user} />);
       await new Promise((r) => setTimeout(r, 0));
     });
-    const useWS = (await import("../WSProvider")).useWS as any;
-    // Simulate match prestart push from server with short time so prestart choice UI appears
+  const useWS = (await import("../WSProvider")).useWS as any;
+  // Simulate match prestart push from server with short time so prestart choice UI appears
     await act(async () => {
-  useWS().__emit({ type: 'match-prestart', roomId: 'm-1', match: { id: 'm-1', createdBy: 'Bob', game: 'X01', modeType: 'firstto', legs: 3, startingScore: 501 }, prestartEndsAt: Date.now() + 1000 });
+      // Simulate joined / presence messages so client can map IDs to names
+      useWS().__emit({ type: 'joined', id: 'self-id' });
+      useWS().__emit({ type: 'presence', id: 'other', username: 'Bob' });
+      useWS().__emit({ type: 'match-prestart', roomId: 'm-1', match: { id: 'm-1', creatorId: 'other', createdBy: 'Bob', game: 'X01', modeType: 'firstto', legs: 3, startingScore: 501 }, prestartEndsAt: Date.now() + 1000 });
       await new Promise((r) => setTimeout(r, 0));
     });
     // Modal should appear
     expect(await screen.findByText('Join Match')).toBeTruthy();
     // Choose Bull Up - should send prestart-choice message
     const bullBtn = await screen.findByText('Bull Up');
-    await act(async () => { bullBtn.click(); await new Promise(r => setTimeout(r, 0)); });
+  await act(async () => { bullBtn.click(); await new Promise(r => setTimeout(r, 0)); });
     expect(__sendSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'prestart-choice', roomId: 'm-1', choice: 'bull' }));
     // Server notifies opponent chose Skip
     await act(async () => {
       useWS().__emit({ type: 'prestart-choice-notify', roomId: 'm-1', playerId: 'other', choice: 'skip' });
       await new Promise((r) => setTimeout(r, 0));
     });
-    expect(await screen.findByText(/Opponent chose/)).toBeTruthy();
+    // The presence mapping should display the opponent's username
+  expect(await screen.findByText('Bob chose: skip')).toBeTruthy();
     // Server starts bull-up flow
     await act(async () => {
       useWS().__emit({ type: 'prestart-bull', roomId: 'm-1' });

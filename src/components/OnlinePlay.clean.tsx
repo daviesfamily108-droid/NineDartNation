@@ -23,6 +23,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   }, [inProgress]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joinMatch, setJoinMatch] = useState<any | null>(null);
+  const joinAcceptRef = React.useRef<HTMLButtonElement | null>(null);
+  const [selfId, setSelfId] = useState<string | null>(null);
+  const [participants, setParticipants] = useState<Record<string, string>>({});
   const [joinTimer, setJoinTimer] = useState(30);
   const serverPrestartRef = React.useRef(false);
   const [joinChoice, setJoinChoice] = useState<null | "bull" | "skip">(null);
@@ -30,6 +33,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [bullActive, setBullActive] = useState(false);
   const [bullThrow, setBullThrow] = useState<number | null>(null);
   const [bullWinner, setBullWinner] = useState<string | null>(null);
+  const [bullLocalThrow, setBullLocalThrow] = useState<number | null>(null);
+  const [bullThrown, setBullThrown] = useState(false);
 
   const currentRoom = rooms[currentRoomIdx];
   const maxMatchesPerRoom = 8;
@@ -73,6 +78,15 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     if (wsGlobal.connected) wsGlobal.send({ type: 'list-matches' });
     const unsub = wsGlobal.addListener((msg) => {
       try {
+        if (msg?.type === 'joined') {
+          if (msg.id) setSelfId(msg.id)
+        }
+        if (msg?.type === 'presence') {
+          // presence carries id and username
+          try {
+            if (msg.id) setParticipants(prev => ({ ...prev, [msg.id]: msg.username || msg.name || msg.id }))
+          } catch {}
+        }
         if (msg?.type === 'matches') {
           setServerMatches(msg.matches || []);
         }
@@ -80,6 +94,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           // Someone accepted the invite; show prestart and update join match if it matches
           const m = msg.match || null;
           if (m) m.prestartEndsAt = msg.prestartEndsAt;
+          // Ensure we know the creator's username
+          try { if (m?.creatorId && m?.creatorName) setParticipants(prev => ({ ...prev, [m.creatorId]: m.creatorName })) } catch {}
           serverPrestartRef.current = true;
           setJoinMatch(m);
           const endsAt = msg.prestartEndsAt || Date.now();
@@ -109,15 +125,19 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         }
         if (msg?.type === 'prestart-bull') {
           setBullActive(true);
+          setBullThrown(false);
+          setBullLocalThrow(null);
         }
         if (msg?.type === 'prestart-bull-winner') {
           setBullWinner(msg.winnerId || null);
           setBullActive(false);
+          setBullThrown(false);
         }
         if (msg?.type === 'prestart-bull-tie') {
           // reset to allow another round
           setBullWinner(null);
           setBullActive(false);
+          setBullThrown(false);
         }
       } catch (err) {}
     });
@@ -135,6 +155,12 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     setRemoteChoices({});
     const t = setInterval(() => setJoinTimer((v) => Math.max(0, v - 1)), 1000);
     return () => clearInterval(t);
+  }, [joinMatch]);
+
+  // Focus the accept button when the join modal is shown
+  useEffect(() => {
+    if (!joinMatch) return;
+    setTimeout(() => joinAcceptRef.current?.focus(), 0);
   }, [joinMatch]);
 
   const handleJoinAccept = () => {
@@ -247,9 +273,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
         {/* Join Modal (simplified) */}
         {joinMatch && (
-          <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
+          <div role="dialog" aria-modal="true" aria-labelledby="join-heading" tabIndex={-1} className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
             <div className="bg-slate-800 rounded-2xl p-6 max-w-md w-full">
-              <div className="text-lg font-bold mb-2">Join Match</div>
+              <div id="join-heading" className="text-lg font-bold mb-2">Join Match</div>
               <div className="mb-3">{joinMatch.game} - {joinMatch.modeType} • {joinMatch.legs} legs</div>
               <div className="text-sm opacity-80 mb-3">Created by {joinMatch.createdBy}</div>
               <div className="mb-3"><GameCalibrationStatus gameMode={joinMatch.game} compact /></div>
@@ -272,7 +298,11 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 </div>
                 <div className="text-xs opacity-70 mt-2">{joinChoice ? `You chose: ${joinChoice}` : "Please choose Bull Up or Skip before accepting"}</div>
                 {Object.keys(remoteChoices).length > 0 && (
-                  <div className="text-xs opacity-70 mt-2">Opponent chose: {Object.values(remoteChoices).join(', ')}</div>
+                  <div className="text-xs opacity-70 mt-2">{
+                    Object.entries(remoteChoices).map(([pid, choice]) => (
+                      <div key={pid}>{(participants[pid] || pid)} chose: {choice}</div>
+                    ))
+                  }</div>
                 )}
                 {joinChoice === "skip" && (
                   <div className="text-xs opacity-70 mt-2">Skip requires both players to click Skip. Waiting for other player…</div>
@@ -281,15 +311,22 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   <div className="text-sm font-semibold mt-2">Both players skipped — Left player throws first</div>
                 )}
                 {bullActive && (
-                  <div className="text-xs opacity-70 mt-2">Bull Up active — throw to win the bull!</div>
+                  <div className="text-xs opacity-70 mt-2">
+                    Bull Up active —{bullThrown ? ` you threw ${bullLocalThrow ?? 50}` : ' throw to win the bull!'}
+                  </div>
                 )}
-                {bullActive && (
+                {bullActive && !bullThrown && (
                   <div className="flex items-center gap-2 mt-2">
-                    <input className="input input-sm" type="number" min={0} max={50} value={bullThrow ?? 50} onChange={(e) => setBullThrow(Math.max(0, Math.min(50, Number(e.target.value || 0))))} />
+                    <input className="input input-sm" aria-label="bull-throw" type="number" min={0} max={50} value={bullThrow ?? 50} onChange={(e) => setBullThrow(Math.max(0, Math.min(50, Number(e.target.value || 0))))} />
                     <button className="btn btn-primary" onClick={() => {
                       try { if (wsGlobal?.connected && joinMatch?.id) wsGlobal.send({ type: 'prestart-bull-throw', roomId: joinMatch.id, score: bullThrow ?? 50 }) } catch {}
+                      setBullLocalThrow(bullThrow ?? 50)
+                      setBullThrown(true)
                     }}>Throw Bull</button>
                   </div>
+                )}
+                {bullThrown && (
+                  <div className="text-sm font-semibold mt-2">You threw: {bullLocalThrow ?? 50}</div>
                 )}
                 {bullWinner && (
                   <div className="text-sm font-semibold mt-2">Bull winner: {bullWinner}</div>
@@ -297,7 +334,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <button className="btn btn-primary" onClick={handleJoinAccept} disabled={joinTimer <= 15 && !joinChoice}>Accept</button>
+                <button ref={joinAcceptRef} aria-label="Accept invitation" className="btn btn-primary" onClick={handleJoinAccept} disabled={joinTimer <= 15 && !joinChoice}>Accept</button>
                 <button className="btn btn-ghost" onClick={() => { setJoinMatch(null); }}>Cancel</button>
               </div>
             </div>
