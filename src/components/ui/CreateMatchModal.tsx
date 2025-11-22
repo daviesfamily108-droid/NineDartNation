@@ -19,9 +19,10 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
   const [modeType, setModeType] = useState<"bestof" | "firstto">("bestof");
   const [legs, setLegs] = useState<number>(3);
   const [avgChoice, setAvgChoice] = useState<number>(0);
-  const [startingScore, setStartingScore] = useState<number | undefined>(
-    game === "X01" ? 501 : undefined,
-  );
+  const [startingScore, setStartingScore] = useState<number | undefined>(() => {
+    const opts = getStartOptionsForGame(game);
+    return opts?.[0];
+  });
   const user = (useUserSettings() as any).username || "Anonymous";
 
   useLayoutEffect(() => {
@@ -107,7 +108,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
               ))}
             </select>
           </div>
-          {game === "X01" && (
+          {getStartOptionsForGame(game)?.length ? (
             <div>
               <label
                 className="text-sm opacity-80"
@@ -126,7 +127,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                 ))}
               </select>
             </div>
-          )}
+          ) : null}
           <div>
             <div className="text-sm opacity-80">Mode</div>
             <div className="flex gap-2 mt-1">

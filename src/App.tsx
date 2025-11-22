@@ -303,8 +303,7 @@ export default function App() {
         );
       const touchScreen =
         "ontouchstart" in window || navigator.maxTouchPoints > 0;
-      const verySmallScreen = width < 769;
-      const verySmallScreen = width < 769;
+  const verySmallScreen = width < 769;
 
       // Determine device type
       const isTablet =

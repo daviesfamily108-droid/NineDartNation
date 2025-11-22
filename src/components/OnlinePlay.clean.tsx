@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import CreateMatchModal from "./ui/CreateMatchModal";
+import GameCalibrationStatus from "./GameCalibrationStatus";
 
 export default function OnlinePlayClean({ user }: { user?: any }) {
   const username = user?.username || "You";
@@ -8,6 +9,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joinMatch, setJoinMatch] = useState<any | null>(null);
   const [joinTimer, setJoinTimer] = useState(30);
+  const [joinChoice, setJoinChoice] = useState<null | "bull" | "skip">(null);
+  const [opponentChoice, setOpponentChoice] = useState<null | "bull" | "skip">(null);
 
   const currentRoom = rooms[currentRoomIdx];
   const maxMatchesPerRoom = 8;
@@ -39,6 +42,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   useEffect(() => {
     if (!joinMatch) return;
     setJoinTimer(30);
+    setJoinChoice(null);
+    setOpponentChoice(null);
     const t = setInterval(() => setJoinTimer((v) => Math.max(0, v - 1)), 1000);
     return () => clearInterval(t);
   }, [joinMatch]);
@@ -78,6 +83,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   <div key={m.id} className="p-3 rounded bg-white/3 border flex items-center justify-between">
                     <div>
                       <div className="font-semibold text-sm">{m.game} {m.modeType === 'bestof' ? '(Best Of)' : '(First To)'} - {m.legs} legs</div>
+                      {m.startingScore && (
+                        <div className="text-xs opacity-80">Starting: <span className="font-mono">{m.startingScore}</span></div>
+                      )}
                       <div className="text-xs opacity-70">Created by: {m.createdBy}</div>
                     </div>
                     <div className="ml-4">
@@ -97,6 +105,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   <div key={m.id} className="p-3 rounded bg-white/3 border flex items-center justify-between">
                     <div>
                       <div className="font-semibold text-sm">{m.game} {m.modeType === 'bestof' ? '(Best Of)' : '(First To)'} - {m.legs} legs</div>
+                      {m.startingScore && (
+                        <div className="text-xs opacity-80">Starting: <span className="font-mono">{m.startingScore}</span></div>
+                      )}
                       <div className="text-xs opacity-70">Created by: {m.createdBy} • Room: {m.roomName}</div>
                     </div>
                     <div className="ml-4">
@@ -119,13 +130,27 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
               <div className="text-lg font-bold mb-2">Join Match</div>
               <div className="mb-3">{joinMatch.game} - {joinMatch.modeType} • {joinMatch.legs} legs</div>
               <div className="text-sm opacity-80 mb-3">Created by {joinMatch.createdBy}</div>
-              <div className="mb-3">Camera calibration: <span className="text-green-400">Calibrated</span></div>
+              <div className="mb-3"><GameCalibrationStatus gameMode={joinMatch.game} compact /></div>
+              {joinMatch.startingScore && (
+                <div className="mb-3">Starting score: <span className="font-mono">{joinMatch.startingScore}</span></div>
+              )}
               <div className="mb-3">Timer: <span className="font-mono">{joinTimer}s</span></div>
               {joinTimer <= 15 && (
-                <div className="mb-3">Choose: <button className="btn btn-ghost mr-2">Bull Up</button><button className="btn btn-ghost">Skip</button></div>
+                <div className="mb-3">Choose: <div className="flex gap-2">
+                  <button className={`btn ${joinChoice === "bull" ? "btn-primary" : "btn-ghost"}`} onClick={() => setJoinChoice("bull")}>Bull Up</button>
+                  <button className={`btn ${joinChoice === "skip" ? "btn-primary" : "btn-ghost"}`} onClick={() => setJoinChoice("skip")}>Skip</button>
+                </div>
+                <div className="text-xs opacity-70 mt-2">{joinChoice ? `You chose: ${joinChoice}` : "Please choose Bull Up or Skip before accepting"}</div>
+                {joinChoice === "skip" && (
+                  <div className="text-xs opacity-70 mt-2">Skip requires both players to click Skip. Waiting for other player…</div>
+                )}
+                {joinChoice === "skip" && opponentChoice === "skip" && (
+                  <div className="text-sm font-semibold mt-2">Both players skipped — Left player throws first</div>
+                )}
+                </div>
               )}
               <div className="flex items-center gap-2">
-                <button className="btn btn-primary" onClick={handleJoinAccept}>Accept</button>
+                <button className="btn btn-primary" onClick={handleJoinAccept} disabled={joinTimer <= 15 && !joinChoice}>Accept</button>
                 <button className="btn btn-ghost" onClick={() => setJoinMatch(null)}>Cancel</button>
               </div>
             </div>
