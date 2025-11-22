@@ -229,6 +229,15 @@ describe("OnlinePlay", () => {
     });
     // Assert each card uses the fixed height class
     const firstCard = screen.getByTestId("match-m-0");
-    expect(firstCard.className.includes("h-28")).toBeTruthy();
+    expect(firstCard.className.includes("h-24")).toBeTruthy();
+  });
+
+  test("does not show World Lobby heading", async () => {
+    const user = { email: "a@example.com", username: "Alice" };
+    await act(async () => {
+      render(<OnlinePlay user={user} />);
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(screen.queryByText(/World Lobby/i)).toBeNull();
   });
 });

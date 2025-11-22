@@ -320,7 +320,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       {combinedMatches.map((m: any) => (
                         <div
                           key={m.id}
-                          className="p-3 rounded border bg-black/10 flex flex-col justify-between h-28"
+                          className="p-3 rounded border bg-black/10 flex items-start justify-between h-24"
                           data-testid={`match-${m.id}`}
                         >
                           <div>
@@ -348,7 +348,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                               )}
                             </div>
                           </div>
-                          <div className="mt-2 self-end">
+                          <div className="ml-4 shrink-0">
                             <button
                               className="btn btn-sm"
                               onClick={() => requestJoin(m)}
@@ -362,51 +362,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   )}
                 </div>
               </div>
-              <h3 className="font-semibold underline mb-3">World Lobby</h3>
-
-              <div className="mb-3 p-3 rounded-xl border border-slate-700 bg-black/10">
-                {worldLobby.length === 0 ? (
-                  <div className="text-sm opacity-60">No matches found.</div>
-                ) : (
-                  <ul className="space-y-2">
-                    {worldLobby.map((m) => (
-                      <li
-                        key={m.id}
-                        className="p-3 rounded border bg-black/10 flex items-center justify-between"
-                      >
-                        <div>
-                          <div className="font-semibold text-sm">
-                            {m.game}{" "}
-                            {m.modeType === "bestof"
-                              ? "(Best Of)"
-                              : "(First To)"}{" "}
-                            - {m.legs} legs
-                          </div>
-                          {m.startingScore && (
-                            <div className="text-xs opacity-80">
-                              Starting:{" "}
-                              <span className="font-mono">
-                                {m.startingScore}
-                              </span>
-                            </div>
-                          )}
-                          <div className="text-xs opacity-70">
-                            Created by: {m.createdBy} • Room: {m.roomName}
-                          </div>
-                        </div>
-                        <div className="ml-4">
-                          <button
-                            className="btn btn-sm"
-                            onClick={() => requestJoin(m)}
-                          >
-                            Join Now!
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              {/* World Lobby removed: combined matches are displayed above */}
             </div>
           </div>
         </div>
