@@ -124,8 +124,8 @@ export default function CameraTile({
     return saved || "local";
   });
 
-  const [expiresAt, setExpiresAt] = useState<number | null>(null);
-  const [paired, setPaired] = useState<boolean>(false);
+  const [, setExpiresAt] = useState<number | null>(null);
+  const [, setPaired] = useState<boolean>(false);
   const [lanHost, setLanHost] = useState<string | null>(null);
   const [httpsInfo, setHttpsInfo] = useState<{
     https: boolean;
@@ -217,6 +217,77 @@ export default function CameraTile({
   }, [mode]);
 
   const [manualModeSetAt, setManualModeSetAt] = useState<number | null>(null);
+
+  const start = useCallback(async () => {
+    dlog("[CameraTile] start() invoked with mode=", mode);
+    if (mode === "wifi") {
+      return startWifiConnection();
+    }
+    dlog("[CameraTile] Attempting to attach global stream for phone mode...");
+
+    // If phone camera is selected and paired, don't try to start local camera
+    if (preferredCameraLabel === "Phone Camera" || mode === "phone") {
+      const s = cameraSession.getMediaStream();
+      if (s && videoRef.current) {
+        try {
+          videoRef.current.srcObject = s;
+          await videoRef.current.play();
+          setStreaming(true);
+          return;
+        } catch {}
+      }
+      // If no global stream yet, for phone mode we should attempt pairing
+      if (mode === "phone") {
+        try {
+          await startPhonePairing();
+          return;
+        } catch {}
+      }
+    }
+
+    try {
+      // Prefer saved camera if available
+      const { preferredCameraId, setPreferredCamera } =
+        useUserSettings.getState();
+      const constraints: MediaStreamConstraints = preferredCameraId
+        ? { video: { deviceId: { exact: preferredCameraId } }, audio: false }
+        : { video: true, audio: false };
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (err: any) {
+        const name = (err && (err.name || err.code)) || "";
+        if (
+          preferredCameraId &&
+          (name === "OverconstrainedError" || name === "NotFoundError")
+        ) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        } else {
+          throw err;
+        }
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        setStreaming(true);
+        registerStream(stream, "local");
+      }
+      // Camera started successfully - no automatic preference updates
+    } catch {}
+  }, [mode, preferredCameraLabel, cameraSession, registerStream, startPhonePairing, startWifiConnection]);
+
+  const stop = useCallback(() => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
+      tracks.forEach((t) => t.stop());
+      videoRef.current.srcObject = null;
+      setStreaming(false);
+      registerStream(null);
+    }
+  }, [registerStream]);
 
   // Sync phone camera selection from Calibrator into CameraTile mode state
   // When user locks in phone camera in Calibrator, it updates preferredCameraLabel
@@ -312,7 +383,7 @@ export default function CameraTile({
     return () => clearInterval(t);
   }, [preferredCameraLabel, mode, cameraSession, cameraSession.isStreaming]);
 
-  async function start() {
+  const start = useCallback(async () => {
     dlog("[CameraTile] start() invoked with mode=", mode);
     if (mode === "wifi") {
       return startWifiConnection();
@@ -371,8 +442,8 @@ export default function CameraTile({
       }
       // Camera started successfully - no automatic preference updates
     } catch {}
-  }
-  function stop() {
+  }, [mode, preferredCameraLabel, cameraSession, registerStream, startPhonePairing, startWifiConnection]);
+  const stop = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
       tracks.forEach((t) => t.stop());
@@ -380,7 +451,7 @@ export default function CameraTile({
       setStreaming(false);
       registerStream(null);
     }
-  }
+  }, [registerStream]);
 
   async function startWifiConnection() {
     setDiscoveringWifi(true);
