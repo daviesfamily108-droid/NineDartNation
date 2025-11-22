@@ -32,7 +32,7 @@ export type TabKey =
 export function getTabs(user: any) {
   const baseTabs = [
     { key: "score", label: "Home", icon: LayoutDashboard },
-    { key: "online", label: "Online", icon: Users },
+  { key: "online", label: "Online Play", icon: Users },
     { key: "offline", label: "Offline", icon: Trophy },
     { key: "tournaments", label: "Tournaments", icon: Trophy },
     { key: "friends", label: "Friends", icon: Users },
