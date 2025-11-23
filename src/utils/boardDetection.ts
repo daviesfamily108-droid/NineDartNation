@@ -47,7 +47,7 @@ export interface BoardDetectionResult {
  */
 function findDartboardRings(
   canvas: HTMLCanvasElement,
-): { cx: number; cy: number; r: number; confidence: number } | null {
+): { cx: number; cy: number; r: number; confidence: number; ringCount?: number; ringStrength?: number } | null {
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
@@ -59,27 +59,44 @@ function findDartboardRings(
   // Step 1: Find all strong edges using Canny-like detection
   const edges: Array<{ x: number; y: number; mag: number }> = [];
 
+  // dynamic gradient threshold based on image size (lower-res -> lower threshold)
+  const baseEdgeThreshold = Math.round(Math.max(8, Math.min(32, (w + h) / 120)));
+
+  // Precompute grayscale and apply a small blur to reduce high-frequency noise
+  const gray = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      gray[y * w + x] = data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114;
+    }
+  }
+  // 3x3 box blur into blurred array
+  const blurred = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      let sum = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          sum += gray[(y + dy) * w + (x + dx)];
+        }
+      }
+      blurred[y * w + x] = sum / 9;
+    }
+  }
+  // Compute gradients using blurred values
   for (let y = 2; y < h - 2; y++) {
     for (let x = 2; x < w - 2; x++) {
-      const idx = (y * w + x) * 4;
-
-      // Compute gradients
       let gx = 0,
         gy = 0;
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
-          const pidx = ((y + dy) * w + (x + dx)) * 4;
-          const gray =
-            data[pidx] * 0.299 +
-            data[pidx + 1] * 0.587 +
-            data[pidx + 2] * 0.114;
-          if (dx !== 0) gx += (dx > 0 ? 1 : -1) * gray;
-          if (dy !== 0) gy += (dy > 0 ? 1 : -1) * gray;
+          const grayVal = blurred[(y + dy) * w + (x + dx)];
+          if (dx !== 0) gx += (dx > 0 ? 1 : -1) * grayVal;
+          if (dy !== 0) gy += (dy > 0 ? 1 : -1) * grayVal;
         }
       }
-
       const mag = Math.hypot(gx, gy);
-      if (mag > 20) {
+      if (mag > baseEdgeThreshold) {
         edges.push({ x, y, mag });
       }
     }
@@ -87,43 +104,88 @@ function findDartboardRings(
 
   if (edges.length === 0) return null;
 
+  // global thresholds scaled by image resolution
+  const minPixelCount = Math.max(3, Math.round((w * h) / (640 * 480) * 10));
+  const minStrength = Math.max(80, Math.round((w * h) / (640 * 480) * 500));
+
   // Step 2: For each potential center, score how many rings we can explain
   let bestCenter = null;
   let bestScore = 0;
+  let bestRingCount = 0;
 
   // Sample potential centers
-  for (let cy = h * 0.3; cy < h * 0.7; cy += 10) {
-    for (let cx = w * 0.3; cx < w * 0.7; cx += 10) {
+  // Use a dynamic sampling stride based on image size
+  const stride = Math.max(6, Math.round(Math.min(w, h) / 40));
+  for (let cy = Math.round(h * 0.3); cy < Math.round(h * 0.7); cy += stride) {
+    for (let cx = Math.round(w * 0.3); cx < Math.round(w * 0.7); cx += stride) {
       // For this center, find rings at expected radii
       let ringCount = 0;
       let ringStrength = 0;
 
-      // Test for rings at known pixel radii (assuming double radius ~150px)
-      const testRadii = [15, 30, 150, 162, 180, 205];
+      // Estimate scale for pixels-per-mm by assuming the board double diameter occupies ~45% of min dimension
+      const approxDoublePixels = Math.min(w, h) * 0.45; // expected double radius in px
+      const scalePxPerMm = approxDoublePixels / BoardRadii.doubleOuter;
+      const testRadii = [
+        BoardRadii.bullInner * scalePxPerMm,
+        BoardRadii.bullOuter * scalePxPerMm,
+        BoardRadii.trebleInner * scalePxPerMm,
+        BoardRadii.trebleOuter * scalePxPerMm,
+        BoardRadii.doubleInner * scalePxPerMm,
+        BoardRadii.doubleOuter * scalePxPerMm,
+      ];
 
-      for (const testR of testRadii) {
-        let strength = 0;
-        let pixelCount = 0;
+      // Build radial histogram (bins) of edge magnitudes per radius for this center
+      const maxR = Math.round(Math.min(
+        Math.min(cx, w - cx),
+        Math.min(cy, h - cy),
+      ));
+      const bins = new Float32Array(maxR + 1);
+      let maxBin = 0;
+      for (const edge of edges) {
+        const dist = Math.round(Math.hypot(edge.x - cx, edge.y - cy));
+        if (dist <= 0 || dist > maxR) continue;
+        bins[dist] += edge.mag;
+        if (bins[dist] > maxBin) maxBin = bins[dist];
+      }
 
-        // Count edge pixels near this radius
-        for (const edge of edges) {
-          const dist = Math.hypot(edge.x - cx, edge.y - cy);
-          if (Math.abs(dist - testR) < 3) {
-            strength += edge.mag;
-            pixelCount++;
-          }
-        }
-
-        if (pixelCount > 10 && strength > 500) {
-          ringCount++;
-          ringStrength += strength;
+      // Find significant peaks in histogram
+      const peakRadius: number[] = [];
+      const peakThreshold = Math.max(12, maxBin * 0.08);
+      for (let r = 2; r < maxR - 2; r++) {
+        const v = bins[r];
+        if (v <= peakThreshold) continue;
+        // local maxima
+        if (v > bins[r - 1] && v >= bins[r + 1]) {
+          peakRadius.push(r);
         }
       }
 
-      // Want at least 4 strong rings
-      if (ringCount >= 4 && ringStrength > bestScore) {
+      // Match expected radii against peaks
+      for (const testR of testRadii) {
+        // compute tolerance based on expected radius
+        const tol = Math.max(3, Math.round(testR * 0.02));
+        // find the peak nearest to testR
+        let bestPeak = -1;
+        let bestDist = Infinity;
+        for (const pr of peakRadius) {
+          const d = Math.abs(pr - testR);
+          if (d < bestDist) {
+            bestDist = d;
+            bestPeak = pr;
+          }
+        }
+        if (bestPeak >= 0 && bestDist <= tol) {
+          // ring strength is bin magnitude at that peak
+          ringCount++;
+          ringStrength += bins[bestPeak] || 0;
+        }
+      }
+
+      // Want at least 3 strong rings (loosened for small/partial crops)
+      if (ringCount >= 3 && ringStrength > bestScore) {
         bestScore = ringStrength;
         bestCenter = { cx, cy };
+        bestRingCount = ringCount;
       }
     }
   }
@@ -134,23 +196,28 @@ function findDartboardRings(
   const refinedCx = bestCenter.cx;
   const refinedCy = bestCenter.cy;
 
-  // Find the strongest ring near where we expect the double outer (165-190 pixels for typical image)
-  let doubleR = 170;
+  // Find the strongest ring near where we expect the double outer
+  // Use an adaptive scan range based on image size
+  const approxDoublePixels = Math.min(w, h) * 0.45;
+  const minScan = Math.max(6, Math.round(approxDoublePixels * 0.5));
+  const maxScan = Math.min(Math.round(Math.max(w, h) - 4), Math.round(approxDoublePixels * 1.5));
+  let doubleR = Math.round(approxDoublePixels);
   let maxStrength = 0;
 
-  for (let testR = 120; testR <= 250; testR += 5) {
+  for (let testR = minScan; testR <= maxScan; testR += Math.max(2, Math.round((maxScan - minScan) / 60))) {
     let strength = 0;
     let pixelCount = 0;
 
     for (const edge of edges) {
       const dist = Math.hypot(edge.x - refinedCx, edge.y - refinedCy);
-      if (Math.abs(dist - testR) < 2) {
+      const tol = Math.max(2, Math.round(testR * 0.01));
+      if (Math.abs(dist - testR) < tol) {
         strength += edge.mag;
         pixelCount++;
       }
     }
 
-    if (pixelCount > 20 && strength > maxStrength) {
+    if (pixelCount > Math.max(6, Math.round(minPixelCount * 0.6)) && strength > maxStrength) {
       maxStrength = strength;
       doubleR = testR;
     }
@@ -173,7 +240,8 @@ function findDartboardRings(
 
     for (const edge of edges) {
       const dist = Math.hypot(edge.x - refinedCx, edge.y - refinedCy);
-      if (Math.abs(dist - expectedPixelR) < 3) {
+      const tol = Math.max(3, Math.round(expectedPixelR * 0.02));
+      if (Math.abs(dist - expectedPixelR) < tol) {
         found = true;
         confidence += 15;
         break;
@@ -188,6 +256,8 @@ function findDartboardRings(
     cy: refinedCy,
     r: doubleR,
     confidence,
+    ringCount: bestRingCount,
+    ringStrength: Math.round(bestScore),
   };
 }
 
@@ -255,7 +325,7 @@ export function detectBoard(canvas: HTMLCanvasElement): BoardDetectionResult {
       { x: -BoardRadii.doubleOuter, y: 0 },
     ];
 
-    let homography: Homography | null = null;
+  let homography: Homography | null = null;
     let errorPx: number | null = null;
     let confidence = detection.confidence;
 
@@ -272,9 +342,11 @@ export function detectBoard(canvas: HTMLCanvasElement): BoardDetectionResult {
       confidence = Math.max(40, confidence);
     }
 
-    const pointsValid = calibrationPoints.every(isFinitePoint);
+  const pointsValid = calibrationPoints.every(isFinitePoint);
     const homographyValid = isFiniteHomography(homography);
     const success = !!homographyValid && pointsValid && confidence > 50;
+  const detRingCount = detection.ringCount ?? 0;
+  const detRingStrength = detection.ringStrength ?? 0;
 
     return {
       success,
@@ -292,12 +364,12 @@ export function detectBoard(canvas: HTMLCanvasElement): BoardDetectionResult {
       calibrationPoints: pointsValid ? calibrationPoints : [],
       message:
         !pointsValid || !homographyValid
-          ? "❌ Detection produced unstable calibration data. Adjust camera framing or calibrate manually."
+          ? `❌ Detection produced unstable calibration data. Adjust camera framing or calibrate manually. (rings: ${detRingCount}, r:${Math.round(detection.r)})`
           : confidence > 80
-            ? "✅ High confidence detection"
-            : confidence > 50
-              ? "⚠️ Detection found but could be better"
-              : "❌ Low confidence - try better lighting",
+          ? `✅ High confidence detection (rings: ${detRingCount}, r:${Math.round(detection.r)})`
+          : confidence > 50
+          ? `⚠️ Detection found but could be better (rings: ${detRingCount}, r:${Math.round(detection.r)})`
+          : `❌ Low confidence - try better lighting (rings: ${detRingCount}, r:${Math.round(detection.r)})`,
     };
   } catch (err) {
     return {

@@ -28,17 +28,31 @@ export class DartDetector {
   private roiCy = 0;
   private initialized = false;
 
-  // Tuning
-  private thresh = 28; // intensity threshold for foreground
-  private minArea = 90; // min connected pixels to consider a dart
+  // Tuning (defaults intentionally more permissive)
+  private thresh = 18; // intensity threshold for foreground (was 28)
+  private minArea = 60; // min connected pixels to consider a dart (was 90)
   private maxArea = 6000; // guard against massive motion
+  private angMaxDeg = 70; // how far from radial to tolerate
   // temporal stabilization
   private prevTip: Point | null = null;
   private prevArea: number = 0;
   private stableCount = 0;
   private requireStableN = 3;
 
-  constructor() {}
+  constructor(cfg?: {
+    thresh?: number;
+    minArea?: number;
+    maxArea?: number;
+    requireStableN?: number;
+    angMaxDeg?: number;
+  }) {
+    if (cfg?.thresh !== undefined) this.thresh = cfg.thresh;
+    if (cfg?.minArea !== undefined) this.minArea = cfg.minArea;
+    if (cfg?.maxArea !== undefined) this.maxArea = cfg.maxArea;
+    if (cfg?.requireStableN !== undefined)
+      this.requireStableN = cfg.requireStableN;
+    if (cfg?.angMaxDeg !== undefined) this.angMaxDeg = cfg.angMaxDeg;
+  }
 
   setROI(cx: number, cy: number, radius: number) {
     this.roiCx = cx;
@@ -249,7 +263,7 @@ export class DartDetector {
       ry = dyc / rlen;
     const cosAng = Math.max(-1, Math.min(1, vx * rx + vy * ry));
     const angDeg = (Math.acos(cosAng) * 180) / Math.PI;
-    if (angDeg > 55) {
+  if (angDeg > this.angMaxDeg) {
       // likely glare or non-radial artifact
       if (!recent) this.updateBackground(frame, 0.02);
       return null;
@@ -296,7 +310,7 @@ export class DartDetector {
     // Optionally, we can inpaint the blob into background upon acceptance by caller
 
     // Temporal stabilization: require 2+ consistent frames for the same dart
-    const stable = this._isStable({ x: tipX + 0.5, y: tipY + 0.5 }, bestArea);
+  const stable = this._isStable({ x: tipX + 0.5, y: tipY + 0.5 }, bestArea);
     if (!stable) return null;
     // Debounce
     if (recent) return null;

@@ -2,7 +2,7 @@ import type { DartDetector as DD } from "./dartDetector";
 import { scoreFromImagePoint } from "./autoscore";
 import type { Homography, Point } from "./vision";
 
-export function runDetectionAndNotify(
+export async function runDetectionAndNotify(
   detector: any,
   frame: ImageData | any,
   H: Homography,
@@ -21,9 +21,10 @@ export function runDetectionAndNotify(
   const pCal: Point = { x: det.tip.x, y: det.tip.y };
   const score = scoreFromImagePoint(H, pCal);
   try {
-    onAutoDart(score.base, score.ring as any, {
+    // If parent handler returns an ack/promise, await it so callers can coordinate commits
+    if (onAutoDart) await Promise.resolve(onAutoDart(score.base, score.ring as any, {
       sector: score.sector ?? null,
       mult: (score.mult as any) ?? 0,
-    });
+    }));
   } catch {}
 }

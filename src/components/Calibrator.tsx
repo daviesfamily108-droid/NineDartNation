@@ -93,7 +93,7 @@ export default function Calibrator() {
     if (typeof navigator === "undefined") return false;
     return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
   });
-  const { H, setCalibration, reset, errorPx, locked } = useCalibration();
+  const { H, setCalibration, reset, errorPx, locked, overlaySize, imageSize } = useCalibration();
   const cameraSession = useCameraSession();
   const {
     calibrationGuide,
@@ -104,6 +104,7 @@ export default function Calibrator() {
     preferredCameraLocked,
     setPreferredCameraLocked,
     setPreferredCamera,
+    preserveCalibrationOverlay,
   } = useUserSettings();
   // Detected ring data (from auto-detect) in image pixels
   const [detected, setDetected] = useState<null | {
@@ -120,6 +121,7 @@ export default function Calibrator() {
   const [liveDetect, setLiveDetect] = useState<boolean>(false);
   const [confidence, setConfidence] = useState<number>(0);
   const [autoCalibrating, setAutoCalibrating] = useState<boolean>(false);
+  const [detectionMessage, setDetectionMessage] = useState<string | null>(null);
   const [forceConfidence, setForceConfidence] = useState<boolean>(true); // Allow forcing 100% for registration reliability
   const [markerResult, setMarkerResult] = useState<MarkerDetection | null>(
     null,
@@ -925,17 +927,41 @@ export default function Calibrator() {
           data.payload,
         );
         try {
-          if (data.payload && data.payload.H && Array.isArray(data.payload.H)) {
-            // Apply the received calibration
-            setCalibration({
-              H: data.payload.H as Homography,
-              createdAt: data.payload.createdAt || Date.now(),
-              errorPx: data.payload.errorPx,
-              imageSize: data.payload.imageSize,
-              locked: true, // Assume locked since peer sent it
-            });
-            console.log("[Calibrator] Applied received calibration");
-          }
+            if (data.payload) {
+              // If payload has a homography, use it. Otherwise if we have 4 calibration points, attempt to compute H.
+              let Hpayload = Array.isArray(data.payload.H) ? (data.payload.H as Homography) : null;
+              if (!Hpayload && Array.isArray(data.payload.calibrationPoints) && data.payload.calibrationPoints.length >= 4) {
+                try {
+                  const canonicalSrc = [
+                    { x: 0, y: -BoardRadii.doubleOuter },
+                    { x: BoardRadii.doubleOuter, y: 0 },
+                    { x: 0, y: BoardRadii.doubleOuter },
+                    { x: -BoardRadii.doubleOuter, y: 0 },
+                  ];
+                  Hpayload = computeHomographyDLT(canonicalSrc, data.payload.calibrationPoints.slice(0, 4));
+                } catch (err) {
+                  console.warn("[Calibrator] Failed to compute homography from received calibration points", err);
+                }
+              }
+              if (Hpayload) {
+                // Apply the received calibration
+                // Use overlay size from current preview (video or overlay/canvas) if available so visual scale stays consistent
+                const overlaySize = overlayRef?.current
+                  ? { w: overlayRef.current.width, h: overlayRef.current.height }
+                  : videoRef?.current
+                  ? { w: videoRef.current.clientWidth, h: videoRef.current.clientHeight }
+                  : data.payload.imageSize ?? null;
+                setCalibration({
+                  H: Hpayload as Homography,
+                  createdAt: data.payload.createdAt || Date.now(),
+                  errorPx: data.payload.errorPx,
+                  imageSize: data.payload.imageSize,
+                  overlaySize,
+                  locked: true, // Assume locked since peer sent it
+                });
+                console.log("[Calibrator] Applied received calibration");
+              }
+            }
         } catch (e) {
           console.error("[Calibrator] Failed to apply received calibration", e);
         }
@@ -1427,11 +1453,17 @@ export default function Calibrator() {
     const Hcalc = computeHomographyDLT(src, dstPoints);
     drawOverlay(dstPoints, Hcalc);
     const err = rmsError(Hcalc, src, dstPoints);
+    const overlaySize = overlayRef?.current
+      ? { w: overlayRef.current.width, h: overlayRef.current.height }
+      : videoRef?.current
+      ? { w: videoRef.current.clientWidth, h: videoRef.current.clientHeight }
+      : { w: canvasRef.current.width, h: canvasRef.current.height };
     setCalibration({
       H: Hcalc as Homography,
       createdAt: Date.now(),
       errorPx: err,
       imageSize: { w: canvasRef.current.width, h: canvasRef.current.height },
+      overlaySize,
       anchors: { src, dst: dstPoints },
     });
     setConfidence(100);
@@ -1507,6 +1539,8 @@ export default function Calibrator() {
   async function autoDetectRings() {
     if (!canvasRef.current)
       return alert("Load a photo or capture a frame first.");
+    setAutoCalibrating(true);
+    setDetectionMessage(null);
     setMarkerResult(null);
     const src = canvasRef.current;
     // Downscale for speed
@@ -1694,25 +1728,46 @@ export default function Calibrator() {
     setDstPoints(pts);
     drawOverlay(pts);
     // Compute homography with the four rim points
-    try {
+  try {
       const src = canonicalRimTargets(); // board space mm
       const Hcalc = computeHomographyDLT(src, pts);
       drawOverlay(pts, Hcalc);
       const err = rmsError(Hcalc, src, pts);
+      const overlaySize = overlayRef?.current
+        ? { w: overlayRef.current.width, h: overlayRef.current.height }
+        : videoRef?.current
+        ? { w: videoRef.current.clientWidth, h: videoRef.current.clientHeight }
+        : { w: canvasRef.current.width, h: canvasRef.current.height };
       setCalibration({
         H: Hcalc as Homography,
         createdAt: Date.now(),
         errorPx: err,
         imageSize: { w: canvasRef.current.width, h: canvasRef.current.height },
+        overlaySize,
         anchors: { src, dst: pts },
       });
-      setPhase("computed");
+  setPhase("computed");
+  setAutoCalibrating(false);
     } catch (e) {
       console.error("[Calibrator] Auto-detect compute failed:", e);
+      setAutoCalibrating(false);
     }
-    // Auto-lock if confidence high and error small
+  // Auto-lock if confidence high and error small
     const autoLock = forceConfidence ? true : adjustedConf >= 0.95; // Use adjusted confidence for near-perfect calibration, or force lock
-    setCalibration({ locked: autoLock });
+    const overlaySizeForLock = overlayRef?.current
+      ? { w: overlayRef.current.width, h: overlayRef.current.height }
+      : videoRef?.current
+      ? { w: videoRef.current.clientWidth, h: videoRef.current.clientHeight }
+      : canvasRef?.current
+      ? { w: canvasRef.current.width, h: canvasRef.current.height }
+      : null;
+    if (autoLock) {
+      setCalibration({ locked: true, overlaySize: overlaySizeForLock });
+    } else {
+      setCalibration({ locked: false });
+    }
+    setDetectionMessage(`Auto-detect completed — confidence: ${Math.round(adjustedConf * 100)}%`);
+    setAutoCalibrating(false);
   }
 
   const workerRef = useRef<Worker | null>(null);
@@ -1770,7 +1825,9 @@ export default function Calibrator() {
           const onMessage = (ev: MessageEvent) => {
             try {
               if (ev.data && ev.data.error) {
-                alert(`Auto-calibration failed: ${ev.data.error}`);
+                const errMsg = ev.data.error || "Auto-calibration failed";
+                alert(`Auto-calibration failed: ${errMsg}`);
+                setDetectionMessage(errMsg);
                 setAutoCalibrating(false);
                 if (timeoutId) clearTimeout(timeoutId);
                 worker.removeEventListener("message", onMessage);
@@ -1782,15 +1839,14 @@ export default function Calibrator() {
                   .detection as BoardDetectionResult;
                 // Respect forceConfidence
                 if (forceConfidence) boardDetection.confidence = 100;
-                // If we have missing homography and forceConfidence, try to compute a homography
+                // If we have missing homography, try to compute a homography from detected points
                 if (
-                  forceConfidence &&
-                  (!boardDetection.homography ||
-                    !Array.isArray(boardDetection.calibrationPoints) ||
-                    boardDetection.calibrationPoints.length < 4)
-                ) {
+                    (!boardDetection.homography ||
+                      !Array.isArray(boardDetection.calibrationPoints) ||
+                      boardDetection.calibrationPoints.length < 4)
+                  ) {
                   const points = boardDetection.calibrationPoints || [];
-                  if (points.length >= 4) {
+                    if (points.length >= 4) {
                     const canonicalSrc = [
                       { x: 0, y: -BoardRadii.doubleOuter },
                       { x: BoardRadii.doubleOuter, y: 0 },
@@ -1810,7 +1866,7 @@ export default function Calibrator() {
                       );
                     } catch (err) {
                       console.warn(
-                        "[Calibrator] Worker forced homography compute failed",
+                          "[Calibrator] Worker homography compute failed",
                         err,
                       );
                     }
@@ -1848,6 +1904,11 @@ export default function Calibrator() {
                 );
                 const shouldLock =
                   (boardDetection.errorPx ?? Number.POSITIVE_INFINITY) <= 2.0;
+                const overlaySize = overlayRef?.current
+                  ? { w: overlayRef.current.width, h: overlayRef.current.height }
+                  : videoRef?.current
+                  ? { w: videoRef.current.clientWidth, h: videoRef.current.clientHeight }
+                  : { w: canvasRef.current?.width ?? 0, h: canvasRef.current?.height ?? 0 };
                 setCalibration({
                   H: boardDetection.homography as Homography,
                   createdAt: Date.now(),
@@ -1856,12 +1917,14 @@ export default function Calibrator() {
                     w: canvasRef.current?.width ?? 0,
                     h: canvasRef.current?.height ?? 0,
                   },
+                  overlaySize,
                   anchors: {
                     src: canonicalRimTargets().slice(0, 4),
                     dst: boardDetection.calibrationPoints,
                   },
                   locked: shouldLock ? true : locked,
                 });
+                setDetectionMessage(boardDetection.message ?? `Auto-calibration success (confidence ${Math.round(boardDetection.confidence)}%)`);
                 setPhase("computed");
                 setConfidence(
                   forceConfidence ? 100 : Math.round(boardDetection.confidence),
@@ -1915,7 +1978,6 @@ export default function Calibrator() {
     boardDetection = refineRingDetection(boardDetection);
     if (forceConfidence) boardDetection.confidence = 100;
     if (
-      forceConfidence &&
       (!boardDetection.homography ||
         !Array.isArray(boardDetection.calibrationPoints) ||
         boardDetection.calibrationPoints.length < 4)
@@ -1946,9 +2008,49 @@ export default function Calibrator() {
       !boardDetection.homography ||
       (!forceConfidence && boardDetection.confidence < 50)
     ) {
+      // Try multi-scale detection attempts to increase robustness on blurry/low-res images
+      const scales = [0.9, 0.8, 1.1, 1.2];
+      for (const scale of scales) {
+        try {
+          const srcCanvas = canvasRef.current!;
+          const tmp = document.createElement('canvas');
+          tmp.width = Math.max(1, Math.round(srcCanvas.width * scale));
+          tmp.height = Math.max(1, Math.round(srcCanvas.height * scale));
+          const tctx = tmp.getContext('2d');
+          if (!tctx) continue;
+          tctx.drawImage(srcCanvas, 0, 0, tmp.width, tmp.height);
+          let bd = detectBoard(tmp as any as HTMLCanvasElement);
+          bd = refineRingDetection(bd);
+          if (bd.success && bd.homography) {
+            // Scale found points back to original coordinate space
+            const invScale = 1 / scale;
+            bd.cx *= invScale;
+            bd.cy *= invScale;
+            bd.bullInner *= invScale;
+            bd.bullOuter *= invScale;
+            bd.trebleInner *= invScale;
+            bd.trebleOuter *= invScale;
+            bd.doubleInner *= invScale;
+            bd.doubleOuter *= invScale;
+            bd.calibrationPoints = bd.calibrationPoints.map((p) => ({ x: p.x * invScale, y: p.y * invScale }));
+            boardDetection = bd;
+            break;
+          }
+        } catch (err) {
+          // continue on error
+        }
+      }
+    }
+    // Re-run the post-success checks after potential multi-scale detection
+    if (
+      !boardDetection.success ||
+      !boardDetection.homography ||
+      (!forceConfidence && boardDetection.confidence < 50)
+    ) {
       alert(
         `❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click the 4 double-ring points: D20, D6, D3, D11)`,
       );
+      setDetectionMessage(boardDetection.message ?? null);
       setAutoCalibrating(false);
       return;
     }
@@ -1967,11 +2069,17 @@ export default function Calibrator() {
     drawOverlay(boardDetection.calibrationPoints, boardDetection.homography);
     const shouldLock =
       (boardDetection.errorPx ?? Number.POSITIVE_INFINITY) <= 2.0;
+    const overlaySize = overlayRef?.current
+      ? { w: overlayRef.current.width, h: overlayRef.current.height }
+      : videoRef?.current
+      ? { w: videoRef.current.clientWidth, h: videoRef.current.clientHeight }
+      : { w: canvasRef.current!.width, h: canvasRef.current!.height };
     setCalibration({
       H: boardDetection.homography as Homography,
       createdAt: Date.now(),
       errorPx: boardDetection.errorPx ?? null,
       imageSize: { w: canvasRef.current!.width, h: canvasRef.current!.height },
+      overlaySize,
       anchors: {
         src: canonicalRimTargets().slice(0, 4),
         dst: boardDetection.calibrationPoints,
@@ -1983,7 +2091,8 @@ export default function Calibrator() {
       forceConfidence ? 100 : Math.round(boardDetection.confidence),
     );
     setCalibration({ errorPx: boardDetection.errorPx ?? null });
-    setAutoCalibrating(false);
+  setDetectionMessage(boardDetection.message ?? null);
+  setAutoCalibrating(false);
   }
 
   function detectMarkers() {
@@ -2011,12 +2120,18 @@ export default function Calibrator() {
       w: canvasRef.current.width,
       h: canvasRef.current.height,
     };
+    const overlaySize = overlayRef?.current
+      ? { w: overlayRef.current.width, h: overlayRef.current.height }
+      : videoRef?.current
+      ? { w: videoRef.current.clientWidth, h: videoRef.current.clientHeight }
+      : { w: canvasRef.current.width, h: canvasRef.current.height };
     const shouldLock = (result.errorPx ?? Number.POSITIVE_INFINITY) <= 1.2;
     setCalibration({
       H: result.homography as Homography,
       createdAt: Date.now(),
       errorPx: result.errorPx ?? null,
       imageSize,
+      overlaySize,
       anchors: { src, dst: result.points },
       locked: shouldLock ? true : locked,
     });
@@ -2708,6 +2823,7 @@ export default function Calibrator() {
                       className="btn bg-emerald-600 hover:bg-emerald-700 font-semibold"
                       disabled={!hasSnapshot || autoCalibrating}
                       onClick={autoCalibrate}
+                      data-testid="autocalibrate-advanced"
                     >
                       {autoCalibrating
                         ? "Auto-calibrating…"
@@ -2715,16 +2831,40 @@ export default function Calibrator() {
                     </button>
                     <button
                       className="btn"
-                      disabled={!hasSnapshot}
+                      disabled={!hasSnapshot || autoCalibrating}
                       onClick={autoDetectRings}
+                      data-testid="autodetect-legacy"
                     >
-                      Legacy: Auto detect rings
+                      {autoCalibrating ? "Auto-calibrating…" : "Legacy: Auto detect rings"}
                     </button>
                     {/* Removed Legacy marker buttons per request */}
                   </div>
                   <div className="mt-2 text-xs opacity-70">
                     Confidence: {forceConfidence ? 100 : confidence}%
                   </div>
+                  <div className="mt-2 text-xs opacity-70">
+                    Scoring image size: {imageSize ? `${imageSize.w} x ${imageSize.h}` : "—"}
+                  </div>
+                  <div className="mt-2 text-xs opacity-70">
+                    Overlay display size: {overlaySize ? `${overlaySize.w} x ${overlaySize.h}` : "—"}
+                  </div>
+                  <div className="mt-2">
+                    <button
+                      className="btn btn-secondary text-xs"
+                      onClick={() => {
+                        if (autoCalibrating) return;
+                        autoCalibrate();
+                      }}
+                      disabled={!hasSnapshot || autoCalibrating}
+                    >
+                      Re-run Auto-Calibrate
+                    </button>
+                  </div>
+                  {detectionMessage && (
+                    <div className="mt-2 text-xs text-yellow-300">
+                      {detectionMessage}
+                    </div>
+                  )}
                   <div className="mt-2 text-xs opacity-70 flex items-center gap-2">
                     <label className="flex items-center gap-2">
                       <input
@@ -2761,10 +2901,38 @@ export default function Calibrator() {
                     </button>
                     <button
                       className={`btn ${locked ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}
-                      onClick={() => setCalibration({ locked: !locked })}
+                      onClick={() => {
+                        const newLocked = !locked;
+                        if (!newLocked) {
+                          setCalibration({ locked: false });
+                        } else {
+                          const overlaySize = overlayRef?.current
+                            ? { w: overlayRef.current.width, h: overlayRef.current.height }
+                            : videoRef?.current
+                            ? { w: videoRef.current.clientWidth, h: videoRef.current.clientHeight }
+                            : canvasRef?.current
+                            ? { w: canvasRef.current.width, h: canvasRef.current.height }
+                            : null;
+                          setCalibration({ locked: true, overlaySize });
+                        }
+                      }}
                     >
                       {locked ? "Unlock" : "Lock in"}
                     </button>
+                    {preserveCalibrationOverlay ? (
+                      <div className="text-xs opacity-70 mt-1">
+                        Overlay preservation <span className="font-semibold">enabled</span> — locked calibration will preserve display size
+                      </div>
+                    ) : (
+                      <div className="text-xs opacity-70 mt-1">
+                        Overlay preservation <span className="font-semibold">disabled</span> — locked calibration uses current canvas size
+                      </div>
+                    )}
+                    {locked && preserveCalibrationOverlay && overlaySize && (
+                      <div className="text-xs opacity-60 mt-1">
+                        Overlay display size preserved: {overlaySize.w} x {overlaySize.h}
+                      </div>
+                    )}
                     <button className="btn" onClick={() => runVerification()}>
                       Verify
                     </button>

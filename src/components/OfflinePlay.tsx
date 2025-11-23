@@ -1663,8 +1663,8 @@ export default function OfflinePlay({ user }: { user: any }) {
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
     sector?: number | null,
-  ) {
-    if (b27Finished) return;
+  ): boolean {
+    if (b27Finished) return false;
     recordDart("Bob's 27");
     const target = b27Stage;
     const hit =
@@ -1685,6 +1685,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       }
       return nd;
     });
+    return true;
   }
   function addB27Numeric() {
     addB27Auto(Math.max(0, playerDartPoints | 0));
@@ -1700,7 +1701,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   }
 
   // Count-Up / High Score / Low Score
-  function addCountUpAuto(value: number) {
+  function addCountUpAuto(value: number): boolean {
     recordDart("Count-Up");
     setCuScore((s) => s + Math.max(0, value | 0));
     setCuDarts((d) => {
@@ -1711,8 +1712,9 @@ export default function OfflinePlay({ user }: { user: any }) {
       }
       return nd;
     });
+    return true;
   }
-  function addHighScoreAuto(value: number) {
+  function addHighScoreAuto(value: number): boolean {
     recordDart("High Score");
     setHsScore((s) => s + Math.max(0, value | 0));
     setHsDarts((d) => {
@@ -1723,8 +1725,9 @@ export default function OfflinePlay({ user }: { user: any }) {
       }
       return nd;
     });
+    return true;
   }
-  function addLowScoreAuto(value: number) {
+  function addLowScoreAuto(value: number): boolean {
     recordDart("Low Score");
     setLsScore((s) => s + Math.max(0, value | 0));
     setLsDarts((d) => {
@@ -1735,6 +1738,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       }
       return nd;
     });
+    return true;
   }
 
   // Checkout routines (double out)
@@ -1775,7 +1779,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   function addCo170Auto(
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
-  ) {
+  ): boolean {
     recordDart("Checkout 170");
     applyCheckout(
       co170Rem,
@@ -1788,11 +1792,12 @@ export default function OfflinePlay({ user }: { user: any }) {
       ring,
     );
     if (co170Darts + 1 >= 3) setCo170Rem(170);
+    return true;
   }
   function addCo121Auto(
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
-  ) {
+  ): boolean {
     recordDart("Checkout 121");
     applyCheckout(
       co121Rem,
@@ -1805,6 +1810,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       ring,
     );
     if (co121Darts + 1 >= 3) setCo121Rem(121);
+    return true;
   }
   function addCoManual(is170: boolean) {
     const v = parseManualDart(manualBox);
@@ -1844,8 +1850,8 @@ export default function OfflinePlay({ user }: { user: any }) {
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
     sector?: number | null,
-  ) {
-    if (trebleFinished) return;
+  ): boolean {
+    if (trebleFinished) return false;
     recordDart("Treble Practice");
     const isHit =
       (ring === "TRIPLE" && sector === trebleTarget) ||
@@ -1864,6 +1870,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       if (trebleMaxDarts > 0 && nd >= trebleMaxDarts) setTrebleFinished(true);
       return nd;
     });
+    return true;
   }
   function resetTreble() {
     setTrebleHits(0);
@@ -1877,13 +1884,14 @@ export default function OfflinePlay({ user }: { user: any }) {
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE",
     sector?: number | null,
-  ) {
+  ): boolean {
     recordDart("Baseball");
     setBaseball((prev) => {
       const cp = { ...prev };
       applyBaseballDart(cp as any, value, ring as any, sector);
       return cp;
     });
+    return true;
   }
   function resetBaseball() {
     setBaseball(createBaseball());
@@ -1895,13 +1903,14 @@ export default function OfflinePlay({ user }: { user: any }) {
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE",
     sector?: number | null,
-  ) {
+  ): boolean {
     recordDart("Golf");
     setGolf((prev) => {
       const cp = { ...prev };
       applyGolfDart(cp as any, value, ring as any, sector);
       return cp;
     });
+    return true;
   }
   function resetGolf() {
     setGolf(createGolf());
@@ -1914,13 +1923,14 @@ export default function OfflinePlay({ user }: { user: any }) {
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
     sector?: number | null,
-  ) {
+  ): boolean {
     recordDart("Tic Tac Toe");
     setTTT((prev) => {
       const cp = { ...prev, board: [...prev.board] as any };
       tryClaimCell(cp as any, cell as any, value, ring as any, sector);
       return cp;
     });
+    return true;
   }
   function resetTtt() {
     setTTT(createTicTacToe());
@@ -1932,13 +1942,14 @@ export default function OfflinePlay({ user }: { user: any }) {
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
     sector?: number | null,
-  ) {
+  ): boolean {
     recordDart("American Cricket");
     setAmCricket((prev) => {
       const cp = { ...prev, marks: { ...prev.marks } };
       applyAmCricketDart(cp as any, value, ring as any, sector, () => false);
       return cp;
     });
+    return true;
   }
   function resetAmCricket() {
     setAmCricket(createAmCricketState());
@@ -1950,7 +1961,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     val: number,
     ring?: "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
     sector?: number | null,
-  ) {
+  ): boolean {
     recordDart("Around the Clock");
     const target = ATC_ORDER[atcIndex];
     let hit = false;
@@ -1967,11 +1978,13 @@ export default function OfflinePlay({ user }: { user: any }) {
       if (val === target || val === target * 2 || val === target * 3)
         hit = true;
     }
-    if (hit) {
+  if (hit) {
       const newHits = atcHits + 1;
       setAtcHits(newHits);
       setAtcIndex((i) => i + 1);
+      return true;
     }
+    return true;
   }
   function addAtcNumeric() {
     addAtcValue(Math.max(0, playerDartPoints | 0));
@@ -1992,7 +2005,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
     sector?: number | null,
-  ) {
+  ): boolean {
     recordDart("Cricket");
     setCricket((prev) => {
       const copy = { ...prev, marks: { ...prev.marks } };
@@ -2004,6 +2017,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       if (nd >= 3) return 0;
       return nd;
     });
+    return true;
   }
   function addCricketNumeric() {
     addCricketAuto(Math.max(0, playerDartPoints | 0));
@@ -2015,7 +2029,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
     sector?: number | null,
-  ) {
+  ): boolean {
     recordDart("Shanghai");
     setShanghai((prev) => {
       const copy = { ...prev, turnHits: { ...prev.turnHits } };
@@ -2034,6 +2048,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       }
       return nd;
     });
+    return true;
   }
   function addShanghaiNumeric() {
     addShanghaiAuto(Math.max(0, playerDartPoints | 0));
@@ -2045,7 +2060,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
     sector?: number | null,
-  ) {
+  ): boolean {
     recordDart("Halve It");
     setHalve((prev) => {
       const copy = { ...prev, targets: [...prev.targets] };
@@ -2064,6 +2079,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       }
       return nd;
     });
+    return true;
   }
   function addHalveNumeric() {
     addHalveAuto(Math.max(0, playerDartPoints | 0));
@@ -2075,7 +2091,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
     sector?: number | null,
-  ) {
+  ): boolean {
     recordDart("High-Low");
     setHighlow((prev) => {
       const copy = { ...prev };
@@ -2094,6 +2110,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       }
       return nd;
     });
+    return true;
   }
   function addHighLowNumeric() {
     addHighLowAuto(Math.max(0, playerDartPoints | 0));
@@ -3172,8 +3189,10 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="x01"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
+                                  cameraAutoCommit="camera"
                                   onAutoDart={(value, ring, info) => {
-                                    applyDartValue(value);
+                                    // Camera owns commits for X01; parent should not applyDartValue to avoid duplicates.
+                                    // We can optionally log or provide telemetry here.
                                   }}
                                 />
                               </div>
@@ -3700,8 +3719,10 @@ export default function OfflinePlay({ user }: { user: any }) {
                                           setDpHits(0);
                                           setDpIndex(0);
                                         }, 250);
+                                      return true;
                                     }
                                   }
+                                  return false;
                                 }}
                                 immediateAutoCommit
                                 onAddVisit={makeOfflineAddVisitAdapter(
@@ -3778,14 +3799,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
-                                  const r = ring === "MISS" ? undefined : ring;
+                                onAutoDart={(value, ring, info) =>
                                   addAtcValue(
                                     value,
-                                    r as any,
+                                    (ring === "MISS" ? undefined : ring) as any,
                                     info?.sector ?? null,
-                                  );
-                                }}
+                                  )}
                                 onAddVisit={makeOfflineAddVisitAdapter(
                                   commitManualVisitTotal,
                                 )}
@@ -3857,14 +3876,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
-                                  const r = ring === "MISS" ? undefined : ring;
+                                onAutoDart={(value, ring, info) =>
                                   addCricketAuto(
                                     value,
-                                    r as any,
+                                    (ring === "MISS" ? undefined : ring) as any,
                                     info?.sector ?? null,
-                                  );
-                                }}
+                                  )}
                                 onAddVisit={makeOfflineAddVisitAdapter(
                                   commitManualVisitTotal,
                                 )}
@@ -3914,14 +3931,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
-                                  const r = ring === "MISS" ? undefined : ring;
+                                onAutoDart={(value, ring, info) =>
                                   addShanghaiAuto(
                                     value,
-                                    r as any,
+                                    (ring === "MISS" ? undefined : ring) as any,
                                     info?.sector ?? null,
-                                  );
-                                }}
+                                  )}
                                 onAddVisit={makeOfflineAddVisitAdapter(
                                   commitManualVisitTotal,
                                 )}
@@ -3971,14 +3986,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
-                                  const r = ring === "MISS" ? undefined : ring;
+                                onAutoDart={(value, ring, info) =>
                                   addHalveAuto(
                                     value,
-                                    r as any,
+                                    (ring === "MISS" ? undefined : ring) as any,
                                     info?.sector ?? null,
-                                  );
-                                }}
+                                  )}
                                 onAddVisit={makeOfflineAddVisitAdapter(
                                   commitManualVisitTotal,
                                 )}
@@ -4028,14 +4041,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
-                                  const r = ring === "MISS" ? undefined : ring;
+                                onAutoDart={(value, ring, info) =>
                                   addHighLowAuto(
                                     value,
-                                    r as any,
+                                    (ring === "MISS" ? undefined : ring) as any,
                                     info?.sector ?? null,
-                                  );
-                                }}
+                                  )}
                                 onAddVisit={makeOfflineAddVisitAdapter(
                                   commitManualVisitTotal,
                                 )}
@@ -4085,14 +4096,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
-                                  const r = ring === "MISS" ? undefined : ring;
+                                onAutoDart={(value, ring, info) =>
                                   addB27Auto(
                                     value,
-                                    r as any,
+                                    (ring === "MISS" ? undefined : ring) as any,
                                     info?.sector ?? null,
-                                  );
-                                }}
+                                  )}
                                 onAddVisit={makeOfflineAddVisitAdapter(
                                   commitManualVisitTotal,
                                 )}
@@ -4424,14 +4433,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
-                                  const r = ring === "MISS" ? undefined : ring;
+                                onAutoDart={(value, ring, info) =>
                                   addTrebleAuto(
                                     value,
-                                    r as any,
+                                    (ring === "MISS" ? undefined : ring) as any,
                                     info?.sector ?? null,
-                                  );
-                                }}
+                                  )}
                               />
                             </div>
                           )}
@@ -4490,14 +4497,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
-                                  const r = ring === "MISS" ? undefined : ring;
+                                onAutoDart={(value, ring, info) =>
                                   addBaseballAuto(
                                     value,
-                                    r as any,
+                                    (ring === "MISS" ? undefined : ring) as any,
                                     info?.sector ?? null,
-                                  );
-                                }}
+                                  )}
                               />
                             </div>
                           )}
@@ -4519,14 +4524,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
-                                  const r = ring === "MISS" ? undefined : ring;
+                                onAutoDart={(value, ring, info) =>
                                   addGolfAuto(
                                     value,
-                                    r as any,
+                                    (ring === "MISS" ? undefined : ring) as any,
                                     info?.sector ?? null,
-                                  );
-                                }}
+                                  )}
                               />
                             </div>
                           )}
@@ -4622,14 +4625,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
-                                  const r = ring === "MISS" ? undefined : ring;
+                                onAutoDart={(value, ring, info) =>
                                   addAmCricketAuto(
                                     value,
-                                    r as any,
+                                    (ring === "MISS" ? undefined : ring) as any,
                                     info?.sector ?? null,
-                                  );
-                                }}
+                                  )}
                               />
                             </div>
                           )}
@@ -4663,6 +4664,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   setScamPlayer(
                                     addScamAuto(scamPlayer, value, r as any),
                                   );
+                                  return true;
                                 }}
                               />
                             </div>
@@ -4736,12 +4738,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 onAutoDart={(value, ring, info) => {
                                   recordDart("Fives");
                                   setFivesPlayer(
-                                    addFivesAuto(
-                                      fivesPlayer,
-                                      value,
-                                      ring as any,
-                                    ),
+                                    addFivesAuto(fivesPlayer, value, ring as any),
                                   );
+                                  return true;
                                 }}
                               />
                             </div>
@@ -4823,12 +4822,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 onAutoDart={(value, ring, info) => {
                                   recordDart("Sevens");
                                   setSevensPlayer(
-                                    addSevensAuto(
-                                      sevensPlayer,
-                                      value,
-                                      ring as any,
-                                    ),
+                                    addSevensAuto(sevensPlayer, value, ring as any),
                                   );
+                                  return true;
                                 }}
                               />
                             </div>
@@ -5027,12 +5023,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                                     showToolbar={cameraToolbarVisible}
                                     immediateAutoCommit
                                     onAutoDart={(value, ring, info) => {
-                                      if (killerWinnerId) return;
+                                      if (killerWinnerId) return false;
                                       const r =
                                         ring === "MISS" ? undefined : ring;
                                       const sector = info?.sector ?? null;
                                       const cur = killerPlayers[killerTurnIdx];
-                                      if (!cur) return;
+                                      if (!cur) return false;
                                       setKillerStates((prev) => {
                                         const copy: Record<
                                           string,
@@ -5093,6 +5089,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                         }
                                         return nd;
                                       });
+                                      return true;
                                     }}
                                   />
                                 </div>
@@ -5491,16 +5488,17 @@ export default function OfflinePlay({ user }: { user: any }) {
                             scoringMode="custom"
                             showToolbar={cameraToolbarVisible}
                             immediateAutoCommit
-                            onAutoDart={(value, ring, info) => {
-                              if (value > 0) {
-                                const r = ring === "MISS" ? undefined : ring;
-                                addCricketAuto(
-                                  value,
-                                  r as any,
-                                  info?.sector ?? null,
-                                );
-                              }
-                            }}
+                              onAutoDart={(value, ring, info) => {
+                                if (value > 0) {
+                                  const r = ring === "MISS" ? undefined : ring;
+                                  addCricketAuto(
+                                    value,
+                                    r as any,
+                                    info?.sector ?? null,
+                                  );
+                                  return true;
+                                }
+                              }}
                           />
                         </div>
                       )}
@@ -5528,6 +5526,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                     r as any,
                                     info?.sector ?? null,
                                   );
+                                  return true;
                                 }
                               }}
                             />
@@ -5553,13 +5552,14 @@ export default function OfflinePlay({ user }: { user: any }) {
                             scoringMode="custom"
                             showToolbar={cameraToolbarVisible}
                             immediateAutoCommit
-                            onAutoDart={(value, ring, info) => {
-                              if (value > 0) {
-                                setScamPlayer(
-                                  addScamAuto(scamPlayer, value, ring as any),
-                                );
-                              }
-                            }}
+                              onAutoDart={(value, ring, info) => {
+                                if (value > 0) {
+                                  setScamPlayer(
+                                    addScamAuto(scamPlayer, value, ring as any),
+                                  );
+                                  return true;
+                                }
+                              }}
                           />
                         </div>
                       )}
@@ -5578,13 +5578,14 @@ export default function OfflinePlay({ user }: { user: any }) {
                             scoringMode="custom"
                             showToolbar={cameraToolbarVisible}
                             immediateAutoCommit
-                            onAutoDart={(value, ring, info) => {
-                              if (value > 0) {
-                                setFivesPlayer(
-                                  addFivesAuto(fivesPlayer, value, ring as any),
-                                );
-                              }
-                            }}
+                              onAutoDart={(value, ring, info) => {
+                                if (value > 0) {
+                                  setFivesPlayer(
+                                    addFivesAuto(fivesPlayer, value, ring as any),
+                                  );
+                                  return true;
+                                }
+                              }}
                           />
                         </div>
                       )}
@@ -5603,17 +5604,18 @@ export default function OfflinePlay({ user }: { user: any }) {
                             scoringMode="custom"
                             showToolbar={cameraToolbarVisible}
                             immediateAutoCommit
-                            onAutoDart={(value, ring, info) => {
-                              if (value > 0) {
-                                setSevensPlayer(
-                                  addSevensAuto(
-                                    sevensPlayer,
-                                    value,
-                                    ring as any,
-                                  ),
-                                );
-                              }
-                            }}
+                              onAutoDart={(value, ring, info) => {
+                                if (value > 0) {
+                                  setSevensPlayer(
+                                    addSevensAuto(
+                                      sevensPlayer,
+                                      value,
+                                      ring as any,
+                                    ),
+                                  );
+                                  return true;
+                                }
+                              }}
                           />
                         </div>
                       )}

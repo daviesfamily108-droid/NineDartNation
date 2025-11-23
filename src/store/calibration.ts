@@ -7,6 +7,9 @@ type CalibrationState = {
   createdAt: number | null;
   errorPx: number | null;
   imageSize: { w: number; h: number } | null;
+  // The visual overlay size (in pixels) used when calibration was locked.
+  // If present, we preserve this display size for drawing overlays so it "sticks".
+  overlaySize: { w: number; h: number } | null;
   anchors: { src: Point[]; dst: Point[] } | null;
   locked: boolean;
   _hydrated: boolean; // Track hydration state
@@ -25,6 +28,7 @@ export const useCalibration = create<CalibrationState>()(
       createdAt: null,
       errorPx: null,
       imageSize: null,
+        overlaySize: null,
       anchors: null,
       locked: false,
       _hydrated: false,
@@ -35,6 +39,7 @@ export const useCalibration = create<CalibrationState>()(
           createdAt: null,
           errorPx: null,
           imageSize: null,
+          overlaySize: null,
           anchors: null,
           locked: false,
         }),
@@ -57,6 +62,7 @@ export const useCalibration = create<CalibrationState>()(
                   createdAt: j.createdAt ?? null,
                   errorPx: j.errorPx ?? null,
                   imageSize: j.imageSize ?? null,
+                  overlaySize: j.overlaySize ?? null,
                   anchors: j.anchors ?? null,
                   locked: !!j.locked,
                 });

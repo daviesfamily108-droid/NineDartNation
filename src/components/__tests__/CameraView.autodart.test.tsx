@@ -72,7 +72,8 @@ vi.mock("../../store/userSettings", () => {
   return { useUserSettings };
 });
 
-let useCalibration: any;
+import { useCalibration } from "../../store/calibration";
+let useCalibrationRef: any;
 let useUserSettings: any;
 // Note: We'll use real stores with persistence stubbed out above
 
@@ -112,5 +113,21 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
     const score = scoreFromImagePoint(H as any, pImg as any);
     expect(score.base).toBe(50);
     expect(score.ring).toBe("INNER_BULL");
+  });
+
+  it("calls parent onAutoDart once when provided and avoids double-commit", async () => {
+    const onAutoDart = vi.fn();
+    // Ensure calibration matrix and image size present for autoscore mapping
+    useCalibration.setState?.({ H: [1, 0, 160, 0, 1, 120, 0, 0, 1], imageSize: { w: 320, h: 240 } });
+    // Oxygen: Render CameraView with onAutoDart; the detector mock will return a detection
+    // The CameraView uses the store mocks above, so render is safe
+    // We'll render the component and wait for the detection to be processed
+    const { default: CameraView } = await vi.importActual("../CameraView");
+    const { render } = await vi.importActual("@testing-library/react");
+    const out = render(<CameraView scoringMode="x01" onAutoDart={onAutoDart} />);
+    // Give a little time for the render loop to tick (autoscore uses RAF)
+    await new Promise((r) => setTimeout(r, 250));
+    // We expect the parent's callback to be called at least once but not duplicated
+    expect(onAutoDart).toHaveBeenCalledTimes(1);
   });
 });

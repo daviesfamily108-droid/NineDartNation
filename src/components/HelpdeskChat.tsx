@@ -26,6 +26,7 @@ export default function HelpdeskChat({
   const [waitTime, setWaitTime] = useState("");
   const msgsRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
+  const timersRef = useRef<number[]>([]);
 
   useEffect(() => {
     if (!ws) return;
@@ -85,7 +86,7 @@ export default function HelpdeskChat({
 
     // If admin not connected, try AI response
     if (!adminConnected) {
-      setTimeout(() => {
+      const t = window.setTimeout(() => {
         const aiResponse = analyzeUserQuestion(userMessage);
         if (aiResponse) {
           const aiMsg = {
@@ -99,6 +100,7 @@ export default function HelpdeskChat({
           setMessages((m) => [...m, aiMsg]);
         }
       }, 500);
+      timersRef.current.push(t);
     }
   };
 
@@ -112,7 +114,7 @@ export default function HelpdeskChat({
       };
       setMessages((m) => [...m, confirmMsg]);
 
-      setTimeout(() => {
+      const t = window.setTimeout(() => {
         const aiMsg = {
           fromName: "AI Assistant",
           message:
@@ -122,6 +124,7 @@ export default function HelpdeskChat({
         };
         setMessages((m) => [...m, aiMsg]);
       }, 300);
+      timersRef.current.push(t);
       return;
     }
 
@@ -141,7 +144,7 @@ export default function HelpdeskChat({
 
     setWaitTime(getEstimatedWaitTime());
 
-    setTimeout(() => {
+    const t = window.setTimeout(() => {
       const waitMsg = {
         fromName: "System",
         message: `⏳ Connecting you with an admin...\n\n📊 Estimated wait time: ${waitTime}\n\nAn admin will be with you shortly. Please stay on this chat.`,
@@ -150,6 +153,7 @@ export default function HelpdeskChat({
       };
       setMessages((m) => [...m, waitMsg]);
     }, 500);
+    timersRef.current.push(t);
   };
 
   // auto-scroll to bottom when messages update
@@ -186,6 +190,8 @@ export default function HelpdeskChat({
   useEffect(() => {
     return () => {
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      for (const t of timersRef.current) clearTimeout(t);
+      timersRef.current = [];
     };
   }, []);
 

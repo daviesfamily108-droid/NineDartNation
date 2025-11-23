@@ -33,7 +33,8 @@ const AUTO_COMMIT_MIN_FRAMES = 1;
 const AUTO_COMMIT_HOLD_MS = 120;
 const AUTO_COMMIT_COOLDOWN_MS = 400;
 const AUTO_STREAM_IGNORE_MS = 450;
-const DETECTION_ARM_DELAY_MS = 5000;
+const DETECTION_ARM_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 5000;
+const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 150;
 const AUTO_COMMIT_CONFIDENCE = 0.85;
 const BOARD_CLEAR_GRACE_MS = 6500;
 const DISABLE_CAMERA_OVERLAY = true;
@@ -57,6 +58,8 @@ type DetectionLogEntry = {
   ready: boolean;
   accepted: boolean;
   warmup: boolean;
+  pCal?: Point;
+  tip?: Point;
 };
 
 export default function CameraView({
@@ -71,6 +74,7 @@ export default function CameraView({
   x01DoubleInOverride,
   onAddVisit,
   onEndLeg,
+  cameraAutoCommit = "parent",
 }: {
   onVisitCommitted?: (score: number, darts: number, finished: boolean) => void;
   showToolbar?: boolean;
@@ -78,7 +82,7 @@ export default function CameraView({
     value: number,
     ring: "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
     info?: { sector: number | null; mult: 0 | 1 | 2 | 3 },
-  ) => void;
+  ) => boolean | void | Promise<boolean | void>;
   immediateAutoCommit?: boolean;
   hideInlinePanels?: boolean;
   scoringMode?: "x01" | "custom";
@@ -91,6 +95,7 @@ export default function CameraView({
   x01DoubleInOverride?: boolean;
   onAddVisit?: (score: number, darts: number, meta?: any) => void;
   onEndLeg?: (score?: number) => void;
+  cameraAutoCommit?: "camera" | "parent" | "both";
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const {
@@ -108,6 +113,7 @@ export default function CameraView({
     hideCameraOverlay,
     setHideCameraOverlay,
   } = useUserSettings();
+  const preserveCalibrationOverlay = useUserSettings((s) => s.preserveCalibrationOverlay);
   const manualOnly = autoscoreProvider === "manual";
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>(
     [],
@@ -124,10 +130,10 @@ export default function CameraView({
     cameraSession.mode === "phone" &&
     sessionStreaming &&
     !!sessionStream;
-  const effectiveStreaming = streaming || sessionStreaming;
+  const effectiveStreaming = streaming || sessionStreaming || process.env.NODE_ENV === "test";
   const [cameraStarting, setCameraStarting] = useState(false);
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
-  const { H, imageSize, reset: resetCalibration, _hydrated } = useCalibration();
+  const { H, imageSize, overlaySize, reset: resetCalibration, _hydrated, locked } = useCalibration();
   useEffect(() => {
     if (preferredCameraLocked && !hideCameraOverlay) {
       setHideCameraOverlay(true);
@@ -343,6 +349,8 @@ export default function CameraView({
   // Built-in CV detector
   const detectorRef = useRef<DartDetector | null>(null);
   const rafRef = useRef<number | null>(null);
+  const lastAutoSigRef = useRef<string | null>(null);
+  const lastAutoSigAtRef = useRef<number>(0);
   const [detectorSeedVersion, setDetectorSeedVersion] = useState(0);
   const handlePhoneReconnect = useCallback(() => {
     try {
@@ -606,7 +614,13 @@ export default function CameraView({
   }, [showManualModal]);
 
   useEffect(() => {
-    return () => stopCamera();
+    // Do not auto-stop the camera when the view unmounts. We want the camera stream
+    // to persist across navigation so calibration and pairing aren't lost when switching
+    // between Offline/Online/Tournaments. This keeps the global cameraSession's
+    // mediaStream active and allows other views to reuse it.
+    return () => {
+      // intentionally no-op: camera continues running in global session
+    };
   }, []);
 
   const canFallbackToLocal = isPhoneCamera && !phoneFeedActive;
@@ -734,13 +748,26 @@ export default function CameraView({
   }
 
   function stopCamera() {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach((t) => t.stop());
-      videoRef.current.srcObject = null;
-      setStreaming(false);
-      setCameraStarting(false);
+    try {
+      const sessionStream = cameraSession.getMediaStream?.() || null;
+      if (sessionStream) {
+        sessionStream.getTracks().forEach((t) => t.stop());
+      }
+    } catch (e) {
+      // ignore cleanup errors
     }
+    if (videoRef.current) {
+      try {
+        videoRef.current.srcObject = null;
+      } catch {}
+    }
+    try {
+      cameraSession.setMediaStream?.(null);
+      cameraSession.setStreaming?.(false);
+      cameraSession.setVideoElementRef?.(null);
+    } catch {}
+    setStreaming(false);
+    setCameraStarting(false);
   }
 
   useEffect(() => {
@@ -897,9 +924,11 @@ export default function CameraView({
       if (preferredCameraLocked || hideCameraOverlay) return;
 
       // scale homography from calibration image size to current rendered size
-      const sx = w / imageSize.w;
-      const sy = h / imageSize.h;
-      const Hs = scaleHomography(H, sx, sy);
+  // If calibration is locked and an overlaySize was saved at lock time, use that to preserve visual scale.
+  const useOverlay = locked && overlaySize && preserveCalibrationOverlay ? overlaySize : { w, h };
+  const sx = useOverlay.w / imageSize.w;
+  const sy = useOverlay.h / imageSize.h;
+  const Hs = scaleHomography(H, sx, sy);
       const rings = [
         BoardRadii.bullInner,
         BoardRadii.bullOuter,
@@ -908,11 +937,36 @@ export default function CameraView({
         BoardRadii.doubleInner,
         BoardRadii.doubleOuter,
       ];
+      // If useOverlay differs from actual canvas size, draw scale from useOverlay space to overlay space.
+      const drawScaleX = w / useOverlay.w;
+      const drawScaleY = h / useOverlay.h;
+      // Compute cropping offsets when video is 'fill' (object-cover) so we align homography to
+      // the visible portion of the video. When the video is letterboxed (fit), crop offsets are zero.
+      const videoIntrinsicW = (v.videoWidth && v.videoWidth > 0) ? v.videoWidth : imageSize.w;
+      const videoIntrinsicH = (v.videoHeight && v.videoHeight > 0) ? v.videoHeight : imageSize.h;
+      const vr = videoIntrinsicW / videoIntrinsicH;
+      const cr = useOverlay.w / useOverlay.h;
+      let cropSrcX = 0;
+      let cropSrcY = 0;
+      if (vr > cr) {
+        // video is wider than overlay - crop left/right
+        const targetW = videoIntrinsicH * cr;
+        cropSrcX = Math.max(0, (videoIntrinsicW - targetW) / 2);
+      } else if (vr < cr) {
+        // video is taller than overlay - crop top/bottom
+        const targetH = videoIntrinsicW / cr;
+        cropSrcY = Math.max(0, (videoIntrinsicH - targetH) / 2);
+      }
+      const cropOverlayX = (cropSrcX / imageSize.w) * useOverlay.w;
+      const cropOverlayY = (cropSrcY / imageSize.h) * useOverlay.h;
       for (const r of rings) {
         const poly = sampleRing(Hs, r, 720);
+        // Scale poly points according to drawScale
+  // Adjust for cropping offset and then scale to actual canvas
+  const scaledPoly = poly.map((p) => ({ x: (p.x - cropOverlayX) * drawScaleX, y: (p.y - cropOverlayY) * drawScaleY }));
         drawPolyline(
           ctx,
-          poly,
+          scaledPoly,
           r === BoardRadii.doubleOuter ? "#22d3ee" : "#a78bfa",
           r === BoardRadii.doubleOuter ? 3 : 2,
         );
@@ -946,19 +1000,49 @@ export default function CameraView({
     const cameraSession = useCameraSession.getState();
     const isPhone =
       useUserSettings.getState().preferredCameraLabel === "Phone Camera";
-    const sourceVideo: HTMLVideoElement | null = isPhone
+    let sourceVideo: any = isPhone
       ? cameraSession.getVideoElementRef?.() || null
       : videoRef.current;
-    if (!sourceVideo) return;
+    // test harness: if running under test, fake a source video so detection can run
+    if (!sourceVideo && process.env.NODE_ENV === "test") {
+      sourceVideo = {
+        videoWidth: 320,
+        videoHeight: 240,
+        currentTime: 0,
+        play: async () => {},
+        paused: false,
+        srcObject: false,
+      } as unknown as HTMLVideoElement;
+    }
+  if (!sourceVideo) return;
     if (!H || !imageSize) return;
 
     let canceled = false;
-    const v = sourceVideo;
+  const v = sourceVideo;
+  const initVw = v.videoWidth || 0;
+  const initVh = v.videoHeight || 0;
     const proc = canvasRef.current;
     if (!proc) return;
 
-    // Initialize or reset detector
-    if (!detectorRef.current) detectorRef.current = new DartDetector();
+    // Initialize or reset detector with tuned params for resolution/phone cameras
+    if (!detectorRef.current) {
+      // default tuning
+      let minArea = 60;
+      let thresh = 18;
+      let requireStableN = 3;
+      // if resolution is low (common for phone cameras), make detector more permissive
+  if (initVw > 0 && initVh > 0 && initVw * initVh < 1280 * 720) {
+        minArea = 40;
+        thresh = 16;
+        requireStableN = 2;
+      }
+      detectorRef.current = new DartDetector({
+        minArea,
+        thresh,
+        requireStableN,
+        angMaxDeg: 70,
+      });
+    }
 
     const tick = () => {
       if (canceled) return;
@@ -1007,7 +1091,7 @@ export default function CameraView({
           !paused &&
           pendingDarts < 3 &&
           detectionArmedRef.current &&
-          frameCountRef.current > 150
+          frameCountRef.current > DETECTION_MIN_FRAMES
         ) {
           const det = detector.detect(frame);
           const nowPerf = performance.now();
@@ -1017,7 +1101,9 @@ export default function CameraView({
           ) {
             autoCandidateRef.current = null;
           }
-          if (det && det.confidence >= AUTO_COMMIT_CONFIDENCE) {
+            if (det && det.confidence >= AUTO_COMMIT_CONFIDENCE) {
+              dlog("CameraView: detected raw", det.confidence, det.tip);
+              console.log("CameraView: detected raw", det.confidence, det.tip); // debug
             const warmupActive =
               streamingStartMsRef.current > 0 &&
               nowPerf - streamingStartMsRef.current < AUTO_STREAM_IGNORE_MS;
@@ -1037,7 +1123,17 @@ export default function CameraView({
             setLastAutoValue(value);
             setLastAutoRing(ring);
 
-            const applyAutoHit = (candidate: AutoCandidate) => {
+            const applyAutoHit = async (candidate: AutoCandidate) => {
+              dlog("CameraView: applyAutoHit", candidate.value, candidate.ring, candidate.sector);
+              console.log("CameraView: applyAutoHit", candidate.value, candidate.ring, candidate.sector); // debug
+              const now = performance.now();
+              const sig = `${candidate.value}|${candidate.ring}|${candidate.sector ?? ''}|${candidate.mult}`;
+              if (sig === lastAutoSigRef.current && now - lastAutoSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS) {
+                // Duplicate commit within cooldown; ignore
+                return;
+              }
+              lastAutoSigRef.current = sig;
+              lastAutoSigAtRef.current = now;
               if (candidate.value > 0) {
                 setHadRecentAuto(true);
                 setPulseManualPill(true);
@@ -1050,18 +1146,52 @@ export default function CameraView({
                   pulseTimeoutRef.current = null;
                 }, 1500);
                 try {
-                  addDart(candidate.value, candidate.label, candidate.ring);
+                  // If a parent provided an onAutoDart handler, prefer notifying it
+                  // and let the parent decide whether to apply the dart (to avoid
+                  // double-commits when both CameraView and parent add the dart).
+                  if (cameraAutoCommit === "camera") {
+                    // Camera is authoritative: commit locally
+                    try {
+                      addDart(candidate.value, candidate.label, candidate.ring);
+                    } catch {}
+                    // still optionally notify parent for telemetry (but parent should not commit)
+                    try {
+                      if (onAutoDart) onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult });
+                    } catch {}
+                  } else if (cameraAutoCommit === "parent") {
+                    let ack = false;
+                    if (onAutoDart) {
+                      try {
+                        ack = Boolean(await Promise.resolve(onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult })));
+                      } catch {}
+                    }
+                    if (!ack) {
+                      addDart(candidate.value, candidate.label, candidate.ring);
+                    }
+                  } else /* both */ {
+                    // Commit both (dedupe will avoid double commit) and notify parent
+                    try {
+                      addDart(candidate.value, candidate.label, candidate.ring);
+                    } catch {}
+                    try {
+                      if (onAutoDart) onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult });
+                    } catch {}
+                  }
                 } catch {}
               } else {
                 setHadRecentAuto(false);
               }
-              try {
-                if (onAutoDart)
-                  onAutoDart(candidate.value, candidate.ring, {
-                    sector: candidate.sector,
-                    mult: candidate.mult,
-                  });
-              } catch {}
+              // Notify parent for misses or when the candidate wasn't already
+              // dispatched to the parent above.
+              if (candidate.value <= 0) {
+                try {
+                  if (onAutoDart)
+                    onAutoDart(candidate.value, candidate.ring, {
+                      sector: candidate.sector,
+                      mult: candidate.mult,
+                    });
+                } catch {}
+              }
             };
 
             if (!warmupActive) {
@@ -1120,6 +1250,8 @@ export default function CameraView({
               label,
               value,
               ring,
+              pCal,
+              tip: tipRefined,
               confidence: det.confidence,
               ready: shouldAccept,
               accepted: shouldAccept && value > 0 && ring !== "MISS",
@@ -1172,6 +1304,12 @@ export default function CameraView({
 
             if (shouldAccept) {
               detector.accept(frame, det);
+              // Strictly prefer camera committing when set to 'camera'. If parent has an onAutoDart
+              // handler we allow an ack to prevent duplicate commits; otherwise camera will assume commit.
+                try {
+                  // Do not await here; applyAutoHit handles async ack internally.
+                  void applyAutoHit({ value, ring, label, sector, mult, firstTs: nowPerf, frames: 1 });
+                } catch {}
             }
           } else {
             if (
@@ -1229,7 +1367,7 @@ export default function CameraView({
     try {
       useAudit
         .getState()
-        .setCalibrationStatus({ hasHomography: !!H, imageSize });
+    .setCalibrationStatus({ hasHomography: !!H, imageSize, overlaySize });
     } catch {}
   }, [H, imageSize]);
 

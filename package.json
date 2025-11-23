@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "start": "node server.cjs",
     "e2e:pair": "node scripts/e2e_pairing.cjs",
+  "e2e:calibrate": "node scripts/e2e_calibration.cjs",
     "test:redis": "node scripts/test_redis.cjs",
     "test:unit": "vitest run",
   "lint": "eslint src --ext .ts,.tsx --report-unused-disable-directives",

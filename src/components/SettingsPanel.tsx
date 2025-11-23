@@ -63,6 +63,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
     setAutoscoreWsUrl,
     setAutoCommitMode,
     setCalibrationGuide,
+      preserveCalibrationOverlay,
+      setPreserveCalibrationOverlay,
     setPreferredCamera,
     setCameraEnabled,
     setOfflineLayout,
@@ -894,6 +896,18 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       >
                         Calibration Guide
                       </button>
+                      <div className="flex items-center gap-3 mt-3">
+                        <input
+                          type="checkbox"
+                          id="preserveOverlaySize"
+                          checked={preserveCalibrationOverlay}
+                          onChange={(e) => setPreserveCalibrationOverlay(e.target.checked)}
+                          className="w-4 h-4"
+                        />
+                        <label htmlFor="preserveOverlaySize" className="text-sm">
+                          Preserve overlay display size when locking calibration
+                        </label>
+                      </div>
                       <div>
                         <label
                           htmlFor="autoscoreProvider"

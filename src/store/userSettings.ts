@@ -29,6 +29,8 @@ type SettingsState = {
   autoscoreWsUrl?: string;
   autoCommitMode?: "wait-for-clear" | "immediate";
   calibrationGuide: boolean;
+  // Preserve calibration overlay display size when calibration is locked
+  preserveCalibrationOverlay: boolean;
   // Devices & preferences
   preferredCameraId?: string;
   preferredCameraLabel?: string;
@@ -63,6 +65,7 @@ type SettingsState = {
   setCameraAspect: (a: "wide" | "square") => void;
   setCameraFitMode: (m: "fit" | "fill") => void;
   setCalibrationGuide: (v: boolean) => void;
+  setPreserveCalibrationOverlay: (v: boolean) => void;
   setPreferredCamera: (
     id: string | undefined,
     label?: string,
@@ -110,6 +113,7 @@ function load(): Pick<
   | "cameraAspect"
   | "cameraFitMode"
   | "calibrationGuide"
+  | "preserveCalibrationOverlay"
   | "preferredCameraId"
   | "preferredCameraLabel"
   | "preferredCameraLocked"
@@ -155,6 +159,7 @@ function load(): Pick<
         calibrationGuide: true,
         preferredCameraId: undefined,
         preferredCameraLabel: undefined,
+          preserveCalibrationOverlay: true,
         cameraEnabled: true,
         hideCameraOverlay: false,
         offlineLayout: "modern",
@@ -225,6 +230,10 @@ function load(): Pick<
         typeof j.preferredCameraId === "string"
           ? j.preferredCameraId
           : undefined,
+      preserveCalibrationOverlay:
+        typeof j.preserveCalibrationOverlay === "boolean"
+          ? j.preserveCalibrationOverlay
+          : true,
       preferredCameraLabel:
         typeof j.preferredCameraLabel === "string"
           ? j.preferredCameraLabel
@@ -276,6 +285,7 @@ function load(): Pick<
       preferredCameraId: undefined,
       preferredCameraLabel: undefined,
       preferredCameraLocked: false,
+        preserveCalibrationOverlay: true,
       cameraEnabled: true,
       hideCameraOverlay: false,
       offlineLayout: "modern",
@@ -391,6 +401,10 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
   setCalibrationGuide: (v) => {
     save({ calibrationGuide: v });
     set({ calibrationGuide: v });
+  },
+  setPreserveCalibrationOverlay: (v) => {
+    save({ preserveCalibrationOverlay: v } as any);
+    set({ preserveCalibrationOverlay: v });
   },
   setPreferredCamera: (id, label, force = false) => {
     try {

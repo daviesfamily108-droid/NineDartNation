@@ -262,8 +262,8 @@ export default function MatchStartShowcase({
         for (const player of players) {
           if (user?.username && player.name === user.username) {
             // Local user: use store
-            const { H, imageSize, locked } = useCalibration.getState();
-            if (H && locked) calibs[player.name] = { H, imageSize, locked };
+            const { H, imageSize, overlaySize, locked } = useCalibration.getState();
+            if (H && locked) calibs[player.name] = { H, imageSize, overlaySize, locked };
           } else {
             // Remote user: fetch from server
             try {
