@@ -389,6 +389,59 @@ app.get('/api/subscription', async (req, res) => {
 
 // Notifications endpoints (demo): persist in-memory. If Supabase is configured,
 // attempt to persist there as well to survive restarts.
+// Helper: create (and persist) a notification for an email
+async function createNotification(email, message, type = 'generic', meta = null) {
+  if (!email || !message) return null;
+  const e = String(email).toLowerCase();
+  const id = require('nanoid').nanoid();
+  const n = { id, email: e, message: String(message), type: String(type || 'generic'), read: false, createdAt: Date.now(), meta: meta || null };
+  const current = notifications.get(e) || [];
+  // Avoid duplicate insert if same type/message exists and still unread
+  if (current.some(x => x.type === n.type && x.message === n.message && !x.read)) {
+    return { ok: true, id: 'duplicate' };
+  }
+  current.unshift(n);
+  notifications.set(e, current.slice(0, 50));
+  if (supabase) {
+    try {
+      await supabase.from('notifications').insert([{ id: n.id, email: n.email, message: n.message, type: n.type, read: n.read, created_at: new Date(n.createdAt).toISOString(), meta: n.meta }]);
+    } catch (err) {
+      console.error('[DB] Failed to insert notification:', err);
+    }
+  }
+  return { ok: true, id };
+}
+
+// Admin: bulk create notifications (owner-only)
+app.post('/api/admin/notifications/bulk', async (req, res) => {
+  const { requesterEmail, emails, message, type, all, meta } = req.body || {};
+  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+  if (!message) return res.status(400).json({ ok: false, error: 'MESSAGE_REQUIRED' });
+  const targets = [];
+  if (all) {
+    // If Supabase available, load all users, otherwise use in-memory users map
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('users').select('email');
+        if (!error && Array.isArray(data)) {
+          for (const u of data) targets.push(String(u.email || '').toLowerCase());
+        }
+      } catch (err) { console.error('[DB] Failed to fetch users for bulk notifications:', err && err.message); }
+    } else {
+      for (const [k] of users.entries()) targets.push(k);
+    }
+  } else if (Array.isArray(emails)) {
+    for (const e of emails) targets.push(String(e || '').toLowerCase());
+  }
+  if (targets.length === 0) return res.status(400).json({ ok: false, error: 'NO_TARGETS' });
+  // Create notices sequentially to avoid overloading DB
+  const results = [];
+  for (const t of targets) {
+    try { results.push(await createNotification(t, message, type || 'generic', meta)); } catch (err) { results.push({ ok: false, error: err && err.message }); }
+  }
+  return res.json({ ok: true, created: results.length, results });
+});
+
 app.get('/api/notifications', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase();
   if (!email) return res.json([]);
@@ -408,26 +461,13 @@ app.get('/api/notifications', async (req, res) => {
 app.post('/api/notifications', async (req, res) => {
   const { email, message, type, meta } = req.body || {};
   if (!email || !message) return res.status(400).json({ ok: false, error: 'Missing email or message' });
-  const e = String(email).toLowerCase();
-  const id = require('nanoid').nanoid();
-  const n = { id, email: e, message: String(message), type: String(type || 'generic'), read: false, createdAt: Date.now(), meta: meta || null };
-  const current = notifications.get(e) || [];
-  // Basic duplicate prevention: avoid inserting if same type/message exists and is unread
-  if (current.some(x => x.type === n.type && x.message === n.message && !x.read)) {
-    return res.json({ ok: true, id: 'duplicate' });
+  try {
+    const out = await createNotification(email, message, type, meta);
+    return res.json(out);
+  } catch (err) {
+    console.error('[NOTIF] create failed:', err && err.message);
+    return res.status(500).json({ ok: false, error: 'FAILED' });
   }
-  current.unshift(n);
-  // limit history to 50
-  notifications.set(e, current.slice(0, 50));
-  // persist to DB if possible
-  if (supabase) {
-    try {
-      await supabase.from('notifications').insert([{ id: n.id, email: n.email, message: n.message, type: n.type, read: n.read, created_at: new Date(n.createdAt).toISOString(), meta: n.meta }]);
-    } catch (err) {
-      console.error('[DB] Failed to insert notification:', err);
-    }
-  }
-  return res.json({ ok: true, id });
 });
 
 app.delete('/api/notifications/:id', async (req, res) => {
@@ -764,6 +804,81 @@ app.post('/api/admin/subscription', (req, res) => {
   subscription.fullAccess = !!fullAccess
   res.json({ ok: true, subscription })
 })
+
+// --- Subscription expiry scanner & notification cron --------------------------------
+async function scanSubscriptionsAndNotify() {
+  const now = Date.now();
+  const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+  const candidates = [];
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('users').select('email, subscription');
+      if (error) {
+        console.error('[SCAN] Failed to load users from DB for subscription scan:', error?.message || error);
+      } else if (Array.isArray(data)) {
+        for (const u of data) {
+          const email = String(u.email || '').toLowerCase();
+          const sub = u.subscription || null;
+          if (!sub) continue;
+          let exp = null;
+          if (sub.expiresAt) exp = typeof sub.expiresAt === 'string' ? Date.parse(sub.expiresAt) : Number(sub.expiresAt);
+          // expiring soon
+          if (exp && exp > now && exp - now <= THREE_DAYS_MS) candidates.push({ email, type: 'sub_expiring', sub, exp });
+          // expired - when expiresAt <= now and subscription isn't granting fullAccess
+          if (exp && exp <= now && !sub.fullAccess) candidates.push({ email, type: 'sub_expired', sub, exp });
+        }
+      }
+    } catch (err) { console.error('[SCAN] DB scan failed:', err && err.message); }
+  } else {
+    // Fallback: scan in-memory users map
+    for (const [email, u] of users.entries()) {
+      const sub = u.subscription || null;
+      if (!sub) continue;
+      let exp = null;
+      if (sub.expiresAt) exp = typeof sub.expiresAt === 'string' ? Date.parse(sub.expiresAt) : Number(sub.expiresAt);
+      if (exp && exp > now && exp - now <= THREE_DAYS_MS) candidates.push({ email, type: 'sub_expiring', sub, exp });
+      if (exp && exp <= now && !sub.fullAccess) candidates.push({ email, type: 'sub_expired', sub, exp });
+    }
+    // Also include premiumWinners map entries (demo mode)
+    for (const [email, exp] of premiumWinners.entries()) {
+      if (!email) continue;
+      if (exp && exp > now && exp - now <= THREE_DAYS_MS) candidates.push({ email: String(email || '').toLowerCase(), type: 'sub_expiring', sub: { fullAccess: true, source: 'tournament', expiresAt: exp }, exp });
+      if (exp && exp <= now) candidates.push({ email: String(email || '').toLowerCase(), type: 'sub_expired', sub: { fullAccess: false, source: 'tournament', expiresAt: exp }, exp });
+    }
+  }
+  for (const c of candidates) {
+    try {
+      // Compute a human-friendly message
+      if (c.type === 'sub_expiring') {
+        const days = Math.ceil((c.exp - now) / (24 * 60 * 60 * 1000));
+        const msg = `Your premium subscription expires in ${days} day(s)`;
+        await createNotification(c.email, msg, 'sub_expiring', { days, expiresAt: c.exp });
+      } else if (c.type === 'sub_expired') {
+        const msg = 'Your premium subscription has ended';
+        await createNotification(c.email, msg, 'sub_expired', { expiresAt: c.exp });
+      }
+    } catch (err) {
+      console.error('[SCAN] Failed to create notification for', c && c.email, err && err.message);
+    }
+  }
+}
+
+// Run on startup and every 6 hours
+try { scanSubscriptionsAndNotify().catch(e => console.error('[SCAN] startup scan failed', e && e.message)); } catch {}
+setInterval(() => { scanSubscriptionsAndNotify().catch(e => console.error('[SCAN] scheduled run failed', e && e.message)); }, 1000 * 60 * 60 * 6);
+
+// Admin endpoint to trigger subscription scan manually
+app.post('/api/admin/notifications/scan-subscriptions', async (req, res) => {
+  const { requesterEmail } = req.body || {};
+  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+  try {
+    await scanSubscriptionsAndNotify();
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[ADMIN] manual scan failed:', err && err.message);
+    return res.status(500).json({ ok: false, error: 'FAILED' });
+  }
+});
 
 // Admin: list/grant/revoke per-email premium overrides (demo)
 app.get('/api/admin/premium-winners', (req, res) => {
