@@ -41,7 +41,26 @@ export function getTabs(user: any) {
     { key: "settings", label: "Settings", icon: Settings },
   ];
   // Admin tab visibility handled in Sidebar via hook (client-side fetch)
-  if (!user?.fullAccess) {
+  // A premium user should not see the 'PREMIUM' tab. Check subscription details
+  // when present. If the user's subscription is active (includes tournament
+  // winners with a future expiresAt or a stripe subscription with active status),
+  // the tab is hidden. Otherwise, show it persistently until purchase.
+  function isSubscriptionActive(u: any) {
+    if (!u) return false;
+    const sub = u.subscription;
+    if (!sub) return !!u.fullAccess; // fallback
+    if (sub.fullAccess) {
+      if (sub.expiresAt) {
+        const exp = typeof sub.expiresAt === 'string' ? Date.parse(sub.expiresAt) : Number(sub.expiresAt);
+        if (!isNaN(exp)) return exp > Date.now();
+      }
+      if (sub.status) return sub.status === 'active';
+      return true; // generic fullAccess true
+    }
+    return false;
+  }
+
+  if (!isSubscriptionActive(user)) {
     baseTabs.push({
       key: "fullaccess",
       label: "PREMIUM £€$",

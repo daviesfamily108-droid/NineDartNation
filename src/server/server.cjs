@@ -322,6 +322,9 @@ app.get('/api/auth/me', (req, res) => {
 let subscription = { fullAccess: false };
 // Winner-based per-email premium grants (demo) email -> expiry (ms since epoch)
 const premiumWinners = new Map();
+// Server notifications: email -> Array<notification>
+// notification: { id, email, message, type, read, createdAt, meta }
+const notifications = new Map();
 // In-memory admin store (demo)
 const OWNER_EMAIL = 'daviesfamily108@gmail.com'
 const adminEmails = new Set([OWNER_EMAIL])
@@ -382,6 +385,89 @@ app.get('/api/subscription', async (req, res) => {
   }
 
   res.json({ fullAccess: false });
+});
+
+// Notifications endpoints (demo): persist in-memory. If Supabase is configured,
+// attempt to persist there as well to survive restarts.
+app.get('/api/notifications', async (req, res) => {
+  const email = String(req.query.email || '').toLowerCase();
+  if (!email) return res.json([]);
+  // Prefer Supabase if available
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('notifications').select('*').eq('email', email);
+      if (!error && data) return res.json(data);
+    } catch (err) {
+      console.error('[DB] Failed to fetch notifications:', err);
+    }
+  }
+  const list = notifications.get(email) || [];
+  return res.json(list);
+});
+
+app.post('/api/notifications', async (req, res) => {
+  const { email, message, type, meta } = req.body || {};
+  if (!email || !message) return res.status(400).json({ ok: false, error: 'Missing email or message' });
+  const e = String(email).toLowerCase();
+  const id = require('nanoid').nanoid();
+  const n = { id, email: e, message: String(message), type: String(type || 'generic'), read: false, createdAt: Date.now(), meta: meta || null };
+  const current = notifications.get(e) || [];
+  // Basic duplicate prevention: avoid inserting if same type/message exists and is unread
+  if (current.some(x => x.type === n.type && x.message === n.message && !x.read)) {
+    return res.json({ ok: true, id: 'duplicate' });
+  }
+  current.unshift(n);
+  // limit history to 50
+  notifications.set(e, current.slice(0, 50));
+  // persist to DB if possible
+  if (supabase) {
+    try {
+      await supabase.from('notifications').insert([{ id: n.id, email: n.email, message: n.message, type: n.type, read: n.read, created_at: new Date(n.createdAt).toISOString(), meta: n.meta }]);
+    } catch (err) {
+      console.error('[DB] Failed to insert notification:', err);
+    }
+  }
+  return res.json({ ok: true, id });
+});
+
+app.delete('/api/notifications/:id', async (req, res) => {
+  const id = String(req.params.id || '');
+  const email = String(req.query.email || '').toLowerCase();
+  if (!id || !email) return res.status(400).json({ ok: false, error: 'Missing id or email' });
+  // Remove from in-memory map
+  const list = notifications.get(email) || [];
+  const idx = list.findIndex(x => x.id === id);
+  if (idx >= 0) {
+    list.splice(idx, 1);
+    notifications.set(email, list);
+  }
+  if (supabase) {
+    try {
+      await supabase.from('notifications').delete().eq('id', id);
+    } catch (err) {
+      console.error('[DB] Failed to delete notification:', err);
+    }
+  }
+  return res.json({ ok: true });
+});
+
+app.patch('/api/notifications/:id', async (req, res) => {
+  const id = String(req.params.id || '');
+  const email = String(req.query.email || '').toLowerCase();
+  const { read } = req.body || {};
+  if (!id || !email || typeof read !== 'boolean') return res.status(400).json({ ok: false, error: 'Missing id/email/read' });
+  const list = notifications.get(email) || [];
+  const n = list.find(x => x.id === id);
+  if (n) n.read = !!read;
+  notifications.set(email, list);
+  if (supabase) {
+    try {
+      await supabase.from('notifications').update({ read: !!read }).eq('id', id);
+    } catch (err) {
+      console.error('[DB] Failed to update notification:', err);
+    }
+  }
+  return res.json({ ok: true });
 });
 
 // Debug endpoint to check Supabase status

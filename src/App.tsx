@@ -10,6 +10,7 @@ import AdminDashboard from "./components/AdminDashboard";
 import SettingsPanel from "./components/SettingsPanel";
 import Auth from "./components/Auth";
 import { ThemeProvider } from "./components/ThemeContext";
+import { Bell } from "lucide-react";
 import { useWS } from "./components/WSProvider";
 import StatusDot from "./components/ui/StatusDot";
 import { getRollingAvg, getAllTimeAvg } from "./store/profileStats";
@@ -412,9 +413,92 @@ export default function App() {
       const res = await fetch("/api/subscription" + q);
       if (!res.ok) return;
       const data = await res.json();
-      setUser({ ...u, fullAccess: !!data?.fullAccess });
+      // Keep the full user object but attach the subscription so other components
+      // can make decisions based on more detailed subscription metadata (expiresAt, source, status).
+      setUser({ ...u, fullAccess: !!data?.fullAccess, subscription: data });
     } catch {}
   }
+
+  // Header notification state: show an alert if subscription is expiring in <= 3 days, or expired
+  const [showSubscriptionsBell, setShowSubscriptionsBell] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [siteNotifications, setSiteNotifications] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!user?.subscription) {
+      setShowSubscriptionsBell(false);
+      return;
+    }
+    const sub = user.subscription as any;
+    const now = Date.now();
+    let expiresAt: number | null = null;
+    if (sub?.expiresAt) {
+      expiresAt = typeof sub.expiresAt === 'string' ? Date.parse(sub.expiresAt) : Number(sub.expiresAt);
+    }
+    // Consider this expiring soon when it's within 3 days (259200000 ms)
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+    if (expiresAt && expiresAt > now && expiresAt - now <= THREE_DAYS_MS) {
+      setShowSubscriptionsBell(true);
+      return;
+    }
+    // If the subscription is expired and fullAccess is false, prompt to buy
+    if (expiresAt && expiresAt <= now && !user?.fullAccess) {
+      setShowSubscriptionsBell(true);
+      return;
+    }
+    // For stripe subscriptions, a 'status' === 'active' means no bell, else show if status !== 'active'
+    if (sub?.source === 'stripe' && sub?.status && sub.status !== 'active') {
+      setShowSubscriptionsBell(true);
+      return;
+    }
+    setShowSubscriptionsBell(false);
+  }, [user?.subscription, user?.fullAccess]);
+
+  // Fetch site notifications & keep in sync
+  useEffect(() => {
+    if (!user?.email) return;
+    let mounted = true;
+    async function fetchNotifs() {
+      try {
+        const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (mounted) setSiteNotifications(data || []);
+      } catch (err) {
+        // noop
+      }
+    }
+    fetchNotifs();
+    const int = setInterval(fetchNotifs, 30000);
+    return () => { mounted = false; clearInterval(int); };
+  }, [user?.email]);
+
+  // If subscription is expiring soon or expired, write a persistent notification server-side
+  useEffect(() => {
+    if (!user?.subscription || !user?.email) return;
+    const sub = user.subscription as any;
+    const now = Date.now();
+    let expiresAt: number | null = null;
+    if (sub?.expiresAt) expiresAt = typeof sub.expiresAt === 'string' ? Date.parse(sub.expiresAt) : Number(sub.expiresAt);
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+    async function addSubscriptionNotification(type: string, message: string) {
+      try {
+        await fetch('/api/notifications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: user.email, message, type }),
+        });
+      } catch {}
+    }
+    if (expiresAt && expiresAt > now && expiresAt - now <= THREE_DAYS_MS) {
+      addSubscriptionNotification('sub_expiring', `Your premium subscription expires in ${Math.ceil((expiresAt - now) / (24*60*60*1000))} day(s)`);
+      return;
+    }
+    if (expiresAt && expiresAt <= now && !user?.fullAccess) {
+      addSubscriptionNotification('sub_expired', 'Your premium subscription has ended');
+      return;
+    }
+  }, [user?.email, user?.subscription, user?.fullAccess]);
 
   if (!user) {
     return (
@@ -567,6 +651,69 @@ export default function App() {
                   )}
                   {/* Camera status badge */}
                   <CameraStatusBadge />
+                  {/* Subscription expiration / warning bell */}
+                  {(siteNotifications.length > 0 || showSubscriptionsBell) && (
+                    <div className="relative ml-2">
+                      <button
+                        className="px-2 py-1 text-sm rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-2"
+                        onClick={() => setNotificationsOpen((s) => !s)}
+                        aria-label="View notifications"
+                        title="Notifications"
+                      >
+                        <Bell className="w-5 h-5 text-amber-400" />
+                        {/* Unread count */}
+                        {siteNotifications.filter(n => !n.read).length > 0 && (
+                          <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-rose-500 rounded-full">{siteNotifications.filter(n => !n.read).length > 9 ? '9+' : siteNotifications.filter(n => !n.read).length}</span>
+                        )}
+                      </button>
+                      {notificationsOpen && (
+                        <div className="absolute right-0 mt-2 w-80 card p-3 z-50">
+                          <div className="font-semibold mb-2">Notifications</div>
+                          <div className="space-y-2">
+                            {siteNotifications.length === 0 && (
+                              <div className="text-sm opacity-70">No notifications</div>
+                            )}
+                            {siteNotifications.map((n) => (
+                              <div key={n.id} className={`p-2 rounded ${n.type?.startsWith('sub') ? 'bg-amber-900/10' : 'bg-black/10'}`}>
+                                <div className="text-sm mb-1">{n.message}</div>
+                                <div className="text-xs opacity-60 flex items-center justify-between">
+                                  <span>{new Date(n.createdAt).toLocaleString()}</span>
+                                  <div className="flex gap-2 items-center">
+                                    {!n.read && (
+                                      <button
+                                        className="text-xs px-2 py-0.5 rounded bg-emerald-600 text-black"
+                                        onClick={async () => {
+                                          try {
+                                            await fetch(`/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ read: true }) });
+                                            const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`);
+                                            if (res.ok) setSiteNotifications(await res.json());
+                                          } catch {}
+                                        }}
+                                      >
+                                        Mark read
+                                      </button>
+                                    )}
+                                    <button
+                                      className="text-xs px-2 py-0.5 rounded bg-rose-600 text-white"
+                                      onClick={async () => {
+                                        try {
+                                          await fetch(`/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`, { method: 'DELETE' });
+                                          const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`);
+                                          if (res.ok) setSiteNotifications(await res.json());
+                                        } catch {}
+                                      }}
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {ws ? (
                     <span className="ml-0 md:ml-2">
                       <StatusDot status={ws.status} />
