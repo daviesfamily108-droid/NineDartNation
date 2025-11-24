@@ -45,6 +45,22 @@ export default function App() {
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [navOpen, setNavOpen] = useState<boolean>(false);
   const [user, setUser] = useState<any>(null);
+  // Use this helper to set user without losing previously fetched subscription data
+  // This avoids toggles/flicker in the UI during partial user refreshes
+  function setUserWithMerge(next: any) {
+    if (!next) {
+      setUser(next);
+      return;
+    }
+    setUser((prev: any) => {
+      const merged = { ...prev, ...next };
+      if (prev?.subscription && !next?.subscription) merged.subscription = prev.subscription;
+      if (next?.subscription) merged.subscription = next.subscription;
+      // Keep fullAccess aligned with subscription unless explicitly provided
+      merged.fullAccess = !!(merged.subscription?.fullAccess || next?.fullAccess || merged.fullAccess);
+      return merged;
+    });
+  }
   const MINIMAL_UI =
     ((import.meta as any).env?.VITE_MINIMAL_AFTER_LOGIN || "").toString() ===
     "1";
@@ -70,7 +86,11 @@ export default function App() {
         .then((res) => res.json())
         .then((data) => {
           if (data?.user) {
-            setUser(data.user);
+            setUserWithMerge(data.user);
+            try {
+              const cached = localStorage.getItem(`ndn:subscription:${data.user.email}`);
+              if (cached) setUserWithMerge({ ...data.user, subscription: JSON.parse(cached) });
+            } catch {}
             fetchSubscription(data.user);
           } else {
             // Token invalid, remove it
@@ -88,6 +108,7 @@ export default function App() {
       try {
         localStorage.removeItem("mockUser");
         localStorage.removeItem("authToken");
+        if (user?.email) localStorage.removeItem(`ndn:subscription:${user.email}`);
       } catch {}
       setUser(null);
       setTab("score");
@@ -219,7 +240,7 @@ export default function App() {
                 localStorage.setItem("authToken", data.token);
               }
               if (data.user) {
-                setUser(data.user);
+                setUserWithMerge(data.user);
               }
               // Clean up URL
               window.history.replaceState(
@@ -266,7 +287,7 @@ export default function App() {
         .then((res) => res.json())
         .then((data) => {
           if (data?.user) {
-            setUser(data.user);
+            setUserWithMerge(data.user);
             alert("Premium subscription activated successfully!");
             // Clean up URL
             window.history.replaceState(
@@ -347,6 +368,7 @@ export default function App() {
       try {
         // Clear any lightweight local flags (keep stats unless explicitly reset)
         localStorage.removeItem("ndn:avatar");
+        if (user?.email) localStorage.removeItem(`ndn:subscription:${user.email}`);
       } catch {}
       setUser(null);
       setTab("score");
@@ -415,7 +437,10 @@ export default function App() {
       const data = await res.json();
       // Keep the full user object but attach the subscription so other components
       // can make decisions based on more detailed subscription metadata (expiresAt, source, status).
-      setUser({ ...u, fullAccess: !!data?.fullAccess, subscription: data });
+      setUserWithMerge({ ...u, fullAccess: !!data?.fullAccess, subscription: data });
+      try {
+        if (u?.email) localStorage.setItem(`ndn:subscription:${u.email}`, JSON.stringify(data));
+      } catch {}
     } catch {}
   }
 
@@ -504,7 +529,13 @@ export default function App() {
     return (
       <Auth
         onAuth={(u: any) => {
-          setUser(u);
+          try {
+            const cached = localStorage.getItem(`ndn:subscription:${u.email}`);
+            if (cached) setUserWithMerge({ ...u, subscription: JSON.parse(cached) });
+            else setUserWithMerge(u);
+          } catch {
+            setUserWithMerge(u);
+          }
           fetchSubscription(u);
         }}
       />

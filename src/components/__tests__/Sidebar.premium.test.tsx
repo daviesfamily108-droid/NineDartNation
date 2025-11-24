@@ -27,4 +27,6 @@ describe('Sidebar premium tab visibility', () => {
     const tabs = getTabs(u);
     expect(tabs.some(t => t.key === 'fullaccess')).toBe(false);
   });
+
+  // LocalStorage-backed caching behavior is tested in Sidebar.cached.test.tsx
 });

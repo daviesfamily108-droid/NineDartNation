@@ -131,3 +131,15 @@ CREATE INDEX IF NOT EXISTS idx_tournament_participants_email ON public.tournamen
 CREATE INDEX IF NOT EXISTS idx_friendships_user ON public.friendships(user_email);
 CREATE INDEX IF NOT EXISTS idx_friendships_friend ON public.friendships(friend_email);
 CREATE INDEX IF NOT EXISTS idx_camera_sessions_expires ON public.camera_sessions(expires_at);
+
+-- Notifications table for persistent site notifications
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    message TEXT NOT NULL,
+    type TEXT,
+    read BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    meta JSONB
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_email ON public.notifications(email);

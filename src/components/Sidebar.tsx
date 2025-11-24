@@ -81,7 +81,16 @@ export function Sidebar({
   user: any;
   className?: string;
 }) {
-  const tabs = getTabs(user);
+  // When the server has not yet returned a subscription, prefer a cached
+  // localStorage subscription (if present) to avoid flicker in the UI.
+  let userForTabs = user;
+  if (!user?.subscription && user?.email) {
+    try {
+      const cached = localStorage.getItem(`ndn:subscription:${user.email}`);
+      if (cached) userForTabs = { ...user, subscription: JSON.parse(cached) };
+    } catch {}
+  }
+  const tabs = getTabs(userForTabs);
   const isAdmin = useIsAdmin(user?.email);
   // IMPORTANT: Admin tab is ONLY shown for explicitly granted admin users
   // Premium status does NOT automatically grant admin access
