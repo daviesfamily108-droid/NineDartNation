@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { render, screen, act, within, fireEvent } from "@testing-library/react";
+import { render, screen, act, within, fireEvent, waitFor } from "@testing-library/react";
 vi.mock("../../../store/profileStats", () => ({
   getAllTimeAvg: () => 37.0,
   getAllTimeFirstNineAvg: () => 36.0,
@@ -150,9 +150,7 @@ describe("MatchStartShowcase", () => {
     });
     render(<Wrapper />);
     // Allow microtasks and timers to progress for the portal and focus code (using real timers)
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
     // Allow a tiny tick for any async mount to complete
     const dialog = document.querySelector('[role="dialog"]');
     expect(dialog).toBeTruthy();
@@ -162,10 +160,8 @@ describe("MatchStartShowcase", () => {
       'button[aria-label="Start match now"]',
     ) as HTMLButtonElement;
     // react-focus-lock is mocked in setup to be a no-op; emulate focus manually
-    await act(async () => {
-      startNow.focus();
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    startNow.focus();
+    await waitFor(() => expect(document.activeElement === startNow).toBeTruthy());
     const closeBtn = screen.getByRole("button", {
       name: /close match start showcase/i,
     });
@@ -175,13 +171,8 @@ describe("MatchStartShowcase", () => {
     expect(root?.getAttribute("aria-hidden")).toBe("true");
     // Programmatic Tab behavior is handled by react-focus-lock; in JSDOM we assert Start Now is initially focused
     // Ensure Close button calls onDone and aria-hidden restores on cleanup
-    await act(async () => {
-      fireEvent.click(closeBtn);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 20));
-    });
+    fireEvent.click(closeBtn);
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
     expect(onDone).toHaveBeenCalled();
     // root should have aria-hidden cleared (cleanup restored previous aria state)
     const ariaVal = document
@@ -220,26 +211,19 @@ describe("MatchStartShowcase", () => {
       vi.useRealTimers();
     });
     render(<Wrapper />);
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
     // Ensure focus & that Escape doesn't close overlay
     const startNow = document.querySelector(
       'button[aria-label="Start match now"]',
     ) as HTMLButtonElement;
-    await act(async () => {
-      startNow.focus();
-    });
-    expect(document.activeElement === startNow).toBeTruthy();
+    startNow.focus();
+    await waitFor(() => expect(document.activeElement === startNow).toBeTruthy());
     // Do not rely on synthetic Escape in jsdom tests; instead ensure focus remains and Close still works
     const closeBtn = screen.getByRole("button", {
       name: /close match start showcase/i,
     });
-    await act(async () => {
-      fireEvent.click(closeBtn);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onDone).toHaveBeenCalled();
+    fireEvent.click(closeBtn);
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
   });
 
   test("Start now and Close buttons call onDone when clicked", async () => {
@@ -269,9 +253,7 @@ describe("MatchStartShowcase", () => {
       vi.useRealTimers();
     });
     const { unmount } = render(<Wrapper />);
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
     const startNow = document.querySelector(
       'button[aria-label="Start match now"]',
     ) as HTMLButtonElement;
@@ -279,11 +261,8 @@ describe("MatchStartShowcase", () => {
       name: /close match start showcase/i,
     });
     // Click Start now
-    await act(async () => {
-      fireEvent.click(startNow);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onDone).toHaveBeenCalled();
+    fireEvent.click(startNow);
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
     // Re-render to test Close (recreate component)
     onDone.mockReset();
     unmount();
@@ -291,11 +270,8 @@ describe("MatchStartShowcase", () => {
     const closeBtn2 = screen.getByRole("button", {
       name: /close match start showcase/i,
     });
-    await act(async () => {
-      fireEvent.click(closeBtn2);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onDone).toHaveBeenCalled();
+    fireEvent.click(closeBtn2);
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
   });
 
   test("mounts and unmounts without throwing", () => {

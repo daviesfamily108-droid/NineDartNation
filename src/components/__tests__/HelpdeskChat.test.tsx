@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
 // using built-in vitest assertions
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import HelpdeskChat from "../HelpdeskChat";
 import { vi, describe, it, beforeEach, expect } from "vitest";
 
@@ -43,13 +43,8 @@ describe("HelpdeskChat", () => {
       fireEvent.change(input, { target: { value: "Reply from admin" } });
     });
     const sendBtn = screen.getByRole("button", { name: /send message/i });
-    // Click send
-    await act(async () => {
-      fireEvent.click(sendBtn);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-
-    // send should be called
-    expect(mockSend).toHaveBeenCalled();
+    // Click send and wait for send to be called
+    fireEvent.click(sendBtn);
+    await waitFor(() => expect(mockSend).toHaveBeenCalled());
   });
 });

@@ -256,7 +256,7 @@ export function scoreAtBoardPoint(p: Point): {
   // Rotate so that sector 20 is at the top (negative Y). Top corresponds to -90 degrees (or 270)
   let deg = (ang * 180) / Math.PI;
   deg = (deg + 360 + 90) % 360; // shift so 0 deg is at top
-  const sector = SectorOrder[Math.floor(((360 - deg) % 360) / 18)]; // clockwise ordering
+  const sector = SectorOrder[Math.floor(deg / 18)]; // deg now ranges 0..360 with 0 at top (clockwise ordering using array)
 
   if (r <= BoardRadii.bullInner)
     return { base: 50, ring: "INNER_BULL", sector: 25, mult: 2 };

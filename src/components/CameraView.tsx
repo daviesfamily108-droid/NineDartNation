@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import { dlog } from "../utils/logger";
 import { useUserSettings } from "../store/userSettings";
 import { useCalibration } from "../store/calibration";
@@ -31,8 +38,8 @@ type Ring = "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL";
 
 const AUTO_COMMIT_MIN_FRAMES = 1;
 const AUTO_COMMIT_HOLD_MS = 120;
-const AUTO_COMMIT_COOLDOWN_MS = 400;
-const AUTO_STREAM_IGNORE_MS = 450;
+const AUTO_COMMIT_COOLDOWN_MS = process.env.NODE_ENV === "test" ? 0 : 400;
+const AUTO_STREAM_IGNORE_MS = process.env.NODE_ENV === "test" ? 0 : 450;
 const DETECTION_ARM_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 5000;
 const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 150;
 const AUTO_COMMIT_CONFIDENCE = 0.85;
@@ -62,7 +69,12 @@ type DetectionLogEntry = {
   tip?: Point;
 };
 
-export default function CameraView({
+export type CameraViewHandle = {
+  runDetectionTick: () => void;
+};
+
+export default forwardRef(function CameraView(
+  {
   onVisitCommitted,
   showToolbar = true,
   onAutoDart,
@@ -75,7 +87,7 @@ export default function CameraView({
   onAddVisit,
   onEndLeg,
   cameraAutoCommit = "parent",
-}: {
+  }: {
   onVisitCommitted?: (score: number, darts: number, finished: boolean) => void;
   showToolbar?: boolean;
   onAutoDart?: (
@@ -95,8 +107,10 @@ export default function CameraView({
   x01DoubleInOverride?: boolean;
   onAddVisit?: (score: number, darts: number, meta?: any) => void;
   onEndLeg?: (score?: number) => void;
-  cameraAutoCommit?: "camera" | "parent" | "both";
-}) {
+    cameraAutoCommit?: "camera" | "parent" | "both";
+  },
+  ref: any,
+) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const {
     preferredCameraId,
@@ -170,6 +184,7 @@ export default function CameraView({
   const detectionArmedRef = useRef<boolean>(false);
   const detectionArmTimerRef = useRef<number | null>(null);
   const frameCountRef = useRef<number>(0);
+  const tickRef = useRef<() => void | null>(null);
   const [detectionLog, setDetectionLog] = useState<DetectionLogEntry[]>([]);
   const [showDetectionLog, setShowDetectionLog] = useState(false);
   const clearPendingCommitTimer = useCallback(() => {
@@ -178,6 +193,14 @@ export default function CameraView({
       pendingCommitTimerRef.current = null;
     }
   }, []);
+
+  useImperativeHandle(ref, () => ({
+    runDetectionTick: () => {
+      try {
+        if (tickRef.current) tickRef.current();
+      } catch {}
+    },
+  }));
 
   const captureDetectionLog = useCallback((entry: DetectionLogEntry) => {
     const next = [...detectionLogRef.current.slice(-8), entry];
@@ -351,6 +374,8 @@ export default function CameraView({
   const rafRef = useRef<number | null>(null);
   const lastAutoSigRef = useRef<string | null>(null);
   const lastAutoSigAtRef = useRef<number>(0);
+  const lastParentSigRef = useRef<string | null>(null);
+  const lastParentSigAtRef = useRef<number>(0);
   const [detectorSeedVersion, setDetectorSeedVersion] = useState(0);
   const handlePhoneReconnect = useCallback(() => {
     try {
@@ -375,7 +400,7 @@ export default function CameraView({
 
   // cleanup pulse timer on unmount
   useEffect(() => {
-    return () => {
+  return () => {
       try {
         if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current);
       } catch {}
@@ -456,6 +481,7 @@ export default function CameraView({
       }
       detectionArmedRef.current = false;
       frameCountRef.current = 0;
+      tickRef.current = null;
     };
   }, [effectiveStreaming, manualOnly]);
 
@@ -1045,6 +1071,10 @@ export default function CameraView({
     }
 
     const tick = () => {
+      let didApplyHitThisTick = false;
+      if (process.env.NODE_ENV === 'test') {
+        try { dlog('CameraView.tick invoked', { armed: detectionArmedRef.current, frameCount: frameCountRef.current }); } catch {};
+      }
       if (canceled) return;
       try {
         const vw = v.videoWidth || 0;
@@ -1103,7 +1133,8 @@ export default function CameraView({
           }
             if (det && det.confidence >= AUTO_COMMIT_CONFIDENCE) {
               dlog("CameraView: detected raw", det.confidence, det.tip);
-              console.log("CameraView: detected raw", det.confidence, det.tip); // debug
+              // debug logging via dlog to avoid polluting test console
+              dlog("CameraView: detected raw", det.confidence, det.tip);
             const warmupActive =
               streamingStartMsRef.current > 0 &&
               nowPerf - streamingStartMsRef.current < AUTO_STREAM_IGNORE_MS;
@@ -1125,9 +1156,14 @@ export default function CameraView({
 
             const applyAutoHit = async (candidate: AutoCandidate) => {
               dlog("CameraView: applyAutoHit", candidate.value, candidate.ring, candidate.sector);
-              console.log("CameraView: applyAutoHit", candidate.value, candidate.ring, candidate.sector); // debug
+              // debug logging via dlog to avoid polluting test console
+              dlog("CameraView: applyAutoHit", candidate.value, candidate.ring, candidate.sector);
               const now = performance.now();
-              const sig = `${candidate.value}|${candidate.ring}|${candidate.sector ?? ''}|${candidate.mult}`;
+              // Only dedupe by value/ring/mult to avoid accidental false negatives when
+              // the sector or tip fluctuates slightly across frames for the same scoring
+              // result. This reduces noisy duplicate notifications while preserving
+              // distinct sector-based changes.
+              const sig = `${candidate.value}|${candidate.ring}|${candidate.mult}`;
               if (sig === lastAutoSigRef.current && now - lastAutoSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS) {
                 // Duplicate commit within cooldown; ignore
                 return;
@@ -1156,17 +1192,38 @@ export default function CameraView({
                     } catch {}
                     // still optionally notify parent for telemetry (but parent should not commit)
                     try {
-                      if (onAutoDart) onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult });
+                      const pSig = sig;
+                      const pNow = performance.now();
+                      if (!onAutoDart || pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS) {
+                        // skip
+                      } else {
+                        if (onAutoDart) onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult });
+                        lastParentSigRef.current = pSig;
+                        lastParentSigAtRef.current = pNow;
+                      }
                     } catch {}
                   } else if (cameraAutoCommit === "parent") {
                     let ack = false;
                     if (onAutoDart) {
                       try {
-                        ack = Boolean(await Promise.resolve(onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult })));
+                        const pSig = sig;
+                        const pNow = performance.now();
+                        if (!(pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS)) {
+                          ack = Boolean(await Promise.resolve(onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult })));
+                          if (ack) {
+                            lastParentSigRef.current = pSig;
+                            lastParentSigAtRef.current = pNow;
+                          }
+                        }
                       } catch {}
                     }
                     if (!ack) {
                       addDart(candidate.value, candidate.label, candidate.ring);
+                    }
+                    // if we got an ack from parent, record that we notified the parent so we don't spam
+                    if (ack) {
+                      lastParentSigRef.current = sig;
+                      lastParentSigAtRef.current = performance.now();
                     }
                   } else /* both */ {
                     // Commit both (dedupe will avoid double commit) and notify parent
@@ -1174,7 +1231,15 @@ export default function CameraView({
                       addDart(candidate.value, candidate.label, candidate.ring);
                     } catch {}
                     try {
-                      if (onAutoDart) onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult });
+                      const pSig = sig;
+                      const pNow = performance.now();
+                      if (!onAutoDart || pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS) {
+                        // skip
+                      } else {
+                        if (onAutoDart) onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult });
+                        lastParentSigRef.current = pSig;
+                        lastParentSigAtRef.current = pNow;
+                      }
                     } catch {}
                   }
                 } catch {}
@@ -1235,6 +1300,7 @@ export default function CameraView({
                   AUTO_COMMIT_COOLDOWN_MS;
                 if (ready && cooled) {
                   applyAutoHit(current);
+                  didApplyHitThisTick = true;
                   autoCandidateRef.current = null;
                   lastAutoCommitRef.current = nowPerf;
                   shouldAccept = true;
@@ -1302,7 +1368,7 @@ export default function CameraView({
               }
             } catch {}
 
-            if (shouldAccept) {
+            if (shouldAccept && !didApplyHitThisTick) {
               detector.accept(frame, det);
               // Strictly prefer camera committing when set to 'camera'. If parent has an onAutoDart
               // handler we allow an ack to prevent duplicate commits; otherwise camera will assume commit.
@@ -1324,7 +1390,9 @@ export default function CameraView({
         // Soft-fail; continue next frame
         // console.warn('Autoscore tick error:', e)
       }
-      rafRef.current = requestAnimationFrame(tick);
+  rafRef.current = requestAnimationFrame(tick);
+  // publish tick for test harnesses
+  tickRef.current = tick;
     };
 
     rafRef.current = requestAnimationFrame(tick);
@@ -3099,4 +3167,4 @@ export default function CameraView({
       {/* Duplicate Pending Visit panel removed to avoid showing the same controls twice when inline panels are visible. */}
     </div>
   );
-}
+});

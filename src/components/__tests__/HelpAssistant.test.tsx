@@ -33,23 +33,16 @@ describe("HelpAssistant escalation", () => {
     render(<HelpAssistant />);
     // open help
     const openBtn = screen.getByTitle("Help Assistant");
-    await act(async () => {
-      fireEvent.click(openBtn);
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    fireEvent.click(openBtn);
+    await waitFor(() => screen.getByPlaceholderText("Ask me anything..."));
 
     // type a message that triggers the "not sure" path
     const input = screen.getByPlaceholderText(
       "Ask me anything...",
     ) as HTMLInputElement;
-    await act(async () => {
-      fireEvent.change(input, { target: { value: "blorp unknown topic" } });
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    await act(async () => {
-      fireEvent.keyPress(input, { key: "Enter", code: "Enter", charCode: 13 });
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    fireEvent.change(input, { target: { value: "blorp unknown topic" } });
+    fireEvent.keyPress(input, { key: "Enter", code: "Enter", charCode: 13 });
+    await waitFor(() => screen.getByText(/connect you to a member of our admin team/i));
 
     // the assistant will ask to connect to an admin; wait for that prompt
     await waitFor(() =>
@@ -59,14 +52,9 @@ describe("HelpAssistant escalation", () => {
     );
 
     // Now respond YES
-    await act(async () => {
-      fireEvent.change(input, { target: { value: "YES" } });
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    await act(async () => {
-      fireEvent.keyPress(input, { key: "Enter", code: "Enter", charCode: 13 });
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    fireEvent.change(input, { target: { value: "YES" } });
+    fireEvent.keyPress(input, { key: "Enter", code: "Enter", charCode: 13 });
+    await waitFor(() => expect(spy).toHaveBeenCalled());
 
     // apiFetch should have been called to create help request
     await waitFor(() => {

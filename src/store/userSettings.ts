@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { dlog, dinfo } from "../utils/logger";
 
 type LastOffline = {
   mode: string;
@@ -409,12 +410,7 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
   setPreferredCamera: (id, label, force = false) => {
     try {
       const state = get();
-      console.log("[USERSETTINGS] setPreferredCamera called:", {
-        id,
-        label,
-        force,
-        locked: state.preferredCameraLocked,
-      });
+        // Intentionally no logs here to avoid noisy console output in user flows
       if (state.preferredCameraLocked && !force) {
         // Locked: ignore programmatic updates unless explicitly forced by user action
         console.log(
@@ -423,7 +419,15 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
         return;
       }
     } catch {}
-    console.log("[USERSETTINGS] Saving preferred camera:", { id, label });
+  // Avoid redundant writes and accidental clears when values are unchanged.
+    try {
+      const prev = get();
+      if (prev.preferredCameraId === id && prev.preferredCameraLabel === label) {
+        // Nothing changed; avoid writing to storage to reduce unexpected updates
+        return;
+      }
+    } catch {}
+  // No logging on successful save to keep runtime output quiet
     save({ preferredCameraId: id, preferredCameraLabel: label });
     set({ preferredCameraId: id, preferredCameraLabel: label });
   },

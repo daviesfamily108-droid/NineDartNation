@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { render, screen, within, cleanup, act } from "@testing-library/react";
+import { render, screen, within, cleanup, act, waitFor } from "@testing-library/react";
 import Tournaments from "../Tournaments";
 import { useMatch } from "../../store/match";
 import { vi, describe, test, expect, beforeEach, afterEach } from "vitest";
@@ -29,18 +29,16 @@ describe("Tournaments", () => {
 
   test("shows start overlay when match starts", async () => {
     const user = { email: "a@example.com", username: "Alice" };
-    await act(async () => {
-      render(<Tournaments user={user} />);
-      await new Promise((r) => setTimeout(r, 0));
-    });
+  render(<Tournaments user={user} />);
+  await waitFor(() => screen.getByRole('heading', { name: /Tournaments/i }));
     // Simulate a match starting
-    await act(async () => {
+    act(() => {
       useMatch.getState().newMatch(["Alice", "Bob"], 501);
     });
     // Now the overlay should show via our useEffect
-    expect(await screen.findByRole("dialog")).toBeTruthy();
+  await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
     // Close overlay by flipping inProgress false
-    await act(async () => {
+    act(() => {
       useMatch.getState().endGame();
     });
   });

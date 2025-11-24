@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { render, screen, fireEvent, within, act } from "@testing-library/react";
+import { render, screen, fireEvent, within, act, waitFor } from "@testing-library/react";
 import CalibrationPopup from "../CalibrationPopup";
 import { describe, test, expect, vi, beforeEach } from "vitest";
 
@@ -39,19 +39,13 @@ describe("CalibrationPopup", () => {
     // There are multiple Bull Up and Skip buttons -- click the first Bull Up, and the second Skip
     const bullUpButtons = screen.getAllByRole("button", { name: /Bull Up/i });
     expect(bullUpButtons.length).toBeGreaterThanOrEqual(1);
-    await act(async () => {
-      fireEvent.click(bullUpButtons[0]);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onOpenCalibrator).toHaveBeenCalled();
+    fireEvent.click(bullUpButtons[0]);
+    await waitFor(() => expect(onOpenCalibrator).toHaveBeenCalled());
 
     const skipButtons = screen.getAllByRole("button", { name: /skip/i });
     expect(skipButtons.length).toBeGreaterThanOrEqual(2);
-    await act(async () => {
-      fireEvent.click(skipButtons[1]);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onSkip).toHaveBeenCalled();
+    fireEvent.click(skipButtons[1]);
+    await waitFor(() => expect(onSkip).toHaveBeenCalled());
   });
 
   test("Start Match button is disabled until all players skipped", async () => {
@@ -91,10 +85,7 @@ describe("CalibrationPopup", () => {
       screen.getByRole("button", { name: /Start Match/i }),
     ).not.toBeDisabled();
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: /Start Match/i }));
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onClose).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Start Match/i }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 });

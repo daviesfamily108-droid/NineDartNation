@@ -37,6 +37,7 @@
 import "@testing-library/jest-dom";
 import React from "react";
 import { vi } from "vitest";
+import { afterEach } from "vitest";
 
 // Provide a small helper to globally silence noisy, known harmless warnings if desired
 // (OPTIONAL) You can add additional filters or transforms here in the future.
@@ -192,3 +193,32 @@ if (typeof (globalThis as any).Worker === "undefined") {
     return null as any;
   } as any;
 }
+
+// Global test cleanup: remove any left-over portals, root elements, and clear mocks/timers
+afterEach(() => {
+  try {
+    // Remove any match-start portals (used by MatchStartShowcase)
+    const portals = Array.from(document.querySelectorAll('.ndn-match-start-portal'));
+    portals.forEach((p) => p.parentElement?.removeChild(p));
+  } catch {}
+
+  try {
+    const root = document.getElementById('root');
+    if (root && root.parentElement) root.parentElement.removeChild(root);
+  } catch {}
+
+  try {
+    // Reset document body to a clean state for the next test.
+    document.body.innerHTML = "";
+  } catch {}
+
+  try {
+    // Clear localStorage between tests
+    try { (globalThis as any).localStorage?.clear?.(); } catch {}
+  } catch {}
+
+  // Reset Vitest mocks and timers
+  try { vi.resetAllMocks(); } catch {}
+  try { vi.restoreAllMocks(); } catch {}
+  try { vi.useRealTimers(); } catch {}
+});

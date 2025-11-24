@@ -7,6 +7,7 @@ import {
   within,
   cleanup,
   act,
+  waitFor,
 } from "@testing-library/react";
 import Scoreboard from "../Scoreboard";
 import { useMatch } from "../../store/match";
@@ -72,11 +73,8 @@ describe("Scoreboard", () => {
       await within(card as HTMLElement).findAllByRole("button", { name: "180" })
     )[0];
     // quick action should call the provided prop handler instead of the store
-    await act(async () => {
-      fireEvent.click(btn);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(mockAddVisit).toHaveBeenCalledWith(180, 3);
+    fireEvent.click(btn);
+    await waitFor(() => expect(mockAddVisit).toHaveBeenCalledWith(180, 3));
     expect(propCalled).toBeTruthy();
     expect(useMatch.getState().addVisit).not.toHaveBeenCalled();
   });
@@ -151,10 +149,8 @@ describe("Scoreboard", () => {
     const addBtn = within(card2 as HTMLElement).getByRole("button", {
       name: "Add Visit",
     });
-    await act(async () => {
-      fireEvent.click(addBtn);
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    fireEvent.click(addBtn);
+    await waitFor(() => expect(matchActions.addVisit).toHaveBeenCalledWith(41, 3));
     // Assert that the provided matchActions.addVisit and endLeg are called for finishing visit
     // Assert that the provided matchActions.addVisit and endLeg are called for finishing visit
     expect(useMatch.getState().addVisit).not.toHaveBeenCalled();

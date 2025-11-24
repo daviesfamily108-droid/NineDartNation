@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, waitFor } from "@testing-library/react";
 import OfflinePlay from "../OfflinePlay";
 // Mock CameraView to avoid async camera effects in OfflinePlay tests
 vi.mock("../CameraView", () => ({
@@ -31,17 +31,13 @@ describe("OfflinePlay", () => {
 
   test("shows MatchStartShowcase for offline matches", async () => {
     const user = { email: "a@example.com", username: "Alice" };
-    await act(async () => {
-      render(<OfflinePlay user={user} />);
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    render(<OfflinePlay user={user} />);
+    await waitFor(() => screen.getByText(/Start Match/i));
     // Start a local offline match directly via the store
-    await act(async () => {
+    act(() => {
       useMatch.getState().newMatch(["Alice", "AI"], 301);
-      await new Promise((r) => setTimeout(r, 0));
     });
-    // Now we show overlay for offline matches on match.inProgress flip
-    const found = await screen.findByRole("dialog");
-    expect(found).toBeTruthy();
+  // Now we show overlay for offline matches on match.inProgress flip
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeTruthy(), { timeout: 2000 });
   });
 });

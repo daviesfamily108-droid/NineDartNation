@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { render, screen, act, fireEvent } from "@testing-library/react";
+import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 // Mock WSProvider to avoid real network connections during unit tests
 const mockSend = vi.fn();
@@ -41,16 +41,12 @@ describe("OnlinePlay create modal", () => {
 
   test("renders create modal and uses per-game mapping options", async () => {
     const user = { email: "a@example.com", username: "Alice" };
-    await act(async () => {
-      render(<OnlinePlay user={user} />);
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    render(<OnlinePlay user={user} />);
+    await waitFor(() => screen.getByText(/Create Match \+/i));
     // Click the Create Match + button
     const createButton = await screen.findByText("Create Match +");
-    await act(async () => {
-      fireEvent.click(createButton);
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    fireEvent.click(createButton);
+    await waitFor(() => screen.getByRole('heading', { name: /Create Match/i }));
     // The modal card should show the header
     expect(
       await screen.findByRole("heading", { name: /Create Match/i }),
@@ -64,34 +60,24 @@ describe("OnlinePlay create modal", () => {
 
   test("mode pills set legs and focus the legs input", async () => {
     const user = { email: "a@example.com", username: "Alice" };
-    await act(async () => {
-      render(<OnlinePlay user={user} />);
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    render(<OnlinePlay user={user} />);
+    await waitFor(() => screen.getByText(/Create Match \+/i));
     // Open modal
     const createButton = await screen.findByText("Create Match +");
-    await act(async () => {
-      fireEvent.click(createButton);
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    fireEvent.click(createButton);
+    await waitFor(() => screen.getByRole('heading', { name: /Create Match/i }));
     // Switch to First To, set legs to 2
     const firstTo = await screen.findByText(/First To/i);
-    await act(async () => {
-      fireEvent.click(firstTo);
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    fireEvent.click(firstTo);
+    await waitFor(() => screen.getByRole('spinbutton', { name: /First To/i }));
   const legsInputFirst = await screen.findByRole('spinbutton', { name: /First To/i });
-    await act(async () => {
-      fireEvent.change(legsInputFirst, { target: { value: '2' } });
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    fireEvent.change(legsInputFirst, { target: { value: '2' } });
+    await waitFor(() => expect((legsInputFirst as HTMLInputElement).value).toBe('2'));
     expect((legsInputFirst as HTMLInputElement).value).toBe('2');
     // Now click Best Of and assert legs becomes odd (2 -> 3)
     const bestOf = await screen.findByText(/Best Of/i);
-    await act(async () => {
-      fireEvent.click(bestOf);
-      await new Promise((r) => setTimeout(r, 0));
-    });
+    fireEvent.click(bestOf);
+    await waitFor(() => screen.getByRole('spinbutton', { name: /Best Of/i }));
   const legsInputBest = await screen.findByRole('spinbutton', { name: /Best Of/i });
     expect((legsInputBest as HTMLInputElement).value).toBe('3');
   });

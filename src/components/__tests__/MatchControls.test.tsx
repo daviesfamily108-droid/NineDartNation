@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { describe, test, expect, vi } from "vitest";
 import MatchControls from "../MatchControls";
 
@@ -29,49 +29,31 @@ describe("MatchControls component", () => {
       fireEvent.change(input, { target: { value: "60" } });
     });
     const addButton = screen.getByText("Add Visit");
-    await act(async () => {
-      fireEvent.click(addButton);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onAddVisit).toHaveBeenCalledWith(60, 3);
+    fireEvent.click(addButton);
+    await waitFor(() => expect(onAddVisit).toHaveBeenCalledWith(60, 3));
     // Quick button
     const quick = screen.getByText("180");
-    await act(async () => {
-      fireEvent.click(quick);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onAddVisit).toHaveBeenCalledWith(180, 3);
+    fireEvent.click(quick);
+    await waitFor(() => expect(onAddVisit).toHaveBeenCalledWith(180, 3));
 
     // Undo
     const undo = screen.getByTitle("Undo");
-    await act(async () => {
-      fireEvent.click(undo);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onUndo).toHaveBeenCalled();
+    fireEvent.click(undo);
+    await waitFor(() => expect(onUndo).toHaveBeenCalled());
 
     // Next Player
     const next = screen.getByText("Next Player");
-    await act(async () => {
-      fireEvent.click(next);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onNextPlayer).toHaveBeenCalled();
+    fireEvent.click(next);
+    await waitFor(() => expect(onNextPlayer).toHaveBeenCalled());
 
     // End Leg
     const endLeg = screen.getByText(/End Leg/) as HTMLButtonElement;
-    await act(async () => {
-      fireEvent.click(endLeg);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onEndLeg).toHaveBeenCalled();
+    fireEvent.click(endLeg);
+    await waitFor(() => expect(onEndLeg).toHaveBeenCalled());
 
     // End Game
     const endGame = screen.getByText("End Game");
-    await act(async () => {
-      fireEvent.click(endGame);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-    expect(onEndGame).toHaveBeenCalled();
+    fireEvent.click(endGame);
+    await waitFor(() => expect(onEndGame).toHaveBeenCalled());
   });
 });

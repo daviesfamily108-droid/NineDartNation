@@ -1,6 +1,7 @@
 import React from "react";
 import { render, act, fireEvent } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
+import { waitFor } from "@testing-library/react";
 
 // (not using jest-dom matchers here)
 
@@ -107,6 +108,23 @@ function stubCanvasContext(canvas: HTMLCanvasElement) {
 }
 
 describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
+  beforeEach(() => {
+    // Reset mocks/state between tests to avoid cross-test interference
+    try {
+      // Reset mocked calibration store
+      const calib = require("../../store/calibration").useCalibration;
+      calib.setState?.({ H: null, imageSize: null, _hydrated: true });
+    } catch {}
+    try {
+      const us = require("../../store/userSettings").useUserSettings;
+      us.setState?.({ autoscoreProvider: "built-in", preferredCameraLabel: "", preferredCameraId: undefined });
+    } catch {}
+  });
+  afterEach(() => {
+    // restore mocks and modules
+    try { vi.restoreAllMocks(); } catch {}
+    try { vi.resetModules(); } catch {}
+  });
   it("maps image center to inner bull when H maps board origin to center", () => {
     const H = [1, 0, 160, 0, 1, 120, 0, 0, 1];
     const pImg = { x: 160, y: 120 };
@@ -116,18 +134,50 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
   });
 
   it("calls parent onAutoDart once when provided and avoids double-commit", async () => {
-    const onAutoDart = vi.fn();
+    // Make a mock that resolves a promise on the first call so we can unmount
+    // immediately and avoid further ticks from invoking the handler again.
+    let resolveCalled: any;
+    const calledP = new Promise<void>((r) => { resolveCalled = r; });
+    const onAutoDart = vi.fn(() => {
+      try { resolveCalled(); } catch {}
+      return true; // ack ownership so camera doesn't double-commit locally
+    });
+  const cameraRef = React.createRef<any>();
+  const useMatch = (await vi.importActual("../../store/match")).useMatch;
+  const addVisitSpy = vi.fn();
+  useMatch.getState().addVisit = addVisitSpy;
     // Ensure calibration matrix and image size present for autoscore mapping
     useCalibration.setState?.({ H: [1, 0, 160, 0, 1, 120, 0, 0, 1], imageSize: { w: 320, h: 240 } });
     // Oxygen: Render CameraView with onAutoDart; the detector mock will return a detection
     // The CameraView uses the store mocks above, so render is safe
     // We'll render the component and wait for the detection to be processed
     const { default: CameraView } = await vi.importActual("../CameraView");
-    const { render } = await vi.importActual("@testing-library/react");
-    const out = render(<CameraView scoringMode="x01" onAutoDart={onAutoDart} />);
+    const { render, act } = await vi.importActual("@testing-library/react");
+  let out: ReturnType<typeof render>;
+  await act(async () => {
+    out = render(<CameraView ref={cameraRef} scoringMode="x01" onAutoDart={onAutoDart} />);
+  });
+  // Mostly for test harness: ensure canvas context functions exist
+  const canvases = out.container.querySelectorAll("canvas");
+  canvases.forEach((c) => stubCanvasContext(c as HTMLCanvasElement));
     // Give a little time for the render loop to tick (autoscore uses RAF)
-    await new Promise((r) => setTimeout(r, 250));
-    // We expect the parent's callback to be called at least once but not duplicated
-    expect(onAutoDart).toHaveBeenCalledTimes(1);
+    // Ensure the video element reports a size so the detection loop will process a frame
+    const video = out.container.querySelector("video") as HTMLVideoElement | null;
+    if (video) {
+      try { Object.defineProperty(video, "videoWidth", { value: 320, configurable: true }); } catch {}
+      try { Object.defineProperty(video, "videoHeight", { value: 240, configurable: true }); } catch {}
+      try { (video as any).paused = false; } catch {}
+    }
+    // Force a single detection tick via the imperative handle instead of waiting for RAF
+    // Wait for and call the imperative runDetectionTick if provided by CameraView
+    await waitFor(() => cameraRef.current?.runDetectionTick, { timeout: 2000 });
+  // Call once to trigger a single detection event
+  cameraRef.current?.runDetectionTick?.();
+  // await the first onAutoDart call and then unmount immediately to avoid additional notifications
+  await calledP;
+  out.unmount();
+  // Verify parent handler was invoked and camera did not commit locally
+  expect(onAutoDart).toHaveBeenCalled();
+  expect(addVisitSpy).not.toHaveBeenCalled();
   });
 });

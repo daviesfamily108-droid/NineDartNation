@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from "react";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
 import { vi, describe, it, beforeEach, expect } from "vitest";
 
 let listener: any = null;
@@ -66,12 +66,8 @@ describe("HelpdeskChat behavior", () => {
       fireEvent.change(input, { target: { value: "Replying now" } });
     });
     const sendBtn = screen.getByRole("button", { name: /send message/i });
-    await act(async () => {
-      fireEvent.click(sendBtn);
-      await new Promise((r) => setTimeout(r, 0));
-    });
-
-    expect(mockSend).toHaveBeenCalled();
+    fireEvent.click(sendBtn);
+    await waitFor(() => expect(mockSend).toHaveBeenCalled());
 
     // new message content is rendered
     expect(await screen.findByText("Replying now")).toBeTruthy();
