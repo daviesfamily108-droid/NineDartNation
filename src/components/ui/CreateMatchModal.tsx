@@ -101,6 +101,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                 const opts = getStartOptionsForGame(v);
                 setStartingScore(opts?.[0]);
               }}
+                onMouseDown={(e) => { e.stopPropagation(); }}
             >
               {allGames.map((g) => (
                 <option key={g} value={g}>
@@ -120,6 +121,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                 className="w-full p-2 border border-white/10 bg-white/5 rounded text-white"
                 value={startingScore}
                 onChange={(e) => setStartingScore(Number(e.target.value))}
+                  onMouseDown={(e) => { e.stopPropagation(); }}
               >
                 {getStartOptionsForGame(game).map((opt) => (
                   <option key={opt} value={opt}>

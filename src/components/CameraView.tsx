@@ -841,12 +841,32 @@ export default forwardRef(function CameraView(
   }
 
   // Inline light-weight device switcher (optional)
+  async function requestCameraPermission() {
+    try {
+      if (!navigator?.mediaDevices?.getUserMedia) throw new Error('getUserMedia not supported');
+      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      // Immediately stop to avoid keeping camera open
+      try { s.getTracks().forEach(t => t.stop()); } catch {}
+      // Re-enumerate devices after permission granted
+      try {
+        const list = await navigator.mediaDevices.enumerateDevices();
+        setAvailableCameras(list.filter((d) => d.kind === 'videoinput'));
+      } catch (err) {
+        console.warn('[CAMERA] enumerateDevices failed after permission:', err);
+      }
+    } catch (err) {
+      console.warn('[CAMERA] request permission failed:', err);
+      alert('Failed to request camera permission. Please enable camera access in your browser.');
+    }
+  }
+
   function CameraSelector() {
-    if (!availableCameras.length) return null;
+    // Always show a discovery UI so users can rescan / request permission even when no cameras were enumerated
     return (
       <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-black/40 rounded px-2 py-1 text-xs">
         <span>Cam:</span>
         <select
+          onMouseDown={(e) => { e.stopPropagation(); }}
           className="bg-black/20 rounded px-1 py-0.5"
           value={preferredCameraId || ""}
           onChange={async (e) => {
@@ -887,6 +907,12 @@ export default forwardRef(function CameraView(
             </option>
           ))}
         </select>
+        {availableCameras.length === 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-yellow-300">No cameras found</span>
+            <button className="btn btn--ghost btn-sm ml-2" onClick={requestCameraPermission} title="Request camera permission">Enable local camera</button>
+          </div>
+        )}
         <button
           className="btn btn--ghost btn-sm ml-2"
           onClick={async () => {

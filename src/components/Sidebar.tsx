@@ -81,14 +81,27 @@ export function Sidebar({
   user: any;
   className?: string;
 }) {
+  // no-op debug retention removed
   // When the server has not yet returned a subscription, prefer a cached
   // localStorage subscription (if present) to avoid flicker in the UI.
   let userForTabs = user;
   if (!user?.subscription && user?.email) {
     try {
-      const cached = localStorage.getItem(`ndn:subscription:${user.email}`);
-      if (cached) userForTabs = { ...user, subscription: JSON.parse(cached) };
-    } catch {}
+      const rawGet = (localStorage as any)?.getItem;
+      const cached = typeof rawGet === "function" ? rawGet.call(localStorage, `ndn:subscription:${user.email}`) : null;
+      if (cached) {
+        const subs = JSON.parse(cached);
+        // If we have a cached subscription, also set fullAccess to mirror the
+        // subscription (some code paths read user.fullAccess directly). This
+        // helps avoid flicker in the UI while the server confirms the
+        // subscription state.
+        userForTabs = { ...user, subscription: subs, fullAccess: subs.fullAccess || user.fullAccess };
+      }
+    } catch {
+      // If localStorage is missing or getItem is not a function, ignore and
+      // fall back to server state; this avoids a hard failure in test
+      // environments that may replace localStorage with a raw object.
+    }
   }
   const tabs = getTabs(userForTabs);
   const isAdmin = useIsAdmin(user?.email);

@@ -358,6 +358,28 @@ export default function Calibrator() {
     }
   }
 
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        await refreshVideoDevices();
+      } catch {}
+      try {
+        if (navigator?.mediaDevices?.addEventListener) {
+          navigator.mediaDevices.addEventListener('devicechange', refreshVideoDevices);
+        } else {
+          (navigator.mediaDevices as any).ondevicechange = refreshVideoDevices;
+        }
+      } catch {}
+    })();
+    return () => {
+      try {
+        if (navigator?.mediaDevices?.removeEventListener)
+          navigator.mediaDevices.removeEventListener('devicechange', refreshVideoDevices);
+      } catch {}
+    };
+  }, []);
+
   async function testCamera(deviceId?: string) {
     if (
       typeof navigator === "undefined" ||
@@ -2396,6 +2418,7 @@ export default function Calibrator() {
         </div>
         <div className="grid grid-cols-3 gap-2 items-center text-sm">
           <select
+            onMouseDown={(e) => { e.stopPropagation(); }}
             className="input col-span-2"
             value={preferredCameraId || "auto"}
             onChange={(e) => {
@@ -2442,6 +2465,29 @@ export default function Calibrator() {
             ))}
             <option value="phone">📱 Phone Camera</option>
           </select>
+          {videoDevices.length === 0 && (
+            <div className="col-span-1 flex gap-2 items-center justify-end">
+              <button
+                className="btn btn--ghost btn-sm"
+                onClick={async () => {
+                  try {
+                    await testCamera();
+                    await refreshVideoDevices();
+                  } catch (err) {
+                    console.warn('[Calibrator] request camera permission failed', err);
+                  }
+                }}
+              >
+                Enable local camera
+              </button>
+              <button
+                className="btn btn--ghost btn-sm"
+                onClick={async () => await refreshVideoDevices()}
+              >
+                Rescan
+              </button>
+            </div>
+          )}
           <div className="text-right">
             <button
               className="btn px-2 py-1"

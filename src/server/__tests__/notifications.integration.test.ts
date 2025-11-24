@@ -34,33 +34,35 @@ describe('notifications integration', () => {
     const email = 'test-notify@example.com'
     const message = 'Your premium subscription expires in 3 days'
 
-    // Create notification
-    const createRes = await fetch(`${BASE_URL}/api/notifications`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, message, type: 'sub_expiring' }) })
+  // Create notification - include an auth token for owner/admin
+  const jwt = require('jsonwebtoken')
+  const token = jwt.sign({ email: 'daviesfamily108@gmail.com' }, process.env.JWT_SECRET || 'fallback-secret-change-in-production', { expiresIn: '100y' })
+  const createRes = await fetch(`${BASE_URL}/api/notifications`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ email, message, type: 'sub_expiring' }) })
     const createJson = await createRes.json()
     expect(createJson.ok).toBeTruthy()
 
     // Fetch and expect to see a notification
-    const listRes = await fetch(`${BASE_URL}/api/notifications?email=${encodeURIComponent(email)}`)
+  const listRes = await fetch(`${BASE_URL}/api/notifications?email=${encodeURIComponent(email)}`, { headers: { 'Authorization': `Bearer ${token}` } })
     const listJson = await listRes.json()
     expect(Array.isArray(listJson)).toBeTruthy()
     expect(listJson.length).toBeGreaterThan(0)
     const nid = listJson[0].id
 
-    // Update (mark read)
-    const patchRes = await fetch(`${BASE_URL}/api/notifications/${encodeURIComponent(nid)}?email=${encodeURIComponent(email)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ read: true }) })
+  // Update (mark read)
+  const patchRes = await fetch(`${BASE_URL}/api/notifications/${encodeURIComponent(nid)}?email=${encodeURIComponent(email)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ read: true }) })
     const patchJson = await patchRes.json()
     expect(patchJson.ok).toBeTruthy()
 
-    const refetch = await fetch(`${BASE_URL}/api/notifications?email=${encodeURIComponent(email)}`)
+  const refetch = await fetch(`${BASE_URL}/api/notifications?email=${encodeURIComponent(email)}`, { headers: { 'Authorization': `Bearer ${token}` } })
     const refetchJson = await refetch.json()
     expect(refetchJson[0].read).toBeTruthy()
 
-    // Delete notification
-    const delRes = await fetch(`${BASE_URL}/api/notifications/${encodeURIComponent(nid)}?email=${encodeURIComponent(email)}`, { method: 'DELETE' })
+  // Delete notification
+  const delRes = await fetch(`${BASE_URL}/api/notifications/${encodeURIComponent(nid)}?email=${encodeURIComponent(email)}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
     const delJson = await delRes.json()
     expect(delJson.ok).toBeTruthy()
 
-    const afterDel = await fetch(`${BASE_URL}/api/notifications?email=${encodeURIComponent(email)}`)
+  const afterDel = await fetch(`${BASE_URL}/api/notifications?email=${encodeURIComponent(email)}`, { headers: { 'Authorization': `Bearer ${token}` } })
     const afterDelJson = await afterDel.json()
     expect(Array.isArray(afterDelJson)).toBeTruthy()
     expect(afterDelJson.find((x: any) => x.id === nid)).toBeUndefined()

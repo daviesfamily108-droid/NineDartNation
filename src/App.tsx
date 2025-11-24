@@ -485,7 +485,10 @@ export default function App() {
     let mounted = true;
     async function fetchNotifs() {
       try {
-        const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`);
+        const token = localStorage.getItem('authToken');
+        const headers: any = { };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`, { headers });
         if (!res.ok) return;
         const data = await res.json();
         if (mounted) setSiteNotifications(data || []);
@@ -508,9 +511,12 @@ export default function App() {
     const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
     async function addSubscriptionNotification(type: string, message: string) {
       try {
+        const token = localStorage.getItem('authToken');
+        const headers: any = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
         await fetch('/api/notifications', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({ email: user.email, message, type }),
         });
       } catch {}
@@ -682,7 +688,14 @@ export default function App() {
                   )}
                   {/* Camera status badge */}
                   <CameraStatusBadge />
-                  {/* Subscription expiration / warning bell */}
+                  
+                  {ws ? (
+                    <span className="ml-0 md:ml-2">
+                      <StatusDot status={ws.status} />
+                    </span>
+                  ) : null}
+                  {/* Subscription expiration / warning bell - move after WS status */}
+                  {/* (Notifications are positioned after StatusDot to appear to the right of the connected badge) */}
                   {(siteNotifications.length > 0 || showSubscriptionsBell) && (
                     <div className="relative ml-2">
                       <button
@@ -713,10 +726,16 @@ export default function App() {
                                     {!n.read && (
                                       <button
                                         className="text-xs px-2 py-0.5 rounded bg-emerald-600 text-black"
-                                        onClick={async () => {
+                                          onClick={async () => {
                                           try {
-                                            await fetch(`/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ read: true }) });
-                                            const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`);
+                                            const btnToken = localStorage.getItem('authToken');
+                                            const headers: any = { 'Content-Type': 'application/json' };
+                                            if (btnToken) headers.Authorization = `Bearer ${btnToken}`;
+                                            await fetch(`/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`, { method: 'PATCH', headers, body: JSON.stringify({ read: true }) });
+                                            const btnRefetchToken = localStorage.getItem('authToken');
+                                            const refetchHeaders: any = {};
+                                            if (btnRefetchToken) refetchHeaders.Authorization = `Bearer ${btnRefetchToken}`;
+                                            const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`, { headers: refetchHeaders });
                                             if (res.ok) setSiteNotifications(await res.json());
                                           } catch {}
                                         }}
@@ -728,8 +747,14 @@ export default function App() {
                                       className="text-xs px-2 py-0.5 rounded bg-rose-600 text-white"
                                       onClick={async () => {
                                         try {
-                                          await fetch(`/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`, { method: 'DELETE' });
-                                          const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`);
+                                            const btnDeleteToken = localStorage.getItem('authToken');
+                                            const headers: any = {};
+                                            if (btnDeleteToken) headers.Authorization = `Bearer ${btnDeleteToken}`;
+                                            await fetch(`/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`, { method: 'DELETE', headers });
+                                          const token = localStorage.getItem('authToken');
+                                          const refetchHeaders: any = {};
+                                          if (token) refetchHeaders.Authorization = `Bearer ${token}`;
+                                          const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`, { headers: refetchHeaders });
                                           if (res.ok) setSiteNotifications(await res.json());
                                         } catch {}
                                       }}
@@ -745,11 +770,6 @@ export default function App() {
                       )}
                     </div>
                   )}
-                  {ws ? (
-                    <span className="ml-0 md:ml-2">
-                      <StatusDot status={ws.status} />
-                    </span>
-                  ) : null}
                   {/* Protocol pill removed per request: keep green connected badge only */}
                 </div>
               </header>

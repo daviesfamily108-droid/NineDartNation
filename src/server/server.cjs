@@ -140,6 +140,8 @@ app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 app.use(cors())
 app.use(compression())
 const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
+// Parse authentication on each request - sets req.user if possible
+app.use(parseAuth);
 app.use(limiter)
 // Logging
 const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
@@ -326,8 +328,63 @@ const premiumWinners = new Map();
 // notification: { id, email, message, type, read, createdAt, meta }
 const notifications = new Map();
 // In-memory admin store (demo)
-const OWNER_EMAIL = 'daviesfamily108@gmail.com'
+const OWNER_EMAIL = (process.env.OWNER_EMAIL || 'daviesfamily108@gmail.com').toLowerCase();
 const adminEmails = new Set([OWNER_EMAIL])
+
+// Admin API key (cluster/op key) for server-to-server operations. Keep secret in env.
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
+
+// Middleware: parse auth header, set req.user with { email, username, isAdmin }
+function parseAuth(req, res, next) {
+  try {
+    const auth = String(req.headers.authorization || '').trim();
+    // Support x-api-key as admin key header
+    const apiKey = String(req.headers['x-api-key'] || '').trim();
+    if (apiKey && ADMIN_API_KEY && apiKey === ADMIN_API_KEY) {
+      req.user = { email: OWNER_EMAIL, username: OWNER_EMAIL, isAdmin: true, adminApiKey: true };
+      return next();
+    }
+    if (!auth) return next();
+    const parts = auth.split(' ');
+    if (parts.length !== 2) return next();
+    const scheme = parts[0];
+    const token = parts[1];
+    if (scheme.toLowerCase() === 'bearer' && token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const email = (decoded && decoded.email) ? String(decoded.email).toLowerCase() : null;
+        const username = (decoded && decoded.username) ? String(decoded.username) : null;
+        const isAdmin = email ? adminEmails.has(email) : false;
+        req.user = { email, username, isAdmin, tokenDecoded: decoded };
+      } catch (e) {
+        // invalid token - ignore, continue as unauthenticated
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+  return next();
+}
+
+function requireAuth(req, res, next) {
+  if (!req.user || !req.user.email) return res.status(401).json({ ok: false, error: 'AUTH_REQUIRED' });
+  return next();
+}
+
+function requireAdmin(req, res, next) {
+  if (req.user && req.user.isAdmin) return next();
+  return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' });
+}
+
+function requireSelfOrAdminForEmail(targetEmail) {
+  return function (req, res, next) {
+    const emailParam = targetEmail(req);
+    if (!emailParam) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' });
+    const email = String(emailParam || '').toLowerCase();
+    if (req.user && (req.user.isAdmin || req.user.email === email)) return next();
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+  };
+}
 // In-memory ops flags (demo)
 let maintenanceMode = false
 let lastAnnouncement = null
@@ -413,9 +470,12 @@ async function createNotification(email, message, type = 'generic', meta = null)
 }
 
 // Admin: bulk create notifications (owner-only)
-app.post('/api/admin/notifications/bulk', async (req, res) => {
+app.post('/api/admin/notifications/bulk', requireAdmin, async (req, res) => {
   const { requesterEmail, emails, message, type, all, meta } = req.body || {};
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+  // Ensure caller is authorised (owner or admin); existing owner check remains as fallback
+  if (requesterEmail && String((requesterEmail || '').toLowerCase()) !== OWNER_EMAIL && (!req.user || !req.user.isAdmin)) {
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
+  }
   if (!message) return res.status(400).json({ ok: false, error: 'MESSAGE_REQUIRED' });
   const targets = [];
   if (all) {
@@ -442,9 +502,10 @@ app.post('/api/admin/notifications/bulk', async (req, res) => {
   return res.json({ ok: true, created: results.length, results });
 });
 
-app.get('/api/notifications', async (req, res) => {
+app.get('/api/notifications', requireAuth, async (req, res) => {
   const email = String(req.query.email || '').toLowerCase();
-  if (!email) return res.json([]);
+  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' });
+  if (!req.user || (!req.user.isAdmin && req.user.email !== email)) return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
   // Prefer Supabase if available
   if (supabase) {
     try {
@@ -458,9 +519,11 @@ app.get('/api/notifications', async (req, res) => {
   return res.json(list);
 });
 
-app.post('/api/notifications', async (req, res) => {
+app.post('/api/notifications', requireAuth, async (req, res) => {
   const { email, message, type, meta } = req.body || {};
   if (!email || !message) return res.status(400).json({ ok: false, error: 'Missing email or message' });
+  // Only admin or the target user may create notifications for the target email
+  if (!req.user || (!req.user.isAdmin && req.user.email !== String(email).toLowerCase())) return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
   try {
     const out = await createNotification(email, message, type, meta);
     return res.json(out);
@@ -470,7 +533,7 @@ app.post('/api/notifications', async (req, res) => {
   }
 });
 
-app.delete('/api/notifications/:id', async (req, res) => {
+app.delete('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), async (req, res) => {
   const id = String(req.params.id || '');
   const email = String(req.query.email || '').toLowerCase();
   if (!id || !email) return res.status(400).json({ ok: false, error: 'Missing id or email' });
@@ -491,7 +554,7 @@ app.delete('/api/notifications/:id', async (req, res) => {
   return res.json({ ok: true });
 });
 
-app.patch('/api/notifications/:id', async (req, res) => {
+app.patch('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), async (req, res) => {
   const id = String(req.params.id || '');
   const email = String(req.query.email || '').toLowerCase();
   const { read } = req.body || {};
@@ -511,12 +574,41 @@ app.patch('/api/notifications/:id', async (req, res) => {
 });
 
 // Debug endpoint to check Supabase status
-app.get('/api/debug/supabase', (req, res) => {
+app.get('/api/debug/supabase', requireAdmin, (req, res) => {
   res.json({
     supabaseConfigured: !!supabase,
     userCount: users.size,
     supabaseUrl: supabase ? 'configured' : 'not configured'
   });
+});
+
+// Debug: Inspect server-side user state for a given email (in-memory and in Supabase)
+app.get('/api/debug/user', requireAdmin, async (req, res) => {
+  const email = String(req.query.email || '').toLowerCase();
+  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' });
+  const inMemoryUser = users.get(email) || null;
+  let supabaseUser = null;
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('users').select('*').eq('email', email).single();
+      if (!error && data) supabaseUser = data;
+    } catch (err) {
+      console.error('[DEBUG] Supabase fetch failed:', err && err.message);
+    }
+  }
+  return res.json({ ok: true, email, inMemoryUser, supabaseUser, admin: adminEmails.has(email), premiumWinner: premiumWinners.get(email) || null, supabaseConfigured: !!supabase });
+});
+
+// Debug: show registered routes & methods
+app.get('/api/debug/routes', requireAdmin, (req, res) => {
+  try {
+    const routes = (app._router?.stack || [])
+      .filter((r) => r.route)
+      .map((r) => ({ path: r.route.path, methods: Object.keys(r.route.methods) }));
+    return res.json({ ok: true, routes });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err && err.message });
+  }
 });
 app.get('/metrics', async (req, res) => {
   try {
@@ -661,7 +753,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
 })
 
 // Admin management (demo; NOT secure ÔÇö no auth/signature verification)
-app.get('/api/admins', (req, res) => {
+app.get('/api/admins', requireAdmin, (req, res) => {
   res.json({ admins: Array.from(adminEmails) })
 })
 
@@ -670,7 +762,7 @@ app.get('/api/admins/check', (req, res) => {
   res.json({ isAdmin: adminEmails.has(email) })
 })
 
-app.post('/api/admins/grant', (req, res) => {
+app.post('/api/admins/grant', requireAdmin, (req, res) => {
   const { email, requesterEmail } = req.body || {}
   if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
@@ -681,7 +773,7 @@ app.post('/api/admins/grant', (req, res) => {
   res.json({ ok: true, admins: Array.from(adminEmails) })
 })
 
-app.post('/api/admins/revoke', (req, res) => {
+app.post('/api/admins/revoke', requireAdmin, (req, res) => {
   const { email, requesterEmail } = req.body || {}
   if ((requesterEmail || '').toLowerCase() !== OWNER_EMAIL) {
     return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
@@ -881,7 +973,7 @@ app.post('/api/admin/notifications/scan-subscriptions', async (req, res) => {
 });
 
 // Admin: list/grant/revoke per-email premium overrides (demo)
-app.get('/api/admin/premium-winners', (req, res) => {
+app.get('/api/admin/premium-winners', requireAdmin, (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   const now = Date.now()
@@ -909,7 +1001,7 @@ app.post('/api/admin/premium/revoke', (req, res) => {
   res.json({ ok: true })
 })
 
-app.get('/api/admin/matches', (req, res) => {
+app.get('/api/admin/matches', requireAdmin, (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   res.json({ ok: true, matches: Array.from(matches.values()) })
@@ -932,7 +1024,7 @@ app.post('/api/admin/matches/delete', (req, res) => {
 })
 
 // Admin persistence status endpoint (owner-only)
-app.get('/api/admin/persistence/status', (req, res) => {
+app.get('/api/admin/persistence/status', requireAdmin, (req, res) => {
   const owner = getOwnerFromReq(req)
   if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   res.json({ ok: true, supabase: !!supabase, redis: !!redisClient || (!!upstashRestUrl && !!upstashToken), lastTournamentPersistAt })
@@ -962,7 +1054,7 @@ app.get('/api/email/preview', (req, res) => {
 })
 
 // Admin: get/update email copy
-app.get('/api/admin/email-copy', (req, res) => {
+app.get('/api/admin/email-copy', requireAdmin, (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   res.json({ ok: true, copy: emailCopy })
@@ -1967,7 +2059,6 @@ wss.on('connection', (ws, req) => {
           }
           // Keep bullThrows arrays; next round will push additional entries
         }
-      }
       } else if (data.type === 'cancel-match') {
         const id = String(data.matchId || '')
         const m = matches.get(id)
@@ -2268,7 +2359,7 @@ app.post('/api/friends/report', (req, res) => {
 })
 
 // Admin: list reports
-app.get('/api/admin/reports', (req, res) => {
+app.get('/api/admin/reports', requireAdmin, (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   res.json({ ok: true, reports })
@@ -2286,7 +2377,7 @@ app.post('/api/admin/reports/resolve', (req, res) => {
 })
 
 // Wallet API (demo, not secure)
-app.get('/api/wallet/balance', (req, res) => {
+app.get('/api/wallet/balance', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
   const w = wallets.get(email) || { email, balances: {} }
@@ -2294,7 +2385,7 @@ app.get('/api/wallet/balance', (req, res) => {
 })
 
 // Wallet: get linked payout method (brand + last4)
-app.get('/api/wallet/payout-method', (req, res) => {
+app.get('/api/wallet/payout-method', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
   const m = payoutMethods.get(email) || null
@@ -2302,7 +2393,7 @@ app.get('/api/wallet/payout-method', (req, res) => {
 })
 
 // Wallet: link/update payout method (store non-sensitive brand + last4 for display only)
-app.post('/api/wallet/link-card', (req, res) => {
+app.post('/api/wallet/link-card', requireAuth, requireSelfOrAdminForEmail((req) => req.body && String(req.body.email || '').toLowerCase()), (req, res) => {
   const { email, brand, last4 } = req.body || {}
   const addr = String(email || '').toLowerCase()
   const b = String(brand || '').trim()
@@ -2314,7 +2405,7 @@ app.post('/api/wallet/link-card', (req, res) => {
   res.json({ ok: true, method: payoutMethods.get(addr) })
 })
 
-app.post('/api/wallet/withdraw', (req, res) => {
+app.post('/api/wallet/withdraw', requireAuth, requireSelfOrAdminForEmail((req) => req.body && String(req.body.email || '').toLowerCase()), (req, res) => {
   const { email, currency, amount } = req.body || {}
   const addr = String(email || '').toLowerCase()
   const curr = String(currency || 'USD').toUpperCase()
@@ -2338,8 +2429,46 @@ app.post('/api/wallet/withdraw', (req, res) => {
   res.json({ ok: true, request: item, paid: false })
 })
 
+// Admin: credit wallet (owner-only)
+app.post('/api/admin/wallet/credit', requireAdmin, async (req, res) => {
+  const { email, currency, amount } = req.body || {}
+  const addr = String(email || '').toLowerCase()
+  const curr = String(currency || 'USD').toUpperCase()
+  const amt = Math.round(Number(amount) * 100)
+  if (!addr || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  creditWallet(addr, curr, amt)
+  const item = { id: nanoid(10), email: addr, currency: curr, amountCents: amt, ts: Date.now(), by: req.user && req.user.email }
+  console.log('[WALLET] Credited', item)
+  return res.json({ ok: true, credited: item })
+})
+
+// Admin: process withdrawal (approve or reject)
+app.post('/api/admin/wallet/withdrawals/decide', requireAdmin, (req, res) => {
+  const { id, action, notes } = req.body || {}
+  if (!id || !action) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  const wReq = withdrawals.get(id)
+  if (!wReq) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  if (action === 'reject') {
+    wReq.status = 'rejected'
+    wReq.decidedAt = Date.now()
+    wReq.notes = String(notes || '')
+    withdrawals.set(id, wReq)
+    return res.json({ ok: true, request: wReq })
+  }
+  if (action === 'paid') {
+    const ok = debitWallet(wReq.email, wReq.currency, wReq.amountCents)
+    if (!ok) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
+    wReq.status = 'paid'
+    wReq.decidedAt = Date.now()
+    wReq.notes = String(notes || '')
+    withdrawals.set(id, wReq)
+    return res.json({ ok: true, request: wReq })
+  }
+  return res.status(400).json({ ok: false, error: 'UNKNOWN_ACTION' })
+})
+
 // Admin: list withdrawals
-app.get('/api/admin/wallet/withdrawals', (req, res) => {
+app.get('/api/admin/wallet/withdrawals', requireAdmin, (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   res.json({ ok: true, withdrawals: Array.from(withdrawals.values()) })
@@ -2620,7 +2749,7 @@ app.post('/api/admin/tournaments/winner', async (req, res) => {
 })
 
 // Admin: list tournaments (owner only)
-app.get('/api/admin/tournaments', (req, res) => {
+app.get('/api/admin/tournaments', requireAdmin, (req, res) => {
   const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
   if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   res.json({ ok: true, tournaments: Array.from(tournaments.values()) })

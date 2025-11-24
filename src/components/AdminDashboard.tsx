@@ -30,6 +30,9 @@ export default function AdminDashboard({ user }: { user: any }) {
     }
   })();
   const [admins, setAdmins] = useState<string[]>([]);
+  const [walletCreditEmail, setWalletCreditEmail] = useState('');
+  const [walletCreditAmount, setWalletCreditAmount] = useState('');
+  const [walletCreditCurrency, setWalletCreditCurrency] = useState('USD');
   const [email, setEmail] = useState("");
   // status state removed: unused in current UI
   const [announcement, setAnnouncement] = useState("");
@@ -802,6 +805,31 @@ export default function AdminDashboard({ user }: { user: any }) {
             <span className="text-sm opacity-80">
               {helpRequests.length} open
             </span>
+          </div>
+          <div className="card mt-4">
+            <h3 className="text-xl font-semibold mb-3">Wallet Operations</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="p-4">
+                <h4 className="font-semibold mb-2">Credit Wallet</h4>
+                <div className="flex gap-2">
+                  <input className="input" placeholder="user@example.com" value={walletCreditEmail} onChange={(e) => setWalletCreditEmail(e.target.value)} />
+                  <input className="input" placeholder="Amount (10.00)" value={walletCreditAmount} onChange={(e) => setWalletCreditAmount(e.target.value)} />
+                  <select className="input" value={walletCreditCurrency} onChange={(e) => setWalletCreditCurrency(e.target.value)}><option>USD</option><option>GBP</option><option>EUR</option></select>
+                  <button className="btn" onClick={async () => {
+                    try {
+                      const token = localStorage.getItem('authToken')
+                      const headers: any = {'Content-Type': 'application/json'}
+                      if (token) headers.Authorization = `Bearer ${token}`
+                      const res = await fetch('/api/admin/wallet/credit', { method: 'POST', headers, body: JSON.stringify({ email: walletCreditEmail, currency: walletCreditCurrency, amount: walletCreditAmount }) })
+                      if (!res.ok) throw new Error('Failed')
+                      setWalletCreditEmail('')
+                      setWalletCreditAmount('')
+                      alert('Wallet credited')
+                    } catch (err) { alert('Failed to credit wallet') }
+                  }}>Credit</button>
+                </div>
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button

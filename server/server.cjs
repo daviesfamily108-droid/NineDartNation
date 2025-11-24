@@ -1461,6 +1461,35 @@ app.get('/api/debug/supabase', (req, res) => {
     supabaseUrl: supabase ? 'configured' : 'not configured'
   });
 });
+
+// Debug: Inspect server-side user state for a given email (in-memory and in Supabase)
+app.get('/api/debug/user', async (req, res) => {
+  const email = String(req.query.email || '').toLowerCase();
+  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' });
+  const inMemoryUser = users.get(email) || null;
+  let supabaseUser = null;
+  if (supabase) {
+    try {
+      const { data, error } = await supabase.from('users').select('*').eq('email', email).single();
+      if (!error && data) supabaseUser = data;
+    } catch (err) {
+      console.error('[DEBUG] Supabase fetch failed:', err && err.message);
+    }
+  }
+  return res.json({ ok: true, email, inMemoryUser, supabaseUser, admin: adminEmails.has(email), premiumWinner: premiumWinners.get(email) || null, supabaseConfigured: !!supabase });
+});
+
+// Debug: show registered routes & methods
+app.get('/api/debug/routes', (req, res) => {
+  try {
+    const routes = (app._router?.stack || [])
+      .filter((r) => r.route)
+      .map((r) => ({ path: r.route.path, methods: Object.keys(r.route.methods) }));
+    return res.json({ ok: true, routes });
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: err && err.message });
+  }
+});
 app.get('/metrics', async (req, res) => {
   try {
     res.setHeader('Content-Type', register.contentType)
