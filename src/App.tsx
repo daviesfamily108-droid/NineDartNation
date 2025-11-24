@@ -1,160 +1,187 @@
-import React, { useEffect, useRef, useState, Suspense } from 'react'
-import { Sidebar, TabKey } from './components/Sidebar'
-const Home = React.lazy(() => import('./components/Home'))
-import ScrollFade from './components/ScrollFade'
-import Calibrator from './components/Calibrator'
-const OfflinePlay = React.lazy(() => import('./components/OfflinePlay'))
-const Friends = React.lazy(() => import('./components/Friends'))
-import Toaster from './components/Toaster'
-import AdminDashboard from './components/AdminDashboard'
-import SettingsPanel from './components/SettingsPanel'
-import Auth from './components/Auth'
-import { ThemeProvider } from './components/ThemeContext'
-import { useWS } from './components/WSProvider'
-import StatusDot from './components/ui/StatusDot'
-import { getRollingAvg, getAllTimeAvg } from './store/profileStats'
-import { useUserSettings } from './store/userSettings'
-import { useCalibration } from './store/calibration'
-import './styles/premium.css'
-const Scoreboard = React.lazy(() => import('./components/Scoreboard'))
-const CameraView = React.lazy(() => import('./components/CameraView'))
-const OnlinePlay = React.lazy(() => import('./components/OnlinePlay'))
-import MatchSettings from './components/MatchSettings'
-const StatsPanel = React.lazy(() => import('./components/StatsPanel'))
-const Tournaments = React.lazy(() => import('./components/Tournaments'))
-const AdminAccess = React.lazy(() => import('./components/AdminAccess'))
+import React, { useEffect, useRef, useState, Suspense } from "react";
+import { Sidebar, TabKey } from "./components/Sidebar";
+const Home = React.lazy(() => import("./components/Home"));
+import ScrollFade from "./components/ScrollFade";
+import Calibrator from "./components/Calibrator";
+const OfflinePlay = React.lazy(() => import("./components/OfflinePlay"));
+const Friends = React.lazy(() => import("./components/Friends"));
+import Toaster from "./components/Toaster";
+import AdminDashboard from "./components/AdminDashboard";
+import SettingsPanel from "./components/SettingsPanel";
+import Auth from "./components/Auth";
+import { ThemeProvider } from "./components/ThemeContext";
+import { useWS } from "./components/WSProvider";
+import StatusDot from "./components/ui/StatusDot";
+import { getRollingAvg, getAllTimeAvg } from "./store/profileStats";
+import { useUserSettings } from "./store/userSettings";
+import { useCalibration } from "./store/calibration";
+import "./styles/premium.css";
+const OnlinePlay = React.lazy(() => import("./components/OnlinePlay.clean"));
+const StatsPanel = React.lazy(() => import("./components/StatsPanel"));
+const Tournaments = React.lazy(() => import("./components/Tournaments"));
+const AdminAccess = React.lazy(() => import("./components/AdminAccess"));
 // AdminAccess already imported above
-import Drawer from './components/ui/Drawer'
-import { getDominantColorFromImage, stringToColor } from './utils/color'
-const OpsDashboard = React.lazy(() => import('./components/OpsDashboard'))
-import HelpAssistant from './components/HelpAssistant'
-import GlobalCameraLogger from './components/GlobalCameraLogger'
-import GlobalPhoneVideoSink from './components/GlobalPhoneVideoSink'
-import CameraStatusBadge from './components/CameraStatusBadge'
-import Footer from './components/Footer'
+import Drawer from "./components/ui/Drawer";
+const OpsDashboard = React.lazy(() => import("./components/OpsDashboard"));
+import HelpAssistant from "./components/HelpAssistant";
+import GlobalCameraLogger from "./components/GlobalCameraLogger";
+import GlobalPhoneVideoSink from "./components/GlobalPhoneVideoSink";
+import CameraStatusBadge from "./components/CameraStatusBadge";
+import Footer from "./components/Footer";
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
-  const [avatar, setAvatar] = useState<string>('');
+  const [avatar, setAvatar] = useState<string>("");
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [httpsInfo, setHttpsInfo] = useState<{ https: boolean; port: number } | null>(null);
-  const ws = (() => { try { return useWS() } catch { return null } })()
-  const [tab, setTab] = useState<TabKey>('score')
-  const [isMobile, setIsMobile] = useState<boolean>(false)
-  const [navOpen, setNavOpen] = useState<boolean>(false)
-  const [user, setUser] = useState<any>(null)
-  const MINIMAL_UI = ((import.meta as any).env?.VITE_MINIMAL_AFTER_LOGIN || '').toString() === '1'
-  const [minimalUI, setMinimalUI] = useState<boolean>(false)
-  const [allTimeAvg, setAllTimeAvg] = useState<number>(0)
-  const { avgMode } = useUserSettings()
-  const { H: calibH, locked: calibLocked, errorPx } = useCalibration()
-
+  const ws = (() => {
+    try {
+      return useWS();
+    } catch {
+      return null;
+    }
+  })();
+  const [tab, setTab] = useState<TabKey>("score");
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [navOpen, setNavOpen] = useState<boolean>(false);
+  const [user, setUser] = useState<any>(null);
+  const MINIMAL_UI =
+    ((import.meta as any).env?.VITE_MINIMAL_AFTER_LOGIN || "").toString() ===
+    "1";
+  const [minimalUI, setMinimalUI] = useState<boolean>(false);
+  const [allTimeAvg, setAllTimeAvg] = useState<number>(0);
+  const { avgMode } = useUserSettings();
+  const { H: calibH, locked: calibLocked, errorPx } = useCalibration();
 
   // Restore user from token on mount
   useEffect(() => {
     if (user && MINIMAL_UI) {
-      setMinimalUI(true)
-      const timer = setTimeout(() => setMinimalUI(false), 1500) // Delay heavy component mount
-      return () => clearTimeout(timer)
+      setMinimalUI(true);
+      const timer = setTimeout(() => setMinimalUI(false), 1500); // Delay heavy component mount
+      return () => clearTimeout(timer);
     }
-    const token = localStorage.getItem('authToken');
+    const token = localStorage.getItem("authToken");
     if (token) {
       // Validate token with server
-      const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+      const API_URL = (import.meta as any).env?.VITE_API_URL || "";
       fetch(`${API_URL}/api/auth/me`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data?.user) {
-          setUser(data.user);
-          fetchSubscription(data.user);
-        } else {
-          // Token invalid, remove it
-          localStorage.removeItem('authToken');
-        }
-      })
-      .catch(() => {
-        // Network error, keep token for offline retry
-      });
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.user) {
+            setUser(data.user);
+            fetchSubscription(data.user);
+          } else {
+            // Token invalid, remove it
+            localStorage.removeItem("authToken");
+          }
+        })
+        .catch(() => {
+          // Network error, keep token for offline retry
+        });
     }
-  }, []);
+  }, [MINIMAL_UI, user]);
 
   useEffect(() => {
     const onLogout = () => {
       try {
-        localStorage.removeItem('mockUser');
-        localStorage.removeItem('authToken');
+        localStorage.removeItem("mockUser");
+        localStorage.removeItem("authToken");
       } catch {}
       setUser(null);
-      setTab('score');
+      setTab("score");
     };
-    window.addEventListener('ndn:logout' as any, onLogout as any);
-    return () => window.removeEventListener('ndn:logout' as any, onLogout as any);
+    window.addEventListener("ndn:logout" as any, onLogout as any);
+    return () =>
+      window.removeEventListener("ndn:logout" as any, onLogout as any);
   }, []);
   // Refresh all-time avg when user changes or stats update
   useEffect(() => {
-    if (!user?.username) return
-    const refresh = () => setAllTimeAvg(avgMode === '24h' ? getRollingAvg(user.username) : getAllTimeAvg(user.username))
-    refresh()
-    const onUpdate = () => refresh()
-    window.addEventListener('ndn:stats-updated', onUpdate as any)
-    return () => window.removeEventListener('ndn:stats-updated', onUpdate as any)
-  }, [user?.username, avgMode])
+    if (!user?.username) return;
+    const refresh = () =>
+      setAllTimeAvg(
+        avgMode === "24h"
+          ? getRollingAvg(user.username)
+          : getAllTimeAvg(user.username),
+      );
+    refresh();
+    const onUpdate = () => refresh();
+    window.addEventListener("ndn:stats-updated", onUpdate as any);
+    return () =>
+      window.removeEventListener("ndn:stats-updated", onUpdate as any);
+  }, [user?.username, avgMode]);
 
   // Load avatar from localStorage when user changes
   useEffect(() => {
     if (!user?.username) {
-      setAvatar('');
+      setAvatar("");
       return;
     }
-    const storedAvatar = localStorage.getItem(`ndn:bio:profilePhoto:${user.username}`);
-    setAvatar(storedAvatar || '');
-  }, [user?.username])
+    const storedAvatar = localStorage.getItem(
+      `ndn:bio:profilePhoto:${user.username}`,
+    );
+    setAvatar(storedAvatar || "");
+  }, [user?.username]);
 
   // Listen for avatar updates from SettingsPanel
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key?.startsWith('ndn:bio:profilePhoto:') && user?.username && e.key.endsWith(user.username)) {
-        setAvatar(e.newValue || '');
+      if (
+        e.key?.startsWith("ndn:bio:profilePhoto:") &&
+        user?.username &&
+        e.key.endsWith(user.username)
+      ) {
+        setAvatar(e.newValue || "");
       }
     };
     const handleAvatarUpdate = (e: any) => {
       // Check if this update is for the current user
       if (e.detail?.username === user?.username) {
-        setAvatar(e.detail?.avatar || '');
+        setAvatar(e.detail?.avatar || "");
       }
       // Also check localStorage as backup for any avatar update
       if (user?.username) {
-        const storedAvatar = localStorage.getItem(`ndn:bio:profilePhoto:${user.username}`);
-        setAvatar(storedAvatar || '');
+        const storedAvatar = localStorage.getItem(
+          `ndn:bio:profilePhoto:${user.username}`,
+        );
+        setAvatar(storedAvatar || "");
       }
     };
     // Also check localStorage when window becomes visible (user switches tabs)
     const handleVisibilityChange = () => {
       if (!document.hidden && user?.username) {
-        const storedAvatar = localStorage.getItem(`ndn:bio:profilePhoto:${user.username}`);
-        setAvatar(storedAvatar || '');
+        const storedAvatar = localStorage.getItem(
+          `ndn:bio:profilePhoto:${user.username}`,
+        );
+        setAvatar(storedAvatar || "");
       }
     };
-    
+
     // Check localStorage every 2 seconds as a fallback
     const checkAvatarInterval = setInterval(() => {
       if (user?.username) {
-        const storedAvatar = localStorage.getItem(`ndn:bio:profilePhoto:${user.username}`);
+        const storedAvatar = localStorage.getItem(
+          `ndn:bio:profilePhoto:${user.username}`,
+        );
         if (storedAvatar && storedAvatar !== avatar) {
           setAvatar(storedAvatar);
         }
       }
     }, 2000);
-    
-    window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('ndn:avatar-updated' as any, handleAvatarUpdate as any);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener(
+      "ndn:avatar-updated" as any,
+      handleAvatarUpdate as any,
+    );
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('ndn:avatar-updated' as any, handleAvatarUpdate as any);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener(
+        "ndn:avatar-updated" as any,
+        handleAvatarUpdate as any,
+      );
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       clearInterval(checkAvatarInterval);
     };
   }, [user?.username, avatar]);
@@ -162,167 +189,227 @@ export default function App() {
   // Handle payment success for username change
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const paid = urlParams.get('paid');
-    const usernameChange = urlParams.get('username-change');
-    if (paid === '1' || paid === 'username-change' || usernameChange === 'free') {
-      const pendingUsername = localStorage.getItem('pendingUsernameChange');
+    const paid = urlParams.get("paid");
+    const usernameChange = urlParams.get("username-change");
+    if (
+      paid === "1" ||
+      paid === "username-change" ||
+      usernameChange === "free"
+    ) {
+      const pendingUsername = localStorage.getItem("pendingUsernameChange");
       if (pendingUsername && user?.email) {
         // Call the change username API
-        const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+        const API_URL = (import.meta as any).env?.VITE_API_URL || "";
         fetch(`${API_URL}/api/change-username`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: user.email, newUsername: pendingUsername })
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: user.email,
+            newUsername: pendingUsername,
+          }),
         })
-        .then(res => res.json())
-        .then(data => {
-          if (data.ok) {
-            alert('Username changed successfully!');
-            localStorage.removeItem('pendingUsernameChange');
-            // Update user data and token
-            if (data.token) {
-              localStorage.setItem('authToken', data.token);
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.ok) {
+              alert("Username changed successfully!");
+              localStorage.removeItem("pendingUsernameChange");
+              // Update user data and token
+              if (data.token) {
+                localStorage.setItem("authToken", data.token);
+              }
+              if (data.user) {
+                setUser(data.user);
+              }
+              // Clean up URL
+              window.history.replaceState(
+                {},
+                document.title,
+                window.location.pathname,
+              );
+            } else {
+              alert(
+                "Failed to change username: " + (data.error || "Unknown error"),
+              );
             }
-            if (data.user) {
-              setUser(data.user);
-            }
-            // Clean up URL
-            window.history.replaceState({}, document.title, window.location.pathname);
-          } else {
-            alert('Failed to change username: ' + (data.error || 'Unknown error'));
-          }
-        })
-        .catch(() => {
-          alert('Network error while changing username');
-        });
+          })
+          .catch(() => {
+            alert("Network error while changing username");
+          });
       }
     }
   }, [user?.email]);
 
+  // Keep full-screen state in sync when the user enters/exits full screen mode.
+  useEffect(() => {
+    const onFullscreenChange = () =>
+      setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    // initialize
+    setIsFullscreen(!!document.fullscreenElement);
+    return () =>
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
   // Handle payment success for premium subscription
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const subscription = urlParams.get('subscription');
-    if (subscription === 'success' && user?.email) {
+    const subscription = urlParams.get("subscription");
+    if (subscription === "success" && user?.email) {
       // Refresh user data to get updated subscription status
-      const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+      const API_URL = (import.meta as any).env?.VITE_API_URL || "";
       fetch(`${API_URL}/api/auth/me`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data?.user) {
-          setUser(data.user);
-          alert('Premium subscription activated successfully!');
-          // Clean up URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      })
-      .catch(() => {
-        alert('Subscription activated, but failed to refresh user data. Please refresh the page.');
-      });
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.user) {
+            setUser(data.user);
+            alert("Premium subscription activated successfully!");
+            // Clean up URL
+            window.history.replaceState(
+              {},
+              document.title,
+              window.location.pathname,
+            );
+          }
+        })
+        .catch(() => {
+          alert(
+            "Subscription activated, but failed to refresh user data. Please refresh the page.",
+          );
+        });
     }
   }, [user?.email]);
 
   // Detect mobile/tablet layout via comprehensive device detection
   useEffect(() => {
     const update = () => {
-      const width = window.innerWidth
-      const height = window.innerHeight
-      const pixelRatio = window.devicePixelRatio || 1
+      const width = window.innerWidth;
 
       // Comprehensive mobile/tablet detection
-      const mqMobile = window.matchMedia('(max-width: 768px)').matches
-      const mqTablet = window.matchMedia('(max-width: 1024px) and (min-width: 769px)').matches
-      const uaMobile = /Mobi|Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini|Windows Phone/i.test(navigator.userAgent || '')
-      const uaTablet = /iPad|Android(?=.*\bMobile\b)|Tablet|PlayBook|Silk/i.test(navigator.userAgent || '')
-      const touchScreen = 'ontouchstart' in window || navigator.maxTouchPoints > 0
-      const smallScreen = width < 1025
-      const verySmallScreen = width < 769
+      const mqMobile = window.matchMedia("(max-width: 768px)").matches;
+      const mqTablet = window.matchMedia(
+        "(max-width: 1024px) and (min-width: 769px)",
+      ).matches;
+      const uaMobile =
+        /Mobi|Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini|Windows Phone/i.test(
+          navigator.userAgent || "",
+        );
+      const uaTablet =
+        /iPad|Android(?=.*\bMobile\b)|Tablet|PlayBook|Silk/i.test(
+          navigator.userAgent || "",
+        );
+      const touchScreen =
+        "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  const verySmallScreen = width < 769;
 
       // Determine device type
-      const isTablet = (mqTablet && touchScreen) || uaTablet || (width >= 769 && width <= 1024 && touchScreen)
-      const isMobile = mqMobile || uaMobile || verySmallScreen || (width < 769 && touchScreen)
-      const isMobileDevice = isMobile || isTablet
+      const isTablet =
+        (mqTablet && touchScreen) ||
+        uaTablet ||
+        (width >= 769 && width <= 1024 && touchScreen);
+      const isMobile =
+        mqMobile || uaMobile || verySmallScreen || (width < 769 && touchScreen);
+      const isMobileDevice = isMobile || isTablet;
 
-      setIsMobile(isMobileDevice)
-    }
-    update()
-    window.addEventListener('resize', update)
-    window.addEventListener('orientationchange', update)
+      setIsMobile(isMobileDevice);
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
 
-    const mqMobile = window.matchMedia('(max-width: 768px)')
-    const mqTablet = window.matchMedia('(max-width: 1024px) and (min-width: 769px)')
+    const mqMobile = window.matchMedia("(max-width: 768px)");
+    const mqTablet = window.matchMedia(
+      "(max-width: 1024px) and (min-width: 769px)",
+    );
 
     try {
-      mqMobile.addEventListener('change', update)
-      mqTablet.addEventListener('change', update)
+      mqMobile.addEventListener("change", update);
+      mqTablet.addEventListener("change", update);
     } catch {}
 
     return () => {
-      window.removeEventListener('resize', update)
-      window.removeEventListener('orientationchange', update)
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
       try {
-        mqMobile.removeEventListener('change', update)
-        mqTablet.removeEventListener('change', update)
+        mqMobile.removeEventListener("change", update);
+        mqTablet.removeEventListener("change", update);
       } catch {}
-    }
-  }, [])
+    };
+  }, []);
 
   // Global logout handler: return to sign-in screen and clear minimal local user context
   useEffect(() => {
     const onLogout = () => {
       try {
         // Clear any lightweight local flags (keep stats unless explicitly reset)
-        localStorage.removeItem('ndn:avatar')
+        localStorage.removeItem("ndn:avatar");
       } catch {}
-      setUser(null)
-      setTab('score')
-    }
-    window.addEventListener('ndn:logout' as any, onLogout as any)
-    return () => window.removeEventListener('ndn:logout' as any, onLogout as any)
-  }, [])
+      setUser(null);
+      setTab("score");
+    };
+    window.addEventListener("ndn:logout" as any, onLogout as any);
+    return () =>
+      window.removeEventListener("ndn:logout" as any, onLogout as any);
+  }, []);
 
   // Apply username changes from Settings globally and propagate via WS presence
   useEffect(() => {
     const onName = (e: any) => {
       try {
-        const next = String(e?.detail?.username || '').trim()
-        if (!next) return
+        const next = String(e?.detail?.username || "").trim();
+        if (!next) return;
         setUser((prev: any) => {
-          const u = prev ? { ...prev, username: next } : prev
-          return u
-        })
+          const u = prev ? { ...prev, username: next } : prev;
+          return u;
+        });
         // Recompute name color on next effect pass based on new username/avatar
         // Send presence update so friends/lobby reflect the new name
         try {
-          const email = (user?.email || '').toLowerCase()
-          if (ws && next && email) ws.send({ type: 'presence', username: next, email })
+          const email = (user?.email || "").toLowerCase();
+          if (ws && next && email)
+            ws.send({ type: "presence", username: next, email });
         } catch {}
       } catch {}
-    }
-    window.addEventListener('ndn:username-changed' as any, onName as any)
-    return () => window.removeEventListener('ndn:username-changed' as any, onName as any)
-  }, [ws, user?.email])
+    };
+    window.addEventListener("ndn:username-changed" as any, onName as any);
+    return () =>
+      window.removeEventListener("ndn:username-changed" as any, onName as any);
+  }, [ws, user?.email]);
 
   // Handle tab changes from Home component quick access pills
   useEffect(() => {
     const onTabChange = (e: any) => {
       try {
-        const tab = String(e?.detail?.tab || '').trim()
-        if (tab && ['score', 'offline', 'online', 'stats', 'settings', 'admin', 'tournaments', 'friends'].includes(tab)) {
-          setTab(tab as TabKey)
+        const tab = String(e?.detail?.tab || "").trim();
+        if (
+          tab &&
+          [
+            "score",
+            "offline",
+            "online",
+            "stats",
+            "settings",
+            "admin",
+            "tournaments",
+            "friends",
+          ].includes(tab)
+        ) {
+          setTab(tab as TabKey);
         }
       } catch {}
-    }
-    window.addEventListener('ndn:change-tab' as any, onTabChange as any)
-    return () => window.removeEventListener('ndn:change-tab' as any, onTabChange as any)
-  }, [])
+    };
+    window.addEventListener("ndn:change-tab" as any, onTabChange as any);
+    return () =>
+      window.removeEventListener("ndn:change-tab" as any, onTabChange as any);
+  }, []);
 
   async function fetchSubscription(u: any) {
     try {
-      const q = u?.email ? `?email=${encodeURIComponent(u.email)}` : ''
-      const res = await fetch('/api/subscription' + q);
+      const q = u?.email ? `?email=${encodeURIComponent(u.email)}` : "";
+      const res = await fetch("/api/subscription" + q);
       if (!res.ok) return;
       const data = await res.json();
       setUser({ ...u, fullAccess: !!data?.fullAccess });
@@ -330,201 +417,313 @@ export default function App() {
   }
 
   if (!user) {
-    return <Auth onAuth={(u:any) => { setUser(u); fetchSubscription(u); }} />;
+    return (
+      <Auth
+        onAuth={(u: any) => {
+          setUser(u);
+          fetchSubscription(u);
+        }}
+      />
+    );
   }
-  const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username||'NDN')}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`
+  const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username || "NDN")}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`;
   return (
     <ThemeProvider>
-  <div ref={appRef} className={`${user?.fullAccess ? 'premium-body' : ''} h-screen overflow-hidden pt-1 pb-0 px-1 xs:pt-2 xs:pb-0 xs:px-2 sm:pt-3 sm:pb-0 sm:px-3 md:pt-4 md:pb-0 md:px-4`}>
+      <div
+        ref={appRef}
+        className={`${user?.fullAccess ? "premium-body" : ""} h-screen overflow-hidden pt-1 pb-0 px-1 xs:pt-2 xs:pb-0 xs:px-2 sm:pt-3 sm:pb-0 sm:px-3 md:pt-4 md:pb-0 md:px-4`}
+      >
         <Toaster />
-  <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-2 xs:gap-3 sm:gap-4 h-full overflow-hidden">
+        <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-2 xs:gap-3 sm:gap-4 h-full overflow-hidden">
           {/* Desktop sidebar; hidden on mobile/tablet */}
           {!isMobile && (
             <div className="relative hidden lg:block" style={{ width: 240 }}>
-              <Sidebar active={tab} onChange={(k)=>{ setTab(k); }} user={user} />
+              <Sidebar
+                active={tab}
+                onChange={(k) => {
+                  setTab(k);
+                }}
+                user={user}
+              />
             </div>
           )}
           {/* Wrap header + scroller in a column so header stays static and only content scrolls below it */}
           <div className="flex flex-col h-full overflow-hidden">
             <div className="pt-1 xs:pt-2">
-            <header id="ndn-header" className={`header glass flex-col xs:flex-col sm:flex-row gap-2 xs:gap-2 sm:gap-3`}>
-              {/* Left: Brand */}
-              <div className="flex items-center gap-2 order-1">
-                <h1
-                  className="text-lg xs:text-xl sm:text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap cursor-pointer select-none"
-                  onClick={() => { setTab('score') }}
-                  title={'Go Home'}
-                >
-                  NINE-DART-NATION 🎯
-                </h1>
-              </div>
-              {/* Middle: Welcome band (full width on mobile) */}
-              <div className="order-3 xs:order-3 sm:order-2 w-full sm:w-auto flex-1 flex flex-col items-center justify-center text-center sm:text-left !text-black">
-                <span className="text-sm xs:text-base sm:text-base md:text-lg font-semibold flex items-center gap-2 max-w-full truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>
-                  <span className="hidden xs:inline !text-black">Welcome</span>
-                  <img src={avatar || fallbackAvatar} alt="avatar" className="w-5 h-5 xs:w-6 xs:h-6 sm:w-6 sm:h-6 md:w-7 md:h-7 rounded-full ring-2 ring-white/20" />
-                  <span className="truncate !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{user.username}🎯</span>
-                </span>
-                <span className="hidden xs:inline text-xs xs:text-xs sm:text-xs md:text-sm !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>All-time 3-dart avg: <span className="font-semibold !text-black" style={{ color: '#000000', WebkitTextFillColor: '#000000' }}>{allTimeAvg.toFixed(2)}</span></span>
-                {isMobile && (
+              <header
+                id="ndn-header"
+                className={`header glass flex-col xs:flex-col sm:flex-row gap-2 xs:gap-2 sm:gap-3`}
+              >
+                {/* Left: Brand */}
+                <div className="flex items-center gap-2 order-1">
+                  <h1>
+                    <button
+                      type="button"
+                      className="text-lg xs:text-xl sm:text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap cursor-pointer select-none"
+                      onClick={() => {
+                        setTab("score");
+                      }}
+                      title={"Go Home"}
+                    >
+                      NINE-DART-NATION 🎯
+                    </button>
+                  </h1>
+                </div>
+                {/* Middle: Welcome band (full width on mobile) */}
+                <div className="order-3 xs:order-3 sm:order-2 w-full sm:w-auto flex-1 flex flex-col items-center justify-center text-center sm:text-left !text-black">
+                  <span
+                    className="text-sm xs:text-base sm:text-base md:text-lg font-semibold flex items-center gap-2 max-w-full truncate !text-black"
+                    style={{ color: "#000000", WebkitTextFillColor: "#000000" }}
+                  >
+                    <span className="hidden xs:inline !text-black">
+                      Welcome
+                    </span>
+                    <img
+                      src={avatar || fallbackAvatar}
+                      alt="avatar"
+                      className="w-5 h-5 xs:w-6 xs:h-6 sm:w-6 sm:h-6 md:w-7 md:h-7 rounded-full ring-2 ring-white/20"
+                    />
+                    <span
+                      className="truncate !text-black"
+                      style={{
+                        color: "#000000",
+                        WebkitTextFillColor: "#000000",
+                      }}
+                    >
+                      {user.username}🎯
+                    </span>
+                  </span>
+                  <span
+                    className="hidden xs:inline text-xs xs:text-xs sm:text-xs md:text-sm !text-black"
+                    style={{ color: "#000000", WebkitTextFillColor: "#000000" }}
+                  >
+                    All-time 3-dart avg:{" "}
+                    <span
+                      className="font-semibold !text-black"
+                      style={{
+                        color: "#000000",
+                        WebkitTextFillColor: "#000000",
+                      }}
+                    >
+                      {allTimeAvg.toFixed(2)}
+                    </span>
+                  </span>
+                  {isMobile && (
+                    <button
+                      className="btn px-3 py-1 xs:px-3 xs:py-1 sm:px-3 sm:py-1 mt-1 text-sm xs:text-sm"
+                      aria-label="Open navigation"
+                      onClick={() => setNavOpen(true)}
+                    >
+                      ☰ Menu
+                    </button>
+                  )}
+                </div>
+                {/* Calibration Status - visible across all tabs */}
+                {calibLocked && calibH && (
                   <button
-                    className="btn px-3 py-1 xs:px-3 xs:py-1 sm:px-3 sm:py-1 mt-1 text-sm xs:text-sm"
-                    aria-label="Open navigation"
-                    onClick={()=> setNavOpen(true)}
-                  >☰ Menu</button>
+                    onClick={() => setTab("calibrate")}
+                    className="order-4 sm:order-4 md:order-3 px-3 py-1 text-xs sm:text-sm rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 border border-emerald-400/50 transition-colors"
+                    title="Click to adjust calibration"
+                  >
+                    ✓ Calibration Active{" "}
+                    {errorPx != null && `• ${errorPx.toFixed(1)}px`}
+                  </button>
                 )}
-              </div>
-              {/* Calibration Status - visible across all tabs */}
-              {calibLocked && calibH && (
-                <button
-                  onClick={() => setTab('calibrate')}
-                  className="order-4 sm:order-4 md:order-3 px-3 py-1 text-xs sm:text-sm rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 border border-emerald-400/50 transition-colors"
-                  title="Click to adjust calibration"
-                >
-                  ✓ Calibration Active {errorPx != null && `• ${errorPx.toFixed(1)}px`}
-                </button>
-              )}
-              {/* Right: Status + Actions */}
-              <div className="order-2 md:order-3 ml-0 md:ml-auto flex items-center gap-2 flex-wrap">
-                <button
-                  className="px-3 py-1 text-sm rounded-full bg-white/5 hover:bg-white/10 border border-white/10"
-                  onClick={() => {
-                    const el = appRef.current
-                    if (!el) return
-                    if (!document.fullscreenElement) el.requestFullscreen().catch(()=>{})
-                    else document.exitFullscreen().catch(()=>{})
-                  }}
-                  title={isFullscreen ? 'Exit Full Screen' : 'Enter Full Screen'}
-                >{isFullscreen ? 'Exit Full Screen' : 'Full Screen'}</button>
-                {tab === 'online' && (
+                {/* Right: Status + Actions */}
+                <div className="order-2 md:order-3 ml-0 md:ml-auto flex items-center gap-2 flex-wrap">
                   <button
-                    className="text-[10px] md:text-xs px-3 py-1 rounded-full bg-indigo-500/25 text-indigo-100 border border-indigo-400/40 hover:bg-indigo-500/40"
-                    title="Open a simulated online match"
+                    className="px-3 py-1 text-sm rounded-full bg-white/5 hover:bg-white/10 border border-white/10"
                     onClick={() => {
-                      setTimeout(() => {
-                        try { window.dispatchEvent(new CustomEvent('ndn:online-match-demo', { detail: { game: 'X01', start: 501 } })) } catch {}
-                      }, 40)
+                      const el = appRef.current;
+                      if (!el) return;
+                      if (!document.fullscreenElement)
+                        el.requestFullscreen().catch(() => {});
+                      else document.exitFullscreen().catch(() => {});
                     }}
-                  >ONLINE DEMO</button>
-                )}
-                {/* Camera status badge */}
-                <CameraStatusBadge />
-                {ws ? (
-                  <span className="ml-0 md:ml-2"><StatusDot status={ws.status} /></span>
-                ) : null}
-                {/* Protocol pill removed per request: keep green connected badge only */}
-              </div>
-            </header>
+                    title={
+                      isFullscreen ? "Exit Full Screen" : "Enter Full Screen"
+                    }
+                  >
+                    {isFullscreen ? "Exit Full Screen" : "Full Screen"}
+                  </button>
+                  {tab === "online" && (
+                    <button
+                      className="text-[10px] md:text-xs px-3 py-1 rounded-full bg-indigo-500/25 text-indigo-100 border border-indigo-400/40 hover:bg-indigo-500/40"
+                      title="Open a simulated online match"
+                      onClick={() => {
+                        setTimeout(() => {
+                          try {
+                            window.dispatchEvent(
+                              new CustomEvent("ndn:online-match-demo", {
+                                detail: { game: "X01", start: 501 },
+                              }),
+                            );
+                          } catch {}
+                        }, 40);
+                      }}
+                    >
+                      ONLINE DEMO
+                    </button>
+                  )}
+                  {/* Camera status badge */}
+                  <CameraStatusBadge />
+                  {ws ? (
+                    <span className="ml-0 md:ml-2">
+                      <StatusDot status={ws.status} />
+                    </span>
+                  ) : null}
+                  {/* Protocol pill removed per request: keep green connected badge only */}
+                </div>
+              </header>
             </div>
             {/* Mobile drawer navigation */}
             {isMobile && (
               <MobileNav
                 open={navOpen}
-                onClose={()=> setNavOpen(false)}
+                onClose={() => setNavOpen(false)}
                 active={tab}
-                onChange={(k)=>{ setTab(k); setNavOpen(false) }}
+                onChange={(k) => {
+                  setTab(k);
+                  setNavOpen(false);
+                }}
                 user={user}
               />
             )}
-            <main id="ndn-main-scroll" className="space-y-4 flex-1 overflow-y-auto pr-1 flex flex-col">
-            {tab === 'settings' && (
-                <Suspense fallback={<div className="p-4">Loading settings…</div>}>
-              <ScrollFade className="flex-1 min-h-0">
-                <SettingsPanel user={user} />
-              </ScrollFade>
+            <main
+              id="ndn-main-scroll"
+              className="space-y-4 flex-1 overflow-y-auto pr-1 flex flex-col"
+            >
+              {tab === "settings" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading settings…</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <SettingsPanel user={user} />
+                  </ScrollFade>
                 </Suspense>
-            )}
-            {tab === 'score' && (
-              <Suspense fallback={<div className="p-4">Loading home…</div>}>
-                <ScrollFade className="flex-1 min-h-0">
-                  <Home user={user} />
+              )}
+              {tab === "score" && (
+                <Suspense fallback={<div className="p-4">Loading home…</div>}>
+                  <ScrollFade className="flex-1 min-h-0">
+                    <Home user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "online" && (
+                <Suspense fallback={<div className="p-4">Loading online…</div>}>
+                  <ScrollFade className="flex-1 min-h-0">
+                    <OnlinePlay user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "offline" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading offline…</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <OfflinePlay user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {/* Always keep Calibrator mounted to preserve phone camera stream, but hide when not active */}
+              <div className={tab === "calibrate" ? "" : "hidden"}>
+                <ScrollFade>
+                  <Calibrator />
                 </ScrollFade>
-              </Suspense>
-            )}
-            {tab === 'online' && (
-              <Suspense fallback={<div className="p-4">Loading online…</div>}>
-                <ScrollFade className="flex-1 min-h-0">
-                  <OnlinePlay user={user} />
-                </ScrollFade>
-              </Suspense>
-            )}
-            {tab === 'offline' && (
-              <Suspense fallback={<div className="p-4">Loading offline…</div>}>
-                <ScrollFade className="flex-1 min-h-0">
-                  <OfflinePlay user={user} />
-                </ScrollFade>
-              </Suspense>
-            )}
-            {/* Always keep Calibrator mounted to preserve phone camera stream, but hide when not active */}
-            <div className={tab === 'calibrate' ? '' : 'hidden'}>
-              <ScrollFade>
-                <Calibrator />
-              </ScrollFade>
-            </div>
-            {tab === 'friends' && (
-              <Suspense fallback={<div className="p-4">Loading friends…</div>}>
-                <ScrollFade className="flex-1 min-h-0">
-                  <Friends user={user} />
-                </ScrollFade>
-              </Suspense>
-            )}
-            {tab === 'stats' && (
-              <Suspense fallback={<div className="p-4">Loading stats…</div>}>
-                <ScrollFade className="flex-1 min-h-0">
-                  <StatsPanel user={user} />
-                </ScrollFade>
-              </Suspense>
-            )}
-            {tab === 'tournaments' && (
-              <Suspense fallback={<div className="p-4">Loading tournaments…</div>}>
-                <ScrollFade className="flex-1 min-h-0">
-                  <Tournaments user={user} />
-                </ScrollFade>
-              </Suspense>
-            )}
-            {tab === 'admin' && (
-              <Suspense fallback={<div className="p-4">Loading admin…</div>}>
-                <ScrollFade className="flex-1 min-h-0">
-                  <div className="flex-1 min-h-0 space-y-6">
-                    <AdminDashboard user={user} />
-                    <OpsDashboard user={user} />
-                  </div>
-                </ScrollFade>
-              </Suspense>
-            )}
-            {tab === 'fullaccess' && (
-              <Suspense fallback={<div className="p-4">Loading admin access…</div>}>
-                <ScrollFade className="flex-1 min-h-0">
-                  <AdminAccess user={user} />
-                </ScrollFade>
-              </Suspense>
-            )}
+              </div>
+              {tab === "friends" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading friends…</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <Friends user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "stats" && (
+                <Suspense fallback={<div className="p-4">Loading stats…</div>}>
+                  <ScrollFade className="flex-1 min-h-0">
+                    <StatsPanel user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "tournaments" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading tournaments…</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <Tournaments user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "admin" && (
+                <Suspense fallback={<div className="p-4">Loading admin…</div>}>
+                  <ScrollFade className="flex-1 min-h-0">
+                    <div className="flex-1 min-h-0 space-y-6">
+                      <AdminDashboard user={user} />
+                      <OpsDashboard user={user} />
+                    </div>
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "fullaccess" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading admin access…</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <AdminAccess user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
             </main>
           </div>
         </div>
       </div>
 
-  {/* Floating Help Assistant - Always visible */}
-  <HelpAssistant />
-  {/* App footer with legal notice */}
-  <Footer />
-  {/* Debug banner removed - not shown to users in production builds */}
-  {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
-  {!minimalUI && <GlobalCameraLogger />}
+      {/* Floating Help Assistant - Always visible */}
+      <HelpAssistant />
+      {/* App footer with legal notice */}
+      <Footer />
+      {/* Debug banner removed - not shown to users in production builds */}
+      {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
+      {!minimalUI && <GlobalCameraLogger />}
       {/* Global phone camera overlay - visibility controlled by store */}
-  {/* Keep a hidden global video element alive across navigation */}
-  {!minimalUI && <GlobalPhoneVideoSink />}
+      {/* Keep a hidden global video element alive across navigation */}
+      {!minimalUI && <GlobalPhoneVideoSink />}
     </ThemeProvider>
-  )
+  );
 }
 
 // Lightweight mobile drawer that reuses the same Sidebar
-function MobileNav({ open, onClose, active, onChange, user }: { open: boolean; onClose: () => void; active: TabKey; onChange: (k: TabKey)=>void; user: any }) {
+function MobileNav({
+  open,
+  onClose,
+  active,
+  onChange,
+  user,
+}: {
+  open: boolean;
+  onClose: () => void;
+  active: TabKey;
+  onChange: (k: TabKey) => void;
+  user: any;
+}) {
   return (
-    <Drawer open={open} onClose={onClose} width={320} side="left" title="Navigate">
+    <Drawer
+      open={open}
+      onClose={onClose}
+      width={320}
+      side="left"
+      title="Navigate"
+    >
       <div className="mt-2">
-        <Sidebar active={active} onChange={onChange} user={user} className="flex relative static max-h-[80vh] w-full" />
+        <Sidebar
+          active={active}
+          onChange={onChange}
+          user={user}
+          className="flex relative static max-h-[80vh] w-full"
+        />
       </div>
     </Drawer>
-  )
+  );
 }

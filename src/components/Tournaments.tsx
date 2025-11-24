@@ -1,348 +1,487 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
-import { getModeOptionsForGame, getModeValueOptionsForGame, labelForMode, type ModeKey } from '../utils/games'
-import { useMatch } from '../store/match'
-import MatchCard from './MatchCard'
-import MatchStartShowcase from './ui/MatchStartShowcase'
-import ResizableModal from './ui/ResizableModal'
-import { useToast } from '../store/toast'
-import { useWS } from './WSProvider'
-import { apiFetch } from '../utils/api'
-import { useUserSettings } from '../store/userSettings'
+import { useEffect, useMemo, useState, useRef } from "react";
+import {
+  getModeOptionsForGame,
+  getModeValueOptionsForGame,
+  labelForMode,
+  type ModeKey,
+} from "../utils/games";
+import { useMatch } from "../store/match";
+import MatchCard from "./MatchCard";
+import MatchStartShowcase from "./ui/MatchStartShowcase";
+import ResizableModal from "./ui/ResizableModal";
+import { useToast } from "../store/toast";
+import { useWS } from "./WSProvider";
+import { apiFetch } from "../utils/api";
+import { useUserSettings } from "../store/userSettings";
 
 type Tournament = {
-  id: string
-  title: string
-  game: string
-  mode: ModeKey
-  value: number
-  description: string
-  startAt: number
-  checkinMinutes: number
-  capacity: number
-  participants: { email: string, username: string }[]
-  official?: boolean
-  prize?: boolean
-  prizeType?: 'premium'|'cash'|'none'
-  prizeAmount?: number
-  currency?: string
-  payoutStatus?: 'none'|'pending'|'paid'
-  status: 'scheduled'|'running'|'completed'
-  winnerEmail?: string|null
-  startingScore?: number
-  creatorEmail?: string
-  creatorName?: string
-}
+  id: string;
+  title: string;
+  game: string;
+  mode: ModeKey;
+  value: number;
+  description: string;
+  startAt: number;
+  checkinMinutes: number;
+  capacity: number;
+  participants: { email: string; username: string }[];
+  official?: boolean;
+  prize?: boolean;
+  prizeType?: "premium" | "cash" | "none";
+  prizeAmount?: number;
+  currency?: string;
+  payoutStatus?: "none" | "pending" | "paid";
+  status: "scheduled" | "running" | "completed";
+  winnerEmail?: string | null;
+  startingScore?: number;
+  creatorEmail?: string;
+  creatorName?: string;
+};
 
 export default function Tournaments({ user }: { user: any }) {
-  const toast = useToast()
-  const wsGlobal = (() => { try { return useWS() } catch { return null } })()
+  const toast = useToast();
+  const wsGlobal = (() => {
+    try {
+      return useWS();
+    } catch {
+      return null;
+    }
+  })();
   // Persisted match preferences (used when creating or joining)
-  const { matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName } = useUserSettings()
-  const [list, setList] = useState<Tournament[]>([])
-  const [loading, setLoading] = useState(false)
-  const [errorMsg, setErrorMsg] = useState('')
-  const [fetchError, setFetchError] = useState<string | null>(null)
-  const [lastRefresh, setLastRefresh] = useState<number | null>(null)
-  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null)
-  const [showCreate, setShowCreate] = useState(false)
-  const [showDemoStart, setShowDemoStart] = useState(false)
-  const [showStartShowcase, setShowStartShowcase] = useState(false)
-  const startedShowcasedRef = useRef(false)
-  const match = useMatch()
-  const endSummaryPrevRef = useRef(!!useMatch.getState().inProgress)
+  const {
+    matchType = "singles",
+    setMatchType,
+    teamAName = "Team A",
+    setTeamAName,
+    teamBName = "Team B",
+    setTeamBName,
+  } = useUserSettings();
+  const [list, setList] = useState<Tournament[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<number | null>(null);
+  const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showDemoStart, setShowDemoStart] = useState(false);
+  const [showStartShowcase, setShowStartShowcase] = useState(false);
+  const startedShowcasedRef = useRef(false);
+  const match = useMatch();
+  const endSummaryPrevRef = useRef(!!useMatch.getState().inProgress);
   useEffect(() => {
-    const prev = endSummaryPrevRef.current
-    const now = !!match.inProgress
+    const prev = endSummaryPrevRef.current;
+    const now = !!match.inProgress;
     // Reset the showcased flag when match ends
-    if (!now) startedShowcasedRef.current = false
+    if (!now) startedShowcasedRef.current = false;
     // When match starts, show the start showcase once
     if (now && !startedShowcasedRef.current) {
-      startedShowcasedRef.current = true
-      setShowStartShowcase(true)
+      startedShowcasedRef.current = true;
+      setShowStartShowcase(true);
     }
-    endSummaryPrevRef.current = now
-  }, [match.inProgress, match.players])
-  const [leaveAsk, setLeaveAsk] = useState<{ open: boolean; t: Tournament | null }>({ open: false, t: null })
-  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; t: Tournament | null }>({ open: false, t: null })
+    endSummaryPrevRef.current = now;
+  }, [match.inProgress, match.players]);
+  const [leaveAsk, setLeaveAsk] = useState<{
+    open: boolean;
+    t: Tournament | null;
+  }>({ open: false, t: null });
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    open: boolean;
+    t: Tournament | null;
+  }>({ open: false, t: null });
   const [form, setForm] = useState({
-    title: 'Community X01 Tournament',
-    game: 'X01',
-    mode: 'bestof' as ModeKey,
+    title: "Community X01 Tournament",
+    game: "X01",
+    mode: "bestof" as ModeKey,
     value: 3,
-    description: '',
-    startAt: new Date(Date.now() + 2*60*60*1000).toISOString().slice(0,16), // local yyyy-mm-ddThh:mm
+    description: "",
+    startAt: new Date(Date.now() + 2 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 16), // local yyyy-mm-ddThh:mm
     checkinMinutes: 15,
     capacity: 8,
     startingScore: 501,
     requireCalibration: false,
-  })
+  });
   const isTouch = (() => {
-    try { return ('ontouchstart' in window) || (navigator.maxTouchPoints||0) > 0 } catch { return false }
-  })()
+    try {
+      return "ontouchstart" in window || (navigator.maxTouchPoints || 0) > 0;
+    } catch {
+      return false;
+    }
+  })();
 
   async function refresh() {
     try {
-      const res = await apiFetch('/api/tournaments')
-      const data = await res.json()
-  const newList = Array.isArray(data.tournaments) ? data.tournaments : []
-  setList(newList)
-  try { console.debug('[Tournaments] refresh fetched', newList.length, 'tournaments'); console.log('[Tournaments] fetched list:', newList) } catch {}
-      setFetchError(null)
-      setLastRefresh(Date.now())
+      const res = await apiFetch("/api/tournaments");
+      const data = await res.json();
+      const newList = Array.isArray(data.tournaments) ? data.tournaments : [];
+      setList(newList);
+      try {
+        console.debug(
+          "[Tournaments] refresh fetched",
+          newList.length,
+          "tournaments",
+        );
+        console.log("[Tournaments] fetched list:", newList);
+      } catch {}
+      setFetchError(null);
+      setLastRefresh(Date.now());
     } catch (err: any) {
-      try { setFetchError(String(err?.message || err)) } catch { setFetchError('unknown') }
+      try {
+        setFetchError(String(err?.message || err));
+      } catch {
+        setFetchError("unknown");
+      }
     }
   }
-  useEffect(() => { refresh() }, [])
+  useEffect(() => {
+    refresh();
+  }, []);
 
   // Re-fetch tournaments when we have a fresh WS connection so clients resync after reconnects/server restarts
   useEffect(() => {
     try {
-      if (wsGlobal?.connected) refresh()
+      if (wsGlobal?.connected) refresh();
     } catch {}
-  }, [wsGlobal?.connected])
+  }, [wsGlobal?.connected]);
 
   // Listen for WS push updates from global provider if available
   useEffect(() => {
-    if (!wsGlobal) return
+    if (!wsGlobal) return;
     const unsub = wsGlobal.addListener((msg) => {
       try {
-  if (msg.type === 'tournaments') { setList(msg.tournaments || []); setLastRefresh(Date.now()); }
-        if (msg.type === 'tournaments') {
-          try { console.debug('[Tournaments] WS tournaments update, num=', (msg.tournaments || []).length) } catch {}
+        if (msg.type === "tournaments") {
+          setList(msg.tournaments || []);
+          setLastRefresh(Date.now());
         }
-        if (msg.type === 'tournament-win' && msg.message) {
-          toast(msg.message, { type: 'success', timeout: 10000 }) // Show for 10 seconds
+        if (msg.type === "tournaments") {
+          try {
+            console.debug(
+              "[Tournaments] WS tournaments update, num=",
+              (msg.tournaments || []).length,
+            );
+          } catch {}
+        }
+        if (msg.type === "tournament-win" && msg.message) {
+          toast(msg.message, { type: "success", timeout: 10000 }); // Show for 10 seconds
         }
         // tournament-reminder handled optionally here if desired
       } catch {}
-    })
-    return () => { unsub() }
-  }, [wsGlobal?.connected])
+    });
+    return () => {
+      unsub();
+    };
+  }, [wsGlobal?.connected]);
 
   // If WS connects, ask for a fresh list via WS; this will prompt server to send a tournaments snapshot.
   useEffect(() => {
     try {
       if (wsGlobal?.connected) {
-        try { wsGlobal.send({ type: 'list-tournaments' }) } catch {}
+        try {
+          wsGlobal.send({ type: "list-tournaments" });
+        } catch {}
         // Also ensure we refresh as a fallback
-        refresh()
+        refresh();
       }
     } catch {}
-  }, [wsGlobal?.connected])
+  }, [wsGlobal?.connected]);
 
   // Polling fallback: if WS is unavailable, poll the API every 10s to keep lobby up-to-date
   useEffect(() => {
-    let iv: number | null = null
+    let iv: number | null = null;
     try {
       if (!wsGlobal || !wsGlobal.connected) {
-        iv = window.setInterval(() => { refresh() }, 10000)
+        iv = window.setInterval(() => {
+          refresh();
+        }, 10000);
       }
     } catch {}
-    return () => { if (iv) clearInterval(iv) }
-  }, [wsGlobal?.connected])
+    return () => {
+      if (iv) clearInterval(iv);
+    };
+  }, [wsGlobal?.connected]);
 
-  const email = String(user?.email || '').toLowerCase()
-  
+  const email = String(user?.email || "").toLowerCase();
+
   // Simple, persistent match preference UI
   const MatchPrefs = () => (
     <div className="mb-3 p-2 rounded-lg bg-slate-900/40 border border-white/10 text-white text-xs flex items-center gap-2 flex-wrap">
       <span className="opacity-70">Default match</span>
-      <span className="btn py-1 px-2 bg-indigo-500/30 border border-indigo-400/50 text-indigo-100">Singles</span>
-      <span className="text-xs opacity-60 ml-2">(tournaments use Singles only)</span>
+      <span className="btn py-1 px-2 bg-indigo-500/30 border border-indigo-400/50 text-indigo-100">
+        Singles
+      </span>
+      <span className="text-xs opacity-60 ml-2">
+        (tournaments use Singles only)
+      </span>
     </div>
-  )
+  );
   // Fetch subscription to detect if user is a recent tournament winner (cooldown)
   useEffect(() => {
-    let abort = false
+    let abort = false;
     async function check() {
-      if (!email) { setCooldownUntil(null); return }
+      if (!email) {
+        setCooldownUntil(null);
+        return;
+      }
       try {
-        const res = await apiFetch(`/api/subscription?email=${encodeURIComponent(email)}`)
-        const data = await res.json()
+        const res = await apiFetch(
+          `/api/subscription?email=${encodeURIComponent(email)}`,
+        );
+        const data = await res.json();
         if (!abort) {
-          if (data?.source === 'tournament' && typeof data.expiresAt === 'number' && data.expiresAt > Date.now()) {
-            setCooldownUntil(data.expiresAt)
+          if (
+            data?.source === "tournament" &&
+            typeof data.expiresAt === "number" &&
+            data.expiresAt > Date.now()
+          ) {
+            setCooldownUntil(data.expiresAt);
           } else {
-            setCooldownUntil(null)
+            setCooldownUntil(null);
           }
         }
       } catch {
-        if (!abort) setCooldownUntil(null)
+        if (!abort) setCooldownUntil(null);
       }
     }
-    check()
-    return () => { abort = true }
-  }, [email])
+    check();
+    return () => {
+      abort = true;
+    };
+  }, [email]);
   function hasJoined(t: Tournament) {
-    return !!t.participants?.some(p => p.email === email)
+    return !!t.participants?.some((p) => p.email === email);
   }
 
   // Helper to delete a tournament with proper error handling and owner fallback
   async function deleteTournament(t: Tournament) {
-    if (!email) return
-    setDeleteConfirm({ open: true, t })
+    if (!email) return;
+    setDeleteConfirm({ open: true, t });
   }
 
   async function confirmDeleteTournament() {
-    const t = deleteConfirm.t
-    if (!t || !email) return
-    setDeleteConfirm({ open: false, t: null })
-    setLoading(true)
+    const t = deleteConfirm.t;
+    if (!t || !email) return;
+    setDeleteConfirm({ open: false, t: null });
+    setLoading(true);
     try {
       // First try creator/owner shared endpoint
-      let res = await apiFetch('/api/tournaments/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tournamentId: t.id, requesterEmail: email })
-      })
+      let res = await apiFetch("/api/tournaments/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tournamentId: t.id, requesterEmail: email }),
+      });
 
       // If forbidden but user is the owner, try the admin endpoint as a fallback
-      if (!res.ok && res.status === 403 && String(email) === 'daviesfamily108@gmail.com') {
-        res = await apiFetch('/api/admin/tournaments/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tournamentId: t.id, requesterEmail: email })
-        })
+      if (
+        !res.ok &&
+        res.status === 403 &&
+        String(email) === "daviesfamily108@gmail.com"
+      ) {
+        res = await apiFetch("/api/admin/tournaments/delete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tournamentId: t.id, requesterEmail: email }),
+        });
       }
 
       if (!res.ok) {
-        let msg = 'Delete failed'
+        let msg = "Delete failed";
         try {
-          const data = await res.json()
-          if (data?.error) msg = `Delete failed: ${String(data.error)}`
+          const data = await res.json();
+          if (data?.error) msg = `Delete failed: ${String(data.error)}`;
         } catch {}
-        toast(msg, { type: 'error' })
-        return
+        toast(msg, { type: "error" });
+        return;
       }
 
-      toast('Tournament deleted', { type: 'success' })
-      await refresh()
+      toast("Tournament deleted", { type: "success" });
+      await refresh();
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
   async function join(t: Tournament) {
-    if (!email) return
-    setLoading(true)
+    if (!email) return;
+    setLoading(true);
     try {
-      const res = await apiFetch('/api/tournaments/join', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: t.id, email, username: user?.username }) })
+      const res = await apiFetch("/api/tournaments/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tournamentId: t.id,
+          email,
+          username: user?.username,
+        }),
+      });
       if (!res.ok) {
-        let data: any = {}
-        try { data = await res.json() } catch {}
-        if (data?.error === 'WINNER_COOLDOWN' && typeof data.until === 'number') {
-          setErrorMsg(`You're a recent NDN tournament winner. You can re-enter after ${fmt(data.until)}.`)
-          setTimeout(()=>setErrorMsg(''), 6000)
-          toast('Join blocked: winner cooldown active', { type: 'error' })
-        } else if (data?.error === 'ALREADY_IN_TOURNAMENT') {
-          setErrorMsg(String(data.message || 'You can only join one tournament at a time.'))
-          setTimeout(()=>setErrorMsg(''), 6000)
-          toast('Join blocked: already in another tournament', { type: 'error' })
+        let data: any = {};
+        try {
+          data = await res.json();
+        } catch {}
+        if (
+          data?.error === "WINNER_COOLDOWN" &&
+          typeof data.until === "number"
+        ) {
+          setErrorMsg(
+            `You're a recent NDN tournament winner. You can re-enter after ${fmt(data.until)}.`,
+          );
+          setTimeout(() => setErrorMsg(""), 6000);
+          toast("Join blocked: winner cooldown active", { type: "error" });
+        } else if (data?.error === "ALREADY_IN_TOURNAMENT") {
+          setErrorMsg(
+            String(
+              data.message || "You can only join one tournament at a time.",
+            ),
+          );
+          setTimeout(() => setErrorMsg(""), 6000);
+          toast("Join blocked: already in another tournament", {
+            type: "error",
+          });
         } else if (data?.error) {
-          setErrorMsg(String(data.error))
-          setTimeout(()=>setErrorMsg(''), 3500)
-          toast(`Join failed: ${String(data.error)}`, { type: 'error' })
+          setErrorMsg(String(data.error));
+          setTimeout(() => setErrorMsg(""), 3500);
+          toast(`Join failed: ${String(data.error)}`, { type: "error" });
         }
-        return
+        return;
       }
-      toast('Joined tournament', { type: 'success' })
-      await refresh()
-    } finally { setLoading(false) }
+      toast("Joined tournament", { type: "success" });
+      await refresh();
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function leave(t: Tournament) {
-    if (!email) return
-    setLoading(true)
+    if (!email) return;
+    setLoading(true);
     try {
-      const res = await apiFetch('/api/tournaments/leave', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: t.id, email }) })
+      const res = await apiFetch("/api/tournaments/leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tournamentId: t.id, email }),
+      });
       if (!res.ok) {
-        let data: any = {}
-        try { data = await res.json() } catch {}
+        let data: any = {};
+        try {
+          data = await res.json();
+        } catch {}
         if (data?.error) {
-          toast(`Leave failed: ${String(data.error)}`, { type: 'error' })
+          toast(`Leave failed: ${String(data.error)}`, { type: "error" });
         } else if (res.status === 404) {
-          toast('Leave failed (endpoint not found). Restart the server to enable /api/tournaments/leave.', { type: 'error' })
+          toast(
+            "Leave failed (endpoint not found). Restart the server to enable /api/tournaments/leave.",
+            { type: "error" },
+          );
         } else {
-          toast('Leave failed. Please try again.', { type: 'error' })
+          toast("Leave failed. Please try again.", { type: "error" });
         }
-        return
+        return;
       }
-      toast('Left tournament', { type: 'success' })
+      toast("Left tournament", { type: "success" });
       // Optimistic local update
-      setList(prev => prev.map(it => it.id === t.id ? { ...it, participants: (it.participants||[]).filter(p => p.email !== email) } : it))
-      await refresh()
-    } finally { setLoading(false) }
+      setList((prev) =>
+        prev.map((it) =>
+          it.id === t.id
+            ? {
+                ...it,
+                participants: (it.participants || []).filter(
+                  (p) => p.email !== email,
+                ),
+              }
+            : it,
+        ),
+      );
+      await refresh();
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function createTournament() {
-    setLoading(true)
+    setLoading(true);
     try {
-      const start = new Date(form.startAt).getTime()
-      const res = await apiFetch('/api/tournaments/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        title: form.title,
-        game: form.game,
-        mode: form.mode,
-        value: Number(form.value),
-        description: form.description,
-        startAt: start,
-        checkinMinutes: Number(form.checkinMinutes),
-        capacity: Number(form.capacity),
-        startingScore: form.game==='X01' ? Number(form.startingScore||501) : undefined,
-        requireCalibration: !!form.requireCalibration,
-        creatorEmail: user?.email,
-        creatorName: user?.username,
-      }) })
+      const start = new Date(form.startAt).getTime();
+      const res = await apiFetch("/api/tournaments/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: form.title,
+          game: form.game,
+          mode: form.mode,
+          value: Number(form.value),
+          description: form.description,
+          startAt: start,
+          checkinMinutes: Number(form.checkinMinutes),
+          capacity: Number(form.capacity),
+          startingScore:
+            form.game === "X01" ? Number(form.startingScore || 501) : undefined,
+          requireCalibration: !!form.requireCalibration,
+          creatorEmail: user?.email,
+          creatorName: user?.username,
+        }),
+      });
       if (!res.ok) {
-        let details = ''
+        let details = "";
         try {
-          const data = await res.json()
-          if (data?.error) details = String(data.error)
-          else if (data?.details) details = String(data.details)
+          const data = await res.json();
+          if (data?.error) details = String(data.error);
+          else if (data?.details) details = String(data.details);
         } catch {}
-        const msg = details ? `Create failed: ${details}` : 'Create failed. Please try again.'
-        setErrorMsg(msg)
-        toast(msg, { type: 'error' })
-        setTimeout(()=>setErrorMsg(''), 6000)
-        return
+        const msg = details
+          ? `Create failed: ${details}`
+          : "Create failed. Please try again.";
+        setErrorMsg(msg);
+        toast(msg, { type: "error" });
+        setTimeout(() => setErrorMsg(""), 6000);
+        return;
       }
       try {
-        const data = await res.json()
+        const data = await res.json();
         if (!data?.ok) {
-          const msg = data?.error ? `Create failed: ${String(data.error)}` : 'Create failed. Please try again.'
-          setErrorMsg(msg)
-          toast(msg, { type: 'error' })
-          setTimeout(()=>setErrorMsg(''), 6000)
-          return
+          const msg = data?.error
+            ? `Create failed: ${String(data.error)}`
+            : "Create failed. Please try again.";
+          setErrorMsg(msg);
+          toast(msg, { type: "error" });
+          setTimeout(() => setErrorMsg(""), 6000);
+          return;
         }
       } catch {}
-      setShowCreate(false)
-      toast('Tournament created', { type: 'success' })
-      await refresh()
-    } finally { setLoading(false) }
+      setShowCreate(false);
+      toast("Tournament created", { type: "success" });
+      await refresh();
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Close the create modal on Escape
   useEffect(() => {
-    if (!showCreate) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowCreate(false) }
-    document.addEventListener('keydown', onKey)
-    return () => document.removeEventListener('keydown', onKey)
-  }, [showCreate])
+    if (!showCreate) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowCreate(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [showCreate]);
 
-  const official = useMemo(() => list.filter(t => t.official), [list])
-  const community = useMemo(() => list.filter(t => !t.official), [list])
-  const created = useMemo(() => list.filter(t => t.status === 'scheduled' && !t.official), [list])
+  const official = useMemo(() => list.filter((t) => t.official), [list]);
+  const community = useMemo(() => list.filter((t) => !t.official), [list]);
+  const created = useMemo(
+    () => list.filter((t) => t.status === "scheduled" && !t.official),
+    [list],
+  );
   const nextOfficial = useMemo(() => {
     const upcoming = official
-      .filter(t => t.status === 'scheduled')
-      .sort((a,b) => a.startAt - b.startAt)
-    return upcoming[0] || null
-  }, [official])
+      .filter((t) => t.status === "scheduled")
+      .sort((a, b) => a.startAt - b.startAt);
+    return upcoming[0] || null;
+  }, [official]);
 
   function fmt(ts: number) {
-    const d = new Date(ts)
-    return d.toLocaleString()
+    const d = new Date(ts);
+    return d.toLocaleString();
   }
 
   return (
@@ -351,303 +490,665 @@ export default function Tournaments({ user }: { user: any }) {
         <h2 className="text-2xl font-bold">Tournaments</h2>
       </div>
       <div className="ndn-shell-body">
-      {/* Create Tournament + and default match prefs on a single header row */}
-      <div className="mb-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-between gap-2 flex-wrap">
-        <div className="min-w-0">
-          <MatchPrefs />
-        </div>
-        <div className="shrink-0">
-          <button className="btn" onClick={()=>setShowCreate(true)}>Create Tournament +</button>
-          {((import.meta as any).env?.DEV || email === 'daviesfamily108@gmail.com') && (
-            <button className="btn btn-ghost ml-2" onClick={() => setShowDemoStart(true)}>Demo Start Showcase</button>
-          )}
-        </div>
-      </div>
-  {/* DEV-only start showcase demo */}
-  {showDemoStart && <MatchStartShowcase players={[{ id: '0', name: 'Demo A', legsWon: 0, legs: [] }, { id: '1', name: 'Demo B', legsWon: 0, legs: [] }]} onDone={() => setShowDemoStart(false)} />}
-  {/* Show overlay when a tournament match starts while on the tournaments page */}
-  {showStartShowcase && <MatchStartShowcase players={(match.players || []) as any} onDone={() => setShowStartShowcase(false)} />}
-  <div className="mb-2 text-sm font-semibold text-slate-300">World Lobby</div>
-      {/* Created Game Lobby: show all created tournaments (scheduled) */}
-      <div className="mb-3 p-3 rounded-xl border border-slate-700 bg-black/10">
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-semibold">Created Game Lobby</div>
-          <div className="text-xs opacity-60">All tournaments created by users and admins</div>
-        </div>
-        <ul className="space-y-2">
-          {created.length === 0 && <li className="text-sm opacity-60">No created tournaments yet.</li>}
-          {created.map(t => (
-            <MatchCard key={t.id} t={t} onJoin={(m)=>join(m)} onLeave={(m)=>leave(m)} joined={hasJoined(t)} disabled={loading || t.status!=='scheduled' || (!hasJoined(t) && (t.participants.length>=t.capacity))} />
-          ))}
-        </ul>
-      </div>
-      {/* Persistent banner for next official weekly tournament */}
-      {nextOfficial && (
-        <div className="mb-4 p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-            <div>
-              <div className="text-sm uppercase tracking-wide text-indigo-300 font-semibold">Weekly Official Tournament</div>
-              <div className="font-bold">{nextOfficial.title}</div>
-                  <div className="text-sm opacity-80">{nextOfficial.game}{nextOfficial.game==='X01' && nextOfficial.startingScore?`/${nextOfficial.startingScore}`:''} · {labelForMode(nextOfficial.mode)} {nextOfficial.value} · Starts {fmt(nextOfficial.startAt)} · Cap {nextOfficial.capacity} · Joined {nextOfficial.participants.length}</div>
-              {nextOfficial.prize && (
-                <div className="text-xs mt-1">
-                  Prize: {nextOfficial.prizeType === 'cash' && nextOfficial.prizeAmount ? `${nextOfficial.currency||'USD'} ${nextOfficial.prizeAmount}` : '3 months PREMIUM'}
-                </div>
-              )}
-              {nextOfficial.status !== 'scheduled' && <div className="text-xs">Status: {nextOfficial.status}</div>}
-              {cooldownUntil && cooldownUntil > Date.now() && (
-                <div className="text-xs text-rose-300">Recent winners can re-enter after {fmt(cooldownUntil)}.</div>
-              )}
-            </div>
-            <div className="shrink-0">
-              <button
-                className={`btn ${hasJoined(nextOfficial) ? 'bg-emerald-600 hover:bg-emerald-600' : ''}`}
-                title={hasJoined(nextOfficial)
-                  ? 'Double-click to leave this tournament'
-                  : (nextOfficial.official && cooldownUntil && cooldownUntil > Date.now() ? `Recent winners can re-enter after ${fmt(cooldownUntil)}` : '')}
-                disabled={loading || nextOfficial.status!=='scheduled' || (!hasJoined(nextOfficial) && (nextOfficial.participants.length>=nextOfficial.capacity || (!!cooldownUntil && cooldownUntil > Date.now())))}
-                onClick={()=> {
-                  if (!hasJoined(nextOfficial)) { join(nextOfficial) }
-                  else if (isTouch) { setLeaveAsk({ open: true, t: nextOfficial }) }
-                }}
-                onDoubleClick={()=> { if (!isTouch && hasJoined(nextOfficial)) setLeaveAsk({ open: true, t: nextOfficial }) }}
-                aria-label={hasJoined(nextOfficial) ? 'Already Joined' : 'Join Now'}
-              >{hasJoined(nextOfficial) ? 'Already Joined!' : 'Join Now'}</button>
-            </div>
+        {/* Create Tournament + and default match prefs on a single header row */}
+        <div className="mb-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-between gap-2 flex-wrap">
+          <div className="min-w-0">
+            <MatchPrefs />
           </div>
-        </div>
-      )}
-      {errorMsg && (
-        <div className="mb-3 p-2 rounded-lg bg-amber-700/30 border border-amber-600/40 text-amber-200 text-sm">{errorMsg}</div>
-      )}
-      <div className="space-y-4">
-        <section>
-          <div className="font-semibold mb-1">Official</div>
-          <div className="text-xs opacity-70 mb-2">
-            {cooldownUntil && cooldownUntil > Date.now() ? (
-              <>You’re a recent NDN tournament winner — to keep it fair, you can re-enter after {fmt(cooldownUntil)}.</>
-            ) : (
-              <>Note: Weekly winners can re-enter once their 3 months of PREMIUM ends.</>
+          <div className="shrink-0">
+            <button className="btn" onClick={() => setShowCreate(true)}>
+              Create Tournament +
+            </button>
+            {((import.meta as any).env?.DEV ||
+              email === "daviesfamily108@gmail.com") && (
+              <button
+                className="btn btn-ghost ml-2"
+                onClick={() => setShowDemoStart(true)}
+              >
+                Demo Start Showcase
+              </button>
             )}
           </div>
-          <ul className="space-y-2">
-            {official.map(t => (
-              <li key={t.id} className="p-3 rounded bg-black/10 flex items-center justify-between relative">
-                <div className="space-y-0.5">
-                  <div className="font-semibold">{t.title} {t.prize && (
-                    <span className="inline-flex items-center gap-1 ml-2 align-middle">
-                      <span className="text-xs px-2 py-0.5 rounded bg-amber-500 text-black">Prize</span>
-                      <span
-                        className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-600 text-white text-[10px] leading-none cursor-help"
-                        title={t.prizeType==='cash' ? 'Official cash prize tournament — payout handled by admin.' : 'Weekly winners get 3 months of PREMIUM and can re-enter once their prize period ends.'}
-                        aria-label="Prize info"
-                      >i</span>
-                    </span>
-                  )}</div>
-                  <div className="text-sm opacity-80">{t.game}{t.game==='X01' && t.startingScore?`/${t.startingScore}`:''} · {labelForMode(t.mode)} {t.value} · {fmt(t.startAt)} · Cap {t.capacity} · Joined {t.participants.length}</div>
-                  {t.prize && (
-                    <div className="text-xs">
-                      Prize: {t.prizeType === 'cash' && t.prizeAmount ? `${t.currency||'USD'} ${t.prizeAmount}` : '3 months PREMIUM'}
-                      {t.status==='completed' && t.prizeType==='cash' && t.payoutStatus && (
-                        <span className={`ml-2 px-2 py-0.5 rounded ${t.payoutStatus==='paid'?'bg-emerald-600':'bg-amber-600'}`}>{t.payoutStatus==='paid'?'Paid':'Pending'}</span>
-                      )}
-                    </div>
-                  )}
-                  {t.status !== 'scheduled' && <div className="text-xs">Status: {t.status}</div>}
-                  {hasJoined(t) && <div className="text-xs text-emerald-400 font-semibold">Already Joined</div>}
-                  {t.official && cooldownUntil && cooldownUntil > Date.now() && (
-                    <div className="text-xs text-rose-300">Cooldown active until {fmt(cooldownUntil)}.</div>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    className={`btn ${hasJoined(t) ? 'bg-emerald-600 hover:bg-emerald-600' : ''}`}
-                    title={hasJoined(t)
-                      ? 'Double-click to leave this tournament'
-                      : (t.official && cooldownUntil && cooldownUntil > Date.now() ? `Recent winners can re-enter after ${fmt(cooldownUntil)}` : '')}
-                    disabled={loading || t.status!=='scheduled' || (!hasJoined(t) && (t.participants.length>=t.capacity || (t.official && !!cooldownUntil && cooldownUntil > Date.now())))}
-                    onClick={()=> { if (!hasJoined(t)) { join(t) } else if (isTouch) { setLeaveAsk({ open: true, t }) } }}
-                    onDoubleClick={()=> { if (!isTouch && hasJoined(t)) setLeaveAsk({ open: true, t }) }}
-                    aria-label={hasJoined(t) ? 'Already Joined' : 'Join Now'}
-                  >{hasJoined(t) ? 'Already Joined!' : 'Join Now'}</button>
-                  {/* Delete button when you are the creator (owner-created official) and it hasn't started */}
-                  {(t.status==='scheduled' && email && ((t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) || email === 'daviesfamily108@gmail.com')) && (
-                    <button
-                      className="w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
-                      title="Delete this tournament"
-                      onClick={()=>deleteTournament(t)}
-                      aria-label="Delete tournament"
-                    >×</button>
-                  )}
-                </div>
-              </li>
-            ))}
-            {official.length === 0 && <li className="text-sm opacity-60">No official tournaments yet.</li>}
-          </ul>
-        </section>
-
-        <section>
-          <div className="font-semibold mb-1">Community</div>
-          <ul className="space-y-2">
-            {community.map(t => (
-              <li key={t.id} className="p-3 rounded bg-black/10 flex items-center justify-between relative">
-                <div className="space-y-0.5">
-                  <div className="font-semibold">{t.title}</div>
-                  <div className="text-sm opacity-80">{t.game}{t.game==='X01' && t.startingScore?`/${t.startingScore}`:''} · {labelForMode(t.mode)} {t.value} · {fmt(t.startAt)} · Cap {t.capacity} · Joined {t.participants.length}</div>
-                  {t.description && <div className="text-xs opacity-80">{t.description}</div>}
-                  {hasJoined(t) && <div className="text-xs text-emerald-400 font-semibold">Already Joined</div>}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    className="btn"
-                    title={hasJoined(t) ? 'Double-click to leave this tournament' : ''}
-                    disabled={loading || t.status!=='scheduled' || (!hasJoined(t) && t.participants.length>=t.capacity)}
-                    onClick={()=> { if (!hasJoined(t)) { join(t) } else if (isTouch) { setLeaveAsk({ open: true, t }) } }}
-                    onDoubleClick={()=> { if (!isTouch && hasJoined(t)) setLeaveAsk({ open: true, t }) }}
-                  >{hasJoined(t) ? 'Already Joined' : 'Join Now'}</button>
-                  {/* Delete button for creator to delete their own scheduled tournament */}
-                  {(t.status==='scheduled' && email && ((t.creatorEmail && String(t.creatorEmail).toLowerCase()===email) || email === 'daviesfamily108@gmail.com')) && (
-                    <button
-                      className="w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
-                      title="Delete this tournament"
-                      onClick={()=>deleteTournament(t)}
-                      aria-label="Delete tournament"
-                    >×</button>
-                  )}
-                </div>
-              </li>
-            ))}
-            {community.length === 0 && <li className="text-sm opacity-60">No community tournaments yet.</li>}
-          </ul>
-        </section>
-      </div>
-
-      {showCreate && (
-        <div className="mb-4">
-          <div className="card relative">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xl font-semibold">Create Tournament</h3>
-              <button className="btn" onClick={()=>setShowCreate(false)}>Close</button>
+        </div>
+        {/* DEV-only start showcase demo */}
+        {showDemoStart && (
+          <MatchStartShowcase
+            players={[
+              { id: "0", name: "Demo A", legsWon: 0, legs: [] },
+              { id: "1", name: "Demo B", legsWon: 0, legs: [] },
+            ]}
+            onDone={() => setShowDemoStart(false)}
+          />
+        )}
+        {/* Show overlay when a tournament match starts while on the tournaments page */}
+        {showStartShowcase && (
+          <MatchStartShowcase
+            players={(match.players || []) as any}
+            onDone={() => setShowStartShowcase(false)}
+          />
+        )}
+        <div className="mb-2 text-sm font-semibold text-slate-300">
+          World Lobby
+        </div>
+        {/* Created Game Lobby: show all created tournaments (scheduled) */}
+        <div className="mb-3 p-3 rounded-xl border border-slate-700 bg-black/10">
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-semibold">Created Game Lobby</div>
+            <div className="text-xs opacity-60">
+              All tournaments created by users and admins
             </div>
-            <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 pr-1">
+          </div>
+          <ul className="space-y-2">
+            {created.length === 0 && (
+              <li className="text-sm opacity-60">
+                No created tournaments yet.
+              </li>
+            )}
+            {created.map((t) => (
+              <MatchCard
+                key={t.id}
+                t={t}
+                onJoin={(m) => join(m)}
+                onLeave={(m) => leave(m)}
+                joined={hasJoined(t)}
+                disabled={
+                  loading ||
+                  t.status !== "scheduled" ||
+                  (!hasJoined(t) && t.participants.length >= t.capacity)
+                }
+              />
+            ))}
+          </ul>
+        </div>
+        {/* Persistent banner for next official weekly tournament */}
+        {nextOfficial && (
+          <div className="mb-4 p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
               <div>
-                <label className="block text-sm font-semibold mb-1">Title</label>
-                <input className="input w-full" value={form.title} onChange={e=>setForm(f=>({ ...f, title: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Game</label>
-                  <select className="input w-full" value={form.game} onChange={e=>setForm(f=>({ ...f, game: e.target.value }))}>
-                    {['X01', 'Cricket', 'Killer'].map(g => <option key={g} value={g}>{g}</option>)}
-                  </select>
+                <div className="text-sm uppercase tracking-wide text-indigo-300 font-semibold">
+                  Weekly Official Tournament
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Mode</label>
-                  <select className="input w-full" value={form.mode} onChange={e=>setForm(f=>({ ...f, mode: e.target.value as any }))}>
-                    {getModeOptionsForGame(form.game).map(o => (
-                      <option key={String(o)} value={String(o)}>{labelForMode(String(o))}</option>
-                    ))}
-                  </select>
+                <div className="font-bold">{nextOfficial.title}</div>
+                <div className="text-sm opacity-80">
+                  {nextOfficial.game}
+                  {nextOfficial.game === "X01" && nextOfficial.startingScore
+                    ? `/${nextOfficial.startingScore}`
+                    : ""}{" "}
+                  · {labelForMode(nextOfficial.mode)} {nextOfficial.value} ·
+                  Starts {fmt(nextOfficial.startAt)} · Cap{" "}
+                  {nextOfficial.capacity} · Joined{" "}
+                  {nextOfficial.participants.length}
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Number</label>
-                  <input className="input w-full" type="number" min={1} value={form.value} onChange={e=>setForm(f=>({ ...f, value: Number(e.target.value) }))} />
-                </div>
+                {nextOfficial.prize && (
+                  <div className="text-xs mt-1">
+                    Prize:{" "}
+                    {nextOfficial.prizeType === "cash" &&
+                    nextOfficial.prizeAmount
+                      ? `${nextOfficial.currency || "USD"} ${nextOfficial.prizeAmount}`
+                      : "3 months PREMIUM"}
+                  </div>
+                )}
+                {nextOfficial.status !== "scheduled" && (
+                  <div className="text-xs">Status: {nextOfficial.status}</div>
+                )}
+                {cooldownUntil && cooldownUntil > Date.now() && (
+                  <div className="text-xs text-rose-300">
+                    Recent winners can re-enter after {fmt(cooldownUntil)}.
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-semibold mb-1">Description</label>
-                <textarea className="input w-full" rows={5} value={form.description} onChange={e=>setForm(f=>({ ...f, description: e.target.value }))} />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Start time</label>
-                  <input className="input w-full" type="datetime-local" value={form.startAt} onChange={e=>setForm(f=>({ ...f, startAt: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Check-in reminder (min)</label>
-                  <input className="input w-full" type="number" min={0} value={form.checkinMinutes} onChange={e=>setForm(f=>({ ...f, checkinMinutes: Number(e.target.value) }))} />
-                </div>
-              </div>
-              {form.game==='X01' && (
-                <div>
-                  <label className="block text-sm font-semibold mb-1">X01 Starting Score</label>
-                  <select className="input w-full" value={String(form.startingScore)} onChange={e=>setForm(f=>({ ...f, startingScore: Number(e.target.value) }))}>
-                    {[301, 501, 701].map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input type="checkbox" className="accent-purple-500" checked={!!form.requireCalibration} onChange={e=>setForm(f=>({ ...f, requireCalibration: !!e.target.checked }))} />
-                  <span className="font-semibold">Require calibration</span>
-                </label>
-                <div className="text-xs opacity-70 mt-1">If checked, players must have a calibrated board to join matches spawned from this tournament.</div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold mb-1">Capacity</label>
-                <input className="input w-full" type="number" min={6} max={64} value={form.capacity} onChange={e=>setForm(f=>({ ...f, capacity: Number(e.target.value) }))} />
-              </div>
-              <div className="text-xs opacity-70">Note: community tournaments do not award prizes.</div>
-              <div className="flex justify-end">
-                <button className="btn" disabled={loading} onClick={createTournament}>Create</button>
+              <div className="shrink-0">
+                <button
+                  className={`btn ${hasJoined(nextOfficial) ? "bg-emerald-600 hover:bg-emerald-600" : ""}`}
+                  title={
+                    hasJoined(nextOfficial)
+                      ? "Double-click to leave this tournament"
+                      : nextOfficial.official &&
+                          cooldownUntil &&
+                          cooldownUntil > Date.now()
+                        ? `Recent winners can re-enter after ${fmt(cooldownUntil)}`
+                        : ""
+                  }
+                  disabled={
+                    loading ||
+                    nextOfficial.status !== "scheduled" ||
+                    (!hasJoined(nextOfficial) &&
+                      (nextOfficial.participants.length >=
+                        nextOfficial.capacity ||
+                        (!!cooldownUntil && cooldownUntil > Date.now())))
+                  }
+                  onClick={() => {
+                    if (!hasJoined(nextOfficial)) {
+                      join(nextOfficial);
+                    } else if (isTouch) {
+                      setLeaveAsk({ open: true, t: nextOfficial });
+                    }
+                  }}
+                  onDoubleClick={() => {
+                    if (!isTouch && hasJoined(nextOfficial))
+                      setLeaveAsk({ open: true, t: nextOfficial });
+                  }}
+                  aria-label={
+                    hasJoined(nextOfficial) ? "Already Joined" : "Join Now"
+                  }
+                >
+                  {hasJoined(nextOfficial) ? "Already Joined!" : "Join Now"}
+                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {leaveAsk.open && leaveAsk.t && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/40" onClick={()=>setLeaveAsk({ open: false, t: null })} />
-          <div className="relative card p-4 w-[360px] max-w-[90vw]">
-            <div className="text-lg font-semibold mb-2">Leave tournament?</div>
-            <div className="text-sm opacity-80 mb-4">Are you sure you want to remove yourself from “{leaveAsk.t.title}”?</div>
-            <div className="flex items-center justify-end gap-2">
-              <button
-                className="btn bg-rose-600 hover:bg-rose-700"
-                onClick={()=>setLeaveAsk({ open: false, t: null })}
-              >Decline</button>
-              <button
-                className="btn bg-emerald-600 hover:bg-emerald-700"
-                onClick={async ()=>{ const t = leaveAsk.t!; setLeaveAsk({ open: false, t: null }); await leave(t) }}
-              >Accept</button>
+        )}
+        {errorMsg && (
+          <div className="mb-3 p-2 rounded-lg bg-amber-700/30 border border-amber-600/40 text-amber-200 text-sm">
+            {errorMsg}
+          </div>
+        )}
+        <div className="space-y-4">
+          <section>
+            <div className="font-semibold mb-1">Official</div>
+            <div className="text-xs opacity-70 mb-2">
+              {cooldownUntil && cooldownUntil > Date.now() ? (
+                <>
+                  You’re a recent NDN tournament winner — to keep it fair, you
+                  can re-enter after {fmt(cooldownUntil)}.
+                </>
+              ) : (
+                <>
+                  Note: Weekly winners can re-enter once their 3 months of
+                  PREMIUM ends.
+                </>
+              )}
             </div>
-        </div>
-      </div>
-      )}
+            <ul className="space-y-2">
+              {official.map((t) => (
+                <li
+                  key={t.id}
+                  className="p-3 rounded bg-black/10 flex items-center justify-between relative"
+                >
+                  <div className="space-y-0.5">
+                    <div className="font-semibold">
+                      {t.title}{" "}
+                      {t.prize && (
+                        <span className="inline-flex items-center gap-1 ml-2 align-middle">
+                          <span className="text-xs px-2 py-0.5 rounded bg-amber-500 text-black">
+                            Prize
+                          </span>
+                          <span
+                            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-600 text-white text-[10px] leading-none cursor-help"
+                            title={
+                              t.prizeType === "cash"
+                                ? "Official cash prize tournament — payout handled by admin."
+                                : "Weekly winners get 3 months of PREMIUM and can re-enter once their prize period ends."
+                            }
+                            aria-label="Prize info"
+                          >
+                            i
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm opacity-80">
+                      {t.game}
+                      {t.game === "X01" && t.startingScore
+                        ? `/${t.startingScore}`
+                        : ""}{" "}
+                      · {labelForMode(t.mode)} {t.value} · {fmt(t.startAt)} ·
+                      Cap {t.capacity} · Joined {t.participants.length}
+                    </div>
+                    {t.prize && (
+                      <div className="text-xs">
+                        Prize:{" "}
+                        {t.prizeType === "cash" && t.prizeAmount
+                          ? `${t.currency || "USD"} ${t.prizeAmount}`
+                          : "3 months PREMIUM"}
+                        {t.status === "completed" &&
+                          t.prizeType === "cash" &&
+                          t.payoutStatus && (
+                            <span
+                              className={`ml-2 px-2 py-0.5 rounded ${t.payoutStatus === "paid" ? "bg-emerald-600" : "bg-amber-600"}`}
+                            >
+                              {t.payoutStatus === "paid" ? "Paid" : "Pending"}
+                            </span>
+                          )}
+                      </div>
+                    )}
+                    {t.status !== "scheduled" && (
+                      <div className="text-xs">Status: {t.status}</div>
+                    )}
+                    {hasJoined(t) && (
+                      <div className="text-xs text-emerald-400 font-semibold">
+                        Already Joined
+                      </div>
+                    )}
+                    {t.official &&
+                      cooldownUntil &&
+                      cooldownUntil > Date.now() && (
+                        <div className="text-xs text-rose-300">
+                          Cooldown active until {fmt(cooldownUntil)}.
+                        </div>
+                      )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className={`btn ${hasJoined(t) ? "bg-emerald-600 hover:bg-emerald-600" : ""}`}
+                      title={
+                        hasJoined(t)
+                          ? "Double-click to leave this tournament"
+                          : t.official &&
+                              cooldownUntil &&
+                              cooldownUntil > Date.now()
+                            ? `Recent winners can re-enter after ${fmt(cooldownUntil)}`
+                            : ""
+                      }
+                      disabled={
+                        loading ||
+                        t.status !== "scheduled" ||
+                        (!hasJoined(t) &&
+                          (t.participants.length >= t.capacity ||
+                            (t.official &&
+                              !!cooldownUntil &&
+                              cooldownUntil > Date.now())))
+                      }
+                      onClick={() => {
+                        if (!hasJoined(t)) {
+                          join(t);
+                        } else if (isTouch) {
+                          setLeaveAsk({ open: true, t });
+                        }
+                      }}
+                      onDoubleClick={() => {
+                        if (!isTouch && hasJoined(t))
+                          setLeaveAsk({ open: true, t });
+                      }}
+                      aria-label={hasJoined(t) ? "Already Joined" : "Join Now"}
+                    >
+                      {hasJoined(t) ? "Already Joined!" : "Join Now"}
+                    </button>
+                    {/* Delete button when you are the creator (owner-created official) and it hasn't started */}
+                    {t.status === "scheduled" &&
+                      email &&
+                      ((t.creatorEmail &&
+                        String(t.creatorEmail).toLowerCase() === email) ||
+                        email === "daviesfamily108@gmail.com") && (
+                        <button
+                          className="w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
+                          title="Delete this tournament"
+                          onClick={() => deleteTournament(t)}
+                          aria-label="Delete tournament"
+                        >
+                          ×
+                        </button>
+                      )}
+                  </div>
+                </li>
+              ))}
+              {official.length === 0 && (
+                <li className="text-sm opacity-60">
+                  No official tournaments yet.
+                </li>
+              )}
+            </ul>
+          </section>
 
-      {/* Delete Tournament Confirmation Modal */}
-      {deleteConfirm.open && deleteConfirm.t && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-slate-800 border border-slate-600 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
-            <div className="text-center">
-              <div className="text-xl font-semibold mb-4 text-white">Delete Tournament</div>
-              <div className="text-slate-300 mb-6">
-                Are you sure you want to delete <span className="font-semibold text-white">"{deleteConfirm.t.title}"</span>?
-                <br />
-                <span className="text-sm text-slate-400">This action cannot be undone.</span>
+          <section>
+            <div className="font-semibold mb-1">Community</div>
+            <ul className="space-y-2">
+              {community.map((t) => (
+                <li
+                  key={t.id}
+                  className="p-3 rounded bg-black/10 flex items-center justify-between relative"
+                >
+                  <div className="space-y-0.5">
+                    <div className="font-semibold">{t.title}</div>
+                    <div className="text-sm opacity-80">
+                      {t.game}
+                      {t.game === "X01" && t.startingScore
+                        ? `/${t.startingScore}`
+                        : ""}{" "}
+                      · {labelForMode(t.mode)} {t.value} · {fmt(t.startAt)} ·
+                      Cap {t.capacity} · Joined {t.participants.length}
+                    </div>
+                    {t.description && (
+                      <div className="text-xs opacity-80">{t.description}</div>
+                    )}
+                    {hasJoined(t) && (
+                      <div className="text-xs text-emerald-400 font-semibold">
+                        Already Joined
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="btn"
+                      title={
+                        hasJoined(t)
+                          ? "Double-click to leave this tournament"
+                          : ""
+                      }
+                      disabled={
+                        loading ||
+                        t.status !== "scheduled" ||
+                        (!hasJoined(t) && t.participants.length >= t.capacity)
+                      }
+                      onClick={() => {
+                        if (!hasJoined(t)) {
+                          join(t);
+                        } else if (isTouch) {
+                          setLeaveAsk({ open: true, t });
+                        }
+                      }}
+                      onDoubleClick={() => {
+                        if (!isTouch && hasJoined(t))
+                          setLeaveAsk({ open: true, t });
+                      }}
+                    >
+                      {hasJoined(t) ? "Already Joined" : "Join Now"}
+                    </button>
+                    {/* Delete button for creator to delete their own scheduled tournament */}
+                    {t.status === "scheduled" &&
+                      email &&
+                      ((t.creatorEmail &&
+                        String(t.creatorEmail).toLowerCase() === email) ||
+                        email === "daviesfamily108@gmail.com") && (
+                        <button
+                          className="w-6 h-6 rounded-full bg-rose-600 hover:bg-rose-700 text-white text-xs flex items-center justify-center shadow"
+                          title="Delete this tournament"
+                          onClick={() => deleteTournament(t)}
+                          aria-label="Delete tournament"
+                        >
+                          ×
+                        </button>
+                      )}
+                  </div>
+                </li>
+              ))}
+              {community.length === 0 && (
+                <li className="text-sm opacity-60">
+                  No community tournaments yet.
+                </li>
+              )}
+            </ul>
+          </section>
+        </div>
+
+        {showCreate && (
+          <div className="mb-4">
+            <div className="card relative">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xl font-semibold">Create Tournament</h3>
+                <button className="btn" onClick={() => setShowCreate(false)}>
+                  Close
+                </button>
               </div>
-              <div className="flex gap-3 justify-center">
+              <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 pr-1">
+                <div>
+                  <label className="block text-sm font-semibold mb-1">
+                    Title
+                  </label>
+                  <input
+                    className="input w-full"
+                    value={form.title}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, title: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">
+                      Game
+                    </label>
+                    <select
+                      className="input w-full"
+                      value={form.game}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, game: e.target.value }))
+                      }
+                    >
+                      {["X01", "Cricket", "Killer"].map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">
+                      Mode
+                    </label>
+                    <select
+                      className="input w-full"
+                      value={form.mode}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, mode: e.target.value as any }))
+                      }
+                    >
+                      {getModeOptionsForGame(
+                        form.game as import("../utils/games").GameKey,
+                      ).map((o) => (
+                        <option key={String(o)} value={String(o)}>
+                          {labelForMode(String(o))}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">
+                      Number
+                    </label>
+                    <input
+                      className="input w-full"
+                      type="number"
+                      min={1}
+                      value={form.value}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          value: Number(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1">
+                    Description
+                  </label>
+                  <textarea
+                    className="input w-full"
+                    rows={5}
+                    value={form.description}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, description: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">
+                      Start time
+                    </label>
+                    <input
+                      className="input w-full"
+                      type="datetime-local"
+                      value={form.startAt}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, startAt: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">
+                      Check-in reminder (min)
+                    </label>
+                    <input
+                      className="input w-full"
+                      type="number"
+                      min={0}
+                      value={form.checkinMinutes}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          checkinMinutes: Number(e.target.value),
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                {form.game === "X01" && (
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">
+                      X01 Starting Score
+                    </label>
+                    <select
+                      className="input w-full"
+                      value={String(form.startingScore)}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          startingScore: Number(e.target.value),
+                        }))
+                      }
+                    >
+                      {[301, 501, 701].map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="accent-purple-500"
+                      checked={!!form.requireCalibration}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          requireCalibration: !!e.target.checked,
+                        }))
+                      }
+                    />
+                    <span className="font-semibold">Require calibration</span>
+                  </label>
+                  <div className="text-xs opacity-70 mt-1">
+                    If checked, players must have a calibrated board to join
+                    matches spawned from this tournament.
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-1">
+                    Capacity
+                  </label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min={6}
+                    max={64}
+                    value={form.capacity}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        capacity: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="text-xs opacity-70">
+                  Note: community tournaments do not award prizes.
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    className="btn"
+                    disabled={loading}
+                    onClick={createTournament}
+                  >
+                    Create
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {leaveAsk.open && leaveAsk.t && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/40"
+              onClick={() => setLeaveAsk({ open: false, t: null })}
+            />
+            <div className="relative card p-4 w-[360px] max-w-[90vw]">
+              <div className="text-lg font-semibold mb-2">
+                Leave tournament?
+              </div>
+              <div className="text-sm opacity-80 mb-4">
+                Are you sure you want to remove yourself from “
+                {leaveAsk.t.title}”?
+              </div>
+              <div className="flex items-center justify-end gap-2">
                 <button
-                  className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
-                  onClick={() => setDeleteConfirm({ open: false, t: null })}
+                  className="btn bg-rose-600 hover:bg-rose-700"
+                  onClick={() => setLeaveAsk({ open: false, t: null })}
                 >
                   Decline
                 </button>
                 <button
-                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
-                  onClick={confirmDeleteTournament}
+                  className="btn bg-emerald-600 hover:bg-emerald-700"
+                  onClick={async () => {
+                    const t = leaveAsk.t!;
+                    setLeaveAsk({ open: false, t: null });
+                    await leave(t);
+                  }}
                 >
-                  Continue
+                  Accept
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
-      
-  {/* Phone camera overlay removed per UX preference; header badge preview only */}
+        )}
+
+        {/* Delete Tournament Confirmation Modal */}
+        {deleteConfirm.open && deleteConfirm.t && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-slate-800 border border-slate-600 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+              <div className="text-center">
+                <div className="text-xl font-semibold mb-4 text-white">
+                  Delete Tournament
+                </div>
+                <div className="text-slate-300 mb-6">
+                  Are you sure you want to delete{" "}
+                  <span className="font-semibold text-white">
+                    "{deleteConfirm.t.title}"
+                  </span>
+                  ?
+                  <br />
+                  <span className="text-sm text-slate-400">
+                    This action cannot be undone.
+                  </span>
+                </div>
+                <div className="flex gap-3 justify-center">
+                  <button
+                    className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+                    onClick={() => setDeleteConfirm({ open: false, t: null })}
+                  >
+                    Decline
+                  </button>
+                  <button
+                    className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
+                    onClick={confirmDeleteTournament}
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Phone camera overlay removed per UX preference; header badge preview only */}
+      </div>
     </div>
-    </div>
-  )
+  );
 }

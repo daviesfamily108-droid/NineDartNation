@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 
 interface DartLoaderProps {
   calibrationComplete: boolean;
@@ -20,16 +20,21 @@ const DartLoader: React.FC<DartLoaderProps> = ({ calibrationComplete }) => {
 
   return (
     <div
-      className={`flex flex-col items-center justify-center w-full h-full transition-opacity duration-700 ${fade ? 'opacity-0' : 'opacity-100'}`}
-      style={{ pointerEvents: 'none', position: 'absolute', inset: 0, zIndex: 10 }}
+      className={`flex flex-col items-center justify-center w-full h-full transition-opacity duration-700 ${fade ? "opacity-0" : "opacity-100"}`}
+      style={{
+        pointerEvents: "none",
+        position: "absolute",
+        inset: 0,
+        zIndex: 10,
+      }}
     >
       <div className="flex items-center justify-center">
         <svg
           width="80"
           height="80"
           viewBox="0 0 80 80"
-          className={`animate-spin-slow ${showTick ? 'opacity-0' : 'opacity-100'} transition-opacity duration-500`}
-          style={{ transition: 'opacity 0.5s' }}
+          className={`animate-spin-slow ${showTick ? "opacity-0" : "opacity-100"} transition-opacity duration-500`}
+          style={{ transition: "opacity 0.5s" }}
         >
           {/* Dart graphic */}
           <g>
@@ -40,14 +45,34 @@ const DartLoader: React.FC<DartLoaderProps> = ({ calibrationComplete }) => {
           </g>
         </svg>
         {showTick && (
-          <svg width="80" height="80" viewBox="0 0 80 80" className="absolute" style={{ left: 0, top: 0 }}>
-            <circle cx="40" cy="40" r="32" fill="none" stroke="#10b981" strokeWidth="6" />
-            <polyline points="28,44 38,54 54,30" fill="none" stroke="#10b981" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+          <svg
+            width="80"
+            height="80"
+            viewBox="0 0 80 80"
+            className="absolute"
+            style={{ left: 0, top: 0 }}
+          >
+            <circle
+              cx="40"
+              cy="40"
+              r="32"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="6"
+            />
+            <polyline
+              points="28,44 38,54 54,30"
+              fill="none"
+              stroke="#10b981"
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
           </svg>
         )}
       </div>
       <div className="mt-4 text-lg font-semibold text-indigo-200">
-        {showTick ? 'Calibration Complete!' : 'Initializing Camera...'}
+        {showTick ? "Calibration Complete!" : "Initializing Camera..."}
       </div>
     </div>
   );

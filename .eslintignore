@@ -1,0 +1,10 @@
+node_modules/
+dist/
+public/
+server/
+coverage/
+*.min.js
+**/*.js.map
+src/components/OnlinePlay_*.tsx
+src/components/OnlinePlay_prev_*.tsx
+src/components/OnlinePlay-*.tsx

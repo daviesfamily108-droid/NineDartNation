@@ -11,10 +11,16 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
-    "baseUrl": "."
+    "baseUrl": ".",
+    "types": ["vitest/globals", "node"]
   },
   "include": [
     "src/**/*",
     "vite.config.ts"
+  ]
+  ,
+  "exclude": [
+    "src/components/OnlinePlay_prev_*.tsx",
+    "src/components/OnlinePlay_1cdd139.tsx"
   ]
 }

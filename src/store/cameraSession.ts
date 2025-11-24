@@ -1,136 +1,144 @@
-import { create } from 'zustand'
-import { dlog } from '../utils/logger'
-import { persist, createJSONStorage } from 'zustand/middleware'
+import { create } from "zustand";
+import { dlog } from "../utils/logger";
+import { persist, createJSONStorage } from "zustand/middleware";
 
-export type CameraStreamMode = 'local' | 'phone' | 'wifi'
+export type CameraStreamMode = "local" | "phone" | "wifi";
 
 // CRITICAL: All non-serializable objects kept OUTSIDE state to avoid React #185 error
 // These must NOT be in Zustand state, even though we set them there momentarily
-let videoElementRefHolder: HTMLVideoElement | null = null
-let mediaStreamRefHolder: MediaStream | null = null
-let pcRefHolder: RTCPeerConnection | null = null
-let wsRefHolder: WebSocket | null = null
+let videoElementRefHolder: HTMLVideoElement | null = null;
+let mediaStreamRefHolder: MediaStream | null = null;
+let pcRefHolder: RTCPeerConnection | null = null;
+let wsRefHolder: WebSocket | null = null;
 
 type CameraSessionState = {
   // Stream state - persists across navigation (ONLY serializable data)
-  isStreaming: boolean
-  mode: CameraStreamMode
-  pairingCode: string | null
-  expiresAt: number | null
-  isPaired: boolean
-  mobileUrl: string | null
+  isStreaming: boolean;
+  mode: CameraStreamMode;
+  pairingCode: string | null;
+  expiresAt: number | null;
+  isPaired: boolean;
+  mobileUrl: string | null;
   // UI: whether the floating phone overlay is visible
-  showOverlay: boolean
-  
-  // Actions
-  setStreaming: (streaming: boolean) => void
-  setMode: (mode: CameraStreamMode) => void
-  setPairingCode: (code: string | null) => void
-  setExpiresAt: (time: number | null) => void
-  setPaired: (paired: boolean) => void
-  setMobileUrl: (url: string | null) => void
-  setShowOverlay: (v: boolean) => void
-  
-  // Methods for managing non-serializable refs (not in state)
-  setMediaStream: (stream: MediaStream | null) => void
-  getMediaStream: () => MediaStream | null
-  setPcRef: (pc: RTCPeerConnection | null) => void
-  getPcRef: () => RTCPeerConnection | null
-  setWsRef: (ws: WebSocket | null) => void
-  getWsRef: () => WebSocket | null
-  
-  // Get video element ref (not stored in state to avoid serialization)
-  getVideoElementRef: () => HTMLVideoElement | null
-  setVideoElementRef: (ref: HTMLVideoElement | null) => void
-  
-  // Clear session when user stops camera
-  clearSession: () => void
-}
+  showOverlay: boolean;
 
-export const useCameraSession = create<CameraSessionState>()(persist((set, get) => ({
-  isStreaming: false,
-  mode: 'local',
-  pairingCode: null,
-  expiresAt: null,
-  isPaired: false,
-  mobileUrl: null,
-  showOverlay: true,
-  
-  setStreaming: (streaming) => {
-  dlog('[CAMERA_SESSION] setStreaming:', streaming)
-    set({ isStreaming: streaming })
-  },
-  setMode: (mode) => {
-  dlog('[CAMERA_SESSION] setMode:', mode)
-    set({ mode })
-  },
-  setPairingCode: (code) => set({ pairingCode: code }),
-  setExpiresAt: (time) => set({ expiresAt: time }),
-  setPaired: (paired) => set({ isPaired: paired }),
-  setMobileUrl: (url) => set({ mobileUrl: url }),
-  setShowOverlay: (v) => set({ showOverlay: !!v }),
-  
-  // Non-serializable refs stored outside state
-  setMediaStream: (stream) => {
-    mediaStreamRefHolder = stream
-  },
-  getMediaStream: () => mediaStreamRefHolder,
-  
-  setPcRef: (pc) => {
-    pcRefHolder = pc
-  },
-  getPcRef: () => pcRefHolder,
-  
-  setWsRef: (ws) => {
-    wsRefHolder = ws
-  },
-  getWsRef: () => wsRefHolder,
-  
-  // Keep video element ref outside of state to avoid serialization issues
-  getVideoElementRef: () => {
-    const ref = videoElementRefHolder
-    if (!ref) {
-      dlog('[cameraSession] ⚠️ getVideoElementRef called but ref is NULL')
-    }
-    return ref
-  },
-  setVideoElementRef: (ref) => {
-    if (ref) {
-      dlog('[cameraSession] ✅ setVideoElementRef called - storing HTMLVideoElement', {
-        tagName: ref.tagName,
-        hasStream: !!ref.srcObject,
-      })
-    } else {
-      dlog('[cameraSession] 🛑 setVideoElementRef called - clearing ref')
-    }
-    videoElementRefHolder = ref
-  },
-  
-  clearSession: () => {
-    videoElementRefHolder = null
-    mediaStreamRefHolder = null
-    pcRefHolder = null
-    wsRefHolder = null
-    set({
+  // Actions
+  setStreaming: (streaming: boolean) => void;
+  setMode: (mode: CameraStreamMode) => void;
+  setPairingCode: (code: string | null) => void;
+  setExpiresAt: (time: number | null) => void;
+  setPaired: (paired: boolean) => void;
+  setMobileUrl: (url: string | null) => void;
+  setShowOverlay: (v: boolean) => void;
+
+  // Methods for managing non-serializable refs (not in state)
+  setMediaStream: (stream: MediaStream | null) => void;
+  getMediaStream: () => MediaStream | null;
+  setPcRef: (pc: RTCPeerConnection | null) => void;
+  getPcRef: () => RTCPeerConnection | null;
+  setWsRef: (ws: WebSocket | null) => void;
+  getWsRef: () => WebSocket | null;
+
+  // Get video element ref (not stored in state to avoid serialization)
+  getVideoElementRef: () => HTMLVideoElement | null;
+  setVideoElementRef: (ref: HTMLVideoElement | null) => void;
+
+  // Clear session when user stops camera
+  clearSession: () => void;
+};
+
+export const useCameraSession = create<CameraSessionState>()(
+  persist(
+    (set, get) => ({
       isStreaming: false,
+      mode: "local",
       pairingCode: null,
       expiresAt: null,
       isPaired: false,
       mobileUrl: null,
-      // Keep overlay state; do not forcibly hide on clear so user choice persists
-    })
-  },
-}), {
-  name: 'ndn-camera-session',
-  storage: createJSONStorage(() => localStorage),
-  // ONLY persist serializable primitives
-  partialize: (state) => ({
-    isStreaming: state.isStreaming,
-    mode: state.mode,
-    pairingCode: state.pairingCode,
-    expiresAt: state.expiresAt,
-    isPaired: state.isPaired,
-    mobileUrl: state.mobileUrl,
-    showOverlay: state.showOverlay,
-  }),
-}))
+      showOverlay: true,
+
+      setStreaming: (streaming) => {
+        dlog("[CAMERA_SESSION] setStreaming:", streaming);
+        set({ isStreaming: streaming });
+      },
+      setMode: (mode) => {
+        dlog("[CAMERA_SESSION] setMode:", mode);
+        set({ mode });
+      },
+      setPairingCode: (code) => set({ pairingCode: code }),
+      setExpiresAt: (time) => set({ expiresAt: time }),
+      setPaired: (paired) => set({ isPaired: paired }),
+      setMobileUrl: (url) => set({ mobileUrl: url }),
+      setShowOverlay: (v) => set({ showOverlay: !!v }),
+
+      // Non-serializable refs stored outside state
+      setMediaStream: (stream) => {
+        mediaStreamRefHolder = stream;
+      },
+      getMediaStream: () => mediaStreamRefHolder,
+
+      setPcRef: (pc) => {
+        pcRefHolder = pc;
+      },
+      getPcRef: () => pcRefHolder,
+
+      setWsRef: (ws) => {
+        wsRefHolder = ws;
+      },
+      getWsRef: () => wsRefHolder,
+
+      // Keep video element ref outside of state to avoid serialization issues
+      getVideoElementRef: () => {
+        const ref = videoElementRefHolder;
+        if (!ref) {
+          dlog("[cameraSession] ⚠️ getVideoElementRef called but ref is NULL");
+        }
+        return ref;
+      },
+      setVideoElementRef: (ref) => {
+        if (ref) {
+          dlog(
+            "[cameraSession] ✅ setVideoElementRef called - storing HTMLVideoElement",
+            {
+              tagName: ref.tagName,
+              hasStream: !!ref.srcObject,
+            },
+          );
+        } else {
+          dlog("[cameraSession] 🛑 setVideoElementRef called - clearing ref");
+        }
+        videoElementRefHolder = ref;
+      },
+
+      clearSession: () => {
+        videoElementRefHolder = null;
+        mediaStreamRefHolder = null;
+        pcRefHolder = null;
+        wsRefHolder = null;
+        set({
+          isStreaming: false,
+          pairingCode: null,
+          expiresAt: null,
+          isPaired: false,
+          mobileUrl: null,
+          // Keep overlay state; do not forcibly hide on clear so user choice persists
+        });
+      },
+    }),
+    {
+      name: "ndn-camera-session",
+      storage: createJSONStorage(() => localStorage),
+      // ONLY persist serializable primitives
+      partialize: (state) => ({
+        isStreaming: state.isStreaming,
+        mode: state.mode,
+        pairingCode: state.pairingCode,
+        expiresAt: state.expiresAt,
+        isPaired: state.isPaired,
+        mobileUrl: state.mobileUrl,
+        showOverlay: state.showOverlay,
+      }),
+    },
+  ),
+);
