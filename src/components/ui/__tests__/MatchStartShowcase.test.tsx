@@ -81,8 +81,9 @@ describe("MatchStartShowcase", () => {
     expect(renderError).toBeUndefined();
     // Debug: snapshot output (no-op in CI) — removed console.log to reduce test verbosity
 
-    // Initial countdown shown
-    expect(screen.getByText("3")).toBeTruthy();
+  // Initial countdown shown (either ring may be present in test environment)
+  const countdownEls = screen.getAllByText("3");
+  expect(countdownEls.length).toBeGreaterThanOrEqual(1);
     // Ensure 180s display matches match/career values upfront (1 match 180 / 5 career)
     const p1Card = screen.getByText("Player1").parentElement as HTMLElement;
     const p2Card = screen.getByText("Player2").parentElement as HTMLElement;
@@ -101,8 +102,9 @@ describe("MatchStartShowcase", () => {
     act(() => {
       vi.advanceTimersByTime(3000);
     });
-    // Now should show GO
-    expect(screen.getByText("GO")).toBeTruthy();
+  // Now should show GO (one or more rings in JSDOM)
+  const goEls = screen.getAllByText("GO");
+  expect(goEls.length).toBeGreaterThanOrEqual(1);
     act(() => {
       vi.advanceTimersByTime(1000);
     });

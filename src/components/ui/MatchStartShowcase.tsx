@@ -57,27 +57,36 @@ function PlayerCalibrationPreview({
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw a simple dartboard circle
-    const centerX = canvas.width / 2;
-    const centerY = canvas.height / 2;
-    const radius = Math.min(centerX, centerY) - 2;
+    try {
+      // Draw a simple dartboard circle
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = Math.min(centerX, centerY) - 2;
 
-    // Outer circle
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-    ctx.stroke();
+      // Outer circle
+      if (typeof ctx.stroke === 'function') {
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+        ctx.stroke();
+      }
 
-    // Bullseye
-    ctx.fillStyle = "#f00";
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
-    ctx.fill();
+      // Bullseye
+      if (typeof ctx.fill === 'function') {
+        ctx.fillStyle = "#f00";
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
+        ctx.fill();
+      }
+    } catch (e) {
+      // Canvas not supported by test environment; ignore and do nothing
+    }
 
     // If calibrated, draw calibration points
     if (isCalibrated) {
-      ctx.fillStyle = "#0f0";
+      try {
+        if (typeof ctx.fill === 'function') ctx.fillStyle = "#0f0";
       // Draw some sample points (simplified)
       const points = [
         [centerX - radius * 0.5, centerY],
@@ -86,10 +95,15 @@ function PlayerCalibrationPreview({
         [centerX, centerY + radius * 0.5],
       ];
       points.forEach(([x, y]) => {
-        ctx.beginPath();
-        ctx.arc(x, y, 2, 0, 2 * Math.PI);
-        ctx.fill();
+        try {
+          if (typeof ctx.beginPath === 'function') ctx.beginPath();
+          if (typeof ctx.arc === 'function') ctx.arc(x, y, 2, 0, 2 * Math.PI);
+          if (typeof ctx.fill === 'function') ctx.fill();
+        } catch {}
       });
+      } catch (e) {
+        // ignore
+      }
     }
   }, [isCalibrated]);
 
@@ -110,8 +124,55 @@ function PlayerCalibrationPreview({
   );
 }
 
+function RecentForm({ player, limit = 3 }: { player: Player; limit?: number }) {
+  // Compute recent visit scores from player's legs, flatten last visits
+  const visits: { score: number; darts: number }[] = [];
+  try {
+    const legs = (player.legs || []) as any[];
+    for (let i = legs.length - 1; i >= 0 && visits.length < limit; i--) {
+      const leg = legs[i];
+      const legVisits = (leg.visits || []) as any[];
+      for (let j = legVisits.length - 1; j >= 0 && visits.length < limit; j--) {
+        const v = legVisits[j];
+        visits.push({ score: Number(v?.score || 0), darts: Number(v?.darts || 3) });
+      }
+    }
+  } catch (e) {}
+  if (!visits.length) return <div className="text-xs opacity-60">No recent visits</div>;
+  return (
+    <div className="flex gap-2 items-center">
+      {visits.map((v, idx) => (
+        <div key={idx} className={`text-xs px-2 py-0.5 rounded ${v.score >= 100 ? 'bg-emerald-600/20 text-emerald-300' : v.score >= 60 ? 'bg-amber-500/10 text-amber-300' : 'bg-white/6 text-gray-200'}`}>
+          {v.score}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 import FocusLock from "react-focus-lock";
 import CalibrationPopup from "./CalibrationPopup";
+function ProgressRing({ secondsLeft, totalSeconds, size = 84, stroke = 8, color = 'emerald' }: { secondsLeft: number; totalSeconds: number; size?: number; stroke?: number; color?: 'emerald' | 'amber' }) {
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const percent = Math.max(0, Math.min(1, totalSeconds > 0 ? secondsLeft / totalSeconds : 0));
+  const dash = circumference * (1 - percent);
+  const colorHex = color === 'emerald' ? '#34d399' : '#f59e0b';
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+      <defs>
+        <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="1" stdDeviation="3" floodColor="#000" floodOpacity="0.45" />
+        </filter>
+      </defs>
+      <circle cx={size/2} cy={size/2} r={radius} fill="transparent" stroke="rgba(255,255,255,0.06)" strokeWidth={stroke} />
+      <circle cx={size/2} cy={size/2} r={radius} fill="transparent" stroke={colorHex} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dash} transform={`rotate(-90 ${size/2} ${size/2})`} style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))' }} />
+      <text x="50%" y="50%" fill="white" fontSize={size * 0.33} fontWeight={700} dominantBaseline="middle" textAnchor="middle">
+        {secondsLeft > 0 ? secondsLeft : 'GO'}
+      </text>
+    </svg>
+  );
+}
 export default function MatchStartShowcase({
   open = true,
   players,
@@ -421,17 +482,20 @@ export default function MatchStartShowcase({
                 >
                   Match Starting Soon
                 </div>
-                <div className="flex items-center gap-4">
-                  <div
-                    className="text-6xl font-extrabold text-emerald-400"
-                    aria-live="polite"
-                  >
-                    {seconds > 0 ? seconds : "GO"}
+                <div className="flex items-center gap-4 flex-col sm:flex-row">
+                  {/* show smaller ring on small screens */}
+                  <div className="flex items-center justify-center">
+                    <div className="block sm:hidden">
+                      <ProgressRing secondsLeft={seconds} totalSeconds={initialSeconds || 15} size={64} stroke={6} color={seconds > 5 ? "emerald" : "amber"} />
+                    </div>
+                    <div className="hidden sm:block">
+                      <ProgressRing secondsLeft={seconds} totalSeconds={initialSeconds || 15} size={84} stroke={8} color={seconds > 5 ? "emerald" : "amber"} />
+                    </div>
                   </div>
-                  <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <button
                       ref={startNowRef}
-                      className="btn btn-lg"
+                      className="btn btn-lg bg-gradient-to-r from-emerald-400 to-indigo-500 text-white shadow-lg transform hover:scale-105 w-full sm:w-auto"
                       onClick={() => {
                         try {
                           onDone?.();
@@ -455,7 +519,7 @@ export default function MatchStartShowcase({
                     </button>
                     <button
                       ref={closeRef}
-                      className="btn btn-ghost btn-sm"
+                      className="btn btn-ghost btn-sm text-white/80 w-full sm:w-auto"
                       onClick={() => {
                         try {
                           onDone?.();
@@ -480,13 +544,13 @@ export default function MatchStartShowcase({
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
                 {stats.map((st) => (
                   <div
                     key={st.id}
-                    className="p-6 rounded-2xl bg-white/8 border border-white/12 flex flex-col items-center shadow-xl"
+                    className="p-6 rounded-2xl bg-gradient-to-tr from-slate-800/70 to-slate-700/60 border border-white/6 flex flex-col items-center shadow-2xl w-full"
                   >
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 to-blue-500 flex items-center justify-center text-2xl font-bold text-white mb-4 shadow-lg">
+                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-emerald-400 flex items-center justify-center text-2xl font-bold text-white mb-4 shadow-xl ring-1 ring-white/10">
                       {st.name
                         .split(" ")
                         .map((n) => n[0])
@@ -494,8 +558,14 @@ export default function MatchStartShowcase({
                         .toUpperCase()
                         .slice(0, 2)}
                     </div>
-                    <div className="text-xl font-semibold mb-4 text-center">
+                    <div className="text-xl font-semibold mb-2 text-center">
                       {st.name}
+                    </div>
+                    <div className="mb-2 flex items-center gap-2">
+                      {user && user.username === st.name ? (
+                        <div className="text-xs bg-emerald-600/20 text-emerald-300 px-2 py-0.5 rounded">You</div>
+                      ) : null}
+                      <PlayerCalibrationPreview player={players.find((p) => p.id === st.id) as any} user={user} playerCalibrations={playerCalibrations} />
                     </div>
                     <div className="grid grid-cols-2 gap-4 w-full">
                       <StatBlock
@@ -521,6 +591,9 @@ export default function MatchStartShowcase({
                     </div>
                     <div className="mt-4 opacity-70 text-sm">
                       180s (match / career): {st.one80s}
+                    </div>
+                    <div className="mt-2 w-full flex justify-center md:justify-center">
+                      <RecentForm player={players.find((p) => p.id === st.id) as Player} limit={3} />
                     </div>
                   </div>
                 ))}
