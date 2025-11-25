@@ -2284,7 +2284,9 @@ export default function OfflinePlay({ user }: { user: any }) {
       <div className="ndn-shell-body">
         <div className="mb-4 flex flex-col gap-3">
           <select
+            onPointerDown={(e) => { (e as any).stopPropagation(); }}
             onMouseDown={(e) => { e.stopPropagation(); }}
+            onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
             className="input w-full"
             value={selectedMode}
             onChange={(e) => setSelectedMode(e.target.value)}
@@ -2355,7 +2357,9 @@ export default function OfflinePlay({ user }: { user: any }) {
               />
               <label className="font-semibold mt-2">Play against AI bot?</label>
               <select
+                onPointerDown={(e) => { (e as any).stopPropagation(); }}
                 onMouseDown={(e) => { e.stopPropagation(); }}
+                onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
                 className="input w-full"
                 value={ai}
                 onChange={(e) => setAI(e.target.value)}

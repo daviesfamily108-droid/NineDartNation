@@ -112,6 +112,8 @@ export default function Tournaments({ user }: { user: any }) {
 
   async function refresh() {
     try {
+      // Avoid multiple quick refreshes which can cause load spikes
+      if (lastRefresh && Date.now() - lastRefresh < 3000) return;
       const res = await apiFetch("/api/tournaments");
       const data = await res.json();
       const newList = Array.isArray(data.tournaments) ? data.tournaments : [];

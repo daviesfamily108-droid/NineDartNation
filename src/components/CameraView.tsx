@@ -36,13 +36,16 @@ import { useAudit } from "../store/audit";
 // Shared ring type across autoscore/manual flows
 type Ring = "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL";
 
-const AUTO_COMMIT_MIN_FRAMES = 1;
-const AUTO_COMMIT_HOLD_MS = 120;
+// Require at least two frames showing a candidate to reduce false positives
+const AUTO_COMMIT_MIN_FRAMES = 2;
+// Allow a short hold time as fallback for single-frame candidates
+const AUTO_COMMIT_HOLD_MS = 200;
 const AUTO_COMMIT_COOLDOWN_MS = process.env.NODE_ENV === "test" ? 0 : 400;
 const AUTO_STREAM_IGNORE_MS = process.env.NODE_ENV === "test" ? 0 : 450;
 const DETECTION_ARM_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 5000;
 const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 150;
-const AUTO_COMMIT_CONFIDENCE = 0.85;
+// Raise confidence threshold slightly to further reduce ghost detections
+const AUTO_COMMIT_CONFIDENCE = 0.9;
 const BOARD_CLEAR_GRACE_MS = 6500;
 const DISABLE_CAMERA_OVERLAY = true;
 
@@ -71,6 +74,8 @@ type DetectionLogEntry = {
 
 export type CameraViewHandle = {
   runDetectionTick: () => void;
+  // Test-only helper to directly add a dart without relying on detector
+  __test_addDart?: (value: number, label: string, ring: Ring) => void;
 };
 
 export default forwardRef(function CameraView(
@@ -86,7 +91,7 @@ export default forwardRef(function CameraView(
   x01DoubleInOverride,
   onAddVisit,
   onEndLeg,
-  cameraAutoCommit = "parent",
+  cameraAutoCommit = "camera",
   }: {
   onVisitCommitted?: (score: number, darts: number, finished: boolean) => void;
   showToolbar?: boolean;
@@ -158,6 +163,7 @@ export default forwardRef(function CameraView(
   const [lastAutoValue, setLastAutoValue] = useState<number>(0);
   const [lastAutoRing, setLastAutoRing] = useState<Ring>("MISS");
   const [pendingDarts, setPendingDarts] = useState<number>(0);
+  const pendingDartsRef = useRef<number>(0);
   const [pendingScore, setPendingScore] = useState<number>(0);
   const [pendingEntries, setPendingEntries] = useState<
     { label: string; value: number; ring: Ring }[]
@@ -200,6 +206,11 @@ export default forwardRef(function CameraView(
         if (tickRef.current) tickRef.current();
       } catch {}
     },
+    // Expose a test-only direct dart add method so tests can deterministically
+    // exercise addDart and commit logic without depending on CV timing or detection.
+    __test_addDart: process.env.NODE_ENV === "test" ? (v: number, l: string, r: Ring) => {
+      try { addDart(v, l, r); } catch (e) { }
+    } : undefined,
   }));
 
   const captureDetectionLog = useCallback((entry: DetectionLogEntry) => {
@@ -250,7 +261,8 @@ export default forwardRef(function CameraView(
     ],
   );
   const clearPendingManual = useCallback((reason: "indicator" | "toolbar") => {
-    setPendingDarts(0);
+  setPendingDarts(0);
+  pendingDartsRef.current = 0;
     setPendingScore(0);
     setPendingEntries([]);
     setPendingPreOpenDarts(0);
@@ -376,6 +388,7 @@ export default forwardRef(function CameraView(
   const lastAutoSigAtRef = useRef<number>(0);
   const lastParentSigRef = useRef<string | null>(null);
   const lastParentSigAtRef = useRef<number>(0);
+  const inFlightAutoCommitRef = useRef<boolean>(false);
   const [detectorSeedVersion, setDetectorSeedVersion] = useState(0);
   const handlePhoneReconnect = useCallback(() => {
     try {
@@ -417,7 +430,8 @@ export default forwardRef(function CameraView(
   useEffect(() => {
     const onDartsCleared = () => {
       setIndicatorVersion((v) => v + 1);
-      setPendingDarts(0);
+  setPendingDarts(0);
+  pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       setPendingPreOpenDarts(0);
@@ -861,12 +875,24 @@ export default forwardRef(function CameraView(
   }
 
   function CameraSelector() {
+    const [showRawDevices, setShowRawDevices] = useState(false);
+    const [manualDeviceId, setManualDeviceId] = useState('');
+    const selectDeviceId = async (id?: string | null) => {
+      if (cameraStarting) return;
+      const label = availableCameras.find((d) => d.deviceId === id)?.label;
+      setPreferredCamera(id || undefined, label || "", true);
+      stopCamera();
+      await new Promise((r) => setTimeout(r, 150));
+      try { await startCamera(); } catch {}
+    }
     // Always show a discovery UI so users can rescan / request permission even when no cameras were enumerated
     return (
       <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-black/40 rounded px-2 py-1 text-xs">
         <span>Cam:</span>
         <select
+          onPointerDown={(e) => { (e as any).stopPropagation(); }}
           onMouseDown={(e) => { e.stopPropagation(); }}
+          onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
           className="bg-black/20 rounded px-1 py-0.5"
           value={preferredCameraId || ""}
           onChange={async (e) => {
@@ -900,6 +926,7 @@ export default forwardRef(function CameraView(
           }}
         >
           <option value="">Auto</option>
+          <option value="manual">~ Enter device ID ...</option>
           {availableCameras.map((d) => (
             <option key={d.deviceId} value={d.deviceId}>
               {d.label ||
@@ -907,6 +934,12 @@ export default forwardRef(function CameraView(
             </option>
           ))}
         </select>
+        {preferredCameraId === 'manual' && (
+          <div className="flex items-center gap-2 ml-2">
+            <input className="input input--small" placeholder="Device ID" value={manualDeviceId} onChange={(e)=>setManualDeviceId(e.target.value)} />
+            <button className="btn btn--ghost btn-sm" onClick={() => selectDeviceId(manualDeviceId || undefined)}>Apply</button>
+          </div>
+        )}
         {availableCameras.length === 0 && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-yellow-300">No cameras found</span>
@@ -931,6 +964,28 @@ export default forwardRef(function CameraView(
         >
           Rescan
         </button>
+        <div className="flex items-center gap-2 ml-2">
+          <button className="btn btn--ghost btn-sm" onClick={() => { setShowRawDevices(v => !v); if (!showRawDevices) { (async ()=>{ try{ const list = await navigator.mediaDevices.enumerateDevices(); setAvailableCameras(list.filter((d)=>d.kind==='videoinput')) } catch {} })() } }}>
+            {showRawDevices ? 'Hide devices' : 'Show devices'}
+          </button>
+        </div>
+        {showRawDevices && (
+          <div className="mt-2 space-y-1 ml-1 text-xs">
+            <div className="opacity-60 text-xxs mb-1">If you don't see your virtual camera (e.g., OBS), ensure the virtual camera is enabled and your browser has camera permission. Click Rescan after enabling.</div>
+            {availableCameras.map((d) => {
+              const isOBS = String(d.label || '').toLowerCase().includes('obs') || String(d.label || '').toLowerCase().includes('virtual');
+              return (
+                <div key={d.deviceId} className="flex items-center gap-2">
+                  <div className="truncate">
+                    {d.label || 'Unnamed device'} {isOBS && <span className="text-xs opacity-60 ml-1">(OBS)</span>}
+                  </div>
+                  <div className="opacity-60 ml-1">{d.deviceId}</div>
+                  <button className="btn btn--ghost btn-xs ml-2" onClick={() => selectDeviceId(d.deviceId)}>Select</button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     );
   }
@@ -977,7 +1032,9 @@ export default forwardRef(function CameraView(
 
       // scale homography from calibration image size to current rendered size
   // If calibration is locked and an overlaySize was saved at lock time, use that to preserve visual scale.
-  const useOverlay = locked && overlaySize && preserveCalibrationOverlay ? overlaySize : { w, h };
+  // Use saved overlay size for consistent visual scale when user chose to preserve it.
+  // Apply even when calibration is not currently "locked" so matches and other views can use the same visual size.
+  const useOverlay = overlaySize && preserveCalibrationOverlay ? overlaySize : { w, h };
   const sx = useOverlay.w / imageSize.w;
   const sy = useOverlay.h / imageSize.h;
   const Hs = scaleHomography(H, sx, sy);
@@ -1185,6 +1242,16 @@ export default forwardRef(function CameraView(
               // debug logging via dlog to avoid polluting test console
               dlog("CameraView: applyAutoHit", candidate.value, candidate.ring, candidate.sector);
               const now = performance.now();
+              // Prevent multiple synchronous applyAutoHit calls causing duplicate commits
+              // (especially in test env where AUTO_COMMIT_COOLDOWN_MS may be 0).
+              if (inFlightAutoCommitRef.current) return;
+              inFlightAutoCommitRef.current = true;
+              // Release the lock after a short window to allow legitimate follow-up darts
+              try {
+                window.setTimeout(() => {
+                  inFlightAutoCommitRef.current = false;
+                }, 120);
+              } catch {}
               // Only dedupe by value/ring/mult to avoid accidental false negatives when
               // the sector or tip fluctuates slightly across frames for the same scoring
               // result. This reduces noisy duplicate notifications while preserving
@@ -1456,6 +1523,19 @@ export default forwardRef(function CameraView(
     }
   }, [availableCameras, isPhoneCamera, setPreferredCamera]);
 
+  // If an OBS (virtual/OBS) camera is present and user hasn't chosen a preferred camera,
+  // auto-select it (but do not override a locked user preference).
+  useEffect(() => {
+    try {
+      if (preferredCameraLocked) return;
+      if (preferredCameraId) return;
+      const obs = availableCameras.find((d) => /obs|virtual/i.test(String(d.label || '')));
+      if (obs) {
+        setPreferredCamera(obs.deviceId, obs.label || '', true);
+      }
+    } catch {}
+  }, [availableCameras, preferredCameraId, preferredCameraLocked, setPreferredCamera]);
+
   // Update calibration audit status whenever homography or image size changes
   useEffect(() => {
     try {
@@ -1464,6 +1544,20 @@ export default forwardRef(function CameraView(
     .setCalibrationStatus({ hasHomography: !!H, imageSize, overlaySize });
     } catch {}
   }, [H, imageSize]);
+
+  // Ensure overlay canvas pixel size matches the calibrated image size to avoid scale mismatch
+  useEffect(() => {
+    try {
+      if (!overlayRef.current || !imageSize) return;
+      const canvas = overlayRef.current;
+      if (typeof imageSize.w === 'number' && typeof imageSize.h === 'number') {
+        if (canvas.width !== imageSize.w || canvas.height !== imageSize.h) {
+          canvas.width = imageSize.w;
+          canvas.height = imageSize.h;
+        }
+      }
+    } catch {}
+  }, [overlayRef, imageSize]);
 
   // External autoscore subscription
   useEffect(() => {
@@ -1606,7 +1700,7 @@ export default forwardRef(function CameraView(
           onGenericDart(value, ring, { label });
         } catch {}
       // Maintain a lightweight pending list for UI only
-      if (pendingDarts >= 3) {
+  if ((pendingDartsRef.current || 0) >= 3) {
         // Rotate to next visit locally so we don't drop darts visually
         setPendingDarts(1);
         setPendingScore(value);
@@ -1614,14 +1708,15 @@ export default forwardRef(function CameraView(
         return;
       }
       const newDarts = pendingDarts + 1;
-      setPendingDarts(newDarts);
+  setPendingDarts(newDarts);
+  pendingDartsRef.current = newDarts;
       setPendingScore((s) => s + value);
       setPendingEntries((e) => [...e, { label, value, ring }]);
       return;
     }
 
     // If a new dart arrives while 3 are pending, auto-commit previous visit and start a new one
-    if (pendingDarts >= 3) {
+  if ((pendingDartsRef.current || 0) >= 3) {
       const previousScore = pendingScore;
       const previousDarts = pendingDarts;
       // Commit previous full visit
@@ -1639,7 +1734,8 @@ export default forwardRef(function CameraView(
       const willCount =
         !x01DoubleIn || isOpened || ring === "DOUBLE" || ring === "INNER_BULL";
       const applied = willCount ? value : 0;
-      setPendingDarts(1);
+  setPendingDarts(1);
+  pendingDartsRef.current = 1;
       setPendingScore(applied);
       setPendingEntries([{ label, value: applied, ring }]);
       setPendingPreOpenDarts(willCount ? 0 : 1);
@@ -1658,7 +1754,7 @@ export default forwardRef(function CameraView(
       });
       return;
     }
-    const newDarts = pendingDarts + 1;
+  const newDarts = (pendingDartsRef.current || 0) + 1;
     // Apply X01 Double-In rule before scoring if enabled and not opened yet
     const countsForScore =
       !x01DoubleIn || isOpened || ring === "DOUBLE" || ring === "INNER_BULL";
@@ -1700,7 +1796,8 @@ export default forwardRef(function CameraView(
         finishedByDouble: false,
         visitTotal: 0,
       });
-      setPendingDarts(0);
+  setPendingDarts(0);
+  pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       setPendingPreOpenDarts(0);
@@ -1710,7 +1807,8 @@ export default forwardRef(function CameraView(
     }
 
     // Normal add (value may be zero if not opened yet)
-    setPendingDarts(newDarts);
+  setPendingDarts(newDarts);
+  pendingDartsRef.current = newDarts;
     setPendingScore(newScore);
     setPendingEntries((e) => [...e, { label, value: appliedValue, ring }]);
     if (
@@ -1738,7 +1836,8 @@ export default forwardRef(function CameraView(
         visitTotal: newScore,
       });
       callEndLeg(newScore);
-      setPendingDarts(0);
+  setPendingDarts(0);
+  pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       setPendingPreOpenDarts(0);
@@ -1754,7 +1853,8 @@ export default forwardRef(function CameraView(
         finishedByDouble: false,
         visitTotal: newScore,
       });
-      setPendingDarts(0);
+  setPendingDarts(0);
+  pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       setPendingPreOpenDarts(0);
@@ -1869,7 +1969,8 @@ export default forwardRef(function CameraView(
         const name = matchState.players[matchState.currentPlayerIdx]?.name;
         if (name) addSample(name, newDarts, 0);
       } catch {}
-      setPendingDarts(0);
+  setPendingDarts(0);
+  pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       enqueueVisitCommit({ score: 0, darts: newDarts, finished: false });
@@ -1878,7 +1979,8 @@ export default forwardRef(function CameraView(
       return;
     }
 
-    setPendingDarts(newDarts);
+  setPendingDarts(newDarts);
+  pendingDartsRef.current = newDarts;
     setPendingScore(newScore);
     setPendingEntries((e) => [
       ...e.slice(0, -1),
@@ -1892,7 +1994,8 @@ export default forwardRef(function CameraView(
         const name = matchState.players[matchState.currentPlayerIdx]?.name;
         if (name) addSample(name, newDarts, newScore);
       } catch {}
-      setPendingDarts(0);
+  setPendingDarts(0);
+  pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: true });
@@ -1907,7 +2010,8 @@ export default forwardRef(function CameraView(
         const name = matchState.players[matchState.currentPlayerIdx]?.name;
         if (name) addSample(name, newDarts, newScore);
       } catch {}
-      setPendingDarts(0);
+  setPendingDarts(0);
+  pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: false });
@@ -1973,7 +2077,8 @@ export default forwardRef(function CameraView(
   function onUndoDart() {
     if (pendingDarts === 0) return;
     const last = pendingEntries[pendingEntries.length - 1];
-    setPendingDarts((d) => d - 1);
+  setPendingDarts((d) => d - 1);
+  pendingDartsRef.current = Math.max(0, (pendingDartsRef.current || 0) - 1);
     setPendingScore((s) => s - (last?.value || 0));
     setPendingEntries((e) => e.slice(0, -1));
   }
@@ -1982,7 +2087,9 @@ export default forwardRef(function CameraView(
     if (pendingDarts === 0 || (shouldDeferCommit && awaitingClear)) return;
     if (scoringMode === "custom") {
       // For custom mode, simply clear local pending (parent maintains its own scoring)
-      setPendingDarts(0);
+  setPendingDarts(0);
+  pendingDartsRef.current = 0;
+  pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       return;
@@ -1994,7 +2101,8 @@ export default forwardRef(function CameraView(
       const name = matchState.players[matchState.currentPlayerIdx]?.name;
       if (name) addSample(name, visitDarts, visitScore);
     } catch {}
-    setPendingDarts(0);
+  setPendingDarts(0);
+  pendingDartsRef.current = 0;
     setPendingScore(0);
     setPendingEntries([]);
     enqueueVisitCommit({

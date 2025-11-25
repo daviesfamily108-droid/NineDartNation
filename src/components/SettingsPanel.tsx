@@ -414,7 +414,9 @@ export default function SettingsPanel({ user }: { user?: any }) {
     color: string;
   }) => (
     <button
+      onPointerDown={(e) => { (e as any).stopPropagation(); }}
       onMouseDown={(e) => { e.stopPropagation(); }}
+      onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
       onClick={() => setExpandedPill(expandedPill === pill ? null : pill)}
       type="button"
       className={`transition-all select-none whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 active:scale-[0.98] bg-gradient-to-r ${color} text-white flex items-center gap-2`}
@@ -904,7 +906,10 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           Aspect Ratio
                         </label>
                         <select
+                          onPointerDown={(e) => { (e as any).stopPropagation(); }}
                           onMouseDown={(e) => { e.stopPropagation(); }}
+                          onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+                          onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
                           id="cameraAspect"
                           value={cameraAspect || "wide"}
                           onChange={(e) =>
@@ -924,7 +929,9 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           Fit Mode
                         </label>
                         <select
+                          onPointerDown={(e) => { (e as any).stopPropagation(); }}
                           onMouseDown={(e) => { e.stopPropagation(); }}
+                          onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
                           id="cameraFitMode"
                           value={cameraFitMode || "fit"}
                           onChange={(e) =>
@@ -962,7 +969,9 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           Auto-score Provider
                         </label>
                         <select
+                          onPointerDown={(e) => { (e as any).stopPropagation(); }}
                           onMouseDown={(e) => { e.stopPropagation(); }}
+                          onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
                           id="autoscoreProvider"
                           value={autoscoreProvider || "manual"}
                           onChange={(e) =>
@@ -1000,7 +1009,9 @@ export default function SettingsPanel({ user }: { user?: any }) {
                             Turn Advance
                           </label>
                           <select
+                            onPointerDown={(e) => { (e as any).stopPropagation(); }}
                             onMouseDown={(e) => { e.stopPropagation(); }}
+                            onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
                             id="autoCommitMode"
                             value={autoCommitMode || "wait-for-clear"}
                             onChange={(e) =>
@@ -1059,8 +1070,10 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         >
                           Voice
                         </label>
-                        <select
-                          onMouseDown={(e) => { e.stopPropagation(); }}
+                            <select
+                              onPointerDown={(e) => { (e as any).stopPropagation(); }}
+                              onMouseDown={(e) => { e.stopPropagation(); }}
+                              onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
                           id="callerVoice"
                           value={callerVoice || ""}
                           onChange={(e) => setCallerVoice(e.target.value)}
@@ -1299,7 +1312,9 @@ export default function SettingsPanel({ user }: { user?: any }) {
                   >
                     Favorite Finish Double
                   </label>
-                  <select
+                        <select
+                          onPointerDown={(e) => { (e as any).stopPropagation(); }}
+                          onMouseDown={(e) => { e.stopPropagation(); }}
                     id="favoriteDouble"
                     value={favoriteDouble}
                     onChange={(e) => setFavoriteDouble(e.target.value)}

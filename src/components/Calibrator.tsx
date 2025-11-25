@@ -42,6 +42,8 @@ import {
   type NetworkDevice,
 } from "../utils/networkDevices";
 import { apiFetch } from "../utils/api";
+import { useMatch } from "../store/match";
+import { useWS } from "./WSProvider";
 
 type Phase = "idle" | "camera" | "capture" | "select" | "computed";
 type CamMode = "local" | "phone" | "wifi";
@@ -105,6 +107,8 @@ export default function Calibrator() {
     setPreferredCameraLocked,
     setPreferredCamera,
     preserveCalibrationOverlay,
+  allowAutocommitInOnline,
+  setAllowAutocommitInOnline,
   } = useUserSettings();
   // Detected ring data (from auto-detect) in image pixels
   const [detected, setDetected] = useState<null | {
@@ -126,6 +130,13 @@ export default function Calibrator() {
   const [markerResult, setMarkerResult] = useState<MarkerDetection | null>(
     null,
   );
+  const [showDartPreview, setShowDartPreview] = useState<boolean>(false);
+  const [autoCommitTestMode, setAutoCommitTestMode] = useState<boolean>(false);
+  const [autoCommitImmediate, setAutoCommitImmediate] = useState<boolean>(false);
+  const [lastDetectedValue, setLastDetectedValue] = useState<number | null>(null);
+  const [lastDetectedLabel, setLastDetectedLabel] = useState<string | null>(null);
+  const [toolsPopoverOpen, setToolsPopoverOpen] = useState<boolean>(false);
+  const dartDetectorRef = useRef<DartDetector | null>(null);
   // Verification results for UI: {label, expected, detected, match}
   const [verificationResults, setVerificationResults] = useState<
     Array<{ label: string; expected: any; detected: any; match: boolean }>
@@ -197,12 +208,91 @@ export default function Calibrator() {
 
   // Log streaming state changes for debugging
   useEffect(() => {
-    console.log("[Calibrator] 🔄 STREAMING STATE CHANGED:", {
-      streaming,
-      phase,
-      videoRefExists: !!videoRef.current,
-    });
-  }, [streaming, phase]);
+    let interval: number | null = null;
+    if (showDartPreview && streaming && videoRef.current && overlayRef.current) {
+      // Initialize detector
+      try {
+        const video = videoRef.current! as HTMLVideoElement;
+        const det = new DartDetector({ requireStableN: 2, thresh: 18, minArea: 40 });
+        const w = video.videoWidth || (videoRef.current as any).clientWidth || 640;
+        const h = video.videoHeight || (videoRef.current as any).clientHeight || 480;
+        det.reset(w, h);
+        // Set ROI roughly to the full board if we have detection
+        if (detected) {
+          const r = Math.max(detected.doubleOuter * 1.1, detected.trebleOuter * 1.1);
+          det.setROI(detected.cx, detected.cy, Math.round(r));
+        }
+        dartDetectorRef.current = det;
+        interval = window.setInterval(() => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.drawImage(video, 0, 0, w, h);
+            const img = ctx.getImageData(0, 0, w, h);
+          // feed background model
+            det.updateBackground(img);
+            const d = det.detect(img);
+            const overlay = overlayRef.current! as HTMLCanvasElement;
+            const octx = overlay.getContext('2d');
+            if (!octx) return;
+            octx.clearRect(0, 0, overlay.width, overlay.height);
+            // overlay is same size as canvas/image
+            if (d) {
+              // draw tip
+              // Map to calibration space and extract score
+              try {
+                if (H && imageSize) {
+                  const pImg = { x: d.tip.x, y: d.tip.y };
+                  // convert canvas coords to calibration image space
+                  const pCal = { x: pImg.x / (overlayRef.current!.width / imageSize.w), y: pImg.y / (overlayRef.current!.height / imageSize.h) };
+                  const detectedBoard = imageToBoard(H as any, pCal);
+                  const scoreObj = scoreAtBoardPoint(detectedBoard);
+                  const val = scoreObj.base;
+                  const label = `${scoreObj.ring} ${val}`.trim();
+                  setLastDetectedValue(val);
+                  setLastDetectedLabel(label);
+                  if (
+                    autoCommitTestMode &&
+                    autoCommitImmediate &&
+                    useMatch.getState().inProgress &&
+                    useMatch.getState().roomId === ""
+                  ) {
+                    // commit as offline match visit (3 darts)
+                    try { useMatch.getState().addVisit(val, 3, { visitTotal: val }); } catch {}
+                  }
+                }
+              } catch (err) {}
+              octx.fillStyle = 'rgba(0,255,0,0.9)';
+              octx.beginPath();
+              octx.arc(d.tip.x, d.tip.y, 6, 0, Math.PI * 2);
+              octx.fill();
+              // draw axis
+              octx.strokeStyle = 'rgba(0,255,0,0.8)';
+              octx.lineWidth = 2;
+              if (d.axis) {
+                octx.beginPath();
+                octx.moveTo(d.axis.x1, d.axis.y1);
+                octx.lineTo(d.axis.x2, d.axis.y2);
+                octx.stroke();
+              }
+            }
+          } catch (err) {
+            // ignore animation errors
+          }
+        }, 300);
+      } catch (err) {
+        console.warn('[Calibrator] failed to start dart preview', err);
+      }
+    }
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+      dartDetectorRef.current = null;
+    };
+  }, [showDartPreview, streaming, detected]);
 
   useEffect(() => {
     const h = window.location.hostname;
@@ -1434,7 +1524,8 @@ export default function Calibrator() {
   }
 
   function onClickOverlay(e: React.MouseEvent<HTMLCanvasElement>) {
-    if (phase !== "select") return;
+    // For selection mode allow adding anchor points, but for computed mode we interpret as a test click
+    if (phase !== "select" && phase !== "computed") return;
     const el = e.target as HTMLCanvasElement;
     const rect = el.getBoundingClientRect();
     const cssX = e.clientX - rect.left;
@@ -1444,10 +1535,44 @@ export default function Calibrator() {
     const scaleY = el.height > 0 ? el.height / rect.height : 1;
     const x = cssX * scaleX;
     const y = cssY * scaleY;
-    const pts = [...dstPoints, { x, y }];
-    if (pts.length <= REQUIRED_POINT_COUNT) {
-      setDstPoints(pts);
-      drawOverlay(pts);
+    if (phase === "select") {
+      const pts = [...dstPoints, { x, y }];
+      if (pts.length <= REQUIRED_POINT_COUNT) {
+        setDstPoints(pts);
+        drawOverlay(pts);
+      }
+      return;
+    }
+    // Phase 'computed' or verification mode: compute a score under calibration
+    try {
+      if (!H || !overlayRef.current || !imageSize) return;
+      const o = overlayRef.current;
+      const sx = o.width / imageSize.w;
+      const sy = o.height / imageSize.h;
+      const pCal = { x: x / sx, y: y / sy };
+      // Use helper to compute score
+      const scoreObj = scoreAtBoardPoint(imageToBoard(H as any, pCal));
+      const val = scoreObj.base;
+      const label = `${scoreObj.ring} ${val}`.trim();
+      setLastDetectedValue(val);
+      setLastDetectedLabel(label);
+          // Autofire commit if test autocommit enabled and immediate toggled and a match is active
+          if (autoCommitTestMode && autoCommitImmediate && useMatch.getState().inProgress) {
+            try {
+              const isOnline = useMatch.getState().roomId !== "";
+              // Offline: commit locally
+              if (!isOnline) {
+                useMatch.getState().addVisit(val, 3, { visitTotal: val });
+              } else {
+                // Online: if the user wants server autocommit, request server to apply
+                if (allowAutocommitInOnline) {
+                  try { useWS().send({ type: 'auto-visit', roomId: useMatch.getState().roomId, value: val, darts: 3 }) } catch {}
+                }
+              }
+            } catch {}
+          }
+    } catch (err) {
+      /* ignore */
     }
   }
 
@@ -1608,7 +1733,7 @@ export default function Calibrator() {
       mag[i] = m;
       if (m > maxMag) maxMag = m;
     }
-    // Coarse circle search around center for double outer
+  // Coarse circle search around center for double outer
     const cx0 = Math.floor(dw / 2),
       cy0 = Math.floor(dh / 2);
     const rMin = Math.floor(Math.min(dw, dh) * 0.35);
@@ -1645,7 +1770,7 @@ export default function Calibrator() {
         }
       }
     }
-    // Map back to original canvas coords
+  // Map back to original canvas coords
     const inv = 1 / scale;
     const OCX = best.cx * inv;
     const OCY = best.cy * inv;
@@ -1687,13 +1812,13 @@ export default function Calibrator() {
       }
       return bestR;
     }
-    const dOuter = OR;
+  const dOuter = OR;
     const dInner = refineAround(dOuter * ratios.doubleInner);
     const tOuter = refineAround(dOuter * ratios.trebleOuter);
     const tInner = refineAround(dOuter * ratios.trebleInner);
     const bOuter = refineAround(dOuter * ratios.bullOuter);
     const bInner = refineAround(dOuter * ratios.bullInner);
-    setDetected({
+  setDetected({
       cx: OCX,
       cy: OCY,
       bullInner: bInner,
@@ -1749,7 +1874,7 @@ export default function Calibrator() {
     ];
     setDstPoints(pts);
     drawOverlay(pts);
-    // Compute homography with the four rim points
+  // Compute homography with the four rim points
   try {
       const src = canonicalRimTargets(); // board space mm
       const Hcalc = computeHomographyDLT(src, pts);
@@ -1774,8 +1899,59 @@ export default function Calibrator() {
       console.error("[Calibrator] Auto-detect compute failed:", e);
       setAutoCalibrating(false);
     }
-  // Auto-lock if confidence high and error small
-    const autoLock = forceConfidence ? true : adjustedConf >= 0.95; // Use adjusted confidence for near-perfect calibration, or force lock
+    // Run the detection a couple more times and ensure stability using detectBoard which includes a refined algorithm
+    try {
+      const testRuns = 3;
+      let stableCount = 1;
+      for (let i = 1; i < testRuns; i++) {
+        const tmp2 = document.createElement("canvas");
+        tmp2.width = Math.max(1, Math.round(src.width * Math.min(1, maxW / src.width)));
+        tmp2.height = Math.max(1, Math.round(src.height * Math.min(1, maxW / src.width)));
+        const tctx2 = tmp2.getContext("2d")!;
+        tctx2.drawImage(src, 0, 0, tmp2.width, tmp2.height);
+        const bd2 = detectBoard(tmp2 as any as HTMLCanvasElement);
+        if (bd2 && bd2.success) {
+          if (
+            isSimilarDetection(
+              { cx: OCX, cy: OCY, doubleOuter: OR },
+              { cx: bd2.cx, cy: bd2.cy, doubleOuter: bd2.doubleOuter },
+            )
+          ) stableCount++;
+        }
+      }
+      const stable = stableCount >= Math.ceil(testRuns * 0.66);
+      if (!stable) {
+        console.warn("Auto-detect inconsistent across quick samples, skipping auto-lock");
+      }
+      // If not stable, reduce adjustedConf so autoLock will not be triggered
+      if (!stable) setConfidence(0);
+    } catch (err) {
+      // ignore errors
+    }
+    // Run quick stability checks (rerun detection a couple of times)
+    const runs = 3;
+    let stableCount = 1;
+    for (let i = 1; i < runs; i++) {
+      try {
+        const tmp3 = document.createElement("canvas");
+        tmp3.width = Math.max(1, Math.round(src.width * Math.min(1, maxW / src.width)));
+        tmp3.height = Math.max(1, Math.round(src.height * Math.min(1, maxW / src.width)));
+        const tctx3 = tmp3.getContext("2d")!;
+        tctx3.drawImage(src, 0, 0, tmp3.width, tmp3.height);
+        // use detectBoard for consistency
+        const bd2 = detectBoard(tmp3 as any as HTMLCanvasElement);
+        if (isSimilarDetection({ cx: OCX, cy: OCY, doubleOuter: OR }, { cx: bd2.cx, cy: bd2.cy, doubleOuter: bd2.doubleOuter })) {
+          stableCount++;
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+    const stable = stableCount >= Math.ceil(runs * 0.66);
+    // Auto-lock if confidence high, error small and stable across runs
+  // Require stability regardless of forceConfidence; allow forceConfidence to help reach confidence thresholds,
+  // but never bypass the stability check to set a locked calibration from a single noisy frame.
+  const autoLock = (forceConfidence ? true : adjustedConf >= 0.95) && stable;
     const overlaySizeForLock = overlayRef?.current
       ? { w: overlayRef.current.width, h: overlayRef.current.height }
       : videoRef?.current
@@ -1790,6 +1966,15 @@ export default function Calibrator() {
     }
     setDetectionMessage(`Auto-detect completed — confidence: ${Math.round(adjustedConf * 100)}%`);
     setAutoCalibrating(false);
+  }
+
+  // Helper: refine detection stability by running the same ring detection a few times and ensure values are close
+  function isSimilarDetection(a: any, b: any, tol = 0.03) {
+    if (!a || !b) return false;
+    const dx = Math.abs((a.cx - b.cx) / (a.cx || 1));
+    const dy = Math.abs((a.cy - b.cy) / (a.cy || 1));
+    const dr = Math.abs((a.doubleOuter - b.doubleOuter) / (a.doubleOuter || 1));
+    return dx <= tol && dy <= tol && dr <= tol;
   }
 
   const workerRef = useRef<Worker | null>(null);
@@ -1924,8 +2109,26 @@ export default function Calibrator() {
                   boardDetection.calibrationPoints,
                   boardDetection.homography,
                 );
-                const shouldLock =
+                let shouldLock =
                   (boardDetection.errorPx ?? Number.POSITIVE_INFINITY) <= 2.0;
+                // Validate detection stability by rerunning local detection a couple times
+                try {
+                  let stableCount2 = 1;
+                  const runs2 = 3;
+                  for (let i = 1; i < runs2; i++) {
+                    const small = document.createElement("canvas");
+                    small.width = Math.max(1, Math.round(canvasRef.current!.width * 0.8));
+                    small.height = Math.max(1, Math.round(canvasRef.current!.height * 0.8));
+                    const sctx = small.getContext("2d")!;
+                    sctx.drawImage(canvasRef.current!, 0, 0, small.width, small.height);
+                    const bd2 = detectBoard(small as any as HTMLCanvasElement);
+                    if (isSimilarDetection(boardDetection as any, bd2 as any)) stableCount2++;
+                  }
+                  const stable2 = stableCount2 >= Math.ceil(runs2 * 0.66);
+                  shouldLock = shouldLock && stable2;
+                } catch (err) {
+                  // ignore stability failures
+                }
                 const overlaySize = overlayRef?.current
                   ? { w: overlayRef.current.width, h: overlayRef.current.height }
                   : videoRef?.current
@@ -2089,8 +2292,25 @@ export default function Calibrator() {
     });
     setDstPoints(boardDetection.calibrationPoints);
     drawOverlay(boardDetection.calibrationPoints, boardDetection.homography);
-    const shouldLock =
-      (boardDetection.errorPx ?? Number.POSITIVE_INFINITY) <= 2.0;
+    // Check stability of the detection across quick re-runs to avoid locking from noisy frames
+    const baseCheck = (boardDetection.errorPx ?? Number.POSITIVE_INFINITY) <= 2.0;
+    let stabilityCount = 1;
+    const stabilityRuns = 3;
+    for (let i = 1; i < stabilityRuns; i++) {
+      try {
+        const tmp = document.createElement("canvas");
+        tmp.width = Math.max(1, Math.round(canvasRef.current!.width * 0.9));
+        tmp.height = Math.max(1, Math.round(canvasRef.current!.height * 0.9));
+        const tctx = tmp.getContext("2d")!;
+        tctx.drawImage(canvasRef.current!, 0, 0, tmp.width, tmp.height);
+        const bd2 = detectBoard(tmp as any as HTMLCanvasElement);
+        if (isSimilarDetection(boardDetection as any, bd2 as any)) stabilityCount++;
+      } catch (err) {
+        // ignore
+      }
+    }
+    const stable = stabilityCount >= Math.ceil(stabilityRuns * 0.66);
+    const shouldLock = baseCheck && stable;
     const overlaySize = overlayRef?.current
       ? { w: overlayRef.current.width, h: overlayRef.current.height }
       : videoRef?.current
@@ -2241,9 +2461,9 @@ export default function Calibrator() {
       preferredCameraLocked,
       setPreferredCameraLocked,
     } = useUserSettings();
-    const [devices, setDevices] = useState<MediaDeviceInfo[]>([]);
+    // Use outer videoDevices and refreshVideoDevices instead of local enumerate
     const [localDevicesSnapshot, setLocalDevicesSnapshot] = useState<
-      MediaDeviceInfo[] | null
+      Array<{ deviceId: string; label: string }> | null
     >(null);
     const [err, setErr] = useState("");
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -2261,22 +2481,12 @@ export default function Calibrator() {
       })();
 
     async function enumerate() {
-      if (DROPDOWN_DEBUG)
-        console.debug("[DevicePicker] enumerate start", Date.now());
+      // Prefer the global device refresh; it's fast and doesn't prompt for permission
+      if (DROPDOWN_DEBUG) console.debug("[DevicePicker] enumerate -> using global refreshVideoDevices", Date.now());
       setErr("");
       try {
-        // Ensure we have permission; otherwise labels may be empty.
-        // IMPORTANT: Only request permission without blocking the camera
-        try {
-          const permStream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-          });
-          // Stop the test stream immediately - don't hold the camera!
-          permStream.getTracks().forEach((t) => t.stop());
-        } catch {}
-        const list = await navigator.mediaDevices.enumerateDevices();
-        const cams = list.filter((d) => d.kind === "videoinput");
-        setDevices(cams);
+        await refreshVideoDevices();
+        const cams = videoDevices;
         // If the picker is open, keep a stable snapshot so the list doesn't jump while interacting
         if (
           dropdownRef.current &&
@@ -2286,7 +2496,7 @@ export default function Calibrator() {
         }
         if (DROPDOWN_DEBUG)
           console.debug(
-            "[DevicePicker] enumerate -> devices",
+            "[DevicePicker] enumerate -> devices (global)",
             cams.map((c) => c.deviceId),
             "snapshot?",
             !!(
@@ -2302,8 +2512,9 @@ export default function Calibrator() {
     }
 
     useEffect(() => {
+      // enumerate device list with global refresh; display quickly
       enumerate();
-    }, []);
+    }, [videoDevices.length]);
 
     // Close dropdown when clicking outside. Guard against immediate close
     // caused by focus/stream state churn by briefly ignoring outside clicks
@@ -2347,12 +2558,18 @@ export default function Calibrator() {
           }
         } catch {}
       }
-      document.addEventListener("mousedown", handleClickOutside);
-      return () =>
-        document.removeEventListener("mousedown", handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    // pointerdown covers pointer devices; touchstart covers legacy touch-only devices
+    document.addEventListener("pointerdown", handleClickOutside as any);
+    document.addEventListener("touchstart", handleClickOutside as any);
+      return () => {
+    document.removeEventListener("mousedown", handleClickOutside);
+    document.removeEventListener("pointerdown", handleClickOutside as any);
+    document.removeEventListener("touchstart", handleClickOutside as any);
+      };
     }, []);
 
-    const selectedDevice = devices.find(
+    const selectedDevice = (localDevicesSnapshot || videoDevices).find(
       (d) => d.deviceId === preferredCameraId,
     );
     const selectedLabel = selectedDevice
@@ -2365,12 +2582,15 @@ export default function Calibrator() {
       useState<string>(selectedLabel);
 
     // If preferred camera is set but not found, show a warning
-    const preferredCameraUnavailable = preferredCameraId && !selectedDevice;
+  const preferredCameraUnavailable = preferredCameraId && !selectedDevice;
 
     return (
-      <div className="mt-3 p-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5">
+      <div ref={dropdownRef} className="mt-3 p-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5">
         <div className="font-semibold mb-2">Select camera device</div>
         {err && <div className="text-rose-400 text-sm mb-2">{err}</div>}
+        {videoDevices.length === 0 && !err && (
+          <div className="text-xs text-slate-400 mb-2">Detecting devices... (click "Rescan" if this hangs)</div>
+        )}
         {preferredCameraUnavailable && (
           <div className="text-amber-400 text-sm mb-2">
             Selected camera is no longer available.
@@ -2418,7 +2638,21 @@ export default function Calibrator() {
         </div>
         <div className="grid grid-cols-3 gap-2 items-center text-sm">
           <select
+            onFocus={() => {
+              try {
+                if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "true";
+                ignoreCloseUntilRef.current = Date.now() + 350; // give a short ignore window
+              } catch {}
+              try { enumerate(); } catch {}
+            }}
+            onBlur={() => {
+              try {
+                if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "false";
+              } catch {}
+            }}
+            onPointerDown={(e) => { (e as any).stopPropagation(); }}
             onMouseDown={(e) => { e.stopPropagation(); }}
+            onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
             className="input col-span-2"
             value={preferredCameraId || "auto"}
             onChange={(e) => {
@@ -2444,7 +2678,7 @@ export default function Calibrator() {
                   setHasSnapshot(false);
                 } catch {}
               } else {
-                const device = devices.find((d) => d.deviceId === val);
+                const device = (localDevicesSnapshot || videoDevices).find((d) => d.deviceId === val);
                 if (device) {
                   try {
                     setPreferredCamera(
@@ -2458,7 +2692,7 @@ export default function Calibrator() {
             }}
           >
             <option value="auto">Auto (browser default)</option>
-            {devices.map((d) => (
+            {(localDevicesSnapshot || videoDevices).map((d) => (
               <option key={d.deviceId} value={d.deviceId}>
                 {d.label || "Camera"}
               </option>
@@ -2498,6 +2732,38 @@ export default function Calibrator() {
             >
               Test
             </button>
+            <div className="text-xs mt-2 space-y-2">
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={showDartPreview} onChange={(e) => setShowDartPreview(e.target.checked)} />
+                <span className="ml-1">Show darts overlay</span>
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={autoCommitTestMode} onChange={(e) => setAutoCommitTestMode(e.target.checked)} />
+                <span className="ml-1">Enable autocommit test mode</span>
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={allowAutocommitInOnline} onChange={(e) => setAllowAutocommitInOnline(e.target.checked)} disabled={!autoCommitTestMode} />
+                <span className="ml-1">Allow autocommit in Online/Tournament matches (dangerous)</span>
+              </label>
+              {allowAutocommitInOnline && autoCommitTestMode && (
+                <div className="text-xs opacity-60 mt-1">Autocommit in online matches will submit scoring events without manual confirmation; use only when you trust the camera & calibration.</div>
+              )}
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={autoCommitImmediate} onChange={(e) => setAutoCommitImmediate(e.target.checked)} disabled={!autoCommitTestMode} />
+                <span className="ml-1">Autocommit immediate when dart detected</span>
+              </label>
+              <div className="flex gap-2 items-center">
+                <button className="btn btn--ghost btn-sm" onClick={() => {
+                  // Manual commit of last detected value (if present)
+                  const v = lastDetectedValue;
+                  if (!v) return;
+                  try { useMatch.getState().addVisit(v, 3, { visitTotal: v }); } catch { }
+                }} disabled={!lastDetectedValue}>Commit detected</button>
+                <div className="text-xs opacity-70">
+                  {lastDetectedLabel ? `Detected: ${lastDetectedLabel}` : "No recent detection"}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         {preferredCameraLabel && (
@@ -2725,6 +2991,93 @@ export default function Calibrator() {
                     Actual
                   </button>
                 </div>
+              </div>
+              {/* Tools pill (always visible) */}
+              <div className="ml-3 relative">
+                <button
+                  className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-400/10 px-3 py-1 text-sm"
+                  onClick={() => setToolsPopoverOpen(!toolsPopoverOpen)}
+                >
+                  <span className="font-semibold">Cal. Tools</span>
+                  {preserveCalibrationOverlay && (
+                    <span className="ml-2 text-xs opacity-70">(overlay preserved)</span>
+                  )}
+                </button>
+                {toolsPopoverOpen && (
+                  <div
+                    className="absolute right-0 mt-2 w-64 rounded-lg border bg-gray-900/80 p-3 shadow-lg z-50"
+                    role="dialog"
+                  >
+                    <div className="text-xs mb-2">Calibrator quick tools</div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        id="hdr-show-darts"
+                        type="checkbox"
+                        checked={showDartPreview}
+                        onChange={(e) => setShowDartPreview(e.target.checked)}
+                      />
+                      <label htmlFor="hdr-show-darts" className="text-sm">
+                        Show darts overlay
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        id="hdr-autocommit"
+                        type="checkbox"
+                        checked={autoCommitTestMode}
+                        onChange={(e) => setAutoCommitTestMode(e.target.checked)}
+                      />
+                      <label htmlFor="hdr-autocommit" className="text-sm">
+                        Enable autocommit test
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        id="hdr-autocommit-online"
+                        type="checkbox"
+                        checked={allowAutocommitInOnline}
+                        onChange={(e) => setAllowAutocommitInOnline(e.target.checked)}
+                        disabled={!autoCommitTestMode}
+                      />
+                      <label htmlFor="hdr-autocommit-online" className="text-sm">
+                        Allow autocommit in Online/Tournament matches (dangerous)
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        id="hdr-autocommit-immediate"
+                        type="checkbox"
+                        checked={autoCommitImmediate}
+                        onChange={(e) => setAutoCommitImmediate(e.target.checked)}
+                      />
+                      <label
+                        htmlFor="hdr-autocommit-immediate"
+                        className="text-sm"
+                      >
+                        Autocommit immediate when detected
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <div className="text-xs opacity-70">
+                        {lastDetectedLabel || "No recent detection"}
+                      </div>
+                      <div>
+                        <button
+                          className="btn btn--small"
+                          onClick={() => {
+                            try {
+                              if (lastDetectedLabel && lastDetectedValue && useMatch.getState().inProgress && useMatch.getState().roomId === "") {
+                                useMatch.getState().addVisit(lastDetectedValue, 3, { visitTotal: lastDetectedValue });
+                              }
+                            } catch (e) {}
+                          }}
+                        >
+                          Commit
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div

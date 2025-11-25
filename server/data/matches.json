@@ -10,5 +10,65 @@
     "game": "X01",
     "requireCalibration": false,
     "createdAt": 1763325760875
+  },
+  {
+    "id": "P4MBzpUYzz",
+    "creatorId": "Q-ebqP_i",
+    "creatorName": "Alice",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764096908863
+  },
+  {
+    "id": "pWldJxcSX5",
+    "creatorId": "riamR1sU",
+    "creatorName": "Alice",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764097124931
+  },
+  {
+    "id": "aM4Aufw3Jb",
+    "creatorId": "LIF9DktW",
+    "creatorName": "Alice",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764097739284
+  },
+  {
+    "id": "-XZoksc39h",
+    "creatorId": "-JrH6ZZa",
+    "creatorName": "Alice",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764097797211
+  },
+  {
+    "id": "1nh2kUWQL5",
+    "creatorId": "HpeNQYqH",
+    "creatorName": "Alice",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764097976370
   }
 ]

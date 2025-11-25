@@ -358,6 +358,15 @@ export default function StatsPanel({ user }: { user?: any }) {
                     </span>
                   </div>
                 </div>
+                {/* Live current three-dart average for in-progress matches */}
+                {inProgress && (
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
+                    <div className="text-slate-300">Current 3-Dart (live)</div>
+                    <div className="font-semibold">
+                      {formatAvg(p.currentThreeDartAvg)}
+                    </div>
+                  </div>
+                )}
                 {/* All-time snapshot */}
                 <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
                   <div className="text-slate-300">All-time snapshot</div>

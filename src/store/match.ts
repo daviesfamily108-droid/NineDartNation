@@ -29,6 +29,7 @@ export type Player = {
   worstThreeDartAvg?: number;
   bestNineDart?: { darts: number; timestamp: number };
   bestCheckout?: number;
+  currentThreeDartAvg?: number; // Live stat that updates after every 3 darts
 };
 
 export type MatchState = {
@@ -104,6 +105,7 @@ export type Actions = {
   nextPlayer: () => void;
   endGame: () => void;
   importState: (state: MatchState) => void;
+  setPlayerCurrentAverage: (playerIndex: number, avg: number) => void;
 };
 
 export const useMatch = create<MatchState & Actions>((set, get) => ({
@@ -168,10 +170,19 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
       try {
         const bust = score === 0 && darts > 0 && postRem === preRem;
         const finish = postRem === 0;
+        const avgPayload: any = {};
+        if (leg.dartsThrown % 3 === 0) {
+          const avg = calcThreeDartAvg(leg);
+          if (Math.abs((p.currentThreeDartAvg ?? 0) - avg) > 0.0001) {
+            p.currentThreeDartAvg = avg;
+          }
+          avgPayload.threeDartAvg = avg;
+        }
         useAudit.getState().recordVisit("x01-match", darts, score, {
           preOpenDarts: meta?.preOpenDarts ?? 0,
           preRemaining: preRem,
           postRemaining: postRem,
+          ...avgPayload,
           bust,
           finish,
         });
@@ -227,4 +238,14 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
     }),
 
   importState: (newState) => set(() => ({ ...newState })),
+  setPlayerCurrentAverage: (playerIndex, avg) =>
+    set((state) => {
+      const p = state.players[playerIndex];
+      if (!p) return state;
+      if (Math.abs((p.currentThreeDartAvg ?? 0) - avg) > 0.0001) {
+        p.currentThreeDartAvg = avg;
+        return { ...state };
+      }
+      return state;
+    }),
 }));

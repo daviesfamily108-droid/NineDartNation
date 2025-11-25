@@ -29,6 +29,8 @@ type SettingsState = {
   autoscoreProvider?: "built-in" | "external-ws" | "manual";
   autoscoreWsUrl?: string;
   autoCommitMode?: "wait-for-clear" | "immediate";
+  // Allow immediate autocommit when playing online/tournaments
+  allowAutocommitInOnline?: boolean;
   calibrationGuide: boolean;
   // Preserve calibration overlay display size when calibration is locked
   preserveCalibrationOverlay: boolean;
@@ -80,6 +82,7 @@ type SettingsState = {
   setAutoscoreProvider: (p: "built-in" | "external-ws" | "manual") => void;
   setAutoscoreWsUrl: (u: string) => void;
   setAutoCommitMode: (mode: "wait-for-clear" | "immediate") => void;
+  setAllowAutocommitInOnline: (v: boolean) => void;
   setTextSize: (size: "small" | "medium" | "large") => void;
   setBoxSize: (size: "small" | "medium" | "large") => void;
   setMatchType: (t: "singles" | "doubles") => void;
@@ -167,6 +170,7 @@ function load(): Pick<
         autoscoreProvider: "built-in",
         autoscoreWsUrl: "",
         autoCommitMode: "wait-for-clear",
+  allowAutocommitInOnline: false,
         textSize: "medium",
         boxSize: "medium",
         matchType: "singles",
@@ -225,6 +229,7 @@ function load(): Pick<
         typeof j.autoscoreWsUrl === "string" ? j.autoscoreWsUrl : "",
       autoCommitMode:
         j.autoCommitMode === "immediate" ? "immediate" : "wait-for-clear",
+      allowAutocommitInOnline: !!j.allowAutocommitInOnline,
       calibrationGuide:
         typeof j.calibrationGuide === "boolean" ? j.calibrationGuide : true,
       preferredCameraId:
@@ -263,7 +268,7 @@ function load(): Pick<
         typeof j.dartTimerSeconds === "number" && isFinite(j.dartTimerSeconds)
           ? Math.max(3, Math.min(60, j.dartTimerSeconds))
           : 10,
-      x01DoubleIn: typeof j.x01DoubleIn === "boolean" ? j.x01DoubleIn : false,
+    x01DoubleIn: typeof j.x01DoubleIn === "boolean" ? j.x01DoubleIn : false,
     };
   } catch {
     return {
@@ -398,6 +403,10 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     const v = mode === "immediate" ? "immediate" : "wait-for-clear";
     save({ autoCommitMode: v });
     set({ autoCommitMode: v });
+  },
+  setAllowAutocommitInOnline: (v) => {
+    save({ allowAutocommitInOnline: v } as any);
+    set({ allowAutocommitInOnline: v });
   },
   setCalibrationGuide: (v) => {
     save({ calibrationGuide: v });

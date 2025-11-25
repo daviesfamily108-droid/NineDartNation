@@ -10,6 +10,7 @@ export type VisitAudit = {
   postRemaining?: number;
   bust?: boolean;
   finish?: boolean;
+  threeDartAvg?: number;
 };
 
 type CalibrationAudit = {
@@ -62,6 +63,7 @@ export const useAudit = create<AuditState>((set, get) => ({
         postRemaining: meta?.postRemaining,
         bust: meta?.bust,
         finish: meta?.finish,
+        threeDartAvg: meta?.threeDartAvg,
       };
       const recent = [...state.recent, item].slice(-50);
       const totals = { ...state.totals };
@@ -78,14 +80,16 @@ export const useAudit = create<AuditState>((set, get) => ({
       // Console surface for quick verification without UI changes
       try {
         const tag = item.finish ? "FINISH" : item.bust ? "BUST" : "VISIT";
-        console.info(`[Audit:${tag}]`, {
+        const info = {
           mode,
           darts,
           visitTotal,
           preOpenDarts: item.preOpenDarts ?? 0,
           preRemaining: item.preRemaining,
           postRemaining: item.postRemaining,
-        });
+          threeDartAvg: item.threeDartAvg,
+        } as any;
+        console.info(`[Audit:${tag}]`, info);
       } catch {}
       // Persist recent visits to localStorage so Home can show recent across reloads
       try {

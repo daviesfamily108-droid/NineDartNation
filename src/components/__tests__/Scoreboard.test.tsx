@@ -159,4 +159,33 @@ describe("Scoreboard", () => {
     // We assert that the endLeg handler was invoked when the remaining became zero.
     expect(matchActions.endLeg).toHaveBeenCalledWith(41);
   });
+
+  test("updates current three-dart average after every 3 darts scored", async () => {
+    // Reset to a new match
+    await act(async () => {
+      useMatch.getState().newMatch(["Alice", "Bob"], 501);
+    });
+    // Add three visits of 60 (T20+T20+S20 each) to make a 180 total
+    await act(async () => {
+      useMatch.getState().addVisit(60, 3);
+      useMatch.getState().addVisit(60, 3);
+      useMatch.getState().addVisit(60, 3);
+    });
+    const p = useMatch.getState().players[0];
+    // After three visits (9 darts), the avg should be a 3-dart average per 3 darts, i.e., (501-start)?? We compute from leg
+    const leg = p.legs[p.legs.length - 1];
+    const scored = leg.totalScoreStart - leg.totalScoreRemaining;
+    const expectedAvg = (scored / leg.dartsThrown) * 3;
+    expect(p.currentThreeDartAvg).toBeCloseTo(expectedAvg);
+  });
+
+  test("allows manual editing of current three-dart average", async () => {
+    await act(async () => {
+      useMatch.getState().newMatch(["Alice", "Bob"], 501);
+    });
+    await act(async () => {
+      useMatch.getState().setPlayerCurrentAverage(0, 63.4);
+    });
+    expect(useMatch.getState().players[0].currentThreeDartAvg).toBeCloseTo(63.4);
+  });
 });

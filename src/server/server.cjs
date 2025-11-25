@@ -35,6 +35,10 @@ const inviteTimers = new Map();
 
 // Pending prestart sessions keyed by roomId
 const pendingPrestarts = new Map();
+// Per-room server-side autocommit permission (roomId -> boolean)
+const roomAutocommitAllowed = new Map();
+// Track room creator id so allow host-only operations
+const roomCreator = new Map();
 
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -1593,6 +1597,13 @@ async function leaveRoom(ws) {
     set.delete(ws);
     if (set.size === 0) rooms.delete(roomId);
   }
+  // if room no longer has participants, clear server-side autocommit/context
+  try {
+    if (!rooms.has(roomId)) {
+      roomAutocommitAllowed.delete(roomId)
+      roomCreator.delete(roomId)
+    }
+  } catch {}
   ws._roomId = null;
   if (ws._email) {
     // Update user status in Redis for cross-server sharing
@@ -1746,6 +1757,43 @@ wss.on('connection', (ws, req) => {
           broadcastToRoom(ws._roomId, { type: 'celebration', kind, by: data.by || (ws._username || `user-${ws._id}`), ts: Date.now() }, null)
         }
       } else if (data.type === 'report') {
+      } else if (data.type === 'set-match-autocommit') {
+        // Host or admin may toggle server-side autocommit allowed flag for a room
+        const roomId = String(data.roomId || '')
+        const allow = !!data.allow
+        if (!roomId) return
+        const creatorId = roomCreator.get(roomId)
+        const isCreator = creatorId && String(creatorId) === String(ws._id)
+        const isAdmin = ws._email && users.get(String(ws._email)) && !!users.get(String(ws._email)).admin
+        if (!isCreator && !isAdmin) {
+          try { ws.send(JSON.stringify({ type: 'error', code: 'FORBIDDEN', message: 'Only match creator or admin can set autocommit' })) } catch {}
+          return
+        }
+        try { roomAutocommitAllowed.set(roomId, !!allow) } catch {}
+        try { console.log(`[SET_AUTOCOMMIT] room=${roomId} allow=${allow} by=${ws._id}`) } catch {}
+        // Notify all participants in the room of the updated setting
+        broadcastToRoom(roomId, { type: 'match-autocommit-updated', roomId, allow })
+      } else if (data.type === 'auto-visit') {
+        // clients request server-side autocommit for a detection: validate and broadcast server-verified commit
+        const roomId = String(data.roomId || '')
+        const value = Number(data.value || 0)
+        const darts = Number(data.darts || 3)
+        const ring = (typeof data.ring === 'string') ? data.ring : null
+        const sector = (typeof data.sector === 'string') ? data.sector : null
+        if (!roomId) return
+        // Ensure room exists and that autocommit is allowed (either room flag or creator/admin override)
+        const allowed = (roomAutocommitAllowed.get(roomId) === true) || (roomCreator.get(roomId) && String(roomCreator.get(roomId)) === String(ws._id)) || (ws._email && users.get(String(ws._email)) && !!users.get(String(ws._email)).admin)
+        if (!allowed) {
+          try { ws.send(JSON.stringify({ type: 'error', code: 'FORBIDDEN', message: 'Autocommit is not allowed for this match' })) } catch {}
+          return
+        }
+        // Broadcast server-verified visit commit to the room - clients should apply this visit
+        const visit = { by: ws._id, value, darts, ring, sector, ts: Date.now() }
+  try { broadcastToRoom(roomId, { type: 'visit-commit', roomId, visit }) } catch {}
+  try { console.log(`[AUTO_VISIT_HANDLER] room=${roomId} by=${ws._id} allowed=${allowed}`) } catch {}
+        // Optionally log to server audit logs (console for now)
+        try { console.log(`[AUTOVISIT] room=${roomId} by=${ws._id} value=${value} darts=${darts} ring=${ring} sector=${sector}`) } catch {}
+      } else if (data.type === 'cam-create') {
         // Abuse report from a client for an in-room message or behavior
         const offenderId = typeof data.offenderId === 'string' ? data.offenderId : null
         const reason = String(data.reason || '').slice(0, 300)
@@ -1826,6 +1874,8 @@ wss.on('connection', (ws, req) => {
           createdAt: Date.now(),
         }
         matches.set(id, m)
+  // Initialize server-side per-room flags for this match (creator can toggle later)
+  try { roomAutocommitAllowed.set(id, false); roomCreator.set(id, String(ws._id)); } catch {}
         persistMatchesToDisk()
         (async () => {
           if (!supabase) return
@@ -1936,6 +1986,8 @@ wss.on('connection', (ws, req) => {
                 const rq = clients.get(requester._id)
                 if (cr && cr.readyState === 1) cr.send(JSON.stringify(startPayload))
                 if (rq && rq.readyState === 1) rq.send(JSON.stringify(startPayload))
+                // Initialize server-side per-room flags
+                try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(m.creatorId)); } catch {}
               } catch (err) { console.warn('[Prestart] auto-start failed', err) }
               pendingPrestarts.delete(roomId)
             }, PRESTART_SECONDS * 1000)
@@ -2026,11 +2078,12 @@ wss.on('connection', (ws, req) => {
             const c = clients.get(pid)
             if (c && c.readyState === 1) c.send(JSON.stringify(payload))
           }
-          const startPayload = { type: 'match-start', roomId, match: sess.match, firstPlayerId: p0 }
+              const startPayload = { type: 'match-start', roomId, match: sess.match, firstPlayerId: p0 }
           for (const pid of sess.players) {
             const c = clients.get(pid)
             if (c && c.readyState === 1) c.send(JSON.stringify(startPayload))
           }
+              try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(sess.match.creatorId)); } catch {}
           try { if (sess.timer) clearTimeout(sess.timer) } catch {}
           pendingPrestarts.delete(roomId)
           matches.delete(sess.match.id)
@@ -2046,6 +2099,7 @@ wss.on('connection', (ws, req) => {
             const c = clients.get(pid)
             if (c && c.readyState === 1) c.send(JSON.stringify(startPayload))
           }
+          try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(sess.match.creatorId)); } catch {}
           try { if (sess.timer) clearTimeout(sess.timer) } catch {}
           pendingPrestarts.delete(roomId)
           matches.delete(sess.match.id)

@@ -101,7 +101,9 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                 const opts = getStartOptionsForGame(v);
                 setStartingScore(opts?.[0]);
               }}
-                onMouseDown={(e) => { e.stopPropagation(); }}
+                    onPointerDown={(e) => { (e as any).stopPropagation(); }}
+                    onMouseDown={(e) => { e.stopPropagation(); }}
+                    onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
             >
               {allGames.map((g) => (
                 <option key={g} value={g}>
@@ -110,18 +112,19 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
               ))}
             </select>
           </div>
-          {getStartOptionsForGame(game)?.length ? (
+          {getStartOptionsForGame(game).length > 0 ? (
             <div>
-              <label
-                className="text-sm opacity-80"
-                htmlFor="match-start"
-              >{`${game} Starting Score`}</label>
+              <label className="text-sm opacity-80" htmlFor="match-start">
+                {`${game} Starting Score`}
+              </label>
               <select
                 id="match-start"
-                className="w-full p-2 border border-white/10 bg-white/5 rounded text-white"
+                className="ml-2 p-2 border border-white/10 bg-white/5 rounded text-white w-full"
                 value={startingScore}
                 onChange={(e) => setStartingScore(Number(e.target.value))}
-                  onMouseDown={(e) => { e.stopPropagation(); }}
+                onPointerDown={(e) => { (e as any).stopPropagation(); }}
+                onMouseDown={(e) => { e.stopPropagation(); }}
+                  onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
               >
                 {getStartOptionsForGame(game).map((opt) => (
                   <option key={opt} value={opt}>
