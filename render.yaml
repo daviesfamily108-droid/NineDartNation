@@ -9,7 +9,9 @@ services:
       cd server && npm ci && cd ..
       # Build frontend
       npm run build
-    startCommand: cd server && npm start
+  # Use the packaged CommonJS runtime to avoid ESM dynamic-require issues
+  # This runs the CJS server directly from the repo root.
+  startCommand: node server/server.cjs
     healthCheckPath: /readyz
     autoDeploy: true
     plan: free
