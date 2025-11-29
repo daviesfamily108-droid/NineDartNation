@@ -20,7 +20,7 @@ type WSContextType = {
   reconnect: () => void;
 };
 
-const WSContext = createContext<WSContextType | null>(null);
+export const WSContext = createContext<WSContextType | null>(null);
 
 export function WSProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false);

@@ -61,7 +61,7 @@
     function log(t) { msg.textContent = t }
 
     async function startCam(facing) {
-      if (stream) { try { stream.getTracks().forEach(t => t.stop()) } catch {} }
+  if (stream) { try { stream.getTracks().forEach(t => t.stop()) } catch (e) {} }
       stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing || 'environment' }, audio: false })
       v.srcObject = stream
       await v.play().catch(()=>{})
@@ -99,7 +99,7 @@
           ws.send(JSON.stringify({ type: 'cam-answer', code, payload: answer }))
           log('Streaming to desktop...')
         } else if (data.type === 'cam-ice') {
-          try { await pc.addIceCandidate(data.payload) } catch {}
+          try { await pc.addIceCandidate(data.payload) } catch (e) {}
         } else if (data.type === 'cam-error') {
           log('Error: ' + (data.code || 'UNKNOWN'))
         }
@@ -107,7 +107,7 @@
     }
 
     joinBtn.addEventListener('click', (e) => { e.preventDefault(); join() })
-    stopBtn.addEventListener('click', (e) => { e.preventDefault(); try { if (pc) pc.close(); if (ws) ws.close(); if (stream) stream.getTracks().forEach(t=>t.stop()) } catch {}; log('Stopped.') })
+  stopBtn.addEventListener('click', (e) => { e.preventDefault(); try { if (pc) pc.close(); if (ws) ws.close(); if (stream) stream.getTracks().forEach(t=>t.stop()) } catch (e) {}; log('Stopped.') })
     swapBtn.addEventListener('click', async (e) => { e.preventDefault(); lastFacing = (lastFacing === 'environment' ? 'user' : 'environment'); await startCam(lastFacing) })
   </script>
 </body>

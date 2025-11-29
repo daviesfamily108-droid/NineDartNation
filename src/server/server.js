@@ -22,6 +22,10 @@ const { createClient } = require('@supabase/supabase-js');
 
 const PORT = process.env.PORT || 8787;
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
+// Central debug flag for runtime logs
+const DEBUG = String(process.env.NDN_DEBUG || '').toLowerCase() === '1'
+// Create structured logger early
+const startLogger = pino({ level: DEBUG ? 'debug' : (process.env.NDN_LOG_LEVEL || 'info') })
 // Track HTTPS runtime status and port
 let HTTPS_ACTIVE = false
 let HTTPS_PORT = Number(process.env.HTTPS_PORT || 8788)
@@ -29,12 +33,12 @@ const app = express();
 
 // Global error handlers
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
+  startLogger.error('Uncaught Exception: %s', err && err.stack ? err.stack : err);
   // process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  startLogger.error('Unhandled Rejection at: %s reason: %s', promise, reason);
   // process.exit(1);
 });
 
@@ -44,16 +48,16 @@ const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null;
 
 if (!supabase) {
-  console.warn('[DB] Supabase not configured - using in-memory storage only');
+  startLogger.warn('[DB] Supabase not configured - using in-memory storage only');
 }
 
 // Initialize Redis for cross-server session management
 let redisClient = null;
 
 // DEBUG: Check Redis configuration
-console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
-console.log('🔍 DEBUG: UPSTASH_REDIS_REST_URL exists:', !!process.env.UPSTASH_REDIS_REST_URL);
-console.log('🔍 DEBUG: UPSTASH_REDIS_REST_TOKEN exists:', !!process.env.UPSTASH_REDIS_REST_TOKEN);
+startLogger.debug('🔍 DEBUG: REDIS_URL exists: %s', !!process.env.REDIS_URL);
+startLogger.debug('🔍 DEBUG: UPSTASH_REDIS_REST_URL exists: %s', !!process.env.UPSTASH_REDIS_REST_URL);
+startLogger.debug('🔍 DEBUG: UPSTASH_REDIS_REST_TOKEN exists: %s', !!process.env.UPSTASH_REDIS_REST_TOKEN);
 
 if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
   // Use Upstash Redis (REST-based, better for serverless)
@@ -62,16 +66,16 @@ if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) 
     url: process.env.UPSTASH_REDIS_REST_URL,
     token: process.env.UPSTASH_REDIS_REST_TOKEN,
   });
-  console.log('[REDIS] Using Upstash Redis');
+  startLogger.info('[REDIS] Using Upstash Redis');
 } else if (process.env.REDIS_URL) {
   // Fallback to standard Redis client
   const redis = require('redis');
   redisClient = redis.createClient({ url: process.env.REDIS_URL });
-  redisClient.on('error', (err) => console.error('[REDIS] Error:', err));
-  redisClient.on('connect', () => console.log('[REDIS] Connected'));
-  redisClient.connect().catch(err => console.warn('[REDIS] Failed to connect:', err));
+  redisClient.on('error', (err) => startLogger.error('[REDIS] Error: %s', err && err.message ? err.message : err));
+  redisClient.on('connect', () => startLogger.info('[REDIS] Connected'));
+  redisClient.connect().catch(err => startLogger.warn('[REDIS] Failed to connect: %s', err && err.message ? err.message : err));
 } else {
-  console.warn('[REDIS] Not configured - using in-memory storage for sessions');
+  startLogger.warn('[REDIS] Not configured - using in-memory storage for sessions');
 }
 
 // Database helper functions
@@ -408,9 +412,9 @@ if (fs.existsSync(rootDistPath)) {
 }
 // Log whether we found a built SPA to serve
 if (staticBase) {
-  console.log(`[SPA] Serving static frontend from ${staticBase}`)
+  startLogger.info(`[SPA] Serving static frontend from %s`, staticBase)
 } else {
-  console.warn('[SPA] No built frontend found at ../dist or ../app/dist; "/" will 404 (API+WS OK).')
+  startLogger.warn('[SPA] No built frontend found at ../dist or ../app/dist; "/" will 404 (API+WS OK).')
 }
 
 
@@ -466,7 +470,7 @@ app.post('/api/auth/signup', async (req, res) => {
         }]);
 
       if (error) {
-        console.error('[DB] Failed to save user to Supabase:', error);
+  startLogger.error('[DB] Failed to save user to Supabase: %s', error && error.message ? error.message : error);
         return res.status(500).json({ error: 'Failed to create account.' });
       }
     }
@@ -485,7 +489,7 @@ app.post('/api/auth/signup', async (req, res) => {
     const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
     return res.json({ user, token })
   } catch (error) {
-    console.error('[SIGNUP] Error:', error);
+  startLogger.error('[SIGNUP] Error: %s', error && error.message ? error.message : error);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 })
@@ -517,7 +521,7 @@ app.post('/api/auth/login', async (req, res) => {
         .single();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('[DB] Supabase login error:', error);
+  startLogger.error('[DB] Supabase login error: %s', error && error.message ? error.message : error);
       } else if (data && data.password === password) {
         user = {
           email: data.email,
@@ -544,7 +548,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
   } catch (error) {
-    console.error('[LOGIN] Error:', error);
+  startLogger.error('[LOGIN] Error: %s', error && error.message ? error.message : error);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -628,7 +632,7 @@ app.get('/api/subscription', async (req, res) => {
         return res.json(data.subscription);
       }
     } catch (err) {
-      console.error('[DB] Error fetching subscription:', err);
+  startLogger.error('[DB] Error fetching subscription: %s', err && err.message ? err.message : err);
     }
   }
 
@@ -706,7 +710,7 @@ app.post('/webhook/stripe', async (req, res) => {
             .update({ subscription: { fullAccess: true, source: 'stripe', purchasedAt: new Date().toISOString() } })
             .eq('email', email);
         } catch (err) {
-          console.error('[DB] Failed to update subscription:', err);
+          startLogger.error('[DB] Failed to update subscription: %s', err && err.message ? err.message : err);
         }
       }
     }
@@ -733,7 +737,7 @@ try {
     stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
   }
 } catch (e) {
-  console.warn('[Stripe] init failed:', e?.message || e)
+  startLogger.warn('[Stripe] init failed: %s', e?.message || e)
 }
 
 app.post('/api/stripe/create-session', async (req, res) => {
@@ -758,7 +762,7 @@ app.post('/api/stripe/create-session', async (req, res) => {
     })
     return res.json({ ok: true, url: session.url })
   } catch (e) {
-    console.error('[Stripe] create-session failed:', e?.message || e)
+  startLogger.error('[Stripe] create-session failed: %s', e?.message || e)
     return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
   }
 })
@@ -780,7 +784,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     // Return the payment link directly
     return res.json({ ok: true, url: premiumPaymentLink })
   } catch (e) {
-    console.error('[Stripe] create-checkout-session failed:', e?.message || e)
+  startLogger.error('[Stripe] create-checkout-session failed: %s', e?.message || e)
     return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
   }
 })
@@ -981,7 +985,7 @@ try {
     })
   }
 } catch (e) {
-  console.warn('[Email] transporter init failed', e?.message||e)
+  startLogger.warn('[Email] transporter init failed: %s', e?.message || e)
 }
 
 async function sendMail(to, subject, html) {
@@ -1088,16 +1092,16 @@ const server = app.listen(PORT, '0.0.0.0', () => {
       if (ni.family === 'IPv4' && !ni.internal) hosts.push(ni.address)
     }
   }
-  console.log(`[HTTP] Server listening on 0.0.0.0:${PORT}`)
+  startLogger.info(`[HTTP] Server listening on 0.0.0.0:%s`, PORT)
   if (hosts.length) {
-    for (const ip of hosts) console.log(`       LAN:  http://${ip}:${PORT}`)
+  for (const ip of hosts) startLogger.info(`       LAN:  http://%s:%s`, ip, PORT)
   } else {
-    console.log(`       TIP: open http://localhost:${PORT} on this PC; phones use your LAN IP`)
+  startLogger.info(`       TIP: open http://localhost:%s on this PC; phones use your LAN IP`, PORT)
   }
 });
 // Constrain ws payload size for safety
 const wss = null; // new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
-console.log(`[WS] WebSocket disabled for debugging`);
+startLogger.info('[WS] WebSocket disabled for debugging');
 // wsConnections.set(0)
 
 // Optional HTTPS server for iOS camera (requires certs)
@@ -1122,21 +1126,21 @@ try {
             if (ni.family === 'IPv4' && !ni.internal) hosts.push(ni.address)
           }
         }
-        console.log(`[HTTPS] Server listening on 0.0.0.0:${HTTPS_PORT}`)
+  startLogger.info(`[HTTPS] Server listening on 0.0.0.0:%s`, HTTPS_PORT)
         HTTPS_ACTIVE = true
         if (hosts.length) {
-          for (const ip of hosts) console.log(`        LAN: https://${ip}:${HTTPS_PORT}`)
+          for (const ip of hosts) startLogger.info(`        LAN: https://%s:%s`, ip, HTTPS_PORT)
         }
       })
       // Attach a secure WebSocket for HTTPS clients
       wssSecure = new WebSocketServer({ server: httpsServer, maxPayload: 128 * 1024 })
-      console.log(`[WS] Secure WebSocket attached to HTTPS server`)
+  startLogger.info(`[WS] Secure WebSocket attached to HTTPS server`)
     } else {
-      console.warn(`[HTTPS] NDN_HTTPS=1 but cert files not found. Expected at:\n  key: ${keyPath}\n  cert: ${certPath}`)
+  startLogger.warn(`[HTTPS] NDN_HTTPS=1 but cert files not found. Expected at:\n  key: %s\n  cert: %s`, keyPath, certPath)
     }
   }
 } catch (e) {
-  console.warn('[HTTPS] Failed to initialize HTTPS server:', e?.message || e)
+  startLogger.warn('[HTTPS] Failed to initialize HTTPS server: %s', e?.message || e)
 }
 
 // Load persistent data from database on startup
@@ -1149,7 +1153,7 @@ async function loadPersistentData() {
     for (const t of tournamentsData) {
       tournaments.set(t.id, t);
     }
-    console.log(`[DB] Loaded ${tournaments.size} tournaments`);
+  startLogger.info(`[DB] Loaded %d tournaments`, tournaments.size);
 
     // Load matches
     // Note: matches are loaded on-demand, not preloaded to avoid memory usage with 1.5k concurrent users
@@ -1164,7 +1168,7 @@ async function loadPersistentData() {
     await db.deleteExpiredCameraSessions();
 
   } catch (error) {
-    console.error('[DB] Failed to load persistent data:', error);
+  startLogger.error('[DB] Failed to load persistent data: %s', error && error.message ? error.message : error);
   }
 }
 
@@ -1363,7 +1367,7 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
 
 if (wss) {
   wss.on('connection', async (ws, req) => {
-    try { console.log(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
+  try { startLogger.debug('[WS] client connected path=%s origin=%s', req?.url||'/', req?.headers?.origin||'') } catch {}
     ws._id = nanoid(8);
     clients.set(ws._id, ws)
     wsConnections.inc()
@@ -1372,7 +1376,7 @@ if (wss) {
     ws.on('pong', () => { ws.isAlive = true })
     // Log low-level socket errors
     ws.on('error', (err) => {
-      try { console.warn(`[WS] error id=${ws._id} message=${err?.message||err}`) } catch {}
+  try { startLogger.warn('[WS] error id=%s message=%s', ws._id, err && err.message ? err.message : err) } catch {}
     })
     // Token-bucket rate limit: 10 msg/sec, burst 20
     ws._bucket = { tokens: 20, last: Date.now(), rate: 10, capacity: 20 }
@@ -1793,13 +1797,13 @@ if (wss) {
       }
     } catch (e) {
       try { errorsTotal.inc({ scope: 'ws_message' }) } catch {}
-      console.error('Invalid message:', e);
+  startLogger.error('Invalid message: %s', e && e.message ? e.message : e);
     }
   });
 
   ws.on('close', async (code, reasonBuf) => {
     const reason = (() => { try { return reasonBuf ? reasonBuf.toString() : '' } catch { return '' } })()
-    try { console.log(`[WS] close id=${ws._id} code=${code} reason=${reason}`) } catch {}
+  try { startLogger.debug('[WS] close id=%s code=%s reason=%s', ws._id, code, reason) } catch {}
     // Clean up room
     await leaveRoom(ws);
     try { wsConnections.dec() } catch {}
@@ -1878,7 +1882,7 @@ const hbTimer = setInterval(() => {
 }, HEARTBEAT_INTERVAL)
 
 function shutdown() {
-  console.log('\n[Shutdown] closing servers...')
+  startLogger.info('\n[Shutdown] closing servers...')
   try { clearInterval(hbTimer) } catch {}
   if (wss) try { wss.close() } catch {}
   try { server.close(() => process.exit(0)) } catch { process.exit(0) }

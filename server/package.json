@@ -1,14 +1,14 @@
 {
   "name": "nine-dart-nation-server",
   "version": "1.0.0",
-  "main": "server.cjs",
+  "main": "server.js",
   "engines": {
     "node": ">=18.17 <23"
   },
   "scripts": {
-    "start": "node server.cjs",
-    "cluster": "NODE_WORKERS=2 node server.cjs",
-    "https": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:NDN_HTTPS='1'; if (-not $env:HTTPS_PORT) { $env:HTTPS_PORT='8788' }; node server.cjs\""
+  "start": "node server.js",
+  "cluster": "NODE_WORKERS=2 node server.js",
+  "https": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:NDN_HTTPS='1'; if (-not $env:HTTPS_PORT) { $env:HTTPS_PORT='8788' }; node server.js\""
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.75.0",

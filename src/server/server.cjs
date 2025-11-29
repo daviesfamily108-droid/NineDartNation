@@ -20,7 +20,17 @@ const client = require('prom-client');
 const Stripe = require('stripe');
 const { createClient } = require('@supabase/supabase-js');
 
+// Allow overridable CLI flags for testing convenience: --data-dir <path>, --debug, --port <num>, --log-level <level>
+const argv = process.argv.slice(2)
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === '--data-dir' && argv[i+1]) { process.env.NDN_DATA_DIR = argv[i+1]; i++ }
+  if (argv[i] === '--debug') { process.env.NDN_DEBUG = '1' }
+  if (argv[i] === '--port' && argv[i+1]) { process.env.PORT = argv[i+1]; i++ }
+  if (argv[i] === '--log-level' && argv[i+1]) { process.env.NDN_LOG_LEVEL = argv[i+1]; i++ }
+}
 const PORT = process.env.PORT || 8787;
+const DEBUG = String(process.env.NDN_DEBUG || '').toLowerCase() === '1'
+const DATA_DIR = process.env.NDN_DATA_DIR ? path.resolve(process.env.NDN_DATA_DIR) : path.join(__dirname, 'data')
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
 // Track HTTPS runtime status and port
 let HTTPS_ACTIVE = false
@@ -40,6 +50,33 @@ const roomAutocommitAllowed = new Map();
 // Track room creator id so allow host-only operations
 const roomCreator = new Map();
 
+// Board radii in mm (duplicate of vision constants to validate client pBoard coords)
+const BoardRadii = {
+  bullInner: 6.35,
+  bullOuter: 15.9,
+  trebleInner: 99,
+  trebleOuter: 107,
+  doubleInner: 162,
+  doubleOuter: 170,
+};
+
+const SectorOrder = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+
+function scoreAtBoardPoint(p) {
+  const r = Math.hypot(p.x, p.y);
+  let ang = Math.atan2(p.y, p.x);
+  let deg = (ang * 180) / Math.PI;
+  deg = (deg + 360 + 90) % 360; // 0 at top
+  const sector = SectorOrder[Math.floor(deg / 18)];
+  if (r <= BoardRadii.bullInner) return { base: 50, ring: 'INNER_BULL', sector: 25, mult: 2 };
+  if (r <= BoardRadii.bullOuter) return { base: 25, ring: 'BULL', sector: 25, mult: 1 };
+  if (r >= BoardRadii.doubleOuter) return { base: 0, ring: 'MISS', sector: null, mult: 0 };
+  if (r >= BoardRadii.doubleInner) return { base: sector * 2, ring: 'DOUBLE', sector: sector, mult: 2 };
+  if (r >= BoardRadii.trebleOuter) return { base: sector, ring: 'SINGLE', sector: sector, mult: 1 };
+  if (r >= BoardRadii.trebleInner) return { base: sector * 3, ring: 'TRIPLE', sector: sector, mult: 3 };
+  return { base: sector, ring: 'SINGLE', sector: sector, mult: 1 };
+}
+
 // Initialize Supabase
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -47,37 +84,38 @@ const supabase = supabaseUrl && supabaseKey ? (() => {
   try {
     return createClient(supabaseUrl, supabaseKey);
   } catch (err) {
-    console.error('[DB] Failed to create Supabase client:', err.message);
+    startLogger.error('[DB] Failed to create Supabase client: %s', err.message);
     return null;
   }
 })() : null;
 
 if (!supabase) {
-  console.warn('[DB] Supabase not configured - using in-memory storage only');
+  startLogger.warn('[DB] Supabase not configured - using in-memory storage only');
 }
 
 // Initialize Redis for cross-server session management
 const { Redis } = require('@upstash/redis');
 
 // DEBUG: Check if REDIS_URL is set
-console.log('🔍 DEBUG: REDIS_URL exists:', !!process.env.REDIS_URL);
+const startLogger = pino({ level: DEBUG ? 'debug' : (process.env.NDN_LOG_LEVEL || 'info') })
+startLogger.debug('🔍 DEBUG: REDIS_URL exists: %s', !!process.env.REDIS_URL);
 if (process.env.REDIS_URL) {
-  console.log('🔍 DEBUG: REDIS_URL starts with:', process.env.REDIS_URL.substring(0, 20) + '...');
+  startLogger.debug('🔍 DEBUG: REDIS_URL starts with: %s...', process.env.REDIS_URL.substring(0, 20));
 }
 
 const redisClient = process.env.REDIS_URL ? (() => {
   try {
     return new Redis({ url: process.env.REDIS_URL });
   } catch (err) {
-    console.error('[REDIS] Failed to create client:', err.message);
+  startLogger.error('[REDIS] Failed to create client:', err.message);
     return null;
   }
 })() : null;
 
 if (redisClient) {
-  console.log('[REDIS] Upstash Redis client initialized');
+  startLogger.info('[REDIS] Upstash Redis client initialized');
 } else {
-  console.warn('[REDIS] Not configured - using in-memory storage for sessions');
+  startLogger.warn('[REDIS] Not configured - using in-memory storage for sessions');
 }
 // Observability: metrics registry
 const register = new client.Registry()
@@ -148,7 +186,8 @@ const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
 app.use(parseAuth);
 app.use(limiter)
 // Logging
-const logger = pino({ level: process.env.LOG_LEVEL || 'info' })
+// Reuse the early startLogger so logging is consistent before/after app initialization
+const logger = startLogger
 app.use(pinoHttp({ logger, genReqId: (req) => req.headers['x-request-id'] || nanoid(12) }))
 // HTTP metrics middleware (after logging so route is known)
 app.use((req, res, next) => {
@@ -176,9 +215,9 @@ if (fs.existsSync(rootDistPath)) {
 }
 // Log whether we found a built SPA to serve
 if (staticBase) {
-  console.log(`[SPA] Serving static frontend from ${staticBase}`)
+  logger.info(`[SPA] Serving static frontend from ${staticBase}`)
 } else {
-  console.warn('[SPA] No built frontend found at ../dist or ../app/dist; "/" will 404 (API+WS OK).')
+  logger.warn('[SPA] No built frontend found at ../dist or ../app/dist; "/" will 404 (API+WS OK).')
 }
 
 
@@ -234,7 +273,7 @@ app.post('/api/auth/signup', async (req, res) => {
         }]);
 
       if (error) {
-        console.error('[DB] Failed to save user to Supabase:', error);
+  startLogger.error('[DB] Failed to save user to Supabase:', error);
         return res.status(500).json({ error: 'Failed to create account.' });
       }
     }
@@ -246,7 +285,7 @@ app.post('/api/auth/signup', async (req, res) => {
     const token = jwt.sign({ username: user.username, email: user.email }, JWT_SECRET, { expiresIn: '100y' });
     return res.json({ user, token })
   } catch (error) {
-    console.error('[SIGNUP] Error:', error);
+  startLogger.error('[SIGNUP] Error:', error);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 })
@@ -278,7 +317,7 @@ app.post('/api/auth/login', async (req, res) => {
         .single();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-        console.error('[DB] Supabase login error:', error);
+  startLogger.error('[DB] Supabase login error:', error);
       } else if (data && data.password === password) {
         user = {
           email: data.email,
@@ -299,7 +338,7 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid username or password.' });
     }
   } catch (error) {
-    console.error('[LOGIN] Error:', error);
+  startLogger.error('[LOGIN] Error:', error);
     return res.status(500).json({ error: 'Internal server error.' });
   }
 });
@@ -441,7 +480,7 @@ app.get('/api/subscription', async (req, res) => {
         return res.json(data.subscription);
       }
     } catch (err) {
-      console.error('[DB] Error fetching subscription:', err);
+      startLogger.error('[DB] Error fetching subscription:', err);
     }
   }
 
@@ -467,7 +506,7 @@ async function createNotification(email, message, type = 'generic', meta = null)
     try {
       await supabase.from('notifications').insert([{ id: n.id, email: n.email, message: n.message, type: n.type, read: n.read, created_at: new Date(n.createdAt).toISOString(), meta: n.meta }]);
     } catch (err) {
-      console.error('[DB] Failed to insert notification:', err);
+      startLogger.error('[DB] Failed to insert notification:', err);
     }
   }
   return { ok: true, id };
@@ -490,7 +529,7 @@ app.post('/api/admin/notifications/bulk', requireAdmin, async (req, res) => {
         if (!error && Array.isArray(data)) {
           for (const u of data) targets.push(String(u.email || '').toLowerCase());
         }
-      } catch (err) { console.error('[DB] Failed to fetch users for bulk notifications:', err && err.message); }
+  } catch (err) { startLogger.error('[DB] Failed to fetch users for bulk notifications:', err && err.message); }
     } else {
       for (const [k] of users.entries()) targets.push(k);
     }
@@ -516,7 +555,7 @@ app.get('/api/notifications', requireAuth, async (req, res) => {
       const { data, error } = await supabase.from('notifications').select('*').eq('email', email);
       if (!error && data) return res.json(data);
     } catch (err) {
-      console.error('[DB] Failed to fetch notifications:', err);
+      startLogger.error('[DB] Failed to fetch notifications:', err);
     }
   }
   const list = notifications.get(email) || [];
@@ -532,7 +571,7 @@ app.post('/api/notifications', requireAuth, async (req, res) => {
     const out = await createNotification(email, message, type, meta);
     return res.json(out);
   } catch (err) {
-    console.error('[NOTIF] create failed:', err && err.message);
+    startLogger.error('[NOTIF] create failed:', err && err.message);
     return res.status(500).json({ ok: false, error: 'FAILED' });
   }
 });
@@ -552,7 +591,7 @@ app.delete('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((re
     try {
       await supabase.from('notifications').delete().eq('id', id);
     } catch (err) {
-      console.error('[DB] Failed to delete notification:', err);
+      startLogger.error('[DB] Failed to delete notification:', err);
     }
   }
   return res.json({ ok: true });
@@ -571,7 +610,7 @@ app.patch('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((req
     try {
       await supabase.from('notifications').update({ read: !!read }).eq('id', id);
     } catch (err) {
-      console.error('[DB] Failed to update notification:', err);
+      startLogger.error('[DB] Failed to update notification:', err);
     }
   }
   return res.json({ ok: true });
@@ -597,7 +636,7 @@ app.get('/api/debug/user', requireAdmin, async (req, res) => {
       const { data, error } = await supabase.from('users').select('*').eq('email', email).single();
       if (!error && data) supabaseUser = data;
     } catch (err) {
-      console.error('[DEBUG] Supabase fetch failed:', err && err.message);
+      startLogger.error('[DEBUG] Supabase fetch failed:', err && err.message);
     }
   }
   return res.json({ ok: true, email, inMemoryUser, supabaseUser, admin: adminEmails.has(email), premiumWinner: premiumWinners.get(email) || null, supabaseConfigured: !!supabase });
@@ -677,7 +716,7 @@ app.post('/webhook/stripe', async (req, res) => {
             .update({ subscription: { fullAccess: true, source: 'stripe', purchasedAt: new Date().toISOString() } })
             .eq('email', email);
         } catch (err) {
-          console.error('[DB] Failed to update subscription:', err);
+          startLogger.error('[DB] Failed to update subscription:', err);
         }
       }
     }
@@ -704,7 +743,7 @@ try {
     stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' })
   }
 } catch (e) {
-  console.warn('[Stripe] init failed:', e?.message || e)
+  startLogger.warn('[Stripe] init failed:', e?.message || e)
 }
 
 app.post('/api/stripe/create-session', async (req, res) => {
@@ -729,7 +768,7 @@ app.post('/api/stripe/create-session', async (req, res) => {
     })
     return res.json({ ok: true, url: session.url })
   } catch (e) {
-    console.error('[Stripe] create-session failed:', e?.message || e)
+    startLogger.error('[Stripe] create-session failed:', e?.message || e)
     return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
   }
 })
@@ -751,7 +790,7 @@ app.post('/api/stripe/create-checkout-session', async (req, res) => {
     // Return the payment link directly
     return res.json({ ok: true, url: premiumPaymentLink })
   } catch (e) {
-    console.error('[Stripe] create-checkout-session failed:', e?.message || e)
+    startLogger.error('[Stripe] create-checkout-session failed:', e?.message || e)
     return res.status(500).json({ ok: false, error: 'SESSION_FAILED' })
   }
 })
@@ -871,7 +910,7 @@ app.post('/api/admin/clustering', (req, res) => {
   // 2. Restart worker processes
   // 3. Configure load balancer
   
-  console.log('[Admin] Clustering config updated:', clusteringConfig)
+  logger.info('[Admin] Clustering config updated: %o', clusteringConfig)
   
   res.json({ 
     ok: true, 
@@ -910,7 +949,7 @@ async function scanSubscriptionsAndNotify() {
     try {
       const { data, error } = await supabase.from('users').select('email, subscription');
       if (error) {
-        console.error('[SCAN] Failed to load users from DB for subscription scan:', error?.message || error);
+        startLogger.error('[SCAN] Failed to load users from DB for subscription scan:', error?.message || error);
       } else if (Array.isArray(data)) {
         for (const u of data) {
           const email = String(u.email || '').toLowerCase();
@@ -924,7 +963,7 @@ async function scanSubscriptionsAndNotify() {
           if (exp && exp <= now && !sub.fullAccess) candidates.push({ email, type: 'sub_expired', sub, exp });
         }
       }
-    } catch (err) { console.error('[SCAN] DB scan failed:', err && err.message); }
+  } catch (err) { startLogger.error('[SCAN] DB scan failed:', err && err.message); }
   } else {
     // Fallback: scan in-memory users map
     for (const [email, u] of users.entries()) {
@@ -954,14 +993,14 @@ async function scanSubscriptionsAndNotify() {
         await createNotification(c.email, msg, 'sub_expired', { expiresAt: c.exp });
       }
     } catch (err) {
-      console.error('[SCAN] Failed to create notification for', c && c.email, err && err.message);
+      startLogger.error('[SCAN] Failed to create notification for', c && c.email, err && err.message);
     }
   }
 }
 
 // Run on startup and every 6 hours
-try { scanSubscriptionsAndNotify().catch(e => console.error('[SCAN] startup scan failed', e && e.message)); } catch {}
-setInterval(() => { scanSubscriptionsAndNotify().catch(e => console.error('[SCAN] scheduled run failed', e && e.message)); }, 1000 * 60 * 60 * 6);
+try { scanSubscriptionsAndNotify().catch(e => startLogger.error('[SCAN] startup scan failed', e && e.message)); } catch {}
+setInterval(() => { scanSubscriptionsAndNotify().catch(e => startLogger.error('[SCAN] scheduled run failed', e && e.message)); }, 1000 * 60 * 60 * 6);
 
 // Admin endpoint to trigger subscription scan manually
 app.post('/api/admin/notifications/scan-subscriptions', async (req, res) => {
@@ -971,7 +1010,7 @@ app.post('/api/admin/notifications/scan-subscriptions', async (req, res) => {
     await scanSubscriptionsAndNotify();
     return res.json({ ok: true });
   } catch (err) {
-    console.error('[ADMIN] manual scan failed:', err && err.message);
+    startLogger.error('[ADMIN] manual scan failed:', err && err.message);
     return res.status(500).json({ ok: false, error: 'FAILED' });
   }
 });
@@ -1019,7 +1058,7 @@ app.post('/api/admin/matches/delete', (req, res) => {
   if (!matchId || !matches.has(matchId)) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
   matches.delete(matchId)
   persistMatchesToDisk()
-  try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch (err) { console.warn('[Matches] Supabase delete failed:', err && err.message) }
+  try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch (err) { startLogger.warn('[Matches] Supabase delete failed:', err && err.message) }
   // Broadcast updated lobby
   for (const client of wss.clients) {
     if (client.readyState === 1) client.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
@@ -1093,7 +1132,7 @@ try {
     })
   }
 } catch (e) {
-  console.warn('[Email] transporter init failed', e?.message||e)
+  startLogger.warn('[Email] transporter init failed', e?.message||e)
 }
 
 async function sendMail(to, subject, html) {
@@ -1200,16 +1239,26 @@ const server = app.listen(PORT, '0.0.0.0', () => {
       if (ni.family === 'IPv4' && !ni.internal) hosts.push(ni.address)
     }
   }
-  console.log(`[HTTP] Server listening on 0.0.0.0:${PORT}`)
+  logger.info(`[HTTP] Server listening on 0.0.0.0:${PORT}`)
   if (hosts.length) {
-    for (const ip of hosts) console.log(`       LAN:  http://${ip}:${PORT}`)
+  for (const ip of hosts) logger.info(`       LAN:  http://${ip}:${PORT}`)
   } else {
-    console.log(`       TIP: open http://localhost:${PORT} on this PC; phones use your LAN IP`)
+  logger.info(`       TIP: open http://localhost:${PORT} on this PC; phones use your LAN IP`)
   }
 });
+
+// Debug: when running in debug mode, print out registered routes for troubleshooting
+try {
+  if (String(process.env.NDN_DEBUG || '').toLowerCase() === '1') {
+    const routes = (app._router && app._router.stack || [])
+      .filter(r => r.route)
+      .map(r => ({ path: r.route.path, methods: Object.keys(r.route.methods) }))
+    logger.info('[DEBUG] Registered HTTP routes: %o', routes)
+  }
+} catch (e) { /* ignore */ }
 // Constrain ws payload size for safety
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
-console.log(`[WS] WebSocket attached to same server at path /ws`);
+logger.info(`[WS] WebSocket attached to same server at path /ws`);
 wsConnections.set(0)
 
 // Optional HTTPS server for iOS camera (requires certs)
@@ -1234,21 +1283,21 @@ try {
             if (ni.family === 'IPv4' && !ni.internal) hosts.push(ni.address)
           }
         }
-        console.log(`[HTTPS] Server listening on 0.0.0.0:${HTTPS_PORT}`)
+  logger.info(`[HTTPS] Server listening on 0.0.0.0:${HTTPS_PORT}`)
         HTTPS_ACTIVE = true
         if (hosts.length) {
-          for (const ip of hosts) console.log(`        LAN: https://${ip}:${HTTPS_PORT}`)
+          for (const ip of hosts) logger.info(`        LAN: https://${ip}:${HTTPS_PORT}`)
         }
       })
       // Attach a secure WebSocket for HTTPS clients
       wssSecure = new WebSocketServer({ server: httpsServer, maxPayload: 128 * 1024 })
-      console.log(`[WS] Secure WebSocket attached to HTTPS server`)
+  logger.info(`[WS] Secure WebSocket attached to HTTPS server`)
     } else {
-      console.warn(`[HTTPS] NDN_HTTPS=1 but cert files not found. Expected at:\n  key: ${keyPath}\n  cert: ${certPath}`)
+      startLogger.warn(`[HTTPS] NDN_HTTPS=1 but cert files not found. Expected at:\n  key: ${keyPath}\n  cert: ${certPath}`)
     }
   }
 } catch (e) {
-  console.warn('[HTTPS] Failed to initialize HTTPS server:', e?.message || e)
+  startLogger.warn('[HTTPS] Failed to initialize HTTPS server:', e?.message || e)
 }
 
 // Simple in-memory rooms
@@ -1257,7 +1306,7 @@ const rooms = new Map(); // roomId -> Set(ws)
 const matches = new Map(); // matchId -> { id, creatorId, creatorName, mode, value, startingScore, game, creatorAvg, createdAt }
 
 // Persist matches to disk (fallback if Supabase not configured)
-const MATCHES_FILE = path.join(__dirname, 'data', 'matches.json')
+const MATCHES_FILE = path.join(DATA_DIR, 'matches.json')
 function loadMatchesFromDisk() {
   try {
     if (!fs.existsSync(MATCHES_FILE)) return
@@ -1268,9 +1317,9 @@ function loadMatchesFromDisk() {
       for (const t of arr) {
         matches.set(String(t.id), t)
       }
-      console.log('[Matches] Loaded', matches.size, 'matches from disk')
+  logger.info('[Matches] Loaded %d matches from disk', matches.size)
     }
-  } catch (err) { console.warn('[Matches] Failed to load from disk:', err && err.message) }
+  } catch (err) { startLogger.warn('[Matches] Failed to load from disk:', err && err.message) }
 }
 
 function persistMatchesToDisk() {
@@ -1279,7 +1328,7 @@ function persistMatchesToDisk() {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
     const arr = Array.from(matches.values())
     fs.writeFileSync(MATCHES_FILE, JSON.stringify(arr, null, 2), 'utf8')
-  } catch (err) { console.warn('[Matches] Failed to persist to disk:', err && err.message) }
+  } catch (err) { startLogger.warn('[Matches] Failed to persist to disk:', err && err.message) }
 }
 
 loadMatchesFromDisk()
@@ -1302,7 +1351,7 @@ const tournaments = new Map();
 let lastTournamentPersistAt = null
 
 // Persist tournaments to disk (fallback if Supabase not configured)
-const TOURNAMENTS_FILE = path.join(__dirname, 'data', 'tournaments.json')
+const TOURNAMENTS_FILE = path.join(DATA_DIR, 'tournaments.json')
 function loadTournamentsFromDisk() {
   try {
     if (!fs.existsSync(TOURNAMENTS_FILE)) return
@@ -1313,9 +1362,9 @@ function loadTournamentsFromDisk() {
       for (const t of arr) {
         tournaments.set(String(t.id), t)
       }
-      console.log('[Tournaments] Loaded', tournaments.size, 'tournaments from disk')
+  logger.info('[Tournaments] Loaded %d tournaments from disk', tournaments.size)
     }
-  } catch (err) { console.warn('[Tournaments] Failed to load from disk:', err && err.message) }
+  } catch (err) { startLogger.warn('[Tournaments] Failed to load from disk:', err && err.message) }
 }
 
 function persistTournamentsToDisk() {
@@ -1328,7 +1377,7 @@ async function persistTournamentsToRedis(arr) {
   await redisClient.set('ndn:tournaments:json', JSON.stringify(arr));
   try { lastTournamentPersistAt = Date.now() } catch {}
   return true
-      } catch (err) { console.warn('[Tournaments] Redis set failed:', err && err.message) }
+  } catch (err) { startLogger.warn('[Tournaments] Redis set failed:', err && err.message) }
     }
     if (upstashRestUrl && upstashToken) {
       try {
@@ -1339,9 +1388,9 @@ async function persistTournamentsToRedis(arr) {
         })
   try { lastTournamentPersistAt = Date.now() } catch {}
   return true
-      } catch (err) { console.warn('[Tournaments] Upstash set failed:', err && err.message) }
+  } catch (err) { startLogger.warn('[Tournaments] Upstash set failed:', err && err.message) }
     }
-  } catch (err) { console.warn('[Tournaments] persistTournamentsToRedis error:', err && err.message) }
+  } catch (err) { startLogger.warn('[Tournaments] persistTournamentsToRedis error:', err && err.message) }
   return false
 }
 
@@ -1354,10 +1403,10 @@ async function loadTournamentsFromPersistence() {
         if (Array.isArray(data) && data.length) {
           tournaments.clear()
           for (const t of data) tournaments.set(String(t.id), t)
-          console.log('[Tournaments] Loaded', tournaments.size, 'tournaments from Supabase')
+          logger.info('[Tournaments] Loaded %d tournaments from Supabase', tournaments.size)
           return
         }
-      } catch (err) { console.warn('[Tournaments] Supabase load failed:', err && err.message) }
+  } catch (err) { startLogger.warn('[Tournaments] Supabase load failed:', err && err.message) }
     }
     // try Redis/Upstash
     try {
@@ -1368,7 +1417,7 @@ async function loadTournamentsFromPersistence() {
           if (Array.isArray(arr) && arr.length) {
             tournaments.clear()
             for (const t of arr) tournaments.set(String(t.id), t)
-            console.log('[Tournaments] Loaded', tournaments.size, 'tournaments from Redis')
+            logger.info('[Tournaments] Loaded %d tournaments from Redis', tournaments.size)
             return
           }
         }
@@ -1381,15 +1430,15 @@ async function loadTournamentsFromPersistence() {
           if (Array.isArray(arr) && arr.length) {
             tournaments.clear()
             for (const t of arr) tournaments.set(String(t.id), t)
-            console.log('[Tournaments] Loaded', tournaments.size, 'tournaments from Upstash')
+            logger.info('[Tournaments] Loaded %d tournaments from Upstash', tournaments.size)
             return
           }
         }
       }
-    } catch (err) { console.warn('[Tournaments] Redis/Upstash load failed:', err && err.message) }
+  } catch (err) { startLogger.warn('[Tournaments] Redis/Upstash load failed:', err && err.message) }
     // Fallback to disk
     loadTournamentsFromDisk()
-  } catch (err) { console.warn('[Tournaments] loadTournamentsFromPersistence error:', err && err.message) }
+  } catch (err) { startLogger.warn('[Tournaments] loadTournamentsFromPersistence error:', err && err.message) }
 }
   try {
     const dir = path.dirname(TOURNAMENTS_FILE)
@@ -1399,11 +1448,11 @@ async function loadTournamentsFromPersistence() {
   try { lastTournamentPersistAt = Date.now() } catch {}
   // Also persist into Redis/Upstash for cross-instance persistence if available
   try { persistTournamentsToRedis(arr).catch(() => {}) } catch {}
-  } catch (err) { console.warn('[Tournaments] Failed to persist to disk:', err && err.message) }
+  } catch (err) { startLogger.warn('[Tournaments] Failed to persist to disk:', err && err.message) }
 }
 
 // Load persisted tournaments at startup (prefer Supabase -> Redis/Upstash -> disk)
-;(async () => { await loadTournamentsFromPersistence().catch(err => console.warn('[Tournaments] initial load failed', err && err.message)) })()
+;(async () => { await loadTournamentsFromPersistence().catch(err => startLogger.warn('[Tournaments] initial load failed', err && err.message)) })()
 // Optional: if SUPABASE configured and NDN_AUTO_MIGRATE_TOURNAMENTS=1, upsert disk tournaments to Supabase
 if (supabase && String(process.env.NDN_AUTO_MIGRATE_TOURNAMENTS || '') === '1') {
   try {
@@ -1436,9 +1485,9 @@ if (supabase && String(process.env.NDN_AUTO_MIGRATE_TOURNAMENTS || '') === '1') 
         }
         await supabase.from('tournaments').upsert(payload, { onConflict: 'id' })
       }
-      console.log('[Tournaments] Auto-migrated', arr.length, 'tournaments into Supabase')
+  logger.info('[Tournaments] Auto-migrated %d tournaments into Supabase', arr.length)
     }
-  } catch (err) { console.warn('[Tournaments] Auto-migrate failed', err && err.message) }
+  } catch (err) { startLogger.warn('[Tournaments] Auto-migrate failed', err && err.message) }
 }
 // Simple in-memory users and friendships (demo)
 // users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
@@ -1456,13 +1505,13 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
 (async () => {
   if (supabase) {
     try {
-      console.log('[DB] Loading users from Supabase...');
+  logger.info('[DB] Loading users from Supabase...');
       const { data, error } = await supabase
         .from('users')
         .select('*');
 
       if (error) {
-        console.error('[DB] Failed to load users from Supabase:', error);
+        startLogger.error('[DB] Failed to load users from Supabase:', error);
       } else if (data) {
         let loadedCount = 0;
         for (const user of data) {
@@ -1475,15 +1524,15 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
           });
           loadedCount++;
         }
-        console.log(`[DB] Successfully loaded ${loadedCount} users from Supabase`);
+  logger.info(`[DB] Successfully loaded ${loadedCount} users from Supabase`);
       } else {
-        console.log('[DB] No users found in Supabase');
+  logger.info('[DB] No users found in Supabase');
       }
     } catch (err) {
-      console.error('[DB] Error loading users from Supabase:', err);
+      startLogger.error('[DB] Error loading users from Supabase:', err);
     }
   } else {
-    console.warn('[DB] Supabase not configured - using in-memory storage only');
+    startLogger.warn('[DB] Supabase not configured - using in-memory storage only');
   }
 })();
 // Initialize demo admin user
@@ -1561,8 +1610,8 @@ function broadcastTournaments() {
   // Diagnostic log: print tournaments count and ids when broadcasting
   try {
     const ids = list.map(t => t.id).slice(0,50)
-    console.log(`[BROADCAST] tournaments=${list.length} ids=${ids.join(',')}`)
-  } catch (e) { console.log('[BROADCAST] could not stringify tournaments', e && e.message) }
+  logger.info(`[BROADCAST] tournaments=%d ids=%s`, list.length, ids.join(','))
+  } catch (e) { logger.warn('[BROADCAST] could not stringify tournaments %s', e && e.message) }
   broadcastAll({ type: 'tournaments', tournaments: list })
 }
 
@@ -1629,15 +1678,37 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
   const set = rooms.get(roomId);
   if (!set) return;
   const payload = (typeof data === 'string') ? data : JSON.stringify(data)
+  try {
+    if (DEBUG) {
+      try { logger.debug('[BROADCAST] room=%s clients=%s except=%s data=%s', roomId, Array.from(set).map(s => s && s._id).join(','), exceptWs && exceptWs._id, typeof data === 'string' ? data : JSON.stringify(data).slice(0,200)) } catch {}
+      try { console.log('[BROADCAST] room=%s clients=%s except=%s data=%s', roomId, Array.from(set).map(s => s && s._id).join(','), exceptWs && exceptWs._id, typeof data === 'string' ? data : JSON.stringify(data).slice(0,200)) } catch {}
+    }
+  } catch {}
   for (const client of set) {
-    if (client.readyState === 1 && client !== exceptWs) {
-      client.send(payload);
+    try {
+      const cid = client && client._id
+      const ready = client && client.readyState
+      if (DEBUG) {
+        try { logger.debug('[BROADCAST-SEND] room=%s target=%s readyState=%s except=%s', roomId, cid, ready, exceptWs && exceptWs._id) } catch {}
+        try { console.log('[BROADCAST-SEND] room=%s target=%s readyState=%s except=%s', roomId, cid, ready, exceptWs && exceptWs._id) } catch {}
+      }
+      if (client.readyState === 1 && client !== exceptWs) {
+        try {
+          client.send(payload)
+          try { if (DEBUG) logger.debug('[BROADCAST-SENT] room=%s target=%s', roomId, cid) } catch {}
+          try { if (DEBUG) console.log('[BROADCAST-SENT] room=%s target=%s', roomId, cid) } catch {}
+        } catch (e) {
+          try { startLogger.warn('[BROADCAST] failed send to %s: %s', cid, e && e.message) } catch {}
+        }
+      }
+    } catch (e) {
+      try { logger.warn('[BROADCAST] iteration error for room=%s: %s', roomId, e && e.message) } catch {}
     }
   }
 }
 
 wss.on('connection', (ws, req) => {
-  try { console.log(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
+  try { logger.info(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
   ws._id = nanoid(8);
   clients.set(ws._id, ws)
   wsConnections.inc()
@@ -1646,7 +1717,7 @@ wss.on('connection', (ws, req) => {
   ws.on('pong', () => { ws.isAlive = true })
   // Log low-level socket errors
   ws.on('error', (err) => {
-    try { console.warn(`[WS] error id=${ws._id} message=${err?.message||err}`) } catch {}
+    try { startLogger.warn(`[WS] error id=${ws._id} message=${err?.message||err}`) } catch {}
   })
   // Token-bucket rate limit: 10 msg/sec, burst 20
   ws._bucket = { tokens: 20, last: Date.now(), rate: 10, capacity: 20 }
@@ -1671,6 +1742,7 @@ wss.on('connection', (ws, req) => {
     if (!allowMessage()) return
     try {
       const data = JSON.parse(msg.toString());
+  try { if (DEBUG) logger.debug('[WSMSG] from=%s room=%s type=%s', ws._id, ws._roomId, data && data.type) } catch {}
       if (data.type === 'join') {
         await leaveRoom(ws);
         await joinRoom(ws, data.roomId);
@@ -1748,7 +1820,7 @@ wss.on('connection', (ws, req) => {
           let cleanMsg
           try { cleanMsg = profanityFilter.clean(raw) } catch { cleanMsg = raw }
           broadcastToRoom(ws._roomId, { type: 'chat', message: cleanMsg, from: ws._id }, null);
-          try { chatMessagesTotal.inc() } catch {}
+          try { chatMessagesTotal.inc() } catch (e) {}
         }
       } else if (data.type === 'celebration') {
         // Broadcast client-declared celebrations (e.g., leg win) to the room
@@ -1757,42 +1829,108 @@ wss.on('connection', (ws, req) => {
           broadcastToRoom(ws._roomId, { type: 'celebration', kind, by: data.by || (ws._username || `user-${ws._id}`), ts: Date.now() }, null)
         }
       } else if (data.type === 'report') {
-      } else if (data.type === 'set-match-autocommit') {
+  } else if (data.type === 'set-match-autocommit') {
         // Host or admin may toggle server-side autocommit allowed flag for a room
         const roomId = String(data.roomId || '')
         const allow = !!data.allow
         if (!roomId) return
-        const creatorId = roomCreator.get(roomId)
-        const isCreator = creatorId && String(creatorId) === String(ws._id)
-        const isAdmin = ws._email && users.get(String(ws._email)) && !!users.get(String(ws._email)).admin
+  const creatorId = roomCreator.get(roomId)
+  const isCreator = creatorId && String(creatorId) === String(ws._id)
+  // Admins may be declared via adminEmails (owner) or via the users map.
+  const isAdmin = ws._email && (adminEmails.has(String(ws._email)) || (users.get(String(ws._email)) && !!users.get(String(ws._email)).admin))
         if (!isCreator && !isAdmin) {
           try { ws.send(JSON.stringify({ type: 'error', code: 'FORBIDDEN', message: 'Only match creator or admin can set autocommit' })) } catch {}
           return
         }
-        try { roomAutocommitAllowed.set(roomId, !!allow) } catch {}
-        try { console.log(`[SET_AUTOCOMMIT] room=${roomId} allow=${allow} by=${ws._id}`) } catch {}
+  try { roomAutocommitAllowed.set(roomId, !!allow) } catch (e) {}
+  try { if (DEBUG) logger.debug('[SET_AUTOCOMMIT] room=%s allow=%s by=%s creatorId=%s isCreator=%s isAdmin=%s', roomId, allow, ws._id, creatorId, isCreator, isAdmin) } catch {}
         // Notify all participants in the room of the updated setting
         broadcastToRoom(roomId, { type: 'match-autocommit-updated', roomId, allow })
-      } else if (data.type === 'auto-visit') {
+  // Also notify the sender directly (ack) so tests can assert server processed toggle.
+  try { ws.send(JSON.stringify({ type: 'match-autocommit-updated', roomId, allow })) } catch {}
+  } else if (data.type === 'auto-visit') {
         // clients request server-side autocommit for a detection: validate and broadcast server-verified commit
         const roomId = String(data.roomId || '')
         const value = Number(data.value || 0)
         const darts = Number(data.darts || 3)
-        const ring = (typeof data.ring === 'string') ? data.ring : null
-        const sector = (typeof data.sector === 'string') ? data.sector : null
+  const ring = (typeof data.ring === 'string') ? data.ring : null
+  const sector = (typeof data.sector === 'number' || typeof data.sector === 'string') ? Number(data.sector) : null
+  const pBoard = data.pBoard && typeof data.pBoard === 'object' ? { x: Number(data.pBoard.x || 0), y: Number(data.pBoard.y || 0) } : null
+  const calibrationValid = !!data.calibrationValid
         if (!roomId) return
-        // Ensure room exists and that autocommit is allowed (either room flag or creator/admin override)
-        const allowed = (roomAutocommitAllowed.get(roomId) === true) || (roomCreator.get(roomId) && String(roomCreator.get(roomId)) === String(ws._id)) || (ws._email && users.get(String(ws._email)) && !!users.get(String(ws._email)).admin)
+  // Ensure sender is currently in the room and autocommit is allowed (either room flag or creator/admin override)
+  const creatorId = roomCreator.get(roomId)
+  const isCreator = creatorId && String(creatorId) === String(ws._id)
+  const isAdmin = ws._email && (adminEmails.has(String(ws._email)) || (users.get(String(ws._email)) && !!users.get(String(ws._email)).admin))
+  const allowed = (roomAutocommitAllowed.get(roomId) === true) || isCreator || isAdmin
+        try {
+          if (DEBUG) {
+            try { logger.debug('[AUTO_VISIT_DEBUG] room=%s ws=%s creator=%s isCreator=%s isAdmin=%s allowed=%s', roomId, ws._id, creatorId, isCreator, isAdmin, allowed) } catch {}
+            try { logger.debug('[AUTO_VISIT_DEBUG] roomMembers=%s', Array.from((rooms.get(roomId) || [])).map(c => c && c._id).join(',')) } catch {}
+            try { console.log('[AUTO_VISIT_DEBUG] room=%s ws=%s creator=%s isCreator=%s isAdmin=%s allowed=%s', roomId, ws._id, creatorId, isCreator, isAdmin, allowed) } catch {}
+            try { const members = Array.from((rooms.get(roomId) || [])).map(c => c && c._id).join(','); console.log('[AUTO_VISIT_DEBUG] roomMembers=%s', members) } catch {}
+          }
+        } catch {}
         if (!allowed) {
           try { ws.send(JSON.stringify({ type: 'error', code: 'FORBIDDEN', message: 'Autocommit is not allowed for this match' })) } catch {}
+          try { if (DEBUG) logger.debug('[AUTO_VISIT_HANDLER] rejected allowed=%s by=%s room=%s creator=%s', allowed, ws._id, roomId, String(roomCreator.get(roomId))) } catch {}
           return
         }
-        // Broadcast server-verified visit commit to the room - clients should apply this visit
-        const visit = { by: ws._id, value, darts, ring, sector, ts: Date.now() }
-  try { broadcastToRoom(roomId, { type: 'visit-commit', roomId, visit }) } catch {}
-  try { console.log(`[AUTO_VISIT_HANDLER] room=${roomId} by=${ws._id} allowed=${allowed}`) } catch {}
+  // Validate pBoard if provided and ensure it maps to the requested value.
+  // Allow creators/admin to bypass strict pBoard validation (owner override).
+        if (!calibrationValid) {
+          try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'Client reports invalid calibration - autocommit rejected' })) } catch {}
+          return
+        }
+        if (!pBoard) {
+          try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'pBoard required for server autocommit' })) } catch {}
+          return
+        }
+  if (pBoard && !isCreator && !isAdmin) {
+          try {
+            const srvScore = scoreAtBoardPoint(pBoard)
+            // simple check: require base equal, ring equal and sector equal (if provided)
+            const allowedVal = Number(srvScore.base || 0)
+            if (allowedVal !== value || (ring && srvScore.ring !== ring) || (sector && Number(srvScore.sector) !== Number(sector))) {
+              try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_PAYLOAD', message: 'pBoard does not match claimed score' })) } catch {}
+              try { if (DEBUG) logger.debug('[AUTO_VISIT_HANDLER] rejected pBoard mismatch room=%s by=%s allowedVal=%s value=%s srv=%s', roomId, ws._id, allowedVal, value, JSON.stringify(srvScore)) } catch {}
+              return
+            }
+            // reject points outside the double ring by a small margin
+            const rad = Math.hypot(pBoard.x, pBoard.y)
+            if (rad > (BoardRadii.doubleOuter + 5)) {
+              try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_PAYLOAD', message: 'pBoard outside board bounds' })) } catch {}
+              return
+            }
+          } catch (e) {
+            try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_PAYLOAD', message: 'pBoard validation failed' })) } catch {}
+            return
+          }
+        }
+        if (ws._roomId !== roomId) {
+          try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'Not in room' })) } catch {}
+          return
+        }
+  // Broadcast server-verified visit commit to the room - clients should apply this visit
+        const visit = { by: ws._id, value, darts, ring, sector, ts: Date.now(), pBoard }
+  try {
+    if (DEBUG) {
+      try { logger.debug('[AUTO_VISIT_BROADCAST] room=%s visitBy=%s visit=%s', roomId, ws._id, JSON.stringify(visit).slice(0,200)) } catch {}
+      try { console.log('[AUTO_VISIT_BROADCAST] room=%s visitBy=%s visit=%s', roomId, ws._id, JSON.stringify(visit).slice(0,200)) } catch {}
+    }
+    // Dump room membership with readyState for debugging
+    try {
+      const members = Array.from((rooms.get(roomId) || [])).map(c => ({ id: c && c._id, readyState: c && c.readyState }))
+      try { logger.debug('[AUTO_VISIT_ROOM_MEMBERS] room=%s members=%s', roomId, JSON.stringify(members)) } catch {}
+      try { console.log('[AUTO_VISIT_ROOM_MEMBERS] room=%s members=%s', roomId, JSON.stringify(members)) } catch {}
+    } catch (e) { try { logger.warn('[AUTO_VISIT] failed to list room members %s', e && e.message) } catch {} }
+    broadcastToRoom(roomId, { type: 'visit-commit', roomId, visit })
+  } catch (e) { try { if (DEBUG) logger.debug('[AUTO_VISIT_BROADCAST] broadcast failed room=%s err=%s', roomId, e && e.message) } catch {} }
+  // Also ack to the sender (useful for tests and immediate application)
+  try { ws.send(JSON.stringify({ type: 'visit-commit', roomId, visit })) } catch {}
+  try { if (DEBUG) logger.debug('[AUTO_VISIT_HANDLER] room=%s by=%s allowed=%s', roomId, ws._id, allowed) } catch {}
         // Optionally log to server audit logs (console for now)
-        try { console.log(`[AUTOVISIT] room=${roomId} by=${ws._id} value=${value} darts=${darts} ring=${ring} sector=${sector}`) } catch {}
+  try { if (DEBUG) logger.debug('[AUTOVISIT] room=%s by=%s value=%s darts=%s ring=%s sector=%s', roomId, ws._id, value, darts, ring, sector) } catch {}
       } else if (data.type === 'cam-create') {
         // Abuse report from a client for an in-room message or behavior
         const offenderId = typeof data.offenderId === 'string' ? data.offenderId : null
@@ -1875,7 +2013,7 @@ wss.on('connection', (ws, req) => {
         }
         matches.set(id, m)
   // Initialize server-side per-room flags for this match (creator can toggle later)
-  try { roomAutocommitAllowed.set(id, false); roomCreator.set(id, String(ws._id)); } catch {}
+  try { roomAutocommitAllowed.set(id, false); roomCreator.set(id, String(ws._id)); } catch (e) {}
         persistMatchesToDisk()
         (async () => {
           if (!supabase) return
@@ -1894,7 +2032,7 @@ wss.on('connection', (ws, req) => {
               status: 'waiting'
             }
             await supabase.from('matches').insert([payload])
-          } catch (err) { console.warn('[Matches] Supabase create failed:', err && err.message) }
+          } catch (err) { startLogger.warn('[Matches] Supabase create failed:', err && err.message) }
         })()
         // Broadcast lobby list to all (pre-stringified)
         const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
@@ -1973,7 +2111,7 @@ wss.on('connection', (ws, req) => {
           if (requester && requester.readyState === 1) requester.send(JSON.stringify(payload))
           matches.delete(matchId)
           persistMatchesToDisk()
-          try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch (err) { console.warn('[Matches] Supabase delete failed:', err && err.message) }
+          try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch (err) { startLogger.warn('[Matches] Supabase delete failed:', err && err.message) }
           // Setup a pending prestart session so we can collect prestart choices (skip/bull) and bull-up throws
           try {
             const pre = { roomId, match: m, players: [m.creatorId, requester._id], choices: {}, bullRound: 0, bullThrows: {}, timer: null }
@@ -1987,11 +2125,11 @@ wss.on('connection', (ws, req) => {
                 if (cr && cr.readyState === 1) cr.send(JSON.stringify(startPayload))
                 if (rq && rq.readyState === 1) rq.send(JSON.stringify(startPayload))
                 // Initialize server-side per-room flags
-                try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(m.creatorId)); } catch {}
-              } catch (err) { console.warn('[Prestart] auto-start failed', err) }
+                try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(m.creatorId)); } catch (e) {}
+              } catch (err) { startLogger.warn('[Prestart] auto-start failed', err) }
               pendingPrestarts.delete(roomId)
             }, PRESTART_SECONDS * 1000)
-          } catch (err) { console.warn('[Prestart] setup failed', err) }
+          } catch (err) { startLogger.warn('[Prestart] setup failed', err) }
           // Mark both players as in-game and store match metadata for friends list
           try {
             const creatorEmail = creator?._email || ''
@@ -2013,7 +2151,7 @@ wss.on('connection', (ws, req) => {
           if (requester && requester.readyState === 1) requester.send(JSON.stringify({ type: 'declined', matchId }))
           matches.delete(matchId)
           persistMatchesToDisk()
-          try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch (err) { console.warn('[Matches] Supabase delete failed:', err && err.message) }
+          try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch (err) { startLogger.warn('[Matches] Supabase delete failed:', err && err.message) }
         }
         // Broadcast updated lobby
         const lobbyPayload2 = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
@@ -2083,7 +2221,7 @@ wss.on('connection', (ws, req) => {
             const c = clients.get(pid)
             if (c && c.readyState === 1) c.send(JSON.stringify(startPayload))
           }
-              try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(sess.match.creatorId)); } catch {}
+              try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(sess.match.creatorId)); } catch (e) {}
           try { if (sess.timer) clearTimeout(sess.timer) } catch {}
           pendingPrestarts.delete(roomId)
           matches.delete(sess.match.id)
@@ -2099,7 +2237,7 @@ wss.on('connection', (ws, req) => {
             const c = clients.get(pid)
             if (c && c.readyState === 1) c.send(JSON.stringify(startPayload))
           }
-          try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(sess.match.creatorId)); } catch {}
+          try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(sess.match.creatorId)); } catch (e) {}
           try { if (sess.timer) clearTimeout(sess.timer) } catch {}
           pendingPrestarts.delete(roomId)
           matches.delete(sess.match.id)
@@ -2124,7 +2262,7 @@ wss.on('connection', (ws, req) => {
         }
   matches.delete(id)
   persistMatchesToDisk()
-  try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', id) })() } catch (err) { console.warn('[Matches] Supabase delete failed:', err && err.message) }
+  try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', id) })() } catch (err) { startLogger.warn('[Matches] Supabase delete failed:', err && err.message) }
         const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
         for (const client of wss.clients) {
           if (client.readyState === 1) client.send(lobbyPayload)
@@ -2213,13 +2351,13 @@ wss.on('connection', (ws, req) => {
       }
     } catch (e) {
       try { errorsTotal.inc({ scope: 'ws_message' }) } catch {}
-      console.error('Invalid message:', e);
+        logger.error('Invalid message: %o', e);
     }
   });
 
   ws.on('close', async (code, reasonBuf) => {
     const reason = (() => { try { return reasonBuf ? reasonBuf.toString() : '' } catch { return '' } })()
-    try { console.log(`[WS] close id=${ws._id} code=${code} reason=${reason}`) } catch {}
+  try { logger.info(`[WS] close id=${ws._id} code=${code} reason=${reason}`) } catch {}
     // Clean up room
     await leaveRoom(ws);
     try { wsConnections.dec() } catch {}
@@ -2293,7 +2431,7 @@ const hbTimer = setInterval(() => {
 }, HEARTBEAT_INTERVAL)
 
 function shutdown() {
-  console.log('\n[Shutdown] closing servers...')
+  logger.warn('\n[Shutdown] closing servers...')
   try { clearInterval(hbTimer) } catch {}
   try { wss.close() } catch {}
   try { server.close(() => process.exit(0)) } catch { process.exit(0) }
@@ -2492,7 +2630,7 @@ app.post('/api/admin/wallet/credit', requireAdmin, async (req, res) => {
   if (!addr || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   creditWallet(addr, curr, amt)
   const item = { id: nanoid(10), email: addr, currency: curr, amountCents: amt, ts: Date.now(), by: req.user && req.user.email }
-  console.log('[WALLET] Credited', item)
+  logger.info('[WALLET] Credited %o', item)
   return res.json({ ok: true, credited: item })
 })
 
@@ -2640,18 +2778,18 @@ app.post('/api/tournaments/create', async (req, res) => {
       // Use upsert (insert/edit) to avoid conflict and verify by selecting
       const { error: upsertErr } = await supabase.from('tournaments').upsert(payload, { onConflict: 'id' })
       if (upsertErr) {
-        console.warn('[Tournaments] Supabase upsert failed:', upsertErr.message || upsertErr)
+        startLogger.warn('[Tournaments] Supabase upsert failed:', upsertErr.message || upsertErr)
         return res.status(500).json({ ok: false, error: 'DB_PERSIST_FAILED', details: upsertErr.message || upsertErr })
       }
       // Verify the created row is readable from DB
       try {
         const { data: checkRows, error: checkErr } = await supabase.from('tournaments').select('*').eq('id', t.id).limit(1).single()
         if (checkErr || !checkRows) {
-          console.warn('[Tournaments] Supabase verify failed:', checkErr || 'no row')
+          startLogger.warn('[Tournaments] Supabase verify failed:', checkErr || 'no row')
           return res.status(500).json({ ok: false, error: 'DB_VERIFY_FAILED', details: (checkErr && checkErr.message) || 'no row' })
         }
       } catch (err) {
-        console.warn('[Tournaments] Supabase verify exception:', err && err.message)
+        startLogger.warn('[Tournaments] Supabase verify exception:', err && err.message)
         return res.status(500).json({ ok: false, error: 'DB_VERIFY_FAILED', details: err && err.message })
       }
       // Persist local cache and backups
@@ -2662,11 +2800,11 @@ app.post('/api/tournaments/create', async (req, res) => {
       persistTournamentsToDisk()
     }
   } catch (err) {
-    console.warn('[Tournaments] Persist error:', err && err.message)
+    startLogger.warn('[Tournaments] Persist error:', err && err.message)
     return res.status(500).json({ ok: false, error: 'PERSIST_ERROR' })
   }
   // Diagnostic log: announce creation
-  try { console.log(`[TOURNAMENT CREATED] id=${id} title=${t.title} official=${!!t.official} creator=${t.creatorEmail}`) } catch (e) {}
+  try { logger.info('[TOURNAMENT CREATED] id=%s title=%s official=%s creator=%s', id, t.title, !!t.official, t.creatorEmail) } catch (e) {}
   broadcastTournaments()
   res.json({ ok: true, tournament: t })
 })
@@ -2694,24 +2832,24 @@ app.post('/api/tournaments/join', async (req, res) => {
     if (supabase) {
       const { error: insErr } = await supabase.from('tournament_participants').upsert([ { tournament_id: t.id, email: addr, username: String(username || addr) } ], { onConflict: 'tournament_id,email' })
       if (insErr) {
-        console.warn('[Tournaments] Supabase join upsert failed:', insErr.message || insErr)
+        startLogger.warn('[Tournaments] Supabase join upsert failed:', insErr.message || insErr)
         return res.status(500).json({ ok: false, error: 'DB_PERSIST_FAILED', details: insErr.message || insErr })
       }
       // Verify participant exists
       try {
         const { data: part, error: qErr } = await supabase.from('tournament_participants').select('*').eq('tournament_id', t.id).eq('email', addr).limit(1).single()
         if (qErr || !part) {
-          console.warn('[Tournaments] Supabase join verify failed:', qErr || 'no row')
+          startLogger.warn('[Tournaments] Supabase join verify failed:', qErr || 'no row')
           return res.status(500).json({ ok: false, error: 'DB_VERIFY_FAILED', details: (qErr && qErr.message) || 'no row' })
         }
       } catch (err) {
-        console.warn('[Tournaments] Supabase join verify exception:', err && err.message)
+        startLogger.warn('[Tournaments] Supabase join verify exception:', err && err.message)
         return res.status(500).json({ ok: false, error: 'DB_VERIFY_FAILED', details: err && err.message })
       }
     }
     persistTournamentsToDisk()
   } catch (err) {
-    console.warn('[Tournaments] Persist participant failed:', err && err.message)
+    startLogger.warn('[Tournaments] Persist participant failed:', err && err.message)
     return res.status(500).json({ ok: false, error: 'PERSIST_ERROR' })
   }
   broadcastTournaments()
@@ -2733,14 +2871,14 @@ app.post('/api/tournaments/leave', async (req, res) => {
     if (supabase) {
       const { error: delErr } = await supabase.from('tournament_participants').delete().eq('tournament_id', t.id).eq('email', addr)
       if (delErr) {
-        console.warn('[Tournaments] Supabase leave failed:', delErr)
+        startLogger.warn('[Tournaments] Supabase leave failed:', delErr)
         return res.status(500).json({ ok: false, error: 'DB_PERSIST_FAILED', details: delErr.message || delErr })
       }
       // Verify participant no longer exists
       try {
         const { data: rem, error: remErr } = await supabase.from('tournament_participants').select('*').eq('tournament_id', t.id).eq('email', addr).limit(1).single()
         if (rem) {
-          console.warn('[Tournaments] Supabase leave verify failed: still exists')
+          startLogger.warn('[Tournaments] Supabase leave verify failed: still exists')
           return res.status(500).json({ ok: false, error: 'DB_VERIFY_FAILED', details: 'still exists' })
         }
         // If remErr means no rows, it's fine
@@ -2749,13 +2887,13 @@ app.post('/api/tournaments/leave', async (req, res) => {
         if (err && err.message && err.message.includes('no rows')) {
           // expected
         } else {
-          console.warn('[Tournaments] Supabase leave verify exception:', err && err.message)
+          startLogger.warn('[Tournaments] Supabase leave verify exception:', err && err.message)
         }
       }
     }
     persistTournamentsToDisk()
   } catch (err) {
-    console.warn('[Tournaments] Persist participant removal failed:', err && err.message)
+    startLogger.warn('[Tournaments] Persist participant removal failed:', err && err.message)
     return res.status(500).json({ ok: false, error: 'PERSIST_ERROR' })
   }
   const left = t.participants.length < before
@@ -2793,11 +2931,11 @@ app.post('/api/admin/tournaments/winner', async (req, res) => {
     if (supabase) {
       const { error } = await supabase.from('tournaments').update({ status: t.status, winner_email: t.winnerEmail, payout_status: t.payoutStatus }).eq('id', t.id)
       if (error) {
-        console.warn('[Tournaments] Supabase winner update failed:', error)
+  startLogger.warn('[Tournaments] Supabase winner update failed:', error)
         return res.status(500).json({ ok: false, error: 'DB_PERSIST_FAILED' })
       }
     }
-  } catch (err) { console.warn('[Tournaments] Supabase winner update failed:', err && err.message); return res.status(500).json({ ok: false, error: 'PERSIST_ERROR' }) }
+  } catch (err) { startLogger.warn('[Tournaments] Supabase winner update failed:', err && err.message); return res.status(500).json({ ok: false, error: 'PERSIST_ERROR' }) }
   broadcastTournaments()
   res.json({ ok: true, tournament: t })
 })
@@ -2842,7 +2980,7 @@ app.post('/api/admin/tournaments/update', (req, res) => {
       currency: t.currency || null,
       starting_score: t.startingScore || null
     }).eq('id', t.id)
-  })() } catch (err) { console.warn('[Tournaments] Supabase update failed:', err && err.message) }
+  })() } catch (err) { startLogger.warn('[Tournaments] Supabase update failed:', err && err.message) }
   broadcastTournaments()
   res.json({ ok: true, tournament: t })
 })
@@ -2864,7 +3002,7 @@ app.post('/api/admin/tournaments/delete', (req, res) => {
     if (!supabase) return
     await supabase.from('tournaments').delete().eq('id', id)
     await supabase.from('tournament_participants').delete().eq('tournament_id', id)
-  })() } catch (err) { console.warn('[Tournaments] Supabase delete failed:', err && err.message) }
+  })() } catch (err) { startLogger.warn('[Tournaments] Supabase delete failed:', err && err.message) }
   broadcastTournaments()
   res.json({ ok: true })
 })
@@ -2889,7 +3027,7 @@ app.post('/api/tournaments/delete', (req, res) => {
     if (!supabase) return
     await supabase.from('tournaments').delete().eq('id', id)
     await supabase.from('tournament_participants').delete().eq('tournament_id', id)
-  })() } catch (err) { console.warn('[Tournaments] Supabase delete failed:', err && err.message) }
+  })() } catch (err) { startLogger.warn('[Tournaments] Supabase delete failed:', err && err.message) }
   broadcastTournaments()
   res.json({ ok: true })
 })
@@ -2929,10 +3067,10 @@ app.post('/api/admin/tournaments/broadcast', (req, res) => {
     // Broadcast locally
     for (const client of wss.clients) { if (client.readyState === 1) client.send(JSON.stringify({ type: 'tournaments', tournaments: arr })) }
     // Publish cross-instance
-    publishTournamentUpdate(arr).catch(err => console.warn('[Tournaments] publishTournamentUpdate error:', err && err.message))
+  publishTournamentUpdate(arr).catch(err => startLogger.warn('[Tournaments] publishTournamentUpdate error:', err && err.message))
     res.json({ ok: true })
   } catch (err) {
-    console.warn('[Tournaments] force broadcast failed:', err && err.message)
+    startLogger.warn('[Tournaments] force broadcast failed:', err && err.message)
     res.status(500).json({ ok: false, error: 'BROADCAST_FAILED' })
   }
 })

@@ -35,7 +35,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       void import("./OfflinePlay");
       void import("./Scoreboard");
       void import("./StatsPanel");
-    } catch {}
+  } catch (e) {}
     if (!username || !password) {
       setError("Username and password required.");
       setLoading(false);

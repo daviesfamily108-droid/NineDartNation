@@ -197,6 +197,46 @@ You can serve the built site from the Node server directly.
   ```
   Outputs static files to `app/dist`.
 
+## Progressive Web App (PWA) / Add to Home Screen
+
+This project includes a minimal PWA setup to allow installing the website on device home screens.
+
+- Manifest is at `public/manifest.webmanifest`.
+- A simple service worker `public/sw.js` provides basic offline caching.
+- On supported browsers (Chrome/Edge on Android, Chrome on Desktop), a browser prompt may appear or you can use the "Install App" button added to the footer.
+
+Native app store links (optional):
+- You can provide native app store download links via environment variables on your hosting platform (or locally with `VITE_*` variables in your dev env):
+  - VITE_PLAY_STORE_URL=https://play.google.com/store/apps/details?id=com.example
+  - VITE_APP_STORE_URL=https://apps.apple.com/us/app/example/id123456789
+  These links are displayed in the header install picker if set.
+
+Icons:
+- The manifest currently contains placeholder icons (small transparent PNGs) in data URL form. For production, replace them with real PNG assets (192x192 and 512x512) in `public/` and update `public/manifest.webmanifest` accordingly. For example:
+  - `/public/icon-192.png` (192x192)
+  - `/public/icon-512.png` (512x512)
+
+Example environment usage for Netlify or other hosting providers:
+- In your site build environment variables, add `VITE_PLAY_STORE_URL` and/or `VITE_APP_STORE_URL` to show buttons to install native builds if available.
+
+Installation options:
+- Android/Chrome: Open the site in Chrome. Chrome will either prompt automatically or you can tap the menu (⋮) -> "Install app".
+- iOS/Safari: Open the site in Safari, tap the Share icon -> "Add to Home Screen"; iOS does not show the same install prompt but supports an Add to Home Screen that creates a shortcut.
+- Windows/Edge: Edge supports installing PWAs via the ... menu -> "Apps" -> "Install this site as an app".
+
+Development notes:
+- The site must be served over HTTPS for the service worker and automatic install prompt to work in production (localhost is allowed during development).
+- The service worker is a simple pre-cache implementation — you can replace it with a more advanced strategy (Workbox) for production use.
+
+Icon generation (optional):
+- If you want to generate PNG app icons from the included SVG programmatically, install the dev deps and run:
+  ```bash
+  npm install --save-dev sharp
+  npm run generate:icons
+  ```
+  This will generate `public/icon-192.png`, `public/icon-512.png`, and `public/apple-touch-icon.png` from the `public/dart-thrower.svg` file.
+
+
 2) Start the server
   - HTTP only:
     ```bash

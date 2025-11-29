@@ -63,7 +63,7 @@ export default function CameraStatusBadge() {
           ctx.textBaseline = "middle";
           ctx.fillText("Camera", canvas.width / 2, canvas.height / 2);
         }
-      } catch {}
+  } catch (e) {}
       rafRef.current = requestAnimationFrame(render);
     };
 
@@ -79,7 +79,7 @@ export default function CameraStatusBadge() {
     try {
       // Toggle global overlay visibility via event (handled by overlay component)
       window.dispatchEvent(new CustomEvent("ndn:toggle-phone-overlay"));
-    } catch {}
+  } catch (e) {}
   };
 
   return (

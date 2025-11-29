@@ -7,6 +7,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
+  <!-- PWA manifest for add-to-home and installation -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <!-- Apple touch icon (fallback) -->
+  <link rel="apple-touch-icon" href="/dart-thrower.svg" />
     <title>Nine Dart Nation</title>
     <!-- Typography: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,5 +22,31 @@
   <body class="bg-slate-50">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Offer a global hook for an 'Install App' prompt. Many browsers fire
+      // `beforeinstallprompt` when the PWA criteria are met.
+      (function () {
+        try {
+          window.deferredInstallPrompt = null;
+          window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            window.deferredInstallPrompt = e;
+          });
+          window.promptInstallApp = async function () {
+            try {
+              const p = window.deferredInstallPrompt;
+              if (!p) return false;
+              p.prompt();
+              const choice = await p.userChoice;
+              return choice && choice.outcome === 'accepted';
+            } catch (err) {
+              return false;
+            }
+          };
+        } catch (e) {
+          // ignore on non-browser contexts
+        }
+      })();
+    </script>
   </body>
 </html>

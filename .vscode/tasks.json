@@ -24,5 +24,13 @@
       "group": "build",
       "problemMatcher": []
     }
+    ,
+    {
+      "label": "Run integration tests (server)",
+      "type": "shell",
+      "command": "npm run test:integration",
+      "group": "test",
+      "problemMatcher": []
+    }
   ]
 }

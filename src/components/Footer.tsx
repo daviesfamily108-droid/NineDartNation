@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import ResizableModal from "./ui/ResizableModal";
+import InstallAppButton from "./InstallAppButton";
 
 export default function Footer() {
   const [show, setShow] = useState(false);
@@ -11,6 +12,10 @@ export default function Footer() {
         <button className="underline" onClick={() => setShow(true)}>
           Legal Notice
         </button>
+        {/* Small install CTA shown only when browser supplies the 'beforeinstallprompt' event */}
+        <span className="ml-3 inline-block align-middle">
+          <InstallAppButton />
+        </span>
       </div>
       {show ? (
         <ResizableModal

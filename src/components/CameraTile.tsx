@@ -202,7 +202,7 @@ export default function CameraTile({
         const origin = `${isSecure ? "https" : "http"}://${u.host}${u.pathname.endsWith("/ws") ? "" : u.pathname}`;
         const base = origin.replace(/\/?ws$/i, "");
         return `${base}/mobile-cam.html?code=${code}`;
-      } catch {}
+  } catch (e) {}
     }
     // Fallback to local development: prefer LAN host if detected
     const host = lanHost || window.location.hostname;

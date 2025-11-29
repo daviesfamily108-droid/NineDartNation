@@ -28,6 +28,8 @@ import HelpAssistant from "./components/HelpAssistant";
 import GlobalCameraLogger from "./components/GlobalCameraLogger";
 import GlobalPhoneVideoSink from "./components/GlobalPhoneVideoSink";
 import CameraStatusBadge from "./components/CameraStatusBadge";
+import InstallPicker from "./components/InstallPicker";
+import AddToHomeButton from "./components/AddToHomeButton";
 import Footer from "./components/Footer";
 
 export default function App() {
@@ -90,7 +92,7 @@ export default function App() {
             try {
               const cached = localStorage.getItem(`ndn:subscription:${data.user.email}`);
               if (cached) setUserWithMerge({ ...data.user, subscription: JSON.parse(cached) });
-            } catch {}
+            } catch (e) {}
             fetchSubscription(data.user);
           } else {
             // Token invalid, remove it
@@ -109,7 +111,7 @@ export default function App() {
         localStorage.removeItem("mockUser");
         localStorage.removeItem("authToken");
         if (user?.email) localStorage.removeItem(`ndn:subscription:${user.email}`);
-      } catch {}
+  } catch (e) {}
       setUser(null);
       setTab("score");
     };
@@ -350,7 +352,7 @@ export default function App() {
     try {
       mqMobile.addEventListener("change", update);
       mqTablet.addEventListener("change", update);
-    } catch {}
+  } catch (e) {}
 
     return () => {
       window.removeEventListener("resize", update);
@@ -358,7 +360,7 @@ export default function App() {
       try {
         mqMobile.removeEventListener("change", update);
         mqTablet.removeEventListener("change", update);
-      } catch {}
+  } catch (e) {}
     };
   }, []);
 
@@ -369,7 +371,7 @@ export default function App() {
         // Clear any lightweight local flags (keep stats unless explicitly reset)
         localStorage.removeItem("ndn:avatar");
         if (user?.email) localStorage.removeItem(`ndn:subscription:${user.email}`);
-      } catch {}
+  } catch (e) {}
       setUser(null);
       setTab("score");
     };
@@ -394,8 +396,8 @@ export default function App() {
           const email = (user?.email || "").toLowerCase();
           if (ws && next && email)
             ws.send({ type: "presence", username: next, email });
-        } catch {}
-      } catch {}
+  } catch (e) {}
+  } catch (e) {}
     };
     window.addEventListener("ndn:username-changed" as any, onName as any);
     return () =>
@@ -422,7 +424,7 @@ export default function App() {
         ) {
           setTab(tab as TabKey);
         }
-      } catch {}
+  } catch (e) {}
     };
     window.addEventListener("ndn:change-tab" as any, onTabChange as any);
     return () =>
@@ -441,7 +443,7 @@ export default function App() {
       try {
         if (u?.email) localStorage.setItem(`ndn:subscription:${u.email}`, JSON.stringify(data));
       } catch {}
-    } catch {}
+  } catch (e) {}
   }
 
   // Header notification state: show an alert if subscription is expiring in <= 3 days, or expired
@@ -519,7 +521,7 @@ export default function App() {
           headers,
           body: JSON.stringify({ email: user.email, message, type }),
         });
-      } catch {}
+  } catch (e) {}
     }
     if (expiresAt && expiresAt > now && expiresAt - now <= THREE_DAYS_MS) {
       addSubscriptionNotification('sub_expiring', `Your premium subscription expires in ${Math.ceil((expiresAt - now) / (24*60*60*1000))} day(s)`);
@@ -679,7 +681,7 @@ export default function App() {
                                 detail: { game: "X01", start: 501 },
                               }),
                             );
-                          } catch {}
+                          } catch (e) {}
                         }, 40);
                       }}
                     >
@@ -697,7 +699,8 @@ export default function App() {
                   {/* Subscription expiration / warning bell - move after WS status */}
                   {/* (Notifications are positioned after StatusDot to appear to the right of the connected badge) */}
                   {(siteNotifications.length > 0 || showSubscriptionsBell) && (
-                    <div className="relative ml-2">
+                    <>
+                      <div className="relative ml-2 flex items-center space-x-2">
                       <button
                         className="px-2 py-1 text-sm rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-2"
                         onClick={() => setNotificationsOpen((s) => !s)}
@@ -737,7 +740,7 @@ export default function App() {
                                             if (btnRefetchToken) refetchHeaders.Authorization = `Bearer ${btnRefetchToken}`;
                                             const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`, { headers: refetchHeaders });
                                             if (res.ok) setSiteNotifications(await res.json());
-                                          } catch {}
+                                          } catch (e) {}
                                         }}
                                       >
                                         Mark read
@@ -756,7 +759,7 @@ export default function App() {
                                           if (token) refetchHeaders.Authorization = `Bearer ${token}`;
                                           const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`, { headers: refetchHeaders });
                                           if (res.ok) setSiteNotifications(await res.json());
-                                        } catch {}
+                                        } catch (e) {}
                                       }}
                                     >
                                       Clear
@@ -768,7 +771,13 @@ export default function App() {
                           </div>
                         </div>
                       )}
-                    </div>
+                      </div>
+                      {/* Add an install picker next to the notifications to allow users to install or download a native build */}
+                      <div className="hidden sm:flex items-center ml-2 space-x-2">
+                        <AddToHomeButton />
+                        <InstallPicker />
+                      </div>
+                    </>
                   )}
                   {/* Protocol pill removed per request: keep green connected badge only */}
                 </div>

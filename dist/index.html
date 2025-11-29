@@ -7,6 +7,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
+  <!-- PWA manifest for add-to-home and installation -->
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <!-- Apple touch icon (fallback) -->
+  <link rel="apple-touch-icon" href="/dart-thrower.svg" />
     <title>Nine Dart Nation</title>
     <!-- Typography: Inter -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14,12 +18,38 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
     <!-- Favicon (prevents 404 in dev) -->
     <link rel="icon" type="image/svg+xml" href="/dart-thrower.svg" />
-    <script type="module" crossorigin src="/assets/index-C32VqwCm.js"></script>
+    <script type="module" crossorigin src="/assets/index-CQ32xty6.js"></script>
     <link rel="modulepreload" crossorigin href="/assets/vendor-D3F3s8fL.js">
     <link rel="modulepreload" crossorigin href="/assets/ui-gqBJRRJB.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-BDiVRtWD.css">
+    <link rel="stylesheet" crossorigin href="/assets/index-xBpv9Jux.css">
   </head>
   <body class="bg-slate-50">
     <div id="root"></div>
+    <script>
+      // Offer a global hook for an 'Install App' prompt. Many browsers fire
+      // `beforeinstallprompt` when the PWA criteria are met.
+      (function () {
+        try {
+          window.deferredInstallPrompt = null;
+          window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            window.deferredInstallPrompt = e;
+          });
+          window.promptInstallApp = async function () {
+            try {
+              const p = window.deferredInstallPrompt;
+              if (!p) return false;
+              p.prompt();
+              const choice = await p.userChoice;
+              return choice && choice.outcome === 'accepted';
+            } catch (err) {
+              return false;
+            }
+          };
+        } catch (e) {
+          // ignore on non-browser contexts
+        }
+      })();
+    </script>
   </body>
 </html>

@@ -4,16 +4,21 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "start": "node server.cjs",
+  "dev": "vite",
+  "build": "vite build",
+  "build:server": "node ./scripts/build-server.cjs",
+  "build:all": "npm run build && npm run build:server",
+  "preview": "vite preview",
+  "prestart": "npm run build:server",
+  "start": "node server/server.js",
     "e2e:pair": "node scripts/e2e_pairing.cjs",
-  "e2e:calibrate": "node scripts/e2e_calibration.cjs",
+    "e2e:calibrate": "node scripts/e2e_calibration.cjs",
     "test:redis": "node scripts/test_redis.cjs",
-    "test:unit": "vitest run",
-  "lint": "eslint src --ext .ts,.tsx --report-unused-disable-directives",
-  "lint:fix": "eslint src --ext .ts,.tsx --fix --report-unused-disable-directives"
+  "test:unit": "vitest run",
+  "test:integration": "cross-env NDN_RUNINTEGRATION=1 vitest run src/server/__tests__/autocommit.integration.test.ts",
+    "lint": "eslint src --ext .ts,.tsx --report-unused-disable-directives",
+    "lint:fix": "eslint src --ext .ts,.tsx --fix --report-unused-disable-directives",
+    "generate:icons": "node scripts/generate-icons.cjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.75.0",
@@ -45,6 +50,7 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
+    "esbuild": "^0.19.0",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^14.0.0",
     "@types/qrcode": "^1.5.5",
@@ -69,6 +75,8 @@
     
     "prettier": "^3.5.1",
     "vite": "^7.1.12",
-    "vitest": "^4.0.5"
+  "vitest": "^4.0.5",
+  "cross-env": "^7.0.3",
+    "sharp": "^0.32.4"
   }
 }

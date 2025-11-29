@@ -126,6 +126,7 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
             legs: [],
           }) as Player,
       );
+      console.debug('[useMatch] newMatch', playerNames, startingScore, roomId);
       return {
         players,
         currentPlayerIdx: 0,
@@ -138,6 +139,7 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
 
   addVisit: (score, darts, meta) =>
     set((state) => {
+      console.debug('[useMatch] addVisit', { score, darts, inProgress: state.inProgress, currentPlayerIdx: state.currentPlayerIdx, players: state.players.length });
       if (!state.inProgress) return state;
       const p = state.players[state.currentPlayerIdx];
       // ensure a current leg exists
@@ -178,7 +180,7 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
           }
           avgPayload.threeDartAvg = avg;
         }
-        useAudit.getState().recordVisit("x01-match", darts, score, {
+  useAudit.getState().recordVisit("x01-match", darts, score, {
           preOpenDarts: meta?.preOpenDarts ?? 0,
           preRemaining: preRem,
           postRemaining: postRem,

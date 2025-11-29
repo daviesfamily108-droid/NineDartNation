@@ -6,18 +6,17 @@ import { describe, test, expect } from 'vitest'
 
 const SERVER_CMD = 'node'
 const SERVER_ARGS = ['server/server.cjs']
-const BASE_URL = 'http://127.0.0.1:8787'
-const WS_URL = 'ws://127.0.0.1:8787/ws'
 
-async function waitForServer(timeoutMs = 8000) {
+async function waitForServer(port: number, timeoutMs = 8000) {
+  const BASE_URL = `http://127.0.0.1:${port}`
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(`${BASE_URL}/health`)
-      if (res.ok) return true
-    } catch (e) {
-      // ignore
-    }
+      // Use the public tournaments list endpoint (no auth required) so we get JSON rather than SPA HTML
+      const res = await fetch(`${BASE_URL}/api/tournaments`)
+      const ct = res.headers.get('content-type') || ''
+      if (ct.includes('application/json')) return true
+    } catch (e) {}
     await new Promise(r => setTimeout(r, 250))
   }
   return false
@@ -27,12 +26,16 @@ describe('tournaments integration', () => {
   const shouldRun = process.env.NDN_RUNINTEGRATION === '1' || process.env.CI
   const maybeTest = shouldRun ? test : test.skip
   maybeTest('owner create -> ADMIN override + WS broadcast', async () => {
-    const server = spawn(SERVER_CMD, SERVER_ARGS, { env: { ...process.env, NDN_HTTPS: '0' }, stdio: 'pipe' })
+  const port = 8800 + Math.floor(Math.random() * 1000)
+  const BASE_URL = `http://127.0.0.1:${port}`
+  const WS_URL = `ws://127.0.0.1:${port}/ws`
+  const tmpDir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'ndn-test-'))
+  const server = spawn(SERVER_CMD, SERVER_ARGS, { env: { ...process.env, NDN_HTTPS: '0', PORT: String(port), NDN_DATA_DIR: tmpDir, NDN_DEBUG: '1' }, stdio: 'pipe' })
     let serverStdout = ''
     server.stdout?.on('data', (d) => { serverStdout += d.toString() })
     server.stderr?.on('data', (d) => { serverStdout += d.toString() })
     // ensure server up
-  const ok = await waitForServer(20000)
+  const ok = await waitForServer(port, 20000)
     expect(ok).toBeTruthy()
 
     // Connect WebSocket and listen for tournaments broadcast
@@ -80,8 +83,8 @@ describe('tournaments integration', () => {
     expect(msgTournaments && Array.isArray(msgTournaments)).toBeTruthy()
   expect(Array.isArray(msgTournaments) && msgTournaments.some((t: any) => t.id === tid)).toBeTruthy()
 
-    // Confirm persisted file contains the tournament
-    const dataFile = path.join(process.cwd(), 'server', 'data', 'tournaments.json')
+  // Confirm persisted file contains the tournament in the per-test tmp data directory
+  const dataFile = path.join(tmpDir, 'tournaments.json')
   let persisted: any[] = []
     try { persisted = JSON.parse(fs.readFileSync(dataFile, 'utf8') || '[]') } catch (e) {}
     expect(Array.isArray(persisted)).toBeTruthy()

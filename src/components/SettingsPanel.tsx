@@ -909,7 +909,6 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           onPointerDown={(e) => { (e as any).stopPropagation(); }}
                           onMouseDown={(e) => { e.stopPropagation(); }}
                           onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
-                          onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
                           id="cameraAspect"
                           value={cameraAspect || "wide"}
                           onChange={(e) =>

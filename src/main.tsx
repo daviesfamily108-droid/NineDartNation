@@ -11,7 +11,7 @@ import { installApiInterceptor } from "./utils/api";
 // This ensures `React` is available at runtime to prevent 'React is not defined' errors.
 try {
   (window as any).React = (window as any).React || {};
-} catch {}
+} catch (e) {}
 
 installApiInterceptor();
 
@@ -29,4 +29,22 @@ function Root() {
   const path = window.location.pathname;
   if (path === "/reset") return <ResetPassword />;
   return <App />;
+}
+
+// Register service worker to enable PWA install & offline capability when available
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  try {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        // eslint-disable-next-line no-console
+        console.debug('[ServiceWorker] Registered', reg);
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.warn('[ServiceWorker] Registration failed', err);
+      });
+  } catch (e) {
+    // ignore
+  }
 }

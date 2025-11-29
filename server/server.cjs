@@ -2247,6 +2247,135 @@ app.get('/api/friends/search', (req, res) => {
   res.json({ results: [] });
 });
 
+if (!global.__NDN_PATCHED) {
+// --- Minimal auth helpers + in-memory notifications & wallet for integration tests ---
+const adminEmails = new Set([String(process.env.OWNER_EMAIL || 'daviesfamily108@gmail.com').toLowerCase()]);
+
+function verifyTokenFromHeader(req) {
+  try {
+    const header = String(req.headers && req.headers.authorization || '')
+    const token = header.split(' ')[1]
+    if (!token) return null
+    const decoded = jwt.verify(token, JWT_SECRET)
+    return String(decoded.email || decoded.username || '').toLowerCase()
+  } catch (e) { return null }
+}
+
+function requireAuth(req, res, next) {
+  const email = verifyTokenFromHeader(req)
+  if (!email) return res.status(401).json({ ok: false, error: 'AUTH_REQUIRED' })
+  req.user = { email }
+  next()
+}
+
+function requireAdmin(req, res, next) {
+  const email = verifyTokenFromHeader(req)
+  if (!email || !adminEmails.has(email)) return res.status(403).json({ ok: false, error: 'ADMIN_REQUIRED' })
+  req.user = { email }
+  next()
+}
+
+function requireSelfOrAdminForEmail(getEmailFromReq) {
+  return (req, res, next) => {
+    const email = verifyTokenFromHeader(req)
+    const target = (getEmailFromReq(req) || '').toLowerCase()
+    if (!email) return res.status(401).json({ ok: false, error: 'AUTH_REQUIRED' })
+    if (email === target || adminEmails.has(email)) { req.user = { email }; return next() }
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
+}
+
+// Simple in-memory notifications store
+const notifications = new Map(); // id -> { id, email, message, read }
+
+function makeId() { return nanoid(10) }
+
+app.get('/api/notifications', requireAuth, (req, res) => {
+  const email = (req.query.email || req.user?.email || '').toLowerCase()
+  const arr = []
+  for (const v of notifications.values()) if (!email || (v.email || '').toLowerCase() === email) arr.push(v)
+  res.json(arr)
+})
+
+app.post('/api/notifications', requireAuth, (req, res) => {
+  try {
+    const body = req.body || {}
+    const id = makeId()
+    const rec = { id, email: String(body.email || req.user.email || '').toLowerCase(), message: String(body.message || ''), read: false, type: body.type || null }
+    notifications.set(id, rec)
+    res.json({ ok: true, notification: rec })
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }) }
+})
+
+app.patch('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), (req, res) => {
+  const id = String(req.params.id || '')
+  const rec = notifications.get(id)
+  if (!rec) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  Object.assign(rec, req.body || {})
+  notifications.set(id, rec)
+  res.json({ ok: true })
+})
+
+app.delete('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), (req, res) => {
+  const id = String(req.params.id || '')
+  const ok = notifications.delete(id)
+  res.json({ ok })
+})
+
+// Minimal in-memory wallet
+const wallets = new Map(); // email -> { balances: { USD: cents }, payoutMethods: [] }
+// simple in-memory withdrawal requests for integration tests
+const withdrawals = []
+
+function ensureWallet(email) {
+  email = String(email || '').toLowerCase()
+  if (!wallets.has(email)) wallets.set(email, { balances: { USD: 0 }, payoutMethods: [] })
+  return wallets.get(email)
+}
+
+app.get('/api/wallet/balance', requireAuth, (req, res) => {
+  const email = String(req.query.email || req.user?.email || '').toLowerCase()
+  const w = ensureWallet(email)
+  res.json({ ok: true, wallet: w })
+})
+
+app.post('/api/admin/wallet/credit', requireAdmin, (req, res) => {
+  try {
+    const { email, currency, amount } = req.body || {}
+    const cents = Math.round(parseFloat(amount || '0') * 100)
+    const w = ensureWallet(String(email || '').toLowerCase())
+    w.balances[currency || 'USD'] = (w.balances[currency || 'USD'] || 0) + cents
+    res.json({ ok: true })
+  } catch (e) { res.status(500).json({ ok: false, error: e.message }) }
+})
+
+app.post('/api/wallet/link-card', requireAuth, (req, res) => {
+  const { email, brand, last4 } = req.body || {}
+  const w = ensureWallet(String(email || req.user?.email || '').toLowerCase())
+  w.payoutMethods.push({ id: makeId(), brand, last4 })
+  res.json({ ok: true })
+})
+
+app.post('/api/wallet/withdraw', requireAuth, (req, res) => {
+  const { email, currency, amount } = req.body || {}
+  const w = ensureWallet(String(email || req.user?.email || '').toLowerCase())
+  const cents = Math.round(parseFloat(amount || '0') * 100)
+  if ((w.balances[currency || 'USD'] || 0) < cents) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
+  w.balances[currency || 'USD'] -= cents
+  const reqRec = { id: makeId(), email: String(email || req.user.email).toLowerCase(), currency: currency || 'USD', amount: cents, status: 'paid' }
+  // persist to in-memory withdrawals list so admins can list them in tests
+  withdrawals.push(reqRec)
+  res.json({ ok: true, request: reqRec })
+})
+
+app.get('/api/admin/wallet/withdrawals', requireAdmin, (req, res) => {
+  // return all withdrawals (no pagination required for tests)
+  res.json({ ok: true, withdrawals: withdrawals.slice().reverse() })
+})
+
+global.__NDN_PATCHED = true
+}
+
 // SPA fallback: serve index.html for any non-API, non-static route when a dist exists
 if (staticBase) {
   app.get('*', (req, res, next) => {
@@ -2334,9 +2463,26 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
   const set = rooms.get(roomId);
   if (!set) return;
   const payload = (typeof data === 'string') ? data : JSON.stringify(data)
+  try {
+    try { console.log('[BROADCAST] room=%s clients=%s except=%s data=%s', roomId, Array.from(set).map(s => s && s._id).join(','), exceptWs && exceptWs._id, typeof data === 'string' ? data : JSON.stringify(data).slice(0,200)) } catch {}
+  } catch {}
   for (const client of set) {
-    if (client.readyState === 1 && client !== exceptWs) {
-      client.send(payload);
+    try {
+      const cid = client && client._id
+      const ready = client && client.readyState
+      if (DEBUG) {
+        try { console.log('[BROADCAST-SEND] room=%s target=%s readyState=%s except=%s', roomId, cid, ready, exceptWs && exceptWs._id) } catch {}
+      }
+      if (client.readyState === 1 && client !== exceptWs) {
+        try {
+          client.send(payload)
+          if (DEBUG) try { console.log('[BROADCAST-SENT] room=%s target=%s', roomId, cid) } catch {}
+        } catch (e) {
+          try { console.warn('[BROADCAST] failed send to %s: %s', cid, e && e.message) } catch {}
+        }
+      }
+    } catch (e) {
+      try { console.warn('[BROADCAST] iteration error for room=%s: %s', roomId, e && e.message) } catch {}
     }
   }
 }
@@ -2415,6 +2561,7 @@ wss.on('connection', (ws, req) => {
     if (!allowMessage()) return
     try {
       const data = JSON.parse(msg.toString());
+      try { console.log('[WSMSG-TYPE] from=%s room=%s type=%s', ws._id, ws._roomId, data && data.type) } catch {}
       // Optional WS auth: if REQUIRE_WS_AUTH=1, demand a valid JWT via 'auth' or in 'presence.token'
       if (String(process.env.REQUIRE_WS_AUTH || '0') === '1') {
         if (!ws._authed) {

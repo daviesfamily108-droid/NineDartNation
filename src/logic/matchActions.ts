@@ -23,31 +23,31 @@ export function createOnlineMatchActions(args: {
       }
       try {
         match.addVisit(score, darts, meta);
-      } catch {
+      } catch (e) {
         match.addVisit(score, darts);
       }
       try {
         sendState();
-      } catch {}
+      } catch (e) {}
     },
     undoVisit: () => {
       match.undoVisit();
       try {
         sendState();
-      } catch {}
+      } catch (e) {}
     },
     nextPlayer: () => {
       match.nextPlayer();
       try {
         sendState();
-      } catch {}
+      } catch (e) {}
     },
     endLeg: (score?: number) => {
       if (typeof score === "number") match.endLeg(score);
       else match.endLeg(0);
       try {
         sendState();
-      } catch {}
+      } catch (e) {}
     },
     endGame: () => {
       match.endGame();
