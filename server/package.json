@@ -1,12 +1,12 @@
 {
   "name": "nine-dart-nation-server",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "server.cjs",
   "engines": {
     "node": ">=18.17 <23"
   },
   "scripts": {
-  "start": "node server.js",
+  "start": "node server.cjs",
   "cluster": "NODE_WORKERS=2 node server.js",
   "https": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:NDN_HTTPS='1'; if (-not $env:HTTPS_PORT) { $env:HTTPS_PORT='8788' }; node server.js\""
   },
