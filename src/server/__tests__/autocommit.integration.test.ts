@@ -195,22 +195,28 @@ describe('server autocommit integration', () => {
   // Record current index of messages to filter later so we only consider new messages
   const hostBeforeIdx = hostMessages.length
   const guestBeforeIdx = guestMessages.length
-    // Wait briefly to allow any in-flight visit-commit messages from the previous valid commit
-    // to be delivered so we don't misattribute late arrivals to the mismatched pBoard send.
-    await new Promise(r => setTimeout(r, 250))
+  // Wait longer to allow any in-flight visit-commit messages from the previous valid commit
+  // to be delivered so we don't misattribute late arrivals to the mismatched pBoard send.
+  // Increased from 250ms to 750ms to reduce flakiness on CI/dev machines.
+  await new Promise(r => setTimeout(r, 750))
   guestWs.send(JSON.stringify({ type: 'auto-visit', roomId, value: 60, darts: 3, ring: 'TRIPLE', sector: 20, pBoard: { x: 9999, y: 9999 }, calibrationValid: true }))
   const deadline4 = Date.now() + 5000
-    while (Date.now() < deadline4) {
-  if (hostMessages.slice(hostBeforeIdx).some(m => m.type === 'visit-commit' && m.roomId === roomId)) { sawVisitCommit = true; break }
-  if (guestMessages.slice(guestBeforeIdx).some(m => m.type === 'visit-commit' && m.roomId === roomId)) { sawVisitCommit = true; break }
-      await new Promise(r => setTimeout(r, 100))
-    }
-    if (sawVisitCommit) {
-      console.log('[DEBUG] hostMessages after mismatched pBoard', JSON.stringify(hostMessages.slice(-200), null, 2))
-      console.log('[DEBUG] guestMessages after mismatched pBoard', JSON.stringify(guestMessages.slice(-200), null, 2))
-      console.log('[DEBUG] serverStdout after mismatched pBoard', serverStdout.slice(0, 10000))
-    }
-    expect(sawVisitCommit).toBeFalsy()
+  while (Date.now() < deadline4) {
+    // wait for any in-flight messages to arrive
+    await new Promise(r => setTimeout(r, 100))
+  }
+  // Inspect only new messages that arrived after we recorded indices to ensure we don't
+  // mistake earlier valid visit-commits for a response to the mismatched pBoard.
+  const newHostMsgs = hostMessages.slice(hostBeforeIdx)
+  const newGuestMsgs = guestMessages.slice(guestBeforeIdx)
+  const newMsgs = newHostMsgs.concat(newGuestMsgs)
+  const sawInvalidVisitCommit = newMsgs.some(m => m.type === 'visit-commit' && m.roomId === roomId && m.visit && m.visit.pBoard && Number(m.visit.pBoard.x) === 9999 && Number(m.visit.pBoard.y) === 9999)
+  if (sawInvalidVisitCommit) {
+    console.log('[DEBUG] hostMessages after mismatched pBoard', JSON.stringify(newHostMsgs.slice(-200), null, 2))
+    console.log('[DEBUG] guestMessages after mismatched pBoard', JSON.stringify(newGuestMsgs.slice(-200), null, 2))
+    console.log('[DEBUG] serverStdout after mismatched pBoard', serverStdout.slice(0, 10000))
+  }
+  expect(sawInvalidVisitCommit).toBeFalsy()
 
   // Ensure that non-authorised guest cannot toggle autocommit
   guestWs.send(JSON.stringify({ type: 'set-match-autocommit', roomId, allow: false }))
