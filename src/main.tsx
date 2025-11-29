@@ -1,6 +1,9 @@
 import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
+// Mobile-only overrides loaded after the main stylesheet to strongly
+// restyle the app on small screens without touching desktop styles.
+import "./styles/mobile-overrides.css";
 import App from "./App";
 import ResetPassword from "./components/ResetPassword";
 import { WSProvider } from "./components/WSProvider";

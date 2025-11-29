@@ -1,0 +1,99 @@
+/* Mobile-only visual overhaul (max-width: 640px)
+   This file contains strong overrides to make the site clean, legible
+   and simple on small screens. It is intentionally scoped to small
+   viewports and loaded after the main stylesheet.
+*/
+
+@media (max-width: 640px) {
+  /* Simplify background to reduce visual noise on phones */
+  body {
+    background: linear-gradient(180deg, #0b0e16 0%, #1b1230 100%);
+    color: #f8fafc;
+    font-size: 16px; /* base readable size */
+    line-height: 1.35;
+  }
+
+  /* Header becomes compact and fixed */
+  .header {
+    position: fixed;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: linear-gradient(90deg, rgba(95,76,190,0.95), rgba(143,67,238,0.95));
+  }
+  .logo { font-size: 1.25rem; font-weight: 800; }
+
+  /* Hide large sidebar and surface as bottom nav when needed */
+  .sidebar { display: none !important; }
+
+  /* Convert main layout to a single-column flow */
+  .container, .app-shell, .main-content, .ndn-game-shell { padding: 0.5rem !important; }
+  .ndn-game-shell { margin-top: 64px; /* account for fixed header */ }
+
+  /* Cards should be edge-to-edge with comfortable padding */
+  .card, .glass {
+    border-radius: 12px !important;
+    margin: 0.5rem 0 !important;
+    padding: 14px !important;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.45) !important;
+    background: rgba(10,12,20,0.6) !important;
+    border: 1px solid rgba(143,67,238,0.12) !important;
+  }
+
+  /* Make buttons full width where appropriate and bigger tap targets */
+  .btn { width: 100% !important; padding: 14px 16px !important; font-size: 16px !important; border-radius: 10px !important; }
+  .btn-inline { width: auto !important; }
+
+  /* Forms and inputs comfortable on mobile */
+  .input, input, textarea, select { font-size: 16px !important; padding: 12px 14px !important; border-radius: 10px !important; }
+
+  /* Camera and video panes should be shorter and responsive */
+  .ndn-camera-tall { min-height: 200px !important; }
+  .camera-fullwidth-card { padding: 0 !important; border-radius: 10px !important; }
+
+  /* Game controls stacked vertically and spaced */
+  .match-controls, .match-actions, .controls-row { display: flex !important; flex-direction: column !important; gap: 10px !important; }
+
+  /* Reduce footer/panels and make floating controls reachable */
+  .floating-controls { bottom: 14px !important; left: 10px !important; right: 10px !important; width: auto !important; }
+
+  /* Promote important text and increase contrast for readability */
+  h1, h2, h3 { font-weight: 700; color: #fff; }
+  p, label { color: #e6e6f0; }
+
+  /* Compact modals to fill the viewport on mobile */
+  .ndn-modal-full, .modal { border-radius: 8px !important; padding: 12px !important; }
+
+  /* Make nav tabs easier to tap (bottom tab bar) */
+  .tabs, .tab-list { display: flex !important; gap: 6px !important; justify-content: space-between; }
+  .tab { flex: 1 1 auto !important; text-align: center !important; padding: 10px 6px !important; font-weight: 700 !important; border-radius: 8px !important; }
+
+  /* Hide decorative background animation on mobile for perf */
+  .background-animated { display: none !important; }
+
+  /* Improve scoreboard readability: single-column items */
+  .scoreboard, .stats-panel { display: block !important; width: 100% !important; }
+  .scoreboard .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.02); }
+
+  /* Footer spacing to avoid UI overlap */
+  .ndn-shell-body { padding-bottom: 96px !important; }
+
+  /* Reduce visual noise in lists */
+  .list-item { padding: 12px 8px !important; border-radius: 8px !important; background: rgba(255,255,255,0.02) !important; }
+
+  /* Ensure overlays and popovers are full width and readable */
+  .popover, .dropdown { left: 8px !important; right: 8px !important; width: auto !important; }
+
+  /* Accessibility: increase tap target for small icons */
+  .icon-btn { padding: 10px !important; border-radius: 8px !important; }
+
+  /* Minor typography tuning */
+  .logo, .brand { letter-spacing: 0.02em; }
+
+}
