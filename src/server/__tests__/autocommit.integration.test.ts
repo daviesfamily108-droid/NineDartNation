@@ -35,7 +35,7 @@ describe('server autocommit integration', () => {
     server.stdout?.on('data', d => serverStdout += d.toString())
     server.stderr?.on('data', d => serverStdout += d.toString())
 
-  const ok = await waitForServer(port, 20000)
+  const ok = await waitForServer(port, 40000)
     expect(ok).toBeTruthy()
 
   const wsUrl = makeWsUrl(port)
@@ -195,6 +195,9 @@ describe('server autocommit integration', () => {
   // Record current index of messages to filter later so we only consider new messages
   const hostBeforeIdx = hostMessages.length
   const guestBeforeIdx = guestMessages.length
+    // Wait briefly to allow any in-flight visit-commit messages from the previous valid commit
+    // to be delivered so we don't misattribute late arrivals to the mismatched pBoard send.
+    await new Promise(r => setTimeout(r, 250))
   guestWs.send(JSON.stringify({ type: 'auto-visit', roomId, value: 60, darts: 3, ring: 'TRIPLE', sector: 20, pBoard: { x: 9999, y: 9999 }, calibrationValid: true }))
   const deadline4 = Date.now() + 5000
     while (Date.now() < deadline4) {

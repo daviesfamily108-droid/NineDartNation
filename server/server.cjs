@@ -5,6 +5,8 @@
 
 const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
+// Enable verbose debug logging when NDN_DEBUG=1 (used by integration tests)
+const DEBUG = String(process.env.NDN_DEBUG || '0') === '1' || String(process.env.NDN_DEBUG || '').toLowerCase() === 'true'
 const upstashRestUrl = process.env.UPSTASH_REDIS_REST_URL;
 const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 const { WebSocketServer } = require('ws');
@@ -164,6 +166,33 @@ function getOwnerFromReq(req) {
     if ((adm.email || '').toLowerCase() === OWNER_EMAIL) return adm
     return null
   } catch { return null }
+}
+
+// Board radii and scoring helper (copied from authoritative server implementation)
+const BoardRadii = {
+  bullInner: 6.35,
+  bullOuter: 15.9,
+  trebleInner: 99,
+  trebleOuter: 107,
+  doubleInner: 162,
+  doubleOuter: 170,
+};
+
+const SectorOrder = [20,1,18,4,13,6,10,15,2,17,3,19,7,16,8,11,14,9,12,5];
+
+function scoreAtBoardPoint(p) {
+  const r = Math.hypot(p.x, p.y);
+  let ang = Math.atan2(p.y, p.x);
+  let deg = (ang * 180) / Math.PI;
+  deg = (deg + 360 + 90) % 360; // 0 at top
+  const sector = SectorOrder[Math.floor(deg / 18)];
+  if (r <= BoardRadii.bullInner) return { base: 50, ring: 'INNER_BULL', sector: 25, mult: 2 };
+  if (r <= BoardRadii.bullOuter) return { base: 25, ring: 'BULL', sector: 25, mult: 1 };
+  if (r >= BoardRadii.doubleOuter) return { base: 0, ring: 'MISS', sector: null, mult: 0 };
+  if (r >= BoardRadii.doubleInner) return { base: sector * 2, ring: 'DOUBLE', sector: sector, mult: 2 };
+  if (r >= BoardRadii.trebleOuter) return { base: sector, ring: 'SINGLE', sector: sector, mult: 1 };
+  if (r >= BoardRadii.trebleInner) return { base: sector * 3, ring: 'TRIPLE', sector: sector, mult: 3 };
+  return { base: sector, ring: 'SINGLE', sector: sector, mult: 1 };
 }
 
 async function listHelpRequests() {
@@ -2929,6 +2958,49 @@ wss.on('connection', (ws, req) => {
         for (const client of wss.clients) { if (client.readyState === 1) client.send(lobbyPayload) }
       } else if (data.type === 'list-matches') {
         ws.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
+      } else if (data.type === 'auto-visit') {
+        // Minimal server-side autocommit handling for packaged runtime used in tests
+        // Provide conservative validation so tests relying on pBoard mismatch (e.g. 9999,9999)
+        // are rejected rather than accepted by this simplified runtime.
+        try {
+          const roomId = String(data.roomId || '')
+          const value = Number(data.value || 0)
+          const darts = Number(data.darts || 3)
+          const ring = (typeof data.ring === 'string') ? data.ring : null
+          const sector = (typeof data.sector === 'number' || typeof data.sector === 'string') ? Number(data.sector) : null
+          const pBoard = data.pBoard && typeof data.pBoard === 'object' ? { x: Number(data.pBoard.x || 0), y: Number(data.pBoard.y || 0) } : null
+          const calibrationValid = !!data.calibrationValid
+          if (!roomId) return
+          // Require calibration validity and a pBoard payload for server autocommit
+          if (!calibrationValid) { try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'Client reports invalid calibration - autocommit rejected' })) } catch {} ; return }
+          if (!pBoard) { try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'pBoard required for server autocommit' })) } catch {} ; return }
+          // Validate pBoard coordinates against expected board scoring (approximation from authoritative server)
+          try {
+            const srvScore = scoreAtBoardPoint(pBoard)
+            const allowedVal = Number(srvScore.base || 0)
+            if (allowedVal !== value || (ring && srvScore.ring !== ring) || (sector && Number(srvScore.sector) !== Number(sector))) {
+              try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_PAYLOAD', message: 'pBoard does not match claimed score' })) } catch {}
+              return
+            }
+            const rad = Math.hypot(Number(pBoard.x || 0), Number(pBoard.y || 0))
+            if (rad > (BoardRadii.doubleOuter + 5)) {
+              try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_PAYLOAD', message: 'pBoard outside board bounds' })) } catch {}
+              return
+            }
+          } catch (e) {
+            try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_PAYLOAD', message: 'pBoard validation failed' })) } catch {}
+            return
+          }
+          // Ensure sender is in the room
+          if (ws._roomId !== roomId) { try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'Not in room' })) } catch {} ; return }
+          const visit = { by: ws._id, value, darts, ring, sector, ts: Date.now(), pBoard }
+          try { console.log('[AUTO_VISIT_BROADCAST] room=%s visitBy=%s visit=%s', roomId, ws._id, JSON.stringify(visit).slice(0,200)) } catch {}
+          try {
+            const members = Array.from((rooms.get(roomId) || [])).map(c => ({ id: c && c._id, readyState: c && c.readyState }))
+            try { console.log('[AUTO_VISIT_ROOM_MEMBERS] room=%s members=%s', roomId, JSON.stringify(members)) } catch {}
+          } catch (e) { try { console.warn('[AUTO_VISIT] failed to list room members %s', e && e.message) } catch {} }
+          try { broadcastToRoom(roomId, { type: 'visit-commit', roomId, visit }) } catch (e) { try { console.warn('[AUTO_VISIT] broadcast failed %s', e && e.message) } catch {} }
+        } catch (e) { try { console.warn('[AUTO_VISIT] handler error %s', e && e.message) } catch {} }
       }
     } catch (e) {
       try { errorsTotal.inc({ scope: 'ws_message' }) } catch {}

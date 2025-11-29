@@ -838,5 +838,101 @@
     "game": "X01",
     "requireCalibration": false,
     "createdAt": 1764431529643
+  },
+  {
+    "id": "zAwfAvyz7G",
+    "creatorId": "_8qSsC_G",
+    "creatorName": "Alice-dls18cx",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764432055705
+  },
+  {
+    "id": "e0-ZPJvUXu",
+    "creatorId": "913_uUr4",
+    "creatorName": "Alice-n969lvs",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764433041603
+  },
+  {
+    "id": "IzHH4mURkp",
+    "creatorId": "nXKJ1xtP",
+    "creatorName": "Alice-j5px1u2",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764433186891
+  },
+  {
+    "id": "qMNZqXUUaq",
+    "creatorId": "6H4bWMZv",
+    "creatorName": "Alice-xfhadif",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764433451879
+  },
+  {
+    "id": "bLE4iAWchO",
+    "creatorId": "8xOi8DD9",
+    "creatorName": "Alice-myx7j1w",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764433539004
+  },
+  {
+    "id": "sGwyE3Fjj5",
+    "creatorId": "KZCkuzzR",
+    "creatorName": "Alice-0oc0d7k",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764433733777
+  },
+  {
+    "id": "ylg1UHqBrg",
+    "creatorId": "0O4l0DJ6",
+    "creatorName": "Alice-w80hp0n",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764434609130
+  },
+  {
+    "id": "0CYpdX2ypG",
+    "creatorId": "SRwTsoKy",
+    "creatorName": "Alice-1z1mxef",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1764434647316
   }
 ]
