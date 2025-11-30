@@ -441,6 +441,18 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     set({ preferredCameraId: id, preferredCameraLabel: label });
   },
   setPreferredCameraLocked: (v) => {
+    // Respect a temporary user-interaction guard which prevents automatic
+    // re-locking while the user is actively interacting with the picker.
+    try {
+      const state = get();
+      if (state.ignorePreferredCameraSync && v === true) {
+        // Ignore attempts to auto-lock while the user has signalled they're
+        // interacting with the picker. This prevents the lock "bouncing"
+        // back on immediately after a user unlocks and selects a new camera.
+        console.debug('[USERSETTINGS] Ignoring auto-lock due to ignorePreferredCameraSync');
+        return;
+      }
+    } catch {}
     save({ preferredCameraLocked: v });
     set({ preferredCameraLocked: v });
   },

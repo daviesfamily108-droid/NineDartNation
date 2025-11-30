@@ -2759,7 +2759,17 @@ export default function Calibrator() {
           <button
             className="btn btn--ghost px-2 py-0.5 text-xs ml-2"
             onClick={() => {
+              try {
+                // Mark that user is interacting so automatic flows don't immediately
+                // re-lock the selection. This prevents the lock button from
+                // "bouncing" back to locked when external code also sets it.
+                setIgnorePreferredCameraSync(true);
+              } catch {}
               setPreferredCameraLocked(!preferredCameraLocked);
+              // Clear the interaction guard shortly after so normal sync resumes
+              setTimeout(() => {
+                try { setIgnorePreferredCameraSync(false); } catch {}
+              }, 1500);
             }}
           >
             {preferredCameraLocked ? "Unlock" : "Lock"}
@@ -2814,10 +2824,16 @@ export default function Calibrator() {
             onPointerDown={(e) => { try { (e as any).stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true);} ignoreCloseUntilRef.current = Date.now() + 350; } catch (err) {} }}
             onMouseDown={(e) => { try { e.stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true);} ignoreCloseUntilRef.current = Date.now() + 350; } catch (err) {} }}
             onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
-            className="input col-span-2"
+            className="input col-span-2 dropdown-themed"
             value={preferredCameraId || "auto"}
             onChange={(e) => {
               const val = e.target.value;
+              // While user is changing selection, prevent auto-locking behavior
+              // from overriding their choice. Keep an ignore window so the
+              // dropdown close handler doesn't immediately dismiss the UI.
+              try { setIgnorePreferredCameraSync(true); } catch {}
+              ignoreCloseUntilRef.current = Date.now() + 800;
+              setTimeout(() => { try { setIgnorePreferredCameraSync(false); } catch {} }, 1500);
               if (DROPDOWN_DEBUG)
                 console.debug(
                   "[DevicePicker] select onChange",

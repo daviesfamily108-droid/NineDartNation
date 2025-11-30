@@ -73,3 +73,17 @@
   color: var(--text);
   border: 1px solid rgba(255,255,255,0.12);
 }
+
+/* Themed dropdown used for camera selection to match site dropdowns but
+   ensure the internal option text uses black for readability (per request). */
+.dropdown-themed {
+  background-color: var(--surface);
+  color: #000000; /* black text inside the control */
+  border: 1px solid rgba(0,0,0,0.12);
+}
+.dropdown-themed option {
+  /* many browsers limit styling of <option>, but set a white background and
+     black text so browsers that support it will match the request. */
+  background: #ffffff;
+  color: #000000;
+}
