@@ -179,6 +179,20 @@ body {
   animation: gradientMove 8s ease-in-out infinite alternate;
 }
 
+/* Overlay behavior: make overlays non-blocking by default so they don't
+   intercept clicks intended for global chrome (header, calibration pills).
+   Use `.ndn-overlay` for the overlay container and `.ndn-overlay-interactive`
+   on any interactive child that should receive pointer events (buttons,
+   draggable headers, canvas, etc.). This is the preferred pattern for
+   floating components like PhoneCameraOverlay.
+*/
+.ndn-overlay {
+  pointer-events: none;
+}
+.ndn-overlay-interactive {
+  pointer-events: auto;
+}
+
 @keyframes gradientMove {
   0% { filter: blur(0px); }
   100% { filter: blur(8px); }
