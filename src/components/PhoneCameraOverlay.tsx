@@ -240,7 +240,9 @@ export default function PhoneCameraOverlay() {
   return (
     <div
       ref={containerRef}
-      className="fixed z-40 bg-black rounded-lg shadow-xl overflow-hidden border border-blue-500"
+      // Prevent the floating preview from blocking clicks by default.
+      // Enable pointer events only on the interactive children below.
+      className="fixed z-40 bg-black rounded-lg shadow-xl overflow-hidden border border-blue-500 pointer-events-none"
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
@@ -255,7 +257,8 @@ export default function PhoneCameraOverlay() {
     >
       {/* Header - draggable */}
       <div
-        className="phone-camera-header bg-gradient-to-r from-blue-600 to-blue-700 px-2 py-1 flex items-center justify-between cursor-grab active:cursor-grabbing select-none"
+        // Header must accept pointer events so users can drag / open controls
+        className="phone-camera-header bg-gradient-to-r from-blue-600 to-blue-700 px-2 py-1 flex items-center justify-between cursor-grab active:cursor-grabbing select-none pointer-events-auto"
         onMouseDown={handleMouseDown}
       >
         <div className="flex items-center gap-2">
@@ -265,14 +268,14 @@ export default function PhoneCameraOverlay() {
         <div className="flex items-center gap-1">
           <button
             onClick={() => setShowControls(!showControls)}
-            className="text-white hover:bg-blue-800 px-1.5 py-0.5 rounded text-xs font-bold transition-colors"
+            className="text-white hover:bg-blue-800 px-1.5 py-0.5 rounded text-xs font-bold transition-colors pointer-events-auto"
             title="Show controls"
           >
             ⚙
           </button>
           <button
             onClick={() => setMinimized(!minimized)}
-            className="text-white hover:bg-blue-800 px-2 py-0.5 rounded text-xs font-bold transition-colors"
+            className="text-white hover:bg-blue-800 px-2 py-0.5 rounded text-xs font-bold transition-colors pointer-events-auto"
             title={minimized ? "Expand" : "Minimize"}
           >
             {minimized ? "▶" : "▼"}
@@ -282,7 +285,8 @@ export default function PhoneCameraOverlay() {
 
       {/* Control buttons - shown when showControls is true and not minimized */}
       {!minimized && showControls && (
-        <div className="bg-slate-800 border-t border-blue-500 px-2 py-2 flex gap-1">
+        // Controls must accept pointer events
+        <div className="bg-slate-800 border-t border-blue-500 px-2 py-2 flex gap-1 pointer-events-auto">
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
@@ -313,7 +317,8 @@ export default function PhoneCameraOverlay() {
       {/** Canvas content - hidden when minimized */}
       {!minimized && (
         <div
-          className="bg-black w-full relative overflow-hidden"
+          // Canvas must accept pointer events so users can interact with the preview if needed
+          className="bg-black w-full relative overflow-hidden pointer-events-auto"
           style={{ aspectRatio: "4/3" }}
         >
           <canvas
