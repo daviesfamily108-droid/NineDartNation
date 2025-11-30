@@ -2794,7 +2794,15 @@ export default function Calibrator() {
               try {
                 if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "true";
                 setDropdownOpen(true);
-                ignoreCloseUntilRef.current = Date.now() + 350; // give a short ignore window
+                // Give a slightly longer ignore window while native select UI
+                // is opening so document-level handlers don't immediately close it.
+                ignoreCloseUntilRef.current = Date.now() + 800;
+                // Temporarily suspend the document handler entirely while the
+                // user is interacting with the native select control.
+                suspendDocHandlerRef.current = true;
+                setTimeout(() => {
+                  try { suspendDocHandlerRef.current = false; } catch {}
+                }, 900);
               } catch (e) {}
               try { enumerate(); } catch {}
             }}
@@ -2821,8 +2829,8 @@ export default function Calibrator() {
                 }
               } catch (e) {}
             }}
-            onPointerDown={(e) => { try { (e as any).stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true);} ignoreCloseUntilRef.current = Date.now() + 350; } catch (err) {} }}
-            onMouseDown={(e) => { try { e.stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true);} ignoreCloseUntilRef.current = Date.now() + 350; } catch (err) {} }}
+            onPointerDown={(e) => { try { (e as any).stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true);} ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; setTimeout(() => { try { suspendDocHandlerRef.current = false; } catch {} }, 900); } catch (err) {} }}
+            onMouseDown={(e) => { try { e.stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true);} ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; setTimeout(() => { try { suspendDocHandlerRef.current = false; } catch {} }, 900); } catch (err) {} }}
             onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
             className="input col-span-2 dropdown-themed"
             value={preferredCameraId || "auto"}
@@ -2832,8 +2840,12 @@ export default function Calibrator() {
               // from overriding their choice. Keep an ignore window so the
               // dropdown close handler doesn't immediately dismiss the UI.
               try { setIgnorePreferredCameraSync(true); } catch {}
-              ignoreCloseUntilRef.current = Date.now() + 800;
-              setTimeout(() => { try { setIgnorePreferredCameraSync(false); } catch {} }, 1500);
+              // Keep a short ignore window and suspend doc handler while the
+              // native select interaction completes. We'll explicitly close
+              // the dropdown after handling the selection.
+              ignoreCloseUntilRef.current = Date.now() + 1200;
+              suspendDocHandlerRef.current = true;
+              setTimeout(() => { try { setIgnorePreferredCameraSync(false); suspendDocHandlerRef.current = false; } catch {} }, 1500);
               if (DROPDOWN_DEBUG)
                 console.debug(
                   "[DevicePicker] select onChange",
@@ -2866,6 +2878,15 @@ export default function Calibrator() {
                   } catch {}
                 }
               }
+              // Close the visual dropdown after the user made a selection.
+              try {
+                setTimeout(() => {
+                  try {
+                    setDropdownOpen(false);
+                    if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "false";
+                  } catch {}
+                }, 120);
+              } catch {}
             }}
           >
             <option value="auto">Auto (browser default)</option>
