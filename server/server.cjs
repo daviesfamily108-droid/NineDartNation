@@ -2958,12 +2958,29 @@ wss.on('connection', (ws, req) => {
         for (const client of wss.clients) { if (client.readyState === 1) client.send(lobbyPayload) }
       } else if (data.type === 'list-matches') {
         ws.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
+      } else if (data.type === 'set-match-autocommit') {
+        // Host or admin may toggle server-side autocommit allowed flag for a room
+        const roomId = String(data.roomId || '')
+        const allow = !!data.allow
+        if (!roomId) return
+        const creatorId = roomCreator.get(roomId)
+        const isCreator = creatorId && String(creatorId) === String(ws._id)
+        const isAdmin = ws._email && adminEmails && adminEmails.has && adminEmails.has(String(ws._email).toLowerCase())
+        if (!isCreator && !isAdmin) {
+          try { ws.send(JSON.stringify({ type: 'error', code: 'FORBIDDEN', message: 'Only match creator or admin can set autocommit' })) } catch {}
+          return
+        }
+        try { roomAutocommitAllowed.set(roomId, !!allow) } catch (e) {}
+        // Notify all participants in the room of the updated setting
+        broadcastToRoom(roomId, { type: 'match-autocommit-updated', roomId, allow })
+        // Also notify the sender directly (ack) so tests can assert server processed toggle.
+        try { ws.send(JSON.stringify({ type: 'match-autocommit-updated', roomId, allow })) } catch {}
       } else if (data.type === 'auto-visit') {
         // Minimal server-side autocommit handling for packaged runtime used in tests
         // Provide conservative validation so tests relying on pBoard mismatch (e.g. 9999,9999)
         // are rejected rather than accepted by this simplified runtime.
         try {
-          const roomId = String(data.roomId || '')
+            const roomId = String(data.roomId || '')
           const value = Number(data.value || 0)
           const darts = Number(data.darts || 3)
           const ring = (typeof data.ring === 'string') ? data.ring : null
@@ -2971,9 +2988,19 @@ wss.on('connection', (ws, req) => {
           const pBoard = data.pBoard && typeof data.pBoard === 'object' ? { x: Number(data.pBoard.x || 0), y: Number(data.pBoard.y || 0) } : null
           const calibrationValid = !!data.calibrationValid
           if (!roomId) return
-          // Require calibration validity and a pBoard payload for server autocommit
+            // Require calibration validity and a pBoard payload for server autocommit
           if (!calibrationValid) { try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'Client reports invalid calibration - autocommit rejected' })) } catch {} ; return }
           if (!pBoard) { try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'pBoard required for server autocommit' })) } catch {} ; return }
+            // Enforce autocommit allowed flag (or creator/admin override)
+            try {
+              const isCreator = String(roomCreator.get(roomId)) === String(ws._id)
+              const isAdmin = !!(ws._email && adminEmails && adminEmails.has && adminEmails.has(String(ws._email).toLowerCase()))
+              const allowed = (roomAutocommitAllowed.get(roomId) === true) || isCreator || isAdmin
+              if (!allowed) { try { ws.send(JSON.stringify({ type: 'error', code: 'FORBIDDEN', message: 'Autocommit not allowed for this room' })) } catch {} ; return }
+            } catch (e) {
+              // If something goes wrong determining allowed, reject conservatively
+              try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'Autocommit validation failed' })) } catch {} ; return
+            }
           // Validate pBoard coordinates against expected board scoring (approximation from authoritative server)
           try {
             const srvScore = scoreAtBoardPoint(pBoard)
@@ -2982,8 +3009,13 @@ wss.on('connection', (ws, req) => {
               try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_PAYLOAD', message: 'pBoard does not match claimed score' })) } catch {}
               return
             }
-            const rad = Math.hypot(Number(pBoard.x || 0), Number(pBoard.y || 0))
-            if (rad > (BoardRadii.doubleOuter + 5)) {
+              const rad = Math.hypot(Number(pBoard.x || 0), Number(pBoard.y || 0))
+              // Reject obviously out-of-bounds coordinates aggressively
+              if (Math.abs(pBoard.x) > 10000 || Math.abs(pBoard.y) > 10000) {
+                try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_PAYLOAD', message: 'pBoard outside plausible bounds' })) } catch {}
+                return
+              }
+              if (rad > (BoardRadii.doubleOuter + 5)) {
               try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_PAYLOAD', message: 'pBoard outside board bounds' })) } catch {}
               return
             }
@@ -2993,7 +3025,24 @@ wss.on('connection', (ws, req) => {
           }
           // Ensure sender is in the room
           if (ws._roomId !== roomId) { try { ws.send(JSON.stringify({ type: 'error', code: 'BAD_REQUEST', message: 'Not in room' })) } catch {} ; return }
-          const visit = { by: ws._id, value, darts, ring, sector, ts: Date.now(), pBoard }
+            // Deduplicate near-duplicate auto-visits from the same player in short succession
+            try {
+              // store last visit signature+timestamp per room/player to avoid broadcasting duplicates
+              if (!global._lastAutoVisit) global._lastAutoVisit = new Map();
+              const roomMap = global._lastAutoVisit.get(roomId) || new Map();
+              const lastRec = roomMap.get(ws._id) || { ts: 0, sig: null };
+              const nowTs = Date.now();
+              const sig = `${value}:${ring || ''}:${sector || ''}:${Number(pBoard.x||0)}:${Number(pBoard.y||0)}`;
+              // If identical signature and within 250ms, ignore as a duplicate
+              if (lastRec.sig === sig && (nowTs - lastRec.ts) < 250) {
+                try { ws.send(JSON.stringify({ type: 'error', code: 'TOO_SOON', message: 'Duplicate auto-visit ignored' })) } catch {}
+                return
+              }
+              roomMap.set(ws._id, { ts: nowTs, sig });
+              global._lastAutoVisit.set(roomId, roomMap);
+            } catch (e) {}
+
+            const visit = { by: ws._id, value, darts, ring, sector, ts: Date.now(), pBoard }
           try { console.log('[AUTO_VISIT_BROADCAST] room=%s visitBy=%s visit=%s', roomId, ws._id, JSON.stringify(visit).slice(0,200)) } catch {}
           try {
             const members = Array.from((rooms.get(roomId) || [])).map(c => ({ id: c && c._id, readyState: c && c.readyState }))
@@ -3123,6 +3172,10 @@ function persistMatchesToDisk() {
 }
 
 loadMatchesFromDisk()
+// Per-room server-side autocommit permission (roomId -> boolean)
+const roomAutocommitAllowed = new Map();
+// Track room creator id so allow host-only operations
+const roomCreator = new Map();
 const clients = new Map(); // wsId -> ws
 // WebRTC camera pairing sessions (code -> { code, desktopId, phoneId, ts })
 const camSessions = {

@@ -17,6 +17,7 @@ import { getRollingAvg, getAllTimeAvg } from "./store/profileStats";
 import { useUserSettings } from "./store/userSettings";
 import { useCalibration } from "./store/calibration";
 import "./styles/premium.css";
+import "./styles/themes.css";
 const OnlinePlay = React.lazy(() => import("./components/OnlinePlay.clean"));
 const StatsPanel = React.lazy(() => import("./components/StatsPanel"));
 const Tournaments = React.lazy(() => import("./components/Tournaments"));
@@ -31,6 +32,8 @@ import CameraStatusBadge from "./components/CameraStatusBadge";
 import InstallPicker from "./components/InstallPicker";
 import AddToHomeButton from "./components/AddToHomeButton";
 import Footer from "./components/Footer";
+import AutoPauseManager from "./components/AutoPauseManager";
+import MatchPage from "./components/MatchPage";
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -104,6 +107,19 @@ export default function App() {
         });
     }
   }, [MINIMAL_UI, user]);
+
+  // If URL contains ?match=1 render a minimal match-only page (allows opening dedicated match windows)
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("match") === "1") {
+      return (
+        <ThemeProvider>
+          <AutoPauseManager />
+          <MatchPage />
+        </ThemeProvider>
+      );
+    }
+  } catch {}
 
   useEffect(() => {
     const onLogout = () => {

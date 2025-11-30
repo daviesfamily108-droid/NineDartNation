@@ -7,6 +7,7 @@ import { useCalibration } from "../store/calibration";
 import GameCalibrationStatus from "./GameCalibrationStatus";
 import CameraTile from "./CameraTile";
 import CameraView from "./CameraView";
+import { broadcastMessage } from "../utils/broadcast";
 import HeatMap from "./HeatMap";
 import { getUserCurrency, formatPriceInCurrency } from "../utils/config";
 import { bumpGameMode } from "../store/profileStats";
@@ -78,6 +79,8 @@ import MatchStartShowcase from "./ui/MatchStartShowcase";
 import { useAudit } from "../store/audit";
 import ResizablePanel from "./ui/ResizablePanel";
 import GameHeaderBar from "./ui/GameHeaderBar";
+import PauseQuitModal from "./ui/PauseQuitModal";
+import { useMatchControl } from "../store/matchControl";
 import GameScoreboard, { type PlayerStats } from "./scoreboards/GameScoreboard";
 import MatchControls from "./MatchControls";
 import { makeOfflineAddVisitAdapter } from "./matchControlAdapters";
@@ -240,6 +243,23 @@ export default function OfflinePlay({ user }: { user: any }) {
   const toast = useToast();
   // New: match popup state
   const [showMatchModal, setShowMatchModal] = useState(false);
+  const [showQuitPause, setShowQuitPause] = useState(false);
+  const setPaused = useMatchControl((s) => s.setPaused);
+  useEffect(() => {
+    const onQuit = () => {
+      setShowMatchModal(false);
+      setInMatch(false);
+      setShowQuitPause(false);
+    };
+    try {
+      window.addEventListener("ndn:match-quit" as any, onQuit as any);
+    } catch {}
+    return () => {
+      try {
+        window.removeEventListener("ndn:match-quit" as any, onQuit as any);
+      } catch {}
+    };
+  }, []);
   // Mirror Online layout defaults when in modern layout, otherwise keep classic feel
   const [maximized, setMaximized] = useState(offlineLayout === "modern");
   const [fitAll, setFitAll] = useState(offlineLayout === "modern");
@@ -2529,10 +2549,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                         </button>
                         <button
                           className="btn bg-rose-600 hover:bg-rose-700 px-3 py-1 text-sm"
-                          onClick={() => {
-                            setShowMatchModal(false);
-                            setInMatch(false);
-                          }}
+                          onClick={() => setShowQuitPause(true)}
                         >
                           Quit
                         </button>
@@ -2540,6 +2557,27 @@ export default function OfflinePlay({ user }: { user: any }) {
                     }
                   />
                 </div>
+                {showQuitPause && (
+                  <PauseQuitModal
+                    onClose={() => setShowQuitPause(false)}
+                    onQuit={() => {
+                      try {
+                        broadcastMessage({ type: "quit" });
+                      } catch {}
+                      setShowMatchModal(false);
+                      setInMatch(false);
+                      setShowQuitPause(false);
+                    }}
+                    onPause={(minutes) => {
+                      const endsAt = Date.now() + minutes * 60 * 1000;
+                      try {
+                        setPaused(true, endsAt);
+                        broadcastMessage({ type: "pause", pauseEndsAt: endsAt, pauseStartedAt: Date.now() });
+                      } catch {}
+                      setShowQuitPause(false);
+                    }}
+                  />
+                )}
                 <div
                   ref={(el) => {
                     (contentRef as any).current = el;

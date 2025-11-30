@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { useAudit } from "./audit";
+import { broadcastMessage } from "../utils/broadcast";
 
 export type ThrowVisit = {
   darts: number;
@@ -189,6 +190,10 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
           finish,
         });
       } catch {}
+      try {
+        // notify other windows a visit occurred
+        broadcastMessage({ type: "visit", score, darts, playerIdx: state.currentPlayerIdx, ts: Date.now() });
+      } catch {}
       return { ...state };
     }),
 
@@ -223,19 +228,28 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
           };
         }
       }
+      try {
+        broadcastMessage({ type: "endLeg", checkoutScore, playerIdx: state.currentPlayerIdx, ts: Date.now() });
+      } catch {}
       return { ...state };
     }),
 
   nextPlayer: () =>
-    set((state) => ({
-      ...state,
-      currentPlayerIdx: (state.currentPlayerIdx + 1) % state.players.length,
-    })),
+    set((state) => {
+      const next = (state.currentPlayerIdx + 1) % state.players.length;
+      try {
+        broadcastMessage({ type: "nextPlayer", currentPlayerIdx: next, ts: Date.now() });
+      } catch {}
+      return { ...state, currentPlayerIdx: next };
+    }),
 
   endGame: () =>
     set((state) => {
       // Only now compute best/worst 3-dart, best 9-dart, best checkout
       for (const p of state.players) updatePlayerEndOfGameStats(p);
+      try {
+        broadcastMessage({ type: "endGame", ts: Date.now() });
+      } catch {}
       return { ...state, inProgress: false };
     }),
 

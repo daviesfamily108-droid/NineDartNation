@@ -1,0 +1,53 @@
+/* Theme tokens (CSS variables). Default theme is neutral; other themes override via [data-theme] on <html>. */
+:root{
+  --bg: #0f172a; /* slate-900 */
+  --surface: #0b1220;
+  --text: #e6eef8;
+  --accent: #06b6d4; /* teal-400 */
+  --muted: #9aa6b2;
+}
+
+[data-theme="halloween"]{
+  --bg: #0b0b0b;
+  --surface: #1b1512;
+  --text: #fff7ed;
+  --accent: #ff6b00; /* orange */
+  --muted: #c9a27a;
+  --decor: url('/public/themes/halloween/bg.png');
+}
+
+[data-theme="easter"]{
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --text: #0f172a;
+  --accent: #fbcfe8; /* pink pastel */
+  --muted: #94a3b8;
+}
+
+[data-theme="summer"]{
+  --bg: #fff7ed;
+  --surface: #fffdf7;
+  --text: #042c2e;
+  --accent: #f59e0b; /* amber */
+  --muted: #7c6b4a;
+}
+
+[data-theme="winter"]{
+  --bg: #0f172a;
+  --surface: #071427;
+  --text: #e6f3ff;
+  --accent: #60a5fa; /* blue-400 */
+  --muted: #9fb7d6;
+}
+
+/* small helper class to apply themed background if provided */
+.theme-bg {
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+/* surface card */
+.surface {
+  background-color: var(--surface);
+  color: var(--text);
+}

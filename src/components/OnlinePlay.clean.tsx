@@ -29,6 +29,23 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     startedShowcasedRef.current = true;
     setShowStartShowcase(true);
   }, [inProgress]);
+
+  // Global quit handler (from CameraView Quit / Pause modal)
+  useEffect(() => {
+    const onQuit = () => {
+      try {
+        useMatch.getState().endGame();
+      } catch (e) {}
+    };
+    try {
+      window.addEventListener("ndn:match-quit" as any, onQuit as any);
+    } catch {}
+    return () => {
+      try {
+        window.removeEventListener("ndn:match-quit" as any, onQuit as any);
+      } catch {}
+    };
+  }, []);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joinMatch, setJoinMatch] = useState<any | null>(null);
   const joinAcceptRef = React.useRef<HTMLButtonElement | null>(null);

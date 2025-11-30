@@ -33,6 +33,11 @@ import { usePendingVisit } from "../store/pendingVisit";
 import { useCameraSession } from "../store/cameraSession";
 import { useMatchControl } from "../store/matchControl";
 import { useAudit } from "../store/audit";
+import PauseQuitModal from "./ui/PauseQuitModal";
+import PauseTimerBadge from "./ui/PauseTimerBadge";
+import { writeMatchSnapshot } from "../utils/matchSync";
+import { broadcastMessage } from "../utils/broadcast";
+import { startForwarding, stopForwarding } from "../utils/cameraHandoff";
 
 // Shared ring type across autoscore/manual flows
 type Ring = "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL";
@@ -184,6 +189,8 @@ export default forwardRef(function CameraView(
 
   // 'matchState' hook: declare early to satisfy hook order and be available for gate checks
   const matchState = useMatch((s) => s);
+  const [showQuitPause, setShowQuitPause] = useState(false);
+  const [forwarding, setForwarding] = useState(false);
   // Gate manual commits in online matches: if any pending entry came from camera and is not calibration-validated, block commit
   const isOnlineMatch = !!(matchState && (matchState as any).roomId);
   const commitBlocked = isOnlineMatch && (pendingEntries as any[]).some((e) => e.meta && e.meta.source === 'camera' && !e.meta.calibrationValid);
@@ -298,6 +305,19 @@ export default forwardRef(function CameraView(
       if (onVisitCommitted) {
         try {
           onVisitCommitted(pending.score, pending.darts, pending.finished);
+          try {
+            // Notify other windows that a visit was committed
+            broadcastMessage({
+              type: "visit",
+              score: pending.score,
+              darts: pending.darts,
+              finished: pending.finished,
+              playerIdx: matchState.currentPlayerIdx,
+              ts: Date.now(),
+            });
+            // Also write a full snapshot so remote windows can fully reconstruct state
+            try { writeMatchSnapshot(); } catch (e) {}
+          } catch (e) {}
   } catch (e) {}
       }
     },
@@ -399,6 +419,36 @@ export default forwardRef(function CameraView(
   useEffect(() => {
     try {
       setVisit(pendingEntries as any, pendingDarts, pendingScore);
+      // Broadcast pending visit so remote windows can visualise per-dart hits in near realtime.
+      try {
+        const msg: any = {
+          type: "pendingVisit",
+          entries: pendingEntries,
+          darts: pendingDarts,
+          total: pendingScore,
+          playerIdx: matchState.currentPlayerIdx,
+          ts: Date.now(),
+        };
+        // attempt to include a small thumbnail of the camera if available (throttled)
+        try {
+          const v = videoRef.current as HTMLVideoElement | null;
+          if (v && v.videoWidth && v.videoHeight) {
+            const w = 320;
+            const h = Math.round((v.videoHeight / v.videoWidth) * w) || 180;
+            const c = document.createElement("canvas");
+            c.width = w;
+            c.height = h;
+            const ctx = c.getContext("2d");
+            if (ctx) {
+              ctx.drawImage(v, 0, 0, w, h);
+              try {
+                msg.frame = c.toDataURL("image/jpeg", 0.45);
+              } catch (e) {}
+            }
+          }
+        } catch (e) {}
+        broadcastMessage(msg);
+      } catch (e) {}
   } catch (e) {}
   }, [pendingEntries, pendingDarts, pendingScore, setVisit]);
   useEffect(
@@ -417,6 +467,17 @@ export default forwardRef(function CameraView(
       dlog("CameraView: callAddVisit", score, darts, meta);
       if (onAddVisit) onAddVisit(score, darts, meta);
       else addVisit(score, darts, meta);
+      try {
+        // Broadcast immediate committed visit to remote windows and update snapshot
+        broadcastMessage({
+          type: "visit",
+          score,
+          darts,
+          playerIdx: matchState.currentPlayerIdx,
+          ts: Date.now(),
+        });
+        try { writeMatchSnapshot(); } catch (e) {}
+      } catch (e) {}
     } catch {
       /* noop */
     }
@@ -2728,6 +2789,86 @@ export default forwardRef(function CameraView(
             >
               Capture Still
             </button>
+            {matchState?.inProgress && (
+              <>
+                <PauseTimerBadge compact />
+                <button
+                  className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
+                  onClick={() => setShowQuitPause(true)}
+                >
+                  Quit / Pause
+                </button>
+                {showQuitPause && (
+                  <PauseQuitModal
+                    onClose={() => setShowQuitPause(false)}
+                    onQuit={() => {
+                      try {
+                        // Emit a global event other parts of the app can listen to
+                        window.dispatchEvent(new CustomEvent("ndn:match-quit"));
+                        // broadcast to other windows
+                        try {
+                          broadcastMessage({ type: "quit" });
+                        } catch {}
+                      } catch (e) {}
+                      setShowQuitPause(false);
+                    }}
+                    onPause={(minutes) => {
+                      const endsAt = Date.now() + minutes * 60 * 1000;
+                      try {
+                        useMatchControl.getState().setPaused(true, endsAt);
+                        try {
+                          broadcastMessage({ type: "pause", pauseEndsAt: endsAt, pauseStartedAt: Date.now() });
+                        } catch {}
+                      } catch (e) {}
+                      setShowQuitPause(false);
+                    }}
+                  />
+                )}
+                <button
+                  className="btn btn--ghost px-3 py-1 text-sm"
+                  onClick={() => {
+                    try {
+                      writeMatchSnapshot();
+                      window.open(`${window.location.origin}${window.location.pathname}?match=1`, "_blank");
+                    } catch (e) {}
+                  }}
+                >
+                  Open match in new window
+                </button>
+                <button
+                  className={`btn btn--ghost px-3 py-1 text-sm ${forwarding ? 'bg-emerald-600 text-black' : ''}`}
+                  onClick={() => {
+                    try {
+                      const v = videoRef.current as HTMLVideoElement | null;
+                      if (!v) return;
+                      if (!forwarding) {
+                        startForwarding(v, 600);
+                        setForwarding(true);
+                      } else {
+                        stopForwarding();
+                        setForwarding(false);
+                      }
+                    } catch (e) {}
+                  }}
+                >
+                  {forwarding ? 'Stop preview forward' : 'Forward preview (PoC)'}
+                </button>
+                <button
+                  className="btn btn--ghost px-3 py-1 text-sm"
+                  onClick={async () => {
+                    try {
+                      if (document.documentElement.requestFullscreen) {
+                        await document.documentElement.requestFullscreen();
+                      } else if ((document as any).body.requestFullscreen) {
+                        await (document as any).body.requestFullscreen();
+                      }
+                    } catch (e) {}
+                  }}
+                >
+                  Open full screen
+                </button>
+              </>
+            )}
             <button
               className="btn bg-slate-700 hover:bg-slate-800"
               disabled={!effectiveStreaming}

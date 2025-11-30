@@ -1,0 +1,6 @@
+Placeholder: Add Halloween background assets here. For the POC, we use CSS-only accents and a subtle orange accent color declared in `src/styles/themes.css` under [data-theme="halloween"].
+Suggested assets:
+- bg.png (1200x800)
+- icon-bat.svg
+- icon-pumpkin.svg
+Place under public/themes/halloween/ and reference via CSS variable --decor if desired.

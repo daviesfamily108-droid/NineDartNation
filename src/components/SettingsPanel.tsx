@@ -17,6 +17,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { useUserSettings } from "../store/userSettings";
+import ThemeToggle from './ThemeToggle';
 import { apiFetch } from "../utils/api";
 
 export default function SettingsPanel({ user }: { user?: any }) {
@@ -1417,6 +1418,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     Reduce motion/animations
                   </label>
                 </div>
+                {/* theme toggle moved to its own section below */}
                 <div className="flex items-center gap-3">
                   <input
                     type="checkbox"
@@ -1429,6 +1431,18 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     Compact header
                   </label>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Theme */}
+          <div className="card">
+            <div className="p-3 rounded-xl border border-yellow-500/30 bg-yellow-500/6">
+              <div className="font-semibold mb-4 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-yellow-400" /> Theme
+              </div>
+              <div>
+                <ThemeToggle />
               </div>
             </div>
           </div>
