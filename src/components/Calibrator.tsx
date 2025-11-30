@@ -2757,6 +2757,7 @@ export default function Calibrator() {
             </div>
           )}
           <button
+            data-testid="cam-lock-toggle"
             className="btn btn--ghost px-2 py-0.5 text-xs ml-2"
             onClick={() => {
               try {
@@ -2790,18 +2791,21 @@ export default function Calibrator() {
         </div>
         <div className="grid grid-cols-3 gap-2 items-center text-sm">
           <select
+            data-testid="cam-select"
             onFocus={() => {
               try {
                 if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "true";
                 setDropdownOpen(true);
+                if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown opened via focus", Date.now());
                 // Give a slightly longer ignore window while native select UI
                 // is opening so document-level handlers don't immediately close it.
                 ignoreCloseUntilRef.current = Date.now() + 800;
                 // Temporarily suspend the document handler entirely while the
                 // user is interacting with the native select control.
                 suspendDocHandlerRef.current = true;
+                if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (focus)", Date.now());
                 setTimeout(() => {
-                  try { suspendDocHandlerRef.current = false; } catch {}
+                  try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (focus)", Date.now()); } catch {}
                 }, 900);
               } catch (e) {}
               try { enumerate(); } catch {}
@@ -2829,8 +2833,8 @@ export default function Calibrator() {
                 }
               } catch (e) {}
             }}
-            onPointerDown={(e) => { try { (e as any).stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true);} ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; setTimeout(() => { try { suspendDocHandlerRef.current = false; } catch {} }, 900); } catch (err) {} }}
-            onMouseDown={(e) => { try { e.stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true);} ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; setTimeout(() => { try { suspendDocHandlerRef.current = false; } catch {} }, 900); } catch (err) {} }}
+            onPointerDown={(e) => { try { (e as any).stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true); if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown opened via pointerdown", Date.now()); } ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (pointerdown)", Date.now()); setTimeout(() => { try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (pointerdown)", Date.now()); } catch {} }, 900); } catch (err) {} }}
+            onMouseDown={(e) => { try { e.stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true); if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown opened via mousedown", Date.now()); } ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (mousedown)", Date.now()); setTimeout(() => { try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (mousedown)", Date.now()); } catch {} }, 900); } catch (err) {} }}
             onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
             className="input col-span-2 dropdown-themed"
             value={preferredCameraId || "auto"}
@@ -2845,7 +2849,8 @@ export default function Calibrator() {
               // the dropdown after handling the selection.
               ignoreCloseUntilRef.current = Date.now() + 1200;
               suspendDocHandlerRef.current = true;
-              setTimeout(() => { try { setIgnorePreferredCameraSync(false); suspendDocHandlerRef.current = false; } catch {} }, 1500);
+              if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (onChange)", Date.now());
+              setTimeout(() => { try { setIgnorePreferredCameraSync(false); suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (onChange)", Date.now()); } catch {} }, 1500);
               if (DROPDOWN_DEBUG)
                 console.debug(
                   "[DevicePicker] select onChange",
@@ -2883,6 +2888,7 @@ export default function Calibrator() {
                 setTimeout(() => {
                   try {
                     setDropdownOpen(false);
+                    if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown closed after selection", Date.now());
                     if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "false";
                   } catch {}
                 }, 120);
