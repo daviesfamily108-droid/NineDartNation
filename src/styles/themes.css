@@ -32,12 +32,14 @@
   --muted: #7c6b4a;
 }
 
-[data-theme="winter"]{
-  --bg: #0f172a;
-  --surface: #071427;
-  --text: #e6f3ff;
-  --accent: #60a5fa; /* blue-400 */
+[data-theme="christmas"]{
+  /* Christmas theme: warmer festive accent (red) with deep evergreen surface */
+  --bg: #071427; /* deep night */
+  --surface: #071a12; /* deep evergreen */
+  --text: #f7f7f9;
+  --accent: #ef4444; /* red-500 (Christmas) */
   --muted: #9fb7d6;
+  --decor: none;
 }
 
 /* small helper class to apply themed background if provided */
@@ -50,4 +52,24 @@
 .surface {
   background-color: var(--surface);
   color: var(--text);
+}
+
+/* Pill utilities to provide filled/ghost variations across the app */
+.pill {
+  padding: 0.125rem 0.5rem; /* px-2 py-0.5 */
+  border-radius: 9999px;
+  font-size: 0.75rem; /* text-xs */
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.pill--filled {
+  background-color: var(--accent);
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+.pill--ghost {
+  background-color: rgba(255,255,255,0.08);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,0.12);
 }

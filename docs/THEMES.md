@@ -1,6 +1,6 @@
 # Theming (Seasonal Themes)
 
-This project includes a lightweight theming system to support seasonal themes (Halloween, Easter, Summer, Winter) and a default neutral theme.
+This project includes a lightweight theming system to support seasonal themes (Halloween, Easter, Summer, Christmas) and a default neutral theme.
 
 How it works
 

@@ -2614,13 +2614,13 @@ export default function OfflinePlay({ user }: { user: any }) {
                           playerScore !== x01Score ||
                           aiScore !== x01Score ||
                           playerVisitDarts > 0;
-                        const pillCls = `px-2 py-0.5 rounded border text-xs ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} `;
+                        const pillCls = `pill ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} `;
                         return (
                           <div className="flex items-center gap-2">
                             <div className="flex items-center gap-1">
                               <button
                                 type="button"
-                                className={`${pillCls} ${formatType === "first" ? "bg-indigo-500/20 text-indigo-100 border-indigo-400/30" : "bg-white/10 text-white/80 border-white/20"}`}
+                                className={`${pillCls} ${formatType === "first" ? "pill--filled" : "pill--ghost"}`}
                                 onClick={() => {
                                   if (!disabled) setFormatType("first");
                                 }}
@@ -2630,7 +2630,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                               </button>
                               <button
                                 type="button"
-                                className={`${pillCls} ${formatType === "best" ? "bg-indigo-500/20 text-indigo-100 border-indigo-400/30" : "bg-white/10 text-white/80 border-white/20"}`}
+                                className={`${pillCls} ${formatType === "best" ? "pill--filled" : "pill--ghost"}`}
                                 onClick={() => {
                                   if (!disabled) setFormatType("best");
                                 }}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTheme, ThemeName } from '../contexts/ThemeProvider';
 
-const ALL_THEMES: ThemeName[] = ['default', 'halloween', 'easter', 'summer', 'winter'];
+const ALL_THEMES: ThemeName[] = ['default', 'halloween', 'easter', 'summer', 'christmas'];
 
 export default function ThemeToggle() {
   const { theme, setTheme, auto, setAuto } = useTheme();

@@ -1,6 +1,6 @@
 ﻿import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-export type ThemeName = 'default' | 'halloween' | 'easter' | 'summer' | 'winter';
+export type ThemeName = 'default' | 'halloween' | 'easter' | 'summer' | 'christmas';
 
 type ThemeContextShape = {
   theme: ThemeName;
@@ -18,8 +18,8 @@ function detectSeasonalTheme(date = new Date()): ThemeName {
   const d = date.getDate();
   // Halloween: Oct 20 - Nov 5
   if (m === 9 || (m === 10 && d <= 5)) return 'halloween';
-  // Winter: Dec 15 - Feb 14
-  if (m === 11 || m === 0 || (m === 1 && d <= 14)) return 'winter';
+  // Christmas / Winter: Dec 15 - Feb 14
+  if (m === 11 || m === 0 || (m === 1 && d <= 14)) return 'christmas';
   // Easter: approximate: March-April
   if (m === 2 || m === 3) return 'easter';
   // Summer: Jun-Aug
