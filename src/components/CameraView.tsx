@@ -11,16 +11,6 @@ import { dlog } from "../utils/logger";
 import { useUserSettings } from "../store/userSettings";
 import { useCalibration } from "../store/calibration";
 import { useMatch } from "../store/match";
-import {
-  BoardRadii,
-  drawPolyline,
-  sampleRing,
-  scaleHomography,
-  type Point,
-  applyHomography,
-  drawCross,
-  refinePointSobel,
-} from "../utils/vision";
 import { scoreFromImagePoint } from "../utils/autoscore";
 import { DartDetector } from "../utils/dartDetector";
 import { addSample } from "../store/profileStats";
