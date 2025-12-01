@@ -2580,8 +2580,6 @@ export default function Calibrator() {
 
   // DevicePicker moved from SettingsPanel
   function DevicePicker() {
-    // Toggle to enable debug logs for dropdown behavior (set false to disable)
-    const DROPDOWN_DEBUG = true;
     const {
       preferredCameraId,
       preferredCameraLabel,
@@ -2598,9 +2596,6 @@ export default function Calibrator() {
     const [err, setErr] = useState("");
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
-    const ignoreCloseUntilRef = useRef<number>(0);
-    // When true, the document outside-click handler is temporarily suspended
-    const suspendDocHandlerRef = useRef<boolean>(false);
     const dropdownPortal =
       document.getElementById("dropdown-portal-root") ||
       (() => {
@@ -2611,8 +2606,7 @@ export default function Calibrator() {
       })();
 
     async function enumerate() {
-      // Prefer the global device refresh; it's fast and doesn't prompt for permission
-      if (DROPDOWN_DEBUG) console.debug("[DevicePicker] enumerate -> using global refreshVideoDevices", Date.now());
+      // Use the global device refresh; it's fast and doesn't prompt for permission
       setErr("");
       try {
         await refreshVideoDevices();
@@ -2624,16 +2618,6 @@ export default function Calibrator() {
         ) {
           setLocalDevicesSnapshot(cams);
         }
-        if (DROPDOWN_DEBUG)
-          console.debug(
-            "[DevicePicker] enumerate -> devices (global)",
-            cams.map((c) => c.deviceId),
-            "snapshot?",
-            !!(
-              dropdownRef.current &&
-              (dropdownRef.current as any).dataset?.open === "true"
-            ),
-          );
       } catch (e: any) {
         setErr(
           "Unable to list cameras. Grant camera permission in your browser.",
@@ -2647,56 +2631,21 @@ export default function Calibrator() {
     }, [videoDevices.length]);
 
     // Close dropdown when clicking outside. Guard against immediate close
-    // caused by focus/stream state churn by briefly ignoring outside clicks
+    // Prevent document handlers from interfering with native <select> dropdown
     useEffect(() => {
       function handleClickOutside(event: MouseEvent) {
         try {
-          if (DROPDOWN_DEBUG)
-            console.debug("[DevicePicker] document.mousedown", {
-              target:
-                (event && (event.target as any))?.tagName ||
-                String(event.target),
-              time: Date.now(),
-              ignoreUntil: ignoreCloseUntilRef.current,
-            });
-          // If suspended (recently opened) don't close yet
-          if (suspendDocHandlerRef.current) {
-            if (DROPDOWN_DEBUG)
-              console.debug(
-                "[DevicePicker] document.mousedown ignored because suspendDocHandlerRef is true",
-                Date.now(),
-              );
-            return;
-          }
-          // If we're within the ignore window, don't close yet
-          if (Date.now() < (ignoreCloseUntilRef.current || 0)) return;
-          // Treat clicks inside the portal as inside the dropdown (portal elements live outside dropdownRef)
+          // Don't close if the click target is the select itself or inside the picker
           const tgt = event.target as Node;
-          // If the activeElement is within the dropdown, treat it as inside
-          // (covers cases where native select UI focus or portals cause
-          // a 'blur' on the component while the select is still active).
-          try {
-            const active = document.activeElement;
-            if (
-              active &&
-              (dropdownRef.current && dropdownRef.current.contains(active))
-            ) {
-              if (DROPDOWN_DEBUG) console.debug('[DevicePicker] document.mousedown ignored because activeElement is within dropdown', Date.now());
-              return;
-            }
-          } catch {}
           const clickedInsideMain =
             dropdownRef.current && dropdownRef.current.contains(tgt);
           const clickedInsidePortal =
             dropdownPortal &&
             dropdownPortal.contains &&
             dropdownPortal.contains(tgt);
+          
+          // If click was outside both, close the dropdown
           if (!clickedInsideMain && !clickedInsidePortal) {
-            if (DROPDOWN_DEBUG)
-              console.debug(
-                "[DevicePicker] document.mousedown -> closing dropdown (outside both main+portal)",
-                Date.now(),
-              );
             setDropdownOpen(false);
             if (dropdownRef.current) {
               (dropdownRef.current as any).dataset.open = "false";
@@ -2773,17 +2722,7 @@ export default function Calibrator() {
             data-testid="cam-lock-toggle"
             className="btn btn--ghost px-2 py-0.5 text-xs ml-2"
             onClick={() => {
-              try {
-                // Mark that user is interacting so automatic flows don't immediately
-                // re-lock the selection. This prevents the lock button from
-                // "bouncing" back to locked when external code also sets it.
-                setIgnorePreferredCameraSync(true);
-              } catch {}
               setPreferredCameraLocked(!preferredCameraLocked);
-              // Clear the interaction guard shortly after so normal sync resumes
-              setTimeout(() => {
-                try { setIgnorePreferredCameraSync(false); } catch {}
-              }, 1500);
             }}
           >
             {preferredCameraLocked ? "Unlock" : "Lock"}
@@ -2806,71 +2745,22 @@ export default function Calibrator() {
           <select
             data-testid="cam-select"
             onFocus={() => {
-              try {
-                if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "true";
-                setDropdownOpen(true);
-                if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown opened via focus", Date.now());
-                // Give a slightly longer ignore window while native select UI
-                // is opening so document-level handlers don't immediately close it.
-                ignoreCloseUntilRef.current = Date.now() + 800;
-                // Temporarily suspend the document handler entirely while the
-                // user is interacting with the native select control.
-                suspendDocHandlerRef.current = true;
-                try { setIgnorePreferredCameraSync(true); } catch {}
-                if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (focus)", Date.now());
-                setTimeout(() => {
-                  try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (focus)", Date.now()); } catch {}
-                }, 900);
-              } catch (e) {}
+              if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "true";
+              setDropdownOpen(true);
               try { enumerate(); } catch {}
             }}
-            onBlur={(e) => {
-              try {
-                // If we've recently set ignoreCloseUntilRef (pointer/mousedown),
-                // don't immediately close on blur — let the click/select action finish.
-                if (Date.now() < (ignoreCloseUntilRef.current || 0)) {
-                  return;
-                }
-                // In some environments (or when focus moves to a portal element),
-                // ensure we only close if focus left the picker entirely.
-                try {
-                  const related = (e as any).relatedTarget || document.activeElement;
-                  if (
-                    related &&
-                    (dropdownRef.current && dropdownRef.current.contains(related as Node))
-                  ) {
-                    return;
-                  }
-                } catch {}
-                if (dropdownRef.current) {
-                  (dropdownRef.current as any).dataset.open = "false";
-                }
-              } catch (e) {}
+            onBlur={() => {
+              if (dropdownRef.current) {
+                (dropdownRef.current as any).dataset.open = "false";
+              }
             }}
-            onPointerDown={(e) => { try { (e as any).stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true); if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown opened via pointerdown", Date.now()); } ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; try { setIgnorePreferredCameraSync(true); } catch {} if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (pointerdown)", Date.now()); setTimeout(() => { try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (pointerdown)", Date.now()); } catch {} }, 900); } catch (err) {} }}
-            onMouseDown={(e) => { try { e.stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true); if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown opened via mousedown", Date.now()); } ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; try { setIgnorePreferredCameraSync(true); } catch {} if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (mousedown)", Date.now()); setTimeout(() => { try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (mousedown)", Date.now()); } catch {} }, 900); } catch (err) {} }}
-            onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+            onPointerDown={(e) => { e.stopPropagation(); }}
+            onMouseDown={(e) => { e.stopPropagation(); }}
+            onTouchStart={(e) => { e.stopPropagation(); }}
             className="input col-span-2 dropdown-themed"
             value={preferredCameraId || "auto"}
             onChange={(e) => {
               const val = e.target.value;
-              // While user is changing selection, prevent auto-locking behavior
-              // from overriding their choice. Keep an ignore window so the
-              // dropdown close handler doesn't immediately dismiss the UI.
-              try { setIgnorePreferredCameraSync(true); } catch {}
-              // Keep a short ignore window and suspend doc handler while the
-              // native select interaction completes. We'll explicitly close
-              // the dropdown after handling the selection.
-              ignoreCloseUntilRef.current = Date.now() + 1200;
-              suspendDocHandlerRef.current = true;
-              if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (onChange)", Date.now());
-              setTimeout(() => { try { setIgnorePreferredCameraSync(false); suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (onChange)", Date.now()); } catch {} }, 1500);
-              if (DROPDOWN_DEBUG)
-                console.debug(
-                  "[DevicePicker] select onChange",
-                  val,
-                  Date.now(),
-                );
               if (val === "auto") {
                 try {
                   setPreferredCamera(undefined, "", true);
@@ -2897,16 +2787,13 @@ export default function Calibrator() {
                   } catch {}
                 }
               }
-              // Close the visual dropdown after the user made a selection.
-              try {
-                setTimeout(() => {
-                  try {
-                    setDropdownOpen(false);
-                    if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown closed after selection", Date.now());
-                    if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "false";
-                  } catch {}
-                }, 120);
-              } catch {}
+              // Close the visual dropdown after selection
+              setTimeout(() => {
+                try {
+                  setDropdownOpen(false);
+                  if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "false";
+                } catch {}
+              }, 100);
             }}
           >
             <option value="auto">Auto (browser default)</option>
