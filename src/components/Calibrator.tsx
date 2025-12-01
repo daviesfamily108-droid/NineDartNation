@@ -2594,7 +2594,6 @@ export default function Calibrator() {
       Array<{ deviceId: string; label: string }> | null
     >(null);
     const [err, setErr] = useState("");
-    const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const dropdownPortal =
       document.getElementById("dropdown-portal-root") ||
@@ -2611,13 +2610,7 @@ export default function Calibrator() {
       try {
         await refreshVideoDevices();
         const cams = videoDevices;
-        // If the picker is open, keep a stable snapshot so the list doesn't jump while interacting
-        if (
-          dropdownRef.current &&
-          (dropdownRef.current as any).dataset?.open === "true"
-        ) {
-          setLocalDevicesSnapshot(cams);
-        }
+        setLocalDevicesSnapshot(cams);
       } catch (e: any) {
         setErr(
           "Unable to list cameras. Grant camera permission in your browser.",
@@ -2630,48 +2623,8 @@ export default function Calibrator() {
       enumerate();
     }, [videoDevices.length]);
 
-    // Close dropdown when clicking outside. Guard against immediate close
-    // Prevent document handlers from interfering with native <select> dropdown
-    useEffect(() => {
-      function handleClickOutside(event: MouseEvent) {
-        try {
-          // Don't close if the click target is the select itself or inside the picker
-          const tgt = event.target as Node;
-          const clickedInsideMain =
-            dropdownRef.current && dropdownRef.current.contains(tgt);
-          const clickedInsidePortal =
-            dropdownPortal &&
-            dropdownPortal.contains &&
-            dropdownPortal.contains(tgt);
-          
-          // If click was outside both, close the dropdown
-          if (!clickedInsideMain && !clickedInsidePortal) {
-            setDropdownOpen(false);
-            if (dropdownRef.current) {
-              (dropdownRef.current as any).dataset.open = "false";
-            }
-          }
-        } catch {}
-      }
-    document.addEventListener("mousedown", handleClickOutside);
-    // pointerdown covers pointer devices; touchstart covers legacy touch-only devices
-    document.addEventListener("pointerdown", handleClickOutside as any);
-    document.addEventListener("touchstart", handleClickOutside as any);
-      return () => {
-    document.removeEventListener("mousedown", handleClickOutside);
-    document.removeEventListener("pointerdown", handleClickOutside as any);
-    document.removeEventListener("touchstart", handleClickOutside as any);
-      };
-    }, []);
-
-    // Keep DOM dataset.open and internal dropdownOpen in sync. This ensures
-    // repeated re-renders don't leave stale dataset attributes set on replaced
-    // nodes (eg JSDOM test environments where nodes are swapped or re-created).
-    useEffect(() => {
-      try {
-        if (dropdownRef.current) (dropdownRef.current as any).dataset.open = dropdownOpen ? "true" : "false";
-      } catch (e) {}
-    }, [dropdownOpen]);
+    // Note: We're using a native <select> element which manages its own dropdown.
+    // The browser handles all interactions, so we don't need custom document listeners.
 
     const selectedDevice = (localDevicesSnapshot || videoDevices).find(
       (d) => d.deviceId === preferredCameraId,
