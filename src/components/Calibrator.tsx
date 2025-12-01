@@ -1686,7 +1686,10 @@ export default function Calibrator() {
     setHasSnapshot(true);
     setFrameSize({ w: c.width, h: c.height });
     setPhase("select");
+    // Ensure we start fresh with 0 points - log for debugging
+    console.log('[Calibrator] captureFrame: resetting dstPoints to []');
     setDstPoints([]);
+    setDetected(null); // Also clear auto-detected rings
     setMarkerResult(null);
     // If liveDetect is on, kick a detect on this captured frame
     if (liveDetect)
@@ -1890,7 +1893,9 @@ export default function Calibrator() {
   const y = cssY * scaleY;
   console.debug('[Calibrator] onClickOverlay css/x/y', { cssX, cssY, scaleX, scaleY, x, y });
     if (phase === "select") {
+      console.log('[Calibrator] Adding point. Current dstPoints.length:', dstPoints.length, 'New point:', { x, y });
       const pts = [...dstPoints, { x, y }];
+      console.log('[Calibrator] After add, pts.length:', pts.length, 'REQUIRED:', REQUIRED_POINT_COUNT);
       if (pts.length <= REQUIRED_POINT_COUNT) {
         setDstPoints(pts);
         // If we have 4+ points, compute a temporary homography to show guide for remaining points

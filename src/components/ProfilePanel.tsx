@@ -188,12 +188,13 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
 
     return (
       <div className={`rounded-xl border ${colorClasses[color]} overflow-hidden`}>
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={() => setExpandedSection(isOpen ? null : id)}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedSection(isOpen ? null : id); }}
-          className="w-full p-4 flex items-center justify-between hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none"
+        <button
+          type="button"
+          onClick={() => {
+            console.log('[ProfilePanel] Section clicked:', id, 'isOpen:', isOpen);
+            setExpandedSection(isOpen ? null : id);
+          }}
+          className="w-full p-4 flex items-center justify-between hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none text-left"
           style={{ touchAction: 'manipulation' }}
         >
           <div className="flex items-center gap-3 font-semibold">
@@ -203,7 +204,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
           <div>
             {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
           </div>
-        </div>
+        </button>
         {isOpen && <div className="p-4 pt-0 border-t border-white/10">{children}</div>}
       </div>
     );
