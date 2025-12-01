@@ -2709,7 +2709,7 @@ export default function Calibrator() {
           <div className="col-span-2 relative">
             <button
               className="input w-full text-left flex items-center justify-between"
-              onClick={() => setDropdownOpen(!dropdownOpen)}
+              onClick={() => setDropdownOpen(true)}
               onPointerDown={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
             >
@@ -2728,6 +2728,8 @@ export default function Calibrator() {
                       } catch {}
                       setDropdownOpen(false);
                     }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
                     Auto (browser default)
                   </button>
@@ -2745,6 +2747,8 @@ export default function Calibrator() {
                         } catch {}
                         setDropdownOpen(false);
                       }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
                     >
                       {d.label || "Camera"}
                     </button>
@@ -2763,6 +2767,8 @@ export default function Calibrator() {
                       } catch {}
                       setDropdownOpen(false);
                     }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
                   >
                     📱 Phone Camera
                   </button>
