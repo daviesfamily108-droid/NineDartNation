@@ -309,15 +309,16 @@ export function detectBoard(canvas: HTMLCanvasElement): BoardDetectionResult {
       doubleOuter: detection.r,
     };
 
-    // Generate 4 calibration points from detected rings (TOP, RIGHT, BOTTOM, LEFT of double)
+    // Generate 5 calibration points from detected rings (TOP, RIGHT, BOTTOM, LEFT of double, plus CENTER)
     const calibrationPoints: Point[] = [
-      { x: detected.cx, y: detected.cy - detected.doubleOuter }, // TOP
-      { x: detected.cx + detected.doubleOuter, y: detected.cy }, // RIGHT
-      { x: detected.cx, y: detected.cy + detected.doubleOuter }, // BOTTOM
-      { x: detected.cx - detected.doubleOuter, y: detected.cy }, // LEFT
+      { x: detected.cx, y: detected.cy - detected.doubleOuter }, // TOP (D20)
+      { x: detected.cx + detected.doubleOuter, y: detected.cy }, // RIGHT (D6)
+      { x: detected.cx, y: detected.cy + detected.doubleOuter }, // BOTTOM (D3)
+      { x: detected.cx - detected.doubleOuter, y: detected.cy }, // LEFT (D11)
+      { x: detected.cx, y: detected.cy }, // CENTER (BULL)
     ];
 
-    // Compute homography from these 4 points
+    // Compute homography from the first 4 points (rim points only, bull is for verification)
     const canonicalSrc = [
       { x: 0, y: -BoardRadii.doubleOuter },
       { x: BoardRadii.doubleOuter, y: 0 },

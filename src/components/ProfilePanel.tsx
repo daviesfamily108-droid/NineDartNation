@@ -186,21 +186,13 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       cyan: "border-cyan-500/40 bg-cyan-500/10 text-cyan-100",
     };
 
-    const toggle = (e?: React.MouseEvent | React.PointerEvent) => {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      setExpandedSection(isOpen ? null : id);
-    };
-
     return (
       <div className={`rounded-xl border ${colorClasses[color]} overflow-hidden`}>
         <div
           role="button"
           tabIndex={0}
-          onClick={toggle}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggle(); }}
+          onClick={() => setExpandedSection(isOpen ? null : id)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setExpandedSection(isOpen ? null : id); }}
           className="w-full p-4 flex items-center justify-between hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none"
           style={{ touchAction: 'manipulation' }}
         >
