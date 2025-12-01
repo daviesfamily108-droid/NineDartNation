@@ -77884,9 +77884,34 @@ var redisHelpers = {
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors());
 app.use(compression());
-var limiter = rateLimit({ windowMs: 60 * 1e3, max: 600 });
+var limiter = rateLimit({
+  windowMs: 60 * 1e3,
+  // 1 minute window
+  max: 100,
+  // 100 requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    return req.path === "/readyz" || req.path === "/metrics";
+  }
+});
+var authLimiter = rateLimit({
+  windowMs: 60 * 1e3,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+var apiLimiter = rateLimit({
+  windowMs: 60 * 1e3,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false
+});
 app.use(parseAuth);
 app.use(limiter);
+app.use("/api/auth/signup", authLimiter);
+app.use("/api/auth/login", authLimiter);
+app.use("/api/", apiLimiter);
 var logger = startLogger;
 app.use(pinoHttp({ logger, genReqId: (req) => req.headers["x-request-id"] || nanoid2(12) }));
 app.use((req, res, next) => {
@@ -79287,9 +79312,58 @@ function broadcastToRoom(roomId, data, exceptWs = null) {
   if (!set)
     return;
   const payload = typeof data === "string" ? data : JSON.stringify(data);
+  try {
+    if (DEBUG) {
+      try {
+        logger.debug("[BROADCAST] room=%s clients=%s except=%s data=%s", roomId, Array.from(set).map((s) => s && s._id).join(","), exceptWs && exceptWs._id, typeof data === "string" ? data : JSON.stringify(data).slice(0, 200));
+      } catch {
+      }
+      try {
+        console.log("[BROADCAST] room=%s clients=%s except=%s data=%s", roomId, Array.from(set).map((s) => s && s._id).join(","), exceptWs && exceptWs._id, typeof data === "string" ? data : JSON.stringify(data).slice(0, 200));
+      } catch {
+      }
+    }
+  } catch {
+  }
   for (const client2 of set) {
-    if (client2.readyState === 1 && client2 !== exceptWs) {
-      client2.send(payload);
+    try {
+      const cid = client2 && client2._id;
+      const ready = client2 && client2.readyState;
+      if (DEBUG) {
+        try {
+          logger.debug("[BROADCAST-SEND] room=%s target=%s readyState=%s except=%s", roomId, cid, ready, exceptWs && exceptWs._id);
+        } catch {
+        }
+        try {
+          console.log("[BROADCAST-SEND] room=%s target=%s readyState=%s except=%s", roomId, cid, ready, exceptWs && exceptWs._id);
+        } catch {
+        }
+      }
+      if (client2.readyState === 1 && client2 !== exceptWs) {
+        try {
+          client2.send(payload);
+          try {
+            if (DEBUG)
+              logger.debug("[BROADCAST-SENT] room=%s target=%s", roomId, cid);
+          } catch {
+          }
+          try {
+            if (DEBUG)
+              console.log("[BROADCAST-SENT] room=%s target=%s", roomId, cid);
+          } catch {
+          }
+        } catch (e) {
+          try {
+            startLogger.warn("[BROADCAST] failed send to %s: %s", cid, e && e.message);
+          } catch {
+          }
+        }
+      }
+    } catch (e) {
+      try {
+        logger.warn("[BROADCAST] iteration error for room=%s: %s", roomId, e && e.message);
+      } catch {
+      }
     }
   }
 }
@@ -79474,6 +79548,28 @@ wss.on("connection", (ws, req) => {
         const isCreator = creatorId && String(creatorId) === String(ws._id);
         const isAdmin = ws._email && (adminEmails.has(String(ws._email)) || users.get(String(ws._email)) && !!users.get(String(ws._email)).admin);
         const allowed = roomAutocommitAllowed.get(roomId) === true || isCreator || isAdmin;
+        try {
+          if (DEBUG) {
+            try {
+              logger.debug("[AUTO_VISIT_DEBUG] room=%s ws=%s creator=%s isCreator=%s isAdmin=%s allowed=%s", roomId, ws._id, creatorId, isCreator, isAdmin, allowed);
+            } catch {
+            }
+            try {
+              logger.debug("[AUTO_VISIT_DEBUG] roomMembers=%s", Array.from(rooms.get(roomId) || []).map((c) => c && c._id).join(","));
+            } catch {
+            }
+            try {
+              console.log("[AUTO_VISIT_DEBUG] room=%s ws=%s creator=%s isCreator=%s isAdmin=%s allowed=%s", roomId, ws._id, creatorId, isCreator, isAdmin, allowed);
+            } catch {
+            }
+            try {
+              const members = Array.from(rooms.get(roomId) || []).map((c) => c && c._id).join(",");
+              console.log("[AUTO_VISIT_DEBUG] roomMembers=%s", members);
+            } catch {
+            }
+          }
+        } catch {
+        }
         if (!allowed) {
           try {
             ws.send(JSON.stringify({ type: "error", code: "FORBIDDEN", message: "Autocommit is not allowed for this match" }));
@@ -79541,8 +79637,39 @@ wss.on("connection", (ws, req) => {
         }
         const visit = { by: ws._id, value, darts, ring, sector, ts: Date.now(), pBoard };
         try {
+          if (DEBUG) {
+            try {
+              logger.debug("[AUTO_VISIT_BROADCAST] room=%s visitBy=%s visit=%s", roomId, ws._id, JSON.stringify(visit).slice(0, 200));
+            } catch {
+            }
+            try {
+              console.log("[AUTO_VISIT_BROADCAST] room=%s visitBy=%s visit=%s", roomId, ws._id, JSON.stringify(visit).slice(0, 200));
+            } catch {
+            }
+          }
+          try {
+            const members = Array.from(rooms.get(roomId) || []).map((c) => ({ id: c && c._id, readyState: c && c.readyState }));
+            try {
+              logger.debug("[AUTO_VISIT_ROOM_MEMBERS] room=%s members=%s", roomId, JSON.stringify(members));
+            } catch {
+            }
+            try {
+              console.log("[AUTO_VISIT_ROOM_MEMBERS] room=%s members=%s", roomId, JSON.stringify(members));
+            } catch {
+            }
+          } catch (e) {
+            try {
+              logger.warn("[AUTO_VISIT] failed to list room members %s", e && e.message);
+            } catch {
+            }
+          }
           broadcastToRoom(roomId, { type: "visit-commit", roomId, visit });
-        } catch {
+        } catch (e) {
+          try {
+            if (DEBUG)
+              logger.debug("[AUTO_VISIT_BROADCAST] broadcast failed room=%s err=%s", roomId, e && e.message);
+          } catch {
+          }
         }
         try {
           ws.send(JSON.stringify({ type: "visit-commit", roomId, visit }));

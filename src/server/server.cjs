@@ -181,10 +181,39 @@ const redisHelpers = {
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 app.use(cors())
 app.use(compression())
-const limiter = rateLimit({ windowMs: 60 * 1000, max: 600 })
+// Global rate limiter: more generous for free-tier Render (100 req/min per IP)
+const limiter = rateLimit({ 
+  windowMs: 60 * 1000,  // 1 minute window
+  max: 100,             // 100 requests per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks and metrics
+    return req.path === '/readyz' || req.path === '/metrics'
+  }
+})
+// Stricter limiter for auth endpoints (10 req/min per IP to prevent brute force)
+const authLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false
+})
+// More permissive limiter for API endpoints (300 req/min per IP)
+const apiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false
+})
 // Parse authentication on each request - sets req.user if possible
 app.use(parseAuth);
 app.use(limiter)
+// Apply auth limiter to auth endpoints
+app.use('/api/auth/signup', authLimiter);
+app.use('/api/auth/login', authLimiter);
+// Apply API limiter to other endpoints
+app.use('/api/', apiLimiter);
 // Logging
 // Reuse the early startLogger so logging is consistent before/after app initialization
 const logger = startLogger
