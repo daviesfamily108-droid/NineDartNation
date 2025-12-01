@@ -186,25 +186,32 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       cyan: "border-cyan-500/40 bg-cyan-500/10 text-cyan-100",
     };
 
-    const toggle = () => setExpandedSection(isOpen ? null : id);
+    const toggle = (e?: React.MouseEvent | React.PointerEvent) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      setExpandedSection(isOpen ? null : id);
+    };
 
     return (
       <div className={`rounded-xl border ${colorClasses[color]} overflow-hidden`}>
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={toggle}
-          onPointerDown={(e) => { e.stopPropagation(); toggle(); }}
-          onTouchStart={(e) => { e.stopPropagation(); }}
-          className="w-full p-4 flex items-center justify-between hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none touch-manipulation"
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggle(); }}
+          className="w-full p-4 flex items-center justify-between hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none"
+          style={{ touchAction: 'manipulation' }}
         >
-          <div className="flex items-center gap-3 font-semibold pointer-events-none">
+          <div className="flex items-center gap-3 font-semibold">
             <Icon className="w-5 h-5" />
             {title}
           </div>
-          <div className="pointer-events-none">
+          <div>
             {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
           </div>
-        </button>
+        </div>
         {isOpen && <div className="p-4 pt-0 border-t border-white/10">{children}</div>}
       </div>
     );

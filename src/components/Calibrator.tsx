@@ -1794,6 +1794,21 @@ export default function Calibrator() {
       ctx.restore();
     }
 
+    // Show "Click on X" instruction prominently on the overlay
+    if (currentPoints.length < REQUIRED_POINT_COUNT) {
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(10, 10, 200, 40);
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = "bold 16px sans-serif";
+      ctx.fillText(
+        `Click on ${CALIBRATION_POINT_LABELS[currentPoints.length]}`,
+        20,
+        36
+      );
+      ctx.restore();
+    }
+
     // Draw clicked points with sector labels so users know which doubles have been mapped
     currentPoints.forEach((p, i) => {
       drawCross(ctx, p, "#f472b6");
@@ -3471,6 +3486,11 @@ export default function Calibrator() {
                 <div className="text-sm font-semibold">
                   {dstPoints.length} / {REQUIRED_POINT_COUNT}
                 </div>
+                {phase === "select" && dstPoints.length < REQUIRED_POINT_COUNT && (
+                  <div className="mt-1 text-yellow-400 font-bold">
+                    → Click on {CALIBRATION_POINT_LABELS[dstPoints.length]} next
+                  </div>
+                )}
               </div>
               <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
                 <div className="uppercase tracking-wide opacity-60">
