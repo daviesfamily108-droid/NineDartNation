@@ -2745,14 +2745,7 @@ export default function Calibrator() {
           <select
             data-testid="cam-select"
             onFocus={() => {
-              if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "true";
-              setDropdownOpen(true);
               try { enumerate(); } catch {}
-            }}
-            onBlur={() => {
-              if (dropdownRef.current) {
-                (dropdownRef.current as any).dataset.open = "false";
-              }
             }}
             onPointerDown={(e) => { e.stopPropagation(); }}
             onMouseDown={(e) => { e.stopPropagation(); }}
@@ -2787,13 +2780,6 @@ export default function Calibrator() {
                   } catch {}
                 }
               }
-              // Close the visual dropdown after selection
-              setTimeout(() => {
-                try {
-                  setDropdownOpen(false);
-                  if (dropdownRef.current) (dropdownRef.current as any).dataset.open = "false";
-                } catch {}
-              }, 100);
             }}
           >
             <option value="auto">Auto (browser default)</option>
