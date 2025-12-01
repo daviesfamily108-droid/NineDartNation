@@ -629,7 +629,11 @@ export default function Calibrator() {
           textarea.focus();
           textarea.select();
           document.execCommand("copy");
-          document.body.removeChild(textarea);
+          try {
+            document.body.removeChild(textarea);
+          } catch {
+            // If removal fails, element was already removed
+          }
         }
         setCopyFeedback(type);
         if (copyTimeoutRef.current) window.clearTimeout(copyTimeoutRef.current);
