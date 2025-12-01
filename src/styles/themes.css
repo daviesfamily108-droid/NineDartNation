@@ -5,42 +5,61 @@
   --text: #e6eef8;
   --accent: #06b6d4; /* teal-400 */
   --muted: #9aa6b2;
+  --gradient-start: #06b6d4;
+  --gradient-end: #8b5cf6;
+}
+
+/* Apply theme colors to html and body - overrides Tailwind bg-slate-50 */
+html, body {
+  background-color: var(--bg) !important;
+  color: var(--text) !important;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 [data-theme="halloween"]{
   --bg: #0b0b0b;
-  --surface: #1b1512;
+  --surface: #1a0f0a;
   --text: #fff7ed;
   --accent: #ff6b00; /* orange */
   --muted: #c9a27a;
-  --decor: url('/public/themes/halloween/bg.png');
+  --gradient-start: #ff6b00;
+  --gradient-end: #7c3aed;
+  --decor: url('/themes/halloween/bg.png');
 }
 
 [data-theme="easter"]{
-  --bg: #f8fafc;
-  --surface: #ffffff;
-  --text: #0f172a;
-  --accent: #fbcfe8; /* pink pastel */
-  --muted: #94a3b8;
+  --bg: #4c1d95; /* deep purple */
+  --surface: #5b21b6;
+  --text: #fdf4ff;
+  --accent: #f0abfc; /* pink pastel */
+  --muted: #c4b5fd;
+  --gradient-start: #e879f9;
+  --gradient-end: #a78bfa;
 }
 
 [data-theme="summer"]{
-  --bg: #fff7ed;
-  --surface: #fffdf7;
-  --text: #042c2e;
-  --accent: #f59e0b; /* amber */
-  --muted: #7c6b4a;
+  --bg: #0c4a6e; /* deep sky blue */
+  --surface: #075985;
+  --text: #f0f9ff;
+  --accent: #fbbf24; /* amber/gold */
+  --muted: #38bdf8;
+  --gradient-start: #f59e0b;
+  --gradient-end: #0ea5e9;
 }
 
 [data-theme="christmas"]{
-  /* Christmas theme: warmer festive accent (red) with deep evergreen surface */
-  --bg: #071427; /* deep night */
-  --surface: #071a12; /* deep evergreen */
-  --text: #f7f7f9;
-  --accent: #ef4444; /* red-500 (Christmas) */
-  --muted: #9fb7d6;
+  /* Christmas theme: festive red/green with snow accents */
+  --bg: #0c1821;
+  --surface: #0a1f14;
+  --text: #f9fafb;
+  --accent: #ef4444; /* red-500 */
+  --muted: #86efac;
+  --gradient-start: #dc2626;
+  --gradient-end: #16a34a;
   --decor: none;
 }
+
+/* ========== GLOBAL THEME APPLICATION ========== */
 
 /* small helper class to apply themed background if provided */
 .theme-bg {
@@ -52,6 +71,37 @@
 .surface {
   background-color: var(--surface);
   color: var(--text);
+}
+
+/* Cards and panels should use themed surface */
+.card,
+.glass,
+.panel {
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+  border-color: rgba(255,255,255,0.1) !important;
+}
+
+/* Buttons with accent color */
+.btn-accent {
+  background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)) !important;
+  color: #fff !important;
+}
+
+/* Headers and text elements */
+.header {
+  background-color: var(--surface) !important;
+  color: var(--text) !important;
+}
+
+/* Links and interactive elements */
+a:not(.btn) {
+  color: var(--accent);
+}
+
+/* Muted text */
+.text-muted {
+  color: var(--muted) !important;
 }
 
 /* Pill utilities to provide filled/ghost variations across the app */

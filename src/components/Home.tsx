@@ -5,6 +5,7 @@ import { getAllTime } from "../store/profileStats";
 import { STRIPE_CHECKOUT_URL } from "../utils/stripe";
 import { useUserSettings } from "../store/userSettings";
 import { useAudit } from "../store/audit";
+import ProfilePanel from "./ProfilePanel";
 
 function goTab(tab: string) {
   try {
@@ -19,9 +20,17 @@ const API_URL = (import.meta as any).env?.VITE_API_URL || "";
 export default function Home({ user }: { user?: any }) {
   const [showLegal, setShowLegal] = useState(false);
   const [showHowTo, setShowHowTo] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [fact, setFact] = useState<string>("");
   const { lastOffline } = useUserSettings();
   const toast = useToast();
+
+  // Listen for profile open events
+  useEffect(() => {
+    const onOpenProfile = () => setShowProfile(true);
+    window.addEventListener("ndn:open-profile", onOpenProfile as any);
+    return () => window.removeEventListener("ndn:open-profile", onOpenProfile as any);
+  }, []);
 
   // Rotate a random "Did you know?" each time Home mounts
   useEffect(() => {
@@ -120,20 +129,7 @@ export default function Home({ user }: { user?: any }) {
             <span aria-hidden>🏆</span> Join Online Match
           </button>
           <button
-            onClick={() => {
-              try {
-                window.dispatchEvent(
-                  new CustomEvent("ndn:change-tab", {
-                    detail: { tab: "settings" },
-                  }),
-                );
-              } catch {}
-              try {
-                window.dispatchEvent(
-                  new CustomEvent("ndn:open-settings-profile"),
-                );
-              } catch {}
-            }}
+            onClick={() => setShowProfile(true)}
             className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
           >
             <span aria-hidden>👤</span> Profile
@@ -347,6 +343,21 @@ export default function Home({ user }: { user?: any }) {
             <p className="text-sm text-purple-200">
               Ready to play? Hit "Start New Match" and let the darts fly!
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Modal */}
+      {showProfile && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 overflow-y-auto py-8">
+          <div className="relative w-full max-w-4xl mx-4 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-white/10">
+            <button
+              className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+              onClick={() => setShowProfile(false)}
+            >
+              ✕
+            </button>
+            <ProfilePanel user={user} onClose={() => setShowProfile(false)} />
           </div>
         </div>
       )}

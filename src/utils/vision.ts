@@ -193,11 +193,11 @@ function gaussianSolve(M: number[][], v: number[]): number[] {
 
 // Canonical calibration targets in board space (mm)
 // We now anchor the homography with four evenly spaced double-ring sectors:
-// D20 (top), D6 (right), D3 (bottom), and D11 (left).
+// D20 (top), D6 (right), D3 (bottom), D11 (left), plus bullseye (center).
 export function canonicalRimTargets(): Point[] {
   const doubleR = BoardRadii.doubleOuter;
   const targetSectors = [20, 6, 3, 11] as const;
-  return targetSectors.map((sector) => {
+  const rimPoints = targetSectors.map((sector) => {
     const idx = SectorOrder.indexOf(sector);
     const angle = (idx / SectorOrder.length) * Math.PI * 2 - Math.PI / 2;
     const x = doubleR * Math.cos(angle);
@@ -207,6 +207,9 @@ export function canonicalRimTargets(): Point[] {
       y: Math.abs(y) < 1e-9 ? 0 : y,
     };
   });
+  // Add bullseye (center) as 5th calibration point
+  rimPoints.push({ x: 0, y: 0 });
+  return rimPoints;
 }
 
 // Given a homography mapping board->image, produce polylines for overlay rings (in image px)

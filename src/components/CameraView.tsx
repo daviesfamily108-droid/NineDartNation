@@ -28,6 +28,7 @@ import PauseTimerBadge from "./ui/PauseTimerBadge";
 import { writeMatchSnapshot } from "../utils/matchSync";
 import { broadcastMessage } from "../utils/broadcast";
 import { startForwarding, stopForwarding } from "../utils/cameraHandoff";
+import { sayDart } from "../utils/checkout";
 
 // Shared ring type across autoscore/manual flows
 type Ring = "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL";
@@ -135,6 +136,9 @@ export default forwardRef(function CameraView(
     preferredCameraLocked,
     hideCameraOverlay,
     setHideCameraOverlay,
+    callerEnabled,
+    callerVoice,
+    callerVolume,
   } = useUserSettings();
   const preserveCalibrationOverlay = useUserSettings((s) => s.preserveCalibrationOverlay);
   const manualOnly = autoscoreProvider === "manual";
@@ -1954,6 +1958,13 @@ export default forwardRef(function CameraView(
   }
 
   function addDart(value: number, label: string, ring: Ring, meta?: { calibrationValid?: boolean; pBoard?: Point | null; source?: 'camera' | 'manual' }) {
+    // Announce the dart if caller is enabled and this came from camera detection
+    if (callerEnabled && meta?.source === 'camera') {
+      try {
+        sayDart(label, callerVoice, { volume: callerVolume });
+      } catch (e) {}
+    }
+    
     if (shouldDeferCommit && awaitingClear) {
       if (!pulseManualPill) {
         setPulseManualPill(true);

@@ -1126,14 +1126,21 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       </div>
                       <button
                         onClick={() => {
-                          const utterance = new SpeechSynthesisUtterance(
-                            "Test voice. 180!",
-                          );
+                          const phrases = [
+                            "Treble twenty... Treble twenty... One hundred and eighty!",
+                            "And he leaves... double sixteen.",
+                            "Lovely darts! One hundred and forty!",
+                            "Game shot! And the match!",
+                          ];
+                          const phrase = phrases[Math.floor(Math.random() * phrases.length)];
+                          const utterance = new SpeechSynthesisUtterance(phrase);
                           utterance.voice =
                             availableVoices.find(
                               (v) => v.voiceURI === callerVoice,
                             ) || null;
                           utterance.volume = callerVolume || 1;
+                          utterance.rate = 0.92;
+                          utterance.pitch = 1.0;
                           speechSynthesis.cancel();
                           speechSynthesis.speak(utterance);
                         }}

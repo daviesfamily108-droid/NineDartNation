@@ -1,6 +1,62 @@
 // Very lightweight checkout suggestions. For proper coverage consider a full table.
 // Returns up to a few route strings like "T20 T20 D20" for a given remaining.
 
+/**
+ * Get recommended voices for natural-sounding darts calling
+ * Prioritizes British English voices which suit darts calling best
+ */
+export function getRecommendedVoices(): SpeechSynthesisVoice[] {
+  try {
+    const synth = window.speechSynthesis;
+    if (!synth) return [];
+    const voices = synth.getVoices();
+    
+    // Prioritize British English voices (they sound best for darts)
+    const britishVoices = voices.filter(v => 
+      v.lang.startsWith('en-GB') || 
+      v.name.toLowerCase().includes('british') ||
+      v.name.toLowerCase().includes('uk')
+    );
+    
+    // Then other English voices
+    const otherEnglish = voices.filter(v => 
+      v.lang.startsWith('en') && 
+      !britishVoices.includes(v)
+    );
+    
+    // Premium/natural voices tend to have these keywords
+    const isPremiumVoice = (v: SpeechSynthesisVoice) => 
+      v.name.toLowerCase().includes('natural') ||
+      v.name.toLowerCase().includes('premium') ||
+      v.name.toLowerCase().includes('neural') ||
+      v.name.toLowerCase().includes('enhanced') ||
+      v.name.includes('Google') ||
+      v.name.includes('Microsoft') && !v.name.includes('David') && !v.name.includes('Zira');
+    
+    // Sort each group by premium/natural voices first
+    const sortByQuality = (a: SpeechSynthesisVoice, b: SpeechSynthesisVoice) => {
+      const aScore = isPremiumVoice(a) ? 1 : 0;
+      const bScore = isPremiumVoice(b) ? 1 : 0;
+      return bScore - aScore;
+    };
+    
+    return [
+      ...britishVoices.sort(sortByQuality),
+      ...otherEnglish.sort(sortByQuality),
+    ];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get the best default voice for darts calling
+ */
+export function getBestCallerVoice(): SpeechSynthesisVoice | null {
+  const recommended = getRecommendedVoices();
+  return recommended.length > 0 ? recommended[0] : null;
+}
+
 const doubles = [
   "D1",
   "D2",
@@ -170,23 +226,65 @@ export function sayScore(
     const shouldAnnounce = !opts?.checkoutOnly || isCheckout || isOneEighty;
     if (!shouldAnnounce) return;
 
+    // Natural caller phrases with variation
     if (isOneEighty) {
-      msg.text = `${name}! One eighty!`;
-      msg.rate = 1.04;
-      msg.pitch = 1.15;
+      const phrases = [
+        `${name}... One hundred and eighty!`,
+        `One hundred and EIGHTY! ${name}!`,
+        `${name} with a maximum! One eighty!`,
+      ];
+      msg.text = phrases[Math.floor(Math.random() * phrases.length)];
+      msg.rate = 0.95;
+      msg.pitch = 1.1;
+    } else if (remaining === 0) {
+      const winPhrases = [
+        `Game shot! And the match, ${name}!`,
+        `${name} takes it! Game shot!`,
+        `And that's the checkout! ${name} wins!`,
+      ];
+      msg.text = winPhrases[Math.floor(Math.random() * winPhrases.length)];
+      msg.rate = 0.9;
+      msg.pitch = 1.05;
     } else if (isCheckout) {
-      msg.text = `${name}, ${remaining} remaining.`;
-      msg.rate = 1.0;
+      // Checkout range - build tension
+      if (remaining <= 40) {
+        msg.text = `${name}... requires ${remaining}.`;
+      } else if (remaining <= 100) {
+        msg.text = `${name}, you require ${remaining}.`;
+      } else {
+        msg.text = `${name} leaves ${remaining}.`;
+      }
+      msg.rate = 0.92;
       msg.pitch = 1.0;
     } else if (scored === 0) {
-      msg.text = `${name}, no score.`;
-      msg.rate = 1.0;
+      const noScorePhrases = [
+        `${name}... no score.`,
+        `No score there for ${name}.`,
+        `${name}, unfortunately, no score.`,
+      ];
+      msg.text = noScorePhrases[Math.floor(Math.random() * noScorePhrases.length)];
+      msg.rate = 0.95;
+      msg.pitch = 0.95;
+    } else if (scored >= 140) {
+      // Big scores get excitement
+      const bigPhrases = [
+        `${name}! ${scored}!`,
+        `Lovely darts! ${name} with ${scored}!`,
+        `${scored}! Great scoring from ${name}!`,
+      ];
+      msg.text = bigPhrases[Math.floor(Math.random() * bigPhrases.length)];
+      msg.rate = 0.95;
+      msg.pitch = 1.05;
+    } else if (scored >= 100) {
+      msg.text = `${name}, ${scored}.`;
+      msg.rate = 0.95;
       msg.pitch = 1.0;
     } else {
-      msg.text = `${name}, ${scored}.`;
-      msg.rate = 1.0;
-      msg.pitch = 1.0;
+      msg.text = `${name}... ${scored}.`;
+      msg.rate = 0.95;
+      msg.pitch = 0.98;
     }
+    
     if (voiceName) {
       const v = synth.getVoices().find((v) => v.name === voiceName);
       if (v) msg.voice = v;
@@ -194,6 +292,89 @@ export function sayScore(
     if (typeof opts?.volume === "number")
       msg.volume = Math.max(0, Math.min(1, opts.volume));
     else msg.volume = 1;
+    try {
+      synth.cancel();
+    } catch {}
+    synth.speak(msg);
+  } catch {}
+}
+
+/**
+ * Speak an individual dart hit as it is detected
+ * e.g. "Triple 20", "Double 16", "Single 5", "Bull", "Bullseye"
+ * Uses natural caller-style pronunciation
+ */
+export function sayDart(
+  label: string,
+  voiceName?: string,
+  opts?: { volume?: number },
+) {
+  try {
+    const synth = window.speechSynthesis;
+    if (!synth) return;
+    
+    // Convert label to natural spoken form
+    // Labels come in various formats:
+    // Short: "T20", "D16", "S5", "BULL", "DBULL", "MISS 0"
+    // Long: "TRIPLE 20", "DOUBLE 16", "SINGLE 5", "INNER_BULL 50", "MISS"
+    let spoken = label;
+    let isExciting = false;
+    let isMiss = false;
+    
+    // Handle long format (from camera detection): "TRIPLE 20", "DOUBLE 16", etc.
+    if (label.startsWith("TRIPLE ")) {
+      const num = label.slice(7);
+      spoken = num === "20" ? "Treble twenty" : `Treble ${num}`;
+      isExciting = num === "20" || num === "19" || num === "18";
+    } else if (label.startsWith("DOUBLE ")) {
+      const num = label.slice(7);
+      spoken = `Double ${num}`;
+    } else if (label.startsWith("SINGLE ")) {
+      spoken = label.slice(7); // Just say the number for singles
+    } else if (label.startsWith("INNER_BULL") || label === "DBULL") {
+      spoken = "Bullseye!";
+      isExciting = true;
+    } else if (label.startsWith("BULL ") || label === "BULL" || label === "OUTER_BULL") {
+      spoken = "Bull";
+    }
+    // Handle short format: "T20", "D16", "S5"
+    else if (label.startsWith("T") && /^T\d+$/.test(label)) {
+      const num = label.slice(1);
+      spoken = num === "20" ? "Treble twenty" : `Treble ${num}`;
+      isExciting = num === "20" || num === "19" || num === "18";
+    } else if (label.startsWith("D") && /^D\d+$/.test(label)) {
+      spoken = `Double ${label.slice(1)}`;
+    } else if (label.startsWith("S") && /^S\d+$/.test(label)) {
+      spoken = label.slice(1); // Just say the number for singles
+    } else if (label.includes("MISS") || label === "0") {
+      const missPhrases = ["Outside", "No score", "Just outside"];
+      spoken = missPhrases[Math.floor(Math.random() * missPhrases.length)];
+      isMiss = true;
+    }
+    
+    const msg = new SpeechSynthesisUtterance();
+    msg.text = spoken;
+    
+    // Natural speech patterns - slower than a robot, with expression
+    if (isExciting) {
+      msg.rate = 0.9;
+      msg.pitch = 1.08;
+    } else if (isMiss) {
+      msg.rate = 0.88;
+      msg.pitch = 0.92;
+    } else {
+      msg.rate = 0.92;
+      msg.pitch = 1.0;
+    }
+    
+    if (voiceName) {
+      const v = synth.getVoices().find((v) => v.name === voiceName);
+      if (v) msg.voice = v;
+    }
+    if (typeof opts?.volume === "number")
+      msg.volume = Math.max(0, Math.min(1, opts.volume));
+    else msg.volume = 1;
+    
     try {
       synth.cancel();
     } catch {}

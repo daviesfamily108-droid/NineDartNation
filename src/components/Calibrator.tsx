@@ -324,7 +324,7 @@ const DevicePicker: React.FC<DevicePickerProps> = ({
   );
 };
 
-const CALIBRATION_POINT_LABELS = ["D20", "D6", "D3", "D11"] as const;
+const CALIBRATION_POINT_LABELS = ["D20", "D6", "D3", "D11", "BULL"] as const;
 const REQUIRED_POINT_COUNT = CALIBRATION_POINT_LABELS.length;
 
 // Center-logo QR helpers moved to ../utils/qr
@@ -2008,13 +2008,13 @@ export default function Calibrator() {
     if (!canvasRef.current) return;
     if (dstPoints.length < REQUIRED_POINT_COUNT) {
       return alert(
-        "Please click all 4 calibration points on the double ring: D20, D6, D3, and D11.",
+        "Please click all 5 calibration points: D20, D6, D3, D11, and Bullseye (center).",
       );
     }
     const src = canonicalRimTargets(); // board space mm
-    const Hcalc = computeHomographyDLT(src, dstPoints);
+    const Hcalc = computeHomographyDLT(src.slice(0, 4), dstPoints.slice(0, 4));
     drawOverlay(dstPoints, Hcalc);
-    const err = rmsError(Hcalc, src, dstPoints);
+    const err = rmsError(Hcalc, src.slice(0, 4), dstPoints.slice(0, 4));
     const overlaySize = overlayRef?.current
       ? { w: overlayRef.current.width, h: overlayRef.current.height }
       : videoRef?.current
