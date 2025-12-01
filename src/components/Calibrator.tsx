@@ -1763,17 +1763,20 @@ export default function Calibrator() {
       drawCircle(detected.bullInner, "#10b981", 3);
     }
 
-    // Show calibration guide circles when not all rim points are selected and homography exists
+    // Show calibration guide circles ONLY when we have a freshly computed homography (HH)
+    // from at least 4 clicked points in this session - don't use old stored H for guides
+    // as it may be incorrect and mislead the user
     const targetPoints = canonicalRimTargets();
-    if (currentPoints.length < targetPoints.length && Huse) {
+    const showGuides = currentPoints.length >= 4 && currentPoints.length < targetPoints.length && HH;
+    if (showGuides) {
       ctx.save();
       ctx.strokeStyle = "rgba(255,193,7,0.4)";
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 4]);
-      // Show the remaining expected click positions (D20, D6, D3, D11)
+      // Show the remaining expected click positions (e.g., BULL after D20, D6, D3, D11)
       for (let i = currentPoints.length; i < targetPoints.length; i++) {
         try {
-          const p = applyHomography(Huse, targetPoints[i]);
+          const p = applyHomography(HH, targetPoints[i]);
           ctx.beginPath();
           ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
           ctx.stroke();
@@ -1875,7 +1878,14 @@ export default function Calibrator() {
       const pts = [...dstPoints, { x, y }];
       if (pts.length <= REQUIRED_POINT_COUNT) {
         setDstPoints(pts);
-        drawOverlay(pts);
+        // If we have 4+ points, compute a temporary homography to show guide for remaining points
+        if (pts.length >= 4) {
+          const src = canonicalRimTargets();
+          const tempH = computeHomographyDLT(src.slice(0, 4), pts.slice(0, 4));
+          drawOverlay(pts, tempH);
+        } else {
+          drawOverlay(pts);
+        }
       }
       return;
     }
