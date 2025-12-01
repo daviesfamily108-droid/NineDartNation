@@ -45,8 +45,9 @@ describe('ThemeProvider', () => {
       </ThemeProvider>,
     );
 
-    // Set theme to default via localStorage and re-render
-    localStorage.setItem('ndn:theme', 'default');
+  // Set theme to default via localStorage and ensure the provider doesn't auto-season
+  localStorage.setItem('ndn:theme', 'default');
+  localStorage.setItem('ndn:theme:auto', 'false');
 
     // Re-mount to pick up persisted value
     render(

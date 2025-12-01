@@ -34,11 +34,8 @@ describe("DevicePicker interaction guard", () => {
     const r = render(<Calibrator />);
 
   // Find the DevicePicker container and its lock/unlock button specifically
-  const pickerLabel = r.getByText(/Select camera device/i);
-  // the label is a child of the picker root; parentElement is the root container
-  const pickerRoot = pickerLabel.parentElement;
-  expect(pickerRoot).toBeTruthy();
-  const btn = within(pickerRoot as HTMLElement).getByText(/Unlock|Lock/i, { selector: 'button' });
+    const btn = r.getByTestId('cam-lock-toggle');
+    expect(btn).toBeTruthy();
   expect(btn).toBeTruthy();
 
     // Use fake timers so we can advance the interaction timeout deterministically
@@ -102,5 +99,28 @@ describe("DevicePicker interaction guard", () => {
 
     // Restore real timers
     vi.useRealTimers();
+  });
+
+  it('select remains open and not closed when outside mousedown happens immediately after pointerdown', async () => {
+    const userSettingsMod = await import("../../store/userSettings");
+    const { useUserSettings } = userSettingsMod;
+    const { default: Calibrator } = await import("../Calibrator");
+    const r = render(<Calibrator />);
+    const select = r.getByTestId('cam-select');
+    // Find the picker root from the select element
+    const pickerRoot = select.parentElement?.parentElement || select.parentElement;
+    expect(pickerRoot).toBeTruthy();
+    // Ensure it's closed first
+    expect((pickerRoot as HTMLElement).dataset.open === 'true').toBe(false);
+    // Simulate pointer down on select which should set suspendDocHandlerRef
+    await act(async () => {
+      fireEvent.pointerDown(select);
+    });
+    // Immediately fire a mousedown on the document to simulate outside click
+    await act(async () => {
+      fireEvent.mouseDown(document.body);
+    });
+    // If suspendDocHandlerRef properly prevented outside click, the dataset.open should still be true
+    expect((pickerRoot as HTMLElement).dataset.open).toBe('true');
   });
 });

@@ -2672,6 +2672,19 @@ export default function Calibrator() {
           if (Date.now() < (ignoreCloseUntilRef.current || 0)) return;
           // Treat clicks inside the portal as inside the dropdown (portal elements live outside dropdownRef)
           const tgt = event.target as Node;
+          // If the activeElement is within the dropdown, treat it as inside
+          // (covers cases where native select UI focus or portals cause
+          // a 'blur' on the component while the select is still active).
+          try {
+            const active = document.activeElement;
+            if (
+              active &&
+              (dropdownRef.current && dropdownRef.current.contains(active))
+            ) {
+              if (DROPDOWN_DEBUG) console.debug('[DevicePicker] document.mousedown ignored because activeElement is within dropdown', Date.now());
+              return;
+            }
+          } catch {}
           const clickedInsideMain =
             dropdownRef.current && dropdownRef.current.contains(tgt);
           const clickedInsidePortal =
@@ -2803,6 +2816,7 @@ export default function Calibrator() {
                 // Temporarily suspend the document handler entirely while the
                 // user is interacting with the native select control.
                 suspendDocHandlerRef.current = true;
+                try { setIgnorePreferredCameraSync(true); } catch {}
                 if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (focus)", Date.now());
                 setTimeout(() => {
                   try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (focus)", Date.now()); } catch {}
@@ -2833,8 +2847,8 @@ export default function Calibrator() {
                 }
               } catch (e) {}
             }}
-            onPointerDown={(e) => { try { (e as any).stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true); if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown opened via pointerdown", Date.now()); } ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (pointerdown)", Date.now()); setTimeout(() => { try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (pointerdown)", Date.now()); } catch {} }, 900); } catch (err) {} }}
-            onMouseDown={(e) => { try { e.stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true); if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown opened via mousedown", Date.now()); } ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (mousedown)", Date.now()); setTimeout(() => { try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (mousedown)", Date.now()); } catch {} }, 900); } catch (err) {} }}
+            onPointerDown={(e) => { try { (e as any).stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true); if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown opened via pointerdown", Date.now()); } ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; try { setIgnorePreferredCameraSync(true); } catch {} if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (pointerdown)", Date.now()); setTimeout(() => { try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (pointerdown)", Date.now()); } catch {} }, 900); } catch (err) {} }}
+            onMouseDown={(e) => { try { e.stopPropagation(); if (dropdownRef.current) { (dropdownRef.current as any).dataset.open = "true"; setDropdownOpen(true); if (DROPDOWN_DEBUG) console.debug("[DevicePicker] dropdown opened via mousedown", Date.now()); } ignoreCloseUntilRef.current = Date.now() + 800; suspendDocHandlerRef.current = true; try { setIgnorePreferredCameraSync(true); } catch {} if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef set true (mousedown)", Date.now()); setTimeout(() => { try { suspendDocHandlerRef.current = false; if (DROPDOWN_DEBUG) console.debug("[DevicePicker] suspendDocHandlerRef cleared (mousedown)", Date.now()); } catch {} }, 900); } catch (err) {} }}
             onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
             className="input col-span-2 dropdown-themed"
             value={preferredCameraId || "auto"}
@@ -3129,8 +3143,10 @@ export default function Calibrator() {
                   <div className="flex items-center gap-1">
                     <button
                       className={`btn px-3 py-1 ${mode === "local" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-700 hover:bg-slate-600"}`}
+                      data-testid="mode-local"
                       onClick={() => {
                         setMode("local");
+                        if (typeof DROPDOWN_DEBUG !== 'undefined' && DROPDOWN_DEBUG) console.debug('[Calibrator] setMode(local)', Date.now());
                         stopCamera(false);
                       }}
                       title="Use local camera"
@@ -3139,8 +3155,10 @@ export default function Calibrator() {
                     </button>
                     <button
                       className={`btn px-3 py-1 ${mode === "phone" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-700 hover:bg-slate-600"}`}
+                      data-testid="mode-phone"
                       onClick={() => {
                         setMode("phone");
+                        if (typeof DROPDOWN_DEBUG !== 'undefined' && DROPDOWN_DEBUG) console.debug('[Calibrator] setMode(phone)', Date.now());
                         stopCamera(false);
                       }}
                       title="Enable camera on this device"
@@ -3149,10 +3167,12 @@ export default function Calibrator() {
                     </button>
                     <button
                       className={`btn px-3 py-1 ${mode === "wifi" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-700 hover:bg-slate-600"}`}
+                      data-testid="mode-wifi"
                       onClick={() => {
                         setMode("wifi");
+                        if (typeof DROPDOWN_DEBUG !== 'undefined' && DROPDOWN_DEBUG) console.debug('[Calibrator] setMode(wifi)', Date.now());
                         stopCamera(false);
-                        startWifiConnection();
+                        try { startWifiConnection(); } catch (e) { console.debug('[Calibrator] startWifiConnection failed', e); }
                       }}
                       title="Discover wifi/USB autoscoring devices"
                     >

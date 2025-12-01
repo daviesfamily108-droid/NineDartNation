@@ -403,6 +403,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
     "user" | "calibration" | "settings" | null
   >(null);
 
+  
+
   const PillButton = ({
     label,
     icon: Icon,
@@ -414,13 +416,14 @@ export default function SettingsPanel({ user }: { user?: any }) {
     pill: "user" | "calibration" | "settings";
     color: string;
   }) => (
-    <button
+  <button
       onPointerDown={(e) => { (e as any).stopPropagation(); }}
       onMouseDown={(e) => { e.stopPropagation(); }}
       onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
-      onClick={() => setExpandedPill(expandedPill === pill ? null : pill)}
-      type="button"
-      className={`transition-all select-none whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 active:scale-[0.98] bg-gradient-to-r ${color} text-white flex items-center gap-2`}
+  onClick={() => setExpandedPill((prev) => (prev === pill ? null : pill))}
+  type="button"
+  data-testid={`pill-button-${pill}`}
+  className={`select-none whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 active:scale-[0.98] bg-gradient-to-r ${color} text-white flex items-center gap-2`}
     >
       <Icon className="w-4 h-4" /> {label}
       <ChevronDown
@@ -445,7 +448,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
       {/* USER INFO CONTENT */}
       {expandedPill === "user" && (
-        <div className="p-6 rounded-2xl border border-white/10 bg-white/[0.02] animate-in fade-in duration-200 space-y-4">
+        <div data-testid="pill-user-content" className="p-6 rounded-2xl border border-white/10 bg-white/[0.02] space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Account */}
             <div className="card">
@@ -856,7 +859,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
       {/* CALIBRATION CONTENT */}
       {expandedPill === "calibration" && (
-        <div className="p-6 rounded-2xl border border-white/10 bg-white/[0.02] animate-in fade-in duration-200 space-y-4">
+        <div data-testid="pill-calibration-content" className="p-6 rounded-2xl border border-white/10 bg-white/[0.02] space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Camera & Vision */}
             <div className="card">
@@ -1161,7 +1164,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
       {/* SETTINGS CONTENT */}
       {expandedPill === "settings" && (
-        <div className="space-y-4 animate-in fade-in duration-200">
+        <div data-testid="pill-settings-content" className="space-y-4">
           {/* Profile Bio */}
           <div className="card">
             <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
