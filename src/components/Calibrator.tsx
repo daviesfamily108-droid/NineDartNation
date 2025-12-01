@@ -2594,6 +2594,7 @@ export default function Calibrator() {
       Array<{ deviceId: string; label: string }> | null
     >(null);
     const [err, setErr] = useState("");
+    const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const dropdownPortal =
       document.getElementById("dropdown-portal-root") ||
@@ -2623,8 +2624,18 @@ export default function Calibrator() {
       enumerate();
     }, [videoDevices.length]);
 
-    // Note: We're using a native <select> element which manages its own dropdown.
-    // The browser handles all interactions, so we don't need custom document listeners.
+    // Close custom dropdown when clicking outside
+    useEffect(() => {
+      function handleClickOutside(event: MouseEvent) {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+          setDropdownOpen(false);
+        }
+      }
+      if (dropdownOpen) {
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+      }
+    }, [dropdownOpen]);
 
     const selectedDevice = (localDevicesSnapshot || videoDevices).find(
       (d) => d.deviceId === preferredCameraId,
@@ -2695,54 +2706,70 @@ export default function Calibrator() {
           </label>
         </div>
         <div className="grid grid-cols-3 gap-2 items-center text-sm">
-          <select
-            data-testid="cam-select"
-            onFocus={() => {
-              try { enumerate(); } catch {}
-            }}
-            onPointerDown={(e) => { e.stopPropagation(); }}
-            onMouseDown={(e) => { e.stopPropagation(); }}
-            onTouchStart={(e) => { e.stopPropagation(); }}
-            className="input col-span-2 dropdown-themed"
-            value={preferredCameraId || "auto"}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val === "auto") {
-                try {
-                  setPreferredCamera(undefined, "", true);
-                } catch {}
-              } else if (val === "phone") {
-                try {
-                  setPreferredCamera(undefined, "Phone Camera", true);
-                } catch {}
-                try {
-                  setMode("phone");
-                  setPhase("camera");
-                  setStreaming(false);
-                  setHasSnapshot(false);
-                } catch {}
-              } else {
-                const device = (localDevicesSnapshot || videoDevices).find((d) => d.deviceId === val);
-                if (device) {
-                  try {
-                    setPreferredCamera(
-                      device.deviceId,
-                      device.label || "",
-                      true,
-                    );
-                  } catch {}
-                }
-              }
-            }}
-          >
-            <option value="auto">Auto (browser default)</option>
-            {(localDevicesSnapshot || videoDevices).map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || "Camera"}
-              </option>
-            ))}
-            <option value="phone">📱 Phone Camera</option>
-          </select>
+          <div className="col-span-2 relative">
+            <button
+              className="input w-full text-left flex items-center justify-between"
+              onClick={() => setDropdownOpen(!dropdownOpen)}
+              onPointerDown={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <span>{selectedLabel}</span>
+              <span className={`transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+            
+            {dropdownOpen && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg z-50">
+                <div className="max-h-48 overflow-y-auto">
+                  <button
+                    className="w-full text-left px-3 py-2 hover:bg-slate-700 text-sm"
+                    onClick={() => {
+                      try {
+                        setPreferredCamera(undefined, "", true);
+                      } catch {}
+                      setDropdownOpen(false);
+                    }}
+                  >
+                    Auto (browser default)
+                  </button>
+                  {(localDevicesSnapshot || videoDevices).map((d) => (
+                    <button
+                      key={d.deviceId}
+                      className="w-full text-left px-3 py-2 hover:bg-slate-700 text-sm"
+                      onClick={() => {
+                        try {
+                          setPreferredCamera(
+                            d.deviceId,
+                            d.label || "",
+                            true,
+                          );
+                        } catch {}
+                        setDropdownOpen(false);
+                      }}
+                    >
+                      {d.label || "Camera"}
+                    </button>
+                  ))}
+                  <button
+                    className="w-full text-left px-3 py-2 hover:bg-slate-700 text-sm"
+                    onClick={() => {
+                      try {
+                        setPreferredCamera(undefined, "Phone Camera", true);
+                      } catch {}
+                      try {
+                        setMode("phone");
+                        setPhase("camera");
+                        setStreaming(false);
+                        setHasSnapshot(false);
+                      } catch {}
+                      setDropdownOpen(false);
+                    }}
+                  >
+                    📱 Phone Camera
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           {videoDevices.length === 0 && (
             <div className="col-span-1 flex gap-2 items-center justify-end">
               <button
