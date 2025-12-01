@@ -33,6 +33,55 @@ import { formatAvg } from "../utils/stats";
 import { apiFetch } from "../utils/api";
 import ThemeToggle from "./ThemeToggle";
 
+// Section component - defined outside to avoid recreation on every render
+const Section = ({
+  id,
+  title,
+  icon: Icon,
+  children,
+  color = "indigo",
+  isOpen,
+  onToggle,
+}: {
+  id: string;
+  title: string;
+  icon: any;
+  children: React.ReactNode;
+  color?: string;
+  isOpen: boolean;
+  onToggle: (id: string) => void;
+}) => {
+  const colorClasses: Record<string, string> = {
+    indigo: "border-indigo-500/40 bg-indigo-500/10 text-indigo-100",
+    green: "border-green-500/40 bg-green-500/10 text-green-100",
+    yellow: "border-yellow-500/40 bg-yellow-500/10 text-yellow-100",
+    blue: "border-blue-500/40 bg-blue-500/10 text-blue-100",
+    purple: "border-purple-500/40 bg-purple-500/10 text-purple-100",
+    orange: "border-orange-500/40 bg-orange-500/10 text-orange-100",
+    red: "border-red-500/40 bg-red-500/10 text-red-100",
+    cyan: "border-cyan-500/40 bg-cyan-500/10 text-cyan-100",
+  };
+
+  return (
+    <div className={`rounded-xl border ${colorClasses[color]} overflow-hidden`}>
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        className="w-full p-4 flex items-center justify-between hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none text-left"
+      >
+        <div className="flex items-center gap-3 font-semibold">
+          <Icon className="w-5 h-5" />
+          {title}
+        </div>
+        <div>
+          {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+        </div>
+      </button>
+      {isOpen && <div className="p-4 pt-0 border-t border-white/10">{children}</div>}
+    </div>
+  );
+};
+
 interface ProfilePanelProps {
   user?: any;
   onClose?: () => void;
@@ -161,53 +210,9 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
   const totalGames = Object.values(gameModeStats).reduce((sum, s) => sum + (s.played || 0), 0);
   const totalWins = Object.values(gameModeStats).reduce((sum, s) => sum + (s.won || 0), 0);
 
-  const Section = ({
-    id,
-    title,
-    icon: Icon,
-    children,
-    color = "indigo",
-  }: {
-    id: string;
-    title: string;
-    icon: any;
-    children: React.ReactNode;
-    color?: string;
-  }) => {
-    const isOpen = expandedSection === id;
-    const colorClasses: Record<string, string> = {
-      indigo: "border-indigo-500/40 bg-indigo-500/10 text-indigo-100",
-      green: "border-green-500/40 bg-green-500/10 text-green-100",
-      yellow: "border-yellow-500/40 bg-yellow-500/10 text-yellow-100",
-      blue: "border-blue-500/40 bg-blue-500/10 text-blue-100",
-      purple: "border-purple-500/40 bg-purple-500/10 text-purple-100",
-      orange: "border-orange-500/40 bg-orange-500/10 text-orange-100",
-      red: "border-red-500/40 bg-red-500/10 text-red-100",
-      cyan: "border-cyan-500/40 bg-cyan-500/10 text-cyan-100",
-    };
-
-    return (
-      <div className={`rounded-xl border ${colorClasses[color]} overflow-hidden`}>
-        <button
-          type="button"
-          onClick={() => {
-            console.log('[ProfilePanel] Section clicked:', id, 'isOpen:', isOpen);
-            setExpandedSection(isOpen ? null : id);
-          }}
-          className="w-full p-4 flex items-center justify-between hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none text-left"
-          style={{ touchAction: 'manipulation' }}
-        >
-          <div className="flex items-center gap-3 font-semibold">
-            <Icon className="w-5 h-5" />
-            {title}
-          </div>
-          <div>
-            {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-          </div>
-        </button>
-        {isOpen && <div className="p-4 pt-0 border-t border-white/10">{children}</div>}
-      </div>
-    );
+  // Toggle section handler
+  const handleSectionToggle = (id: string) => {
+    setExpandedSection(prev => prev === id ? null : id);
   };
 
   return (
@@ -289,7 +294,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       </div>
 
       {/* Profile Overview Section */}
-      <Section id="overview" title="Profile Overview" icon={User} color="indigo">
+      <Section id="overview" title="Profile Overview" icon={User} color="indigo" isOpen={expandedSection === "overview"} onToggle={handleSectionToggle}>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="font-medium">Edit Profile</span>
@@ -402,7 +407,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       </Section>
 
       {/* Statistics Section */}
-      <Section id="stats" title="My Statistics" icon={BarChart3} color="blue">
+      <Section id="stats" title="My Statistics" icon={BarChart3} color="blue" isOpen={expandedSection === "stats"} onToggle={handleSectionToggle}>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white/5 rounded-lg p-3 text-center">
             <Target className="w-6 h-6 mx-auto mb-1 text-blue-400" />
@@ -454,7 +459,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       </Section>
 
       {/* Achievements Section */}
-      <Section id="achievements" title="Achievements & Badges" icon={Award} color="yellow">
+      <Section id="achievements" title="Achievements & Badges" icon={Award} color="yellow" isOpen={expandedSection === "achievements"} onToggle={handleSectionToggle}>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {achievements.map((a) => (
             <div
@@ -484,7 +489,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       </Section>
 
       {/* Preferences Section */}
-      <Section id="preferences" title="Game Preferences" icon={Settings} color="purple">
+      <Section id="preferences" title="Game Preferences" icon={Settings} color="purple" isOpen={expandedSection === "preferences"} onToggle={handleSectionToggle}>
         <div className="space-y-4">
           {/* Favourite Double */}
           <div className="flex items-center justify-between">
@@ -552,7 +557,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       </Section>
 
       {/* Account & Subscription Section */}
-      <Section id="account" title="Account & Subscription" icon={CreditCard} color="green">
+      <Section id="account" title="Account & Subscription" icon={CreditCard} color="green" isOpen={expandedSection === "account"} onToggle={handleSectionToggle}>
         <div className="space-y-4">
           {/* Subscription Status */}
           <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
