@@ -49,6 +49,281 @@ import { useWS } from "./WSProvider";
 type Phase = "idle" | "camera" | "capture" | "select" | "computed";
 type CamMode = "local" | "phone" | "wifi";
 
+type DevicePickerProps = {
+  videoDevices: Array<{ deviceId: string; label: string }>;
+  streaming: boolean;
+  refreshVideoDevices: () => Promise<void>;
+  testCamera: (deviceId?: string) => Promise<void>;
+  onSelectPhoneCamera: () => void;
+  lastDetectedLabel: string | null;
+  autoCommitTestMode: boolean;
+  doCommit: () => void;
+  lastDetectedValue: number | null;
+  calibrationValid: boolean;
+};
+
+const DevicePicker: React.FC<DevicePickerProps> = ({
+  videoDevices,
+  streaming,
+  refreshVideoDevices,
+  testCamera,
+  onSelectPhoneCamera,
+  lastDetectedLabel,
+  autoCommitTestMode,
+  doCommit,
+  lastDetectedValue,
+  calibrationValid,
+}) => {
+  const {
+    preferredCameraId,
+    preferredCameraLabel,
+    setPreferredCamera,
+    cameraEnabled,
+    setCameraEnabled,
+    preferredCameraLocked,
+    setPreferredCameraLocked,
+  } = useUserSettings();
+
+  const [err, setErr] = useState<string>("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
+
+  const handleRefreshDevices = useCallback(async () => {
+    setErr("");
+    try {
+      await refreshVideoDevices();
+    } catch (e) {
+      console.warn("[DevicePicker] refresh failed", e);
+      setErr("Unable to list cameras. Grant camera permission in your browser.");
+    }
+  }, [refreshVideoDevices]);
+
+  useEffect(() => {
+    void handleRefreshDevices();
+  }, [handleRefreshDevices]);
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
+        setDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownOpen]);
+
+  const selectedDevice = videoDevices.find(
+    (d) => d.deviceId === preferredCameraId,
+  );
+  const selectedLabel = selectedDevice
+    ? `${selectedDevice.label || "Camera"}`
+    : preferredCameraId
+      ? "Camera (unavailable)"
+      : "Auto (browser default)";
+  const preferredCameraUnavailable = Boolean(
+    preferredCameraId && !selectedDevice,
+  );
+
+  const handleSelectCamera = useCallback(
+    (deviceId: string | undefined, label = "") => {
+      try {
+        setPreferredCamera(deviceId, label, true);
+      } catch (err) {
+        console.warn("[DevicePicker] setPreferredCamera failed", err);
+      }
+      setDropdownOpen(false);
+    },
+    [setPreferredCamera],
+  );
+
+  const handlePhoneCamera = useCallback(() => {
+    handleSelectCamera(undefined, "Phone Camera");
+    onSelectPhoneCamera();
+  }, [handleSelectCamera, onSelectPhoneCamera]);
+
+  const handleLockToggle = useCallback(() => {
+    setPreferredCameraLocked(!preferredCameraLocked);
+  }, [preferredCameraLocked, setPreferredCameraLocked]);
+
+  return (
+    <div
+      ref={dropdownRef}
+      className="mt-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5 p-3"
+    >
+      <div className="mb-2 font-semibold">Select camera device</div>
+      {err && <div className="mb-2 text-sm text-rose-400">{err}</div>}
+      {videoDevices.length === 0 && !err && (
+        <div className="mb-2 text-xs text-slate-400">
+          Detecting devices... (click "Rescan" if this hangs)
+        </div>
+      )}
+      {preferredCameraUnavailable && (
+        <div className="mb-2 text-sm text-amber-400">
+          Selected camera is no longer available.
+          <button
+            className="ml-1 underline"
+            onClick={() => handleSelectCamera(undefined, "")}
+            disabled={streaming}
+          >
+            Use auto-selection
+          </button>
+        </div>
+      )}
+      <div className="mb-2 flex items-center gap-2">
+        {preferredCameraLocked ? (
+          <div className="text-xs text-emerald-400">🔒 Camera selection locked</div>
+        ) : (
+          <div className="text-xs text-slate-400">Camera selection unlocked</div>
+        )}
+        <button
+          data-testid="cam-lock-toggle"
+          className="btn btn--ghost ml-2 px-2 py-0.5 text-xs"
+          onClick={handleLockToggle}
+        >
+          {preferredCameraLocked ? "Unlock" : "Lock"}
+        </button>
+      </div>
+      <div className="mb-3 flex items-center gap-3">
+        <input
+          type="checkbox"
+          id="cameraEnabled-calibrator"
+          checked={cameraEnabled}
+          onChange={(e) => setCameraEnabled(e.target.checked)}
+          className="h-4 w-4"
+          disabled={streaming}
+        />
+        <label htmlFor="cameraEnabled-calibrator" className="text-sm">
+          Enable camera for scoring
+        </label>
+      </div>
+      <div className="grid grid-cols-3 items-center gap-2 text-sm">
+        <div className="relative col-span-2">
+          <button
+            className="input flex w-full items-center justify-between text-left"
+            onClick={() => setDropdownOpen(true)}
+            onPointerDown={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <span>{selectedLabel}</span>
+            <span
+              className={`transition-transform ${
+                dropdownOpen ? "rotate-180" : ""
+              }`}
+            >
+              ▼
+            </span>
+          </button>
+          {dropdownOpen && (
+            <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded border border-slate-600 bg-slate-800 shadow-lg">
+              <div className="max-h-48 overflow-y-auto">
+                <button
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700"
+                  onClick={() => handleSelectCamera(undefined, "")}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  Auto (browser default)
+                </button>
+                {videoDevices.map((device) => (
+                  <button
+                    key={device.deviceId}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700"
+                    onClick={() =>
+                      handleSelectCamera(device.deviceId, device.label || "")
+                    }
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    {device.label || "Camera"}
+                  </button>
+                ))}
+                <button
+                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700"
+                  onClick={handlePhoneCamera}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  📱 Phone Camera
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        {videoDevices.length === 0 && (
+          <div className="col-span-1 flex items-center justify-end gap-2">
+            <button
+              className="btn btn--ghost btn-sm"
+              onClick={async () => {
+                try {
+                  await testCamera();
+                  await refreshVideoDevices();
+                } catch (err) {
+                  console.warn("[DevicePicker] request camera permission failed", err);
+                  setErr("Camera permission denied. Please allow access in your browser.");
+                }
+              }}
+            >
+              Enable local camera
+            </button>
+            <button
+              className="btn btn--ghost btn-sm"
+              onClick={() => void handleRefreshDevices()}
+            >
+              Rescan
+            </button>
+          </div>
+        )}
+        <div className="col-span-3 text-right">
+          <button
+            className="btn px-2 py-1"
+            onClick={() => {
+              void testCamera(preferredCameraId || undefined);
+            }}
+            disabled={streaming}
+          >
+            Test
+          </button>
+          <div className="mt-2 flex items-center justify-end gap-2 text-xs opacity-70">
+            <span>
+              {lastDetectedLabel ? `Detected: ${lastDetectedLabel}` : "No recent detection"}
+            </span>
+            {(lastDetectedLabel != null || autoCommitTestMode) && (
+              <button
+                className="btn btn--ghost btn-sm"
+                onClick={() => doCommit()}
+                onPointerDown={() => doCommit()}
+                disabled={lastDetectedValue == null}
+              >
+                Commit detected
+              </button>
+            )}
+            <span
+              className={`inline-block h-2.5 w-2.5 rounded-full ${
+                calibrationValid ? "bg-emerald-400" : "bg-rose-500"
+              }`}
+            />
+            <span className="text-xs">
+              {calibrationValid ? "Cal OK" : "Cal invalid"}
+            </span>
+          </div>
+        </div>
+      </div>
+      {preferredCameraLabel && (
+        <div className="mt-1 text-xs opacity-70">
+          Selected: {preferredCameraLabel}
+        </div>
+      )}
+      <div className="mt-1 text-xs opacity-70">
+        Tip: All camera technology is supported for autoscoring needs—select your camera here and then open Calibrator to align.
+      </div>
+    </div>
+  );
+};
+
 const CALIBRATION_POINT_LABELS = ["D20", "D6", "D3", "D11"] as const;
 const REQUIRED_POINT_COUNT = CALIBRATION_POINT_LABELS.length;
 
@@ -76,6 +351,12 @@ export default function Calibrator() {
   );
   const [dstPoints, setDstPoints] = useState<Point[]>([]); // image points clicked in order D20 (top), D6 (right), D3 (bottom), D11 (left)
   const [hasSnapshot, setHasSnapshot] = useState(false);
+  const handleSelectPhoneCamera = useCallback(() => {
+    setMode("phone");
+    setPhase("camera");
+    setStreaming(false);
+    setHasSnapshot(false);
+  }, [setMode, setPhase, setStreaming, setHasSnapshot]);
   // Track current frame (video/snapshot) size to preserve aspect ratio in the preview container
   const [frameSize, setFrameSize] = useState<{ w: number; h: number } | null>(
     null,
@@ -2582,274 +2863,6 @@ export default function Calibrator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locked, pairCode]);
 
-  // DevicePicker moved from SettingsPanel
-  function DevicePicker() {
-    const {
-      preferredCameraId,
-      preferredCameraLabel,
-      setPreferredCamera,
-      cameraEnabled,
-      setCameraEnabled,
-      preferredCameraLocked,
-      setPreferredCameraLocked,
-    } = useUserSettings();
-    // Use outer videoDevices and refreshVideoDevices instead of local enumerate
-    const [localDevicesSnapshot, setLocalDevicesSnapshot] = useState<
-      Array<{ deviceId: string; label: string }> | null
-    >(null);
-    const [err, setErr] = useState("");
-    const [dropdownOpen, setDropdownOpen] = useState(false);
-    const dropdownRef = useRef<HTMLDivElement>(null);
-    const dropdownPortal =
-      document.getElementById("dropdown-portal-root") ||
-      (() => {
-        const el = document.createElement("div");
-        el.id = "dropdown-portal-root";
-        document.body.appendChild(el);
-        return el;
-      })();
-
-    async function enumerate() {
-      // Use the global device refresh; it's fast and doesn't prompt for permission
-      setErr("");
-      try {
-        await refreshVideoDevices();
-        const cams = videoDevices;
-        setLocalDevicesSnapshot(cams);
-      } catch (e: any) {
-        setErr(
-          "Unable to list cameras. Grant camera permission in your browser.",
-        );
-      }
-    }
-
-    useEffect(() => {
-      // enumerate device list with global refresh; display quickly
-      enumerate();
-    }, [videoDevices.length]);
-
-    // Close custom dropdown when clicking outside
-    useEffect(() => {
-      function handleClickOutside(event: MouseEvent) {
-        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-          setDropdownOpen(false);
-        }
-      }
-      if (dropdownOpen) {
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-      }
-    }, [dropdownOpen]);
-
-    const selectedDevice = (localDevicesSnapshot || videoDevices).find(
-      (d) => d.deviceId === preferredCameraId,
-    );
-    const selectedLabel = selectedDevice
-      ? `${selectedDevice.label || "Camera"}`
-      : preferredCameraId
-        ? "Camera (unavailable)"
-        : "Auto (browser default)";
-    // Local immediate label so UI reflects selection instantly even if global store
-    const [localSelectedLabel, setLocalSelectedLabel] =
-      useState<string>(selectedLabel);
-
-    // If preferred camera is set but not found, show a warning
-  const preferredCameraUnavailable = preferredCameraId && !selectedDevice;
-
-    return (
-      <div ref={dropdownRef} className="mt-3 p-3 rounded-lg border border-indigo-500/30 bg-indigo-500/5">
-        <div className="font-semibold mb-2">Select camera device</div>
-        {err && <div className="text-rose-400 text-sm mb-2">{err}</div>}
-        {videoDevices.length === 0 && !err && (
-          <div className="text-xs text-slate-400 mb-2">Detecting devices... (click "Rescan" if this hangs)</div>
-        )}
-        {preferredCameraUnavailable && (
-          <div className="text-amber-400 text-sm mb-2">
-            Selected camera is no longer available.
-            <button
-              className="underline ml-1"
-              onClick={() => setPreferredCamera(undefined, "", true)}
-              disabled={streaming}
-            >
-              Use auto-selection
-            </button>
-          </div>
-        )}
-        {/* Lock indicator and toggle for camera selection */}
-        <div className="flex items-center gap-2 mb-2">
-          {preferredCameraLocked ? (
-            <div className="text-xs text-emerald-400">
-              🔒 Camera selection locked
-            </div>
-          ) : (
-            <div className="text-xs text-slate-400">
-              Camera selection unlocked
-            </div>
-          )}
-          <button
-            data-testid="cam-lock-toggle"
-            className="btn btn--ghost px-2 py-0.5 text-xs ml-2"
-            onClick={() => {
-              setPreferredCameraLocked(!preferredCameraLocked);
-            }}
-          >
-            {preferredCameraLocked ? "Unlock" : "Lock"}
-          </button>
-        </div>
-        <div className="flex items-center gap-3 mb-3">
-          <input
-            type="checkbox"
-            id="cameraEnabled-calibrator"
-            checked={cameraEnabled}
-            onChange={(e) => setCameraEnabled(e.target.checked)}
-            className="w-4 h-4"
-            disabled={streaming}
-          />
-          <label htmlFor="cameraEnabled-calibrator" className="text-sm">
-            Enable camera for scoring
-          </label>
-        </div>
-        <div className="grid grid-cols-3 gap-2 items-center text-sm">
-          <div className="col-span-2 relative">
-            <button
-              className="input w-full text-left flex items-center justify-between"
-              onClick={() => setDropdownOpen(true)}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <span>{selectedLabel}</span>
-              <span className={`transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}>▼</span>
-            </button>
-            
-            {dropdownOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded shadow-lg z-50">
-                <div className="max-h-48 overflow-y-auto">
-                  <button
-                    className="w-full text-left px-3 py-2 hover:bg-slate-700 text-sm"
-                    onClick={() => {
-                      try {
-                        setPreferredCamera(undefined, "", true);
-                      } catch {}
-                      setDropdownOpen(false);
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    Auto (browser default)
-                  </button>
-                  {(localDevicesSnapshot || videoDevices).map((d) => (
-                    <button
-                      key={d.deviceId}
-                      className="w-full text-left px-3 py-2 hover:bg-slate-700 text-sm"
-                      onClick={() => {
-                        try {
-                          setPreferredCamera(
-                            d.deviceId,
-                            d.label || "",
-                            true,
-                          );
-                        } catch {}
-                        setDropdownOpen(false);
-                      }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onMouseDown={(e) => e.stopPropagation()}
-                    >
-                      {d.label || "Camera"}
-                    </button>
-                  ))}
-                  <button
-                    className="w-full text-left px-3 py-2 hover:bg-slate-700 text-sm"
-                    onClick={() => {
-                      try {
-                        setPreferredCamera(undefined, "Phone Camera", true);
-                      } catch {}
-                      try {
-                        setMode("phone");
-                        setPhase("camera");
-                        setStreaming(false);
-                        setHasSnapshot(false);
-                      } catch {}
-                      setDropdownOpen(false);
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onMouseDown={(e) => e.stopPropagation()}
-                  >
-                    📱 Phone Camera
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-          {videoDevices.length === 0 && (
-            <div className="col-span-1 flex gap-2 items-center justify-end">
-              <button
-                className="btn btn--ghost btn-sm"
-                onClick={async () => {
-                  try {
-                    await testCamera();
-                    await refreshVideoDevices();
-                  } catch (err) {
-                    console.warn('[Calibrator] request camera permission failed', err);
-                  }
-                }}
-              >
-                Enable local camera
-              </button>
-              <button
-                className="btn btn--ghost btn-sm"
-                onClick={async () => await refreshVideoDevices()}
-              >
-                Rescan
-              </button>
-            </div>
-          )}
-            <div className="text-right">
-            <button
-              className="btn px-2 py-1"
-              onClick={() => {
-                testCamera(preferredCameraId || undefined);
-              }}
-              disabled={streaming}
-            >
-              Test
-            </button>
-                <div className="text-xs mt-2 flex items-center justify-end gap-2">
-                <div className="text-xs opacity-70 flex items-center gap-2">
-                  <span>{lastDetectedLabel ? `Detected: ${lastDetectedLabel}` : "No recent detection"}</span>
-                    {(lastDetectedLabel != null || autoCommitTestMode) && (
-                      <button
-                        className="btn btn--ghost btn-sm"
-                        onClick={() => {
-                          console.debug('[Calibrator] top Commit detected click (onClick)');// eslint-disable-line no-console
-                          doCommit();
-                        }}
-                        onPointerDown={() => {
-                          console.debug('[Calibrator] top Commit detected click (onPointerDown)');// eslint-disable-line no-console
-                          doCommit();
-                        }}
-                        disabled={lastDetectedValue == null}
-                      >
-                        Commit detected
-                      </button>
-                  )}
-                  <span className={`inline-block w-2.5 h-2.5 rounded-full ${calibrationValid ? 'bg-emerald-400' : 'bg-rose-500'}`} />
-                  <span className="text-xs opacity-70">{calibrationValid ? 'Cal OK' : 'Cal invalid'}</span>
-                </div>
-              </div>
-          </div>
-        </div>
-        {preferredCameraLabel && (
-          <div className="text-xs opacity-70 mt-1">
-            Selected: {preferredCameraLabel}
-          </div>
-        )}
-        <div className="text-xs opacity-70 mt-1">
-          Tip: All camera technology is supported for autoscoring needs—select
-          your camera here and then open Calibrator to align.
-        </div>
-      </div>
-    );
-  }
   const showMobileLanding = isMobileDevice && !mobileLandingOverride;
 
   if (showMobileLanding) {
@@ -3461,7 +3474,18 @@ export default function Calibrator() {
           </section>
 
           <aside className="space-y-4">
-            <DevicePicker />
+            <DevicePicker
+              videoDevices={videoDevices}
+              streaming={streaming}
+              refreshVideoDevices={refreshVideoDevices}
+              testCamera={testCamera}
+              onSelectPhoneCamera={handleSelectPhoneCamera}
+              lastDetectedLabel={lastDetectedLabel}
+              autoCommitTestMode={autoCommitTestMode}
+              doCommit={doCommit}
+              lastDetectedValue={lastDetectedValue}
+              calibrationValid={calibrationValid}
+            />
 
             {mode === "phone" && (
               <section className="space-y-3 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
