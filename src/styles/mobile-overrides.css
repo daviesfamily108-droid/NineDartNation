@@ -77,6 +77,59 @@
   /* Hide decorative background animation on mobile for perf */
   .background-animated { display: none !important; }
 
+  /* Add breathing room at the bottom since we now float a tab bar */
+  #ndn-main-scroll {
+    padding-bottom: 130px !important;
+    scroll-padding-bottom: 140px !important;
+  }
+
+  .ndn-shell-body {
+    padding-bottom: 140px !important;
+  }
+
+  .card, .glass {
+    width: 100% !important;
+  }
+
+  .ndn-mobile-tabbar {
+    position: fixed;
+    bottom: 12px;
+    left: 8px;
+    right: 8px;
+    z-index: 55;
+    display: flex;
+    gap: 6px;
+    padding: 4px;
+    border-radius: 18px;
+    background: rgba(10, 14, 24, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: 0 18px 35px rgba(5, 6, 15, 0.55);
+  }
+
+  .ndn-mobile-tabbar .tab {
+    flex-direction: column !important;
+    justify-content: center !important;
+    padding: 6px 4px 4px !important;
+    min-width: 0 !important;
+    height: 60px !important;
+  }
+
+  .ndn-mobile-tabbar .tab::after {
+    display: none !important;
+  }
+
+  .mobile-tab-label {
+    font-size: 0.55rem;
+    letter-spacing: 0.03em;
+  }
+
+  .ndn-mobile-tabbar .tab svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  footer { margin-bottom: 80px !important; }
+
   /* Improve scoreboard readability: single-column items */
   .scoreboard, .stats-panel { display: block !important; width: 100% !important; }
   .scoreboard .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.02); }

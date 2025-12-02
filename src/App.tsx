@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, Suspense } from "react";
-import { Sidebar, TabKey } from "./components/Sidebar";
+import { MobileTabBar, Sidebar, TabKey } from "./components/Sidebar";
 const Home = React.lazy(() => import("./components/Home"));
 import ScrollFade from "./components/ScrollFade";
 import Calibrator from "./components/Calibrator";
@@ -905,6 +905,13 @@ export default function App() {
             </main>
           </div>
         </div>
+        {isMobile && (
+          <MobileTabBar
+            active={tab}
+            onChange={(next) => setTab(next)}
+            user={user}
+          />
+        )}
       </div>
 
       {/* Floating Help Assistant - Always visible */}

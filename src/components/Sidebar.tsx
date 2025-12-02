@@ -1,13 +1,13 @@
 import {
-  LayoutDashboard,
-  Camera,
-  Users,
-  Trophy,
-  Settings,
-  MessageCircle,
-  Lock,
-  PoundSterling,
   Bell,
+  Camera,
+  LayoutDashboard,
+  Lock,
+  MessageCircle,
+  PoundSterling,
+  Settings,
+  Trophy,
+  Users,
 } from "lucide-react";
 import FocusLock from "react-focus-lock";
 import { useEffect, useState } from "react";
@@ -29,7 +29,13 @@ export type TabKey =
   | "tournaments"
   | "fullaccess";
 
-export function getTabs(user: any) {
+type TabDefinition = {
+  key: TabKey;
+  label: string;
+  icon: typeof LayoutDashboard;
+};
+
+export function getTabs(user: any): TabDefinition[] {
   const baseTabs = [
     { key: "score", label: "Home", icon: LayoutDashboard },
   { key: "online", label: "Online Play", icon: Users },
@@ -70,6 +76,48 @@ export function getTabs(user: any) {
   return baseTabs;
 }
 
+function resolveUserForTabs(user: any) {
+  let userForTabs = user;
+  if (!user?.subscription && user?.email) {
+    try {
+      const rawGet = (localStorage as any)?.getItem;
+      if (typeof rawGet === "function") {
+        const cached = rawGet.call(
+          localStorage,
+          `ndn:subscription:${user.email}`,
+        );
+        if (cached) {
+          const subs = JSON.parse(cached);
+          userForTabs = {
+            ...user,
+            subscription: subs,
+            fullAccess: subs.fullAccess || user.fullAccess,
+          };
+        }
+      }
+    } catch {}
+  }
+  return userForTabs;
+}
+
+export function buildTabList(user: any, isAdmin: boolean): TabDefinition[] {
+  const tabs: TabDefinition[] = [...getTabs(user)];
+  if (isAdmin && !tabs.some((t) => t.key === "admin")) {
+    const adminTab = {
+      key: "admin",
+      label: "Admin",
+      icon: Settings,
+    } as const;
+    const insertIdx = tabs.findIndex((t) => t.key === "settings");
+    if (insertIdx >= 0) {
+      tabs.splice(insertIdx, 0, adminTab);
+    } else {
+      tabs.push(adminTab as TabDefinition);
+    }
+  }
+  return tabs;
+}
+
 export function Sidebar({
   active,
   onChange,
@@ -84,36 +132,9 @@ export function Sidebar({
   // no-op debug retention removed
   // When the server has not yet returned a subscription, prefer a cached
   // localStorage subscription (if present) to avoid flicker in the UI.
-  let userForTabs = user;
-  if (!user?.subscription && user?.email) {
-    try {
-      const rawGet = (localStorage as any)?.getItem;
-      const cached = typeof rawGet === "function" ? rawGet.call(localStorage, `ndn:subscription:${user.email}`) : null;
-      if (cached) {
-        const subs = JSON.parse(cached);
-        // If we have a cached subscription, also set fullAccess to mirror the
-        // subscription (some code paths read user.fullAccess directly). This
-        // helps avoid flicker in the UI while the server confirms the
-        // subscription state.
-        userForTabs = { ...user, subscription: subs, fullAccess: subs.fullAccess || user.fullAccess };
-      }
-    } catch {
-      // If localStorage is missing or getItem is not a function, ignore and
-      // fall back to server state; this avoids a hard failure in test
-      // environments that may replace localStorage with a raw object.
-    }
-  }
-  const tabs = getTabs(userForTabs);
+  const userForTabs = resolveUserForTabs(user);
   const isAdmin = useIsAdmin(user?.email);
-  // IMPORTANT: Admin tab is ONLY shown for explicitly granted admin users
-  // Premium status does NOT automatically grant admin access
-  // Admin access must be granted via /api/admins/grant endpoint by the owner
-  if (isAdmin && !tabs.some((t) => t.key === "admin")) {
-    const idx = tabs.findIndex((t) => t.key === "settings");
-    const adminTab = { key: "admin", label: "Admin", icon: Settings } as const;
-    if (idx >= 0) tabs.splice(idx, 0, adminTab as any);
-    else tabs.push(adminTab as any);
-  }
+  const tabs = buildTabList(userForTabs, isAdmin);
   const [showDiscord, setShowDiscord] = useState(false);
   const [showNDNDiscord, setShowNDNDiscord] = useState(false);
   const freeLeft =
@@ -341,5 +362,35 @@ export function Sidebar({
           document.body,
         )}
     </aside>
+  );
+}
+
+export function MobileTabBar({
+  active,
+  onChange,
+  user,
+}: {
+  active: TabKey;
+  onChange: (key: TabKey) => void;
+  user: any;
+}) {
+  const isAdmin = useIsAdmin(user?.email);
+  const userForTabs = resolveUserForTabs(user);
+  const tabs = buildTabList(userForTabs, isAdmin);
+  return (
+    <nav className="ndn-mobile-tabbar glass" aria-label="Mobile navigation">
+      {tabs.map(({ key, label, icon: Icon }) => (
+        <button
+          key={key}
+          type="button"
+          title={label}
+          className={`tab mobile-tab-item ${active === key ? "tab--active" : "tab--inactive"}`}
+          onClick={() => onChange(key)}
+        >
+          <Icon className="w-5 h-5" />
+          <span className="mobile-tab-label">{label}</span>
+        </button>
+      ))}
+    </nav>
   );
 }
