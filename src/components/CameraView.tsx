@@ -218,7 +218,7 @@ export default forwardRef(function CameraView(
   const detectionArmedRef = useRef<boolean>(false);
   const detectionArmTimerRef = useRef<number | null>(null);
   const frameCountRef = useRef<number>(0);
-  const tickRef = useRef<() => void | null>(null);
+  const tickRef = useRef<(() => void) | null>(null);
   const [detectionLog, setDetectionLog] = useState<DetectionLogEntry[]>([]);
   const [showDetectionLog, setShowDetectionLog] = useState(false);
   const clearPendingCommitTimer = useCallback(() => {
@@ -1394,32 +1394,11 @@ export default forwardRef(function CameraView(
             // Map to board-space coordinates (mm) using homography mapping
             let pBoard: Point | null = null;
             try { pBoard = imageToBoard(H as any, pCal); } catch (e) { pBoard = null; }
-            // Notify parent synchronously for immediate ACKs if they provided an onAutoDart
-            // so the parent can take ownership of the dart and prevent camera double-commit.
-            if (onAutoDart) {
-              try {
-                const pSig = `${score.base}|${score.ring}|${score.mult}`;
-                const pNow = performance.now();
-                if (!(pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS)) {
-                  const maybe = onAutoDart(score.base, score.ring as any, { sector: score.sector ?? null, mult: Math.max(0, Number(score.mult) || 0) as 0 | 1 | 2 | 3, calibrationValid: Boolean(calibrationGood), pBoard });
-                  if (maybe === true) {
-                    lastParentSigRef.current = pSig;
-                    lastParentSigAtRef.current = pNow;
-                    // Parent claimed ownership, skip internal commit path for this detection
-                    skipLocalCommit = true;
-                  }
-                }
-              } catch (e) {}
-            }
             const ring = score.ring as Ring;
             const value = score.base;
             const label = `${ring} ${value > 0 ? value : ""}`.trim();
             const sector = (score.sector ?? null) as number | null;
             const mult = Math.max(0, Number(score.mult) || 0) as 0 | 1 | 2 | 3;
-            let shouldAccept = false;
-            dlog('CameraView: detection details', {value, ring, calibrationGood, tipInVideo, pCalInImage, isGhost});
-            // additional validation: ensure calibration is present and detection maps to inside the board
-            // if calibration isn't locked, require a small errorPx as a fallback to allow detection during initial calibration.
             const ERROR_PX_MAX = 6; // threshold for acceptable calibration error in pixels
             const TIP_MARGIN_PX = 3; // small margin (px) to allow rounding / proc-to-video pixel mismatch
             const PCAL_MARGIN_PX = 3; // allow small margin in calibration image space
@@ -1433,17 +1412,33 @@ export default forwardRef(function CameraView(
             const tipInVideo = tipRefined.x >= -TIP_MARGIN_PX && tipRefined.x <= vw + TIP_MARGIN_PX && tipRefined.y >= -TIP_MARGIN_PX && tipRefined.y <= vh + TIP_MARGIN_PX;
             const pCalInImage = imageSize ? pCal.x >= -PCAL_MARGIN_PX && pCal.x <= imageSize.w + PCAL_MARGIN_PX && pCal.y >= -PCAL_MARGIN_PX && pCal.y <= imageSize.h + PCAL_MARGIN_PX : false;
             let onBoard = false;
-            try {
-              if (H) {
-                const pBoard = imageToBoard(H, pCal);
-                const boardR = Math.hypot(pBoard.x, pBoard.y);
-                const BOARD_MARGIN_MM = 3; // mm tolerance for being on-board
-                onBoard = boardR <= BoardRadii.doubleOuter + BOARD_MARGIN_MM;
-              }
-            } catch (e) { /* ignore */ }
+            if (pBoard) {
+              const boardR = Math.hypot(pBoard.x, pBoard.y);
+              const BOARD_MARGIN_MM = 3; // mm tolerance for being on-board
+              onBoard = boardR <= BoardRadii.doubleOuter + BOARD_MARGIN_MM;
+            }
             // treat as ghost unless onBoard and calibrationGood
             // Let an onBoard detection pass if calibration is good; otherwise treat as ghost
             const isGhost = !calibrationGood || !tipInVideo || !pCalInImage;
+            // Notify parent synchronously for immediate ACKs if they provided an onAutoDart
+            // so the parent can take ownership of the dart and prevent camera double-commit.
+            if (onAutoDart) {
+              try {
+                const pSig = `${score.base}|${score.ring}|${score.mult}`;
+                const pNow = performance.now();
+                if (!(pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS)) {
+                  const maybe = onAutoDart(score.base, score.ring as any, { sector, mult, calibrationValid: Boolean(calibrationGood), pBoard });
+                  if (maybe === true) {
+                    lastParentSigRef.current = pSig;
+                    lastParentSigAtRef.current = pNow;
+                    // Parent claimed ownership, skip internal commit path for this detection
+                    skipLocalCommit = true;
+                  }
+                }
+              } catch (e) {}
+            }
+            let shouldAccept = false;
+            dlog('CameraView: detection details', {value, ring, calibrationGood, tipInVideo, pCalInImage, isGhost});
             setLastAutoScore(label);
             setLastAutoValue(value);
             setLastAutoRing(ring);
@@ -1846,10 +1841,8 @@ export default forwardRef(function CameraView(
   // Update calibration audit status whenever homography or image size changes
   useEffect(() => {
     try {
-      useAudit
-        .getState()
-    .setCalibrationStatus({ hasHomography: !!H, imageSize, overlaySize });
-  } catch (e) {}
+      useAudit.getState().setCalibrationStatus({ hasHomography: !!H, imageSize });
+    } catch (e) {}
   }, [H, imageSize]);
 
   // Ensure overlay canvas pixel size matches the calibrated image size to avoid scale mismatch
@@ -2497,6 +2490,11 @@ export default forwardRef(function CameraView(
                   : fit
                     ? "absolute inset-0 w-full h-full object-contain object-center bg-black"
                     : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black";
+              const videoScale = cameraScale ?? 1;
+              const videoStyle = {
+                transform: `scale(${videoScale})`,
+                transformOrigin: "center center" as const,
+              };
               const containerClass =
                 aspect === "square"
                   ? "relative w-full mx-auto aspect-square bg-black"
@@ -2506,6 +2504,7 @@ export default forwardRef(function CameraView(
                   <video
                     ref={videoRef}
                     className={videoClass}
+                    style={videoStyle}
                     playsInline
                     muted
                     autoPlay
@@ -3432,6 +3431,7 @@ export default forwardRef(function CameraView(
                           <video
                             ref={videoRef}
                             className={videoClass}
+                            style={videoStyle}
                             playsInline
                             muted
                             autoPlay
