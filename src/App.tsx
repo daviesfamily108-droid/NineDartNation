@@ -74,37 +74,41 @@ export default function App() {
   const { avgMode } = useUserSettings();
   const { H: calibH, locked: calibLocked, errorPx } = useCalibration();
 
-  // Restore user from token on mount
+  // Restore user from token on mount (run once only)
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token) return;
+    
+    // Validate token with server
+    const API_URL = (import.meta as any).env?.VITE_API_URL || "";
+    fetch(`${API_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.user) {
+          setUserWithMerge(data.user);
+          try {
+            const cached = localStorage.getItem(`ndn:subscription:${data.user.email}`);
+            if (cached) setUserWithMerge({ ...data.user, subscription: JSON.parse(cached) });
+          } catch (e) {}
+          fetchSubscription(data.user);
+        } else {
+          // Token invalid, remove it
+          localStorage.removeItem("authToken");
+        }
+      })
+      .catch(() => {
+        // Network error, keep token for offline retry
+      });
+  }, []);
+  
+  // Handle minimal UI delay when user is present
   useEffect(() => {
     if (user && MINIMAL_UI) {
       setMinimalUI(true);
-      const timer = setTimeout(() => setMinimalUI(false), 1500); // Delay heavy component mount
+      const timer = setTimeout(() => setMinimalUI(false), 1500);
       return () => clearTimeout(timer);
-    }
-    const token = localStorage.getItem("authToken");
-    if (token) {
-      // Validate token with server
-      const API_URL = (import.meta as any).env?.VITE_API_URL || "";
-      fetch(`${API_URL}/api/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data?.user) {
-            setUserWithMerge(data.user);
-            try {
-              const cached = localStorage.getItem(`ndn:subscription:${data.user.email}`);
-              if (cached) setUserWithMerge({ ...data.user, subscription: JSON.parse(cached) });
-            } catch (e) {}
-            fetchSubscription(data.user);
-          } else {
-            // Token invalid, remove it
-            localStorage.removeItem("authToken");
-          }
-        })
-        .catch(() => {
-          // Network error, keep token for offline retry
-        });
     }
   }, [MINIMAL_UI, user]);
 
