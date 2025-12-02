@@ -1691,6 +1691,14 @@ export default function Calibrator() {
     setDstPoints([]);
     setDetected(null); // Also clear auto-detected rings
     setMarkerResult(null);
+    // Clear the overlay canvas to remove any leftover drawings (dart axis lines, etc.)
+    if (overlayRef.current) {
+      const o = overlayRef.current;
+      o.width = c.width;
+      o.height = c.height;
+      const octx = o.getContext("2d");
+      if (octx) octx.clearRect(0, 0, o.width, o.height);
+    }
     // If liveDetect is on, kick a detect on this captured frame
     if (liveDetect)
       setTimeout(() => {
@@ -1710,8 +1718,10 @@ export default function Calibrator() {
     const ctx = o.getContext("2d")!;
     ctx.clearRect(0, 0, o.width, o.height);
 
-    // If we have a homography, draw rings (precise, perspective-correct)
-    const Huse = HH || H;
+    // Only use stored H for drawing rings if we have enough points OR if explicitly passed HH
+    // During calibration point collection (phase="select" with < REQUIRED points), don't use old H
+    // as it may be from a previous frame and draw incorrectly
+    const Huse = HH || (currentPoints.length >= REQUIRED_POINT_COUNT ? H : null);
     if (Huse) {
       const rings = [
         BoardRadii.bullInner,
