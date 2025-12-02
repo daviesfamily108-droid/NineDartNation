@@ -130,12 +130,16 @@ export default forwardRef(function CameraView(
     autoscoreWsUrl,
     cameraAspect,
     cameraFitMode,
+    cameraScale,
     autoCommitMode = "wait-for-clear",
     cameraEnabled,
     setCameraEnabled,
     preferredCameraLocked,
     hideCameraOverlay,
     setHideCameraOverlay,
+    setCameraScale,
+    setCameraAspect,
+    setCameraFitMode,
     callerEnabled,
     callerVoice,
     callerVolume,
@@ -223,6 +227,31 @@ export default forwardRef(function CameraView(
       pendingCommitTimerRef.current = null;
     }
   }, []);
+
+  const clampCameraScale = useCallback((value: number) => {
+    if (typeof value !== "number" || Number.isNaN(value)) return 1;
+    return Math.min(1.25, Math.max(0.5, Math.round(value * 100) / 100));
+  }, []);
+
+  const adjustCameraScale = useCallback(
+    (delta: number) => {
+      if (!setCameraScale) return;
+      const next = clampCameraScale((cameraScale ?? 1) + delta);
+      setCameraScale(next);
+    },
+    [cameraScale, clampCameraScale, setCameraScale],
+  );
+
+  const setFullPreview = useCallback(() => {
+    if (setCameraFitMode) setCameraFitMode("fill");
+    if (setCameraAspect) setCameraAspect("wide");
+  }, [setCameraFitMode, setCameraAspect]);
+
+  const setWidePreview = useCallback(() => {
+    if (setCameraFitMode) setCameraFitMode("fit");
+    if (setCameraAspect) setCameraAspect("wide");
+  }, [setCameraFitMode, setCameraAspect]);
+
 
   useImperativeHandle(ref, () => ({
     runDetectionTick: () => {
@@ -2576,6 +2605,40 @@ export default forwardRef(function CameraView(
             })()}
           </ResizablePanel>
 
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+            <span className="uppercase tracking-wide text-slate-400">Cam</span>
+            <button
+              className="btn btn--ghost px-2 py-1"
+              onClick={() => adjustCameraScale(-0.05)}
+              title="Decrease camera zoom"
+            >
+              −
+            </button>
+            <span className="w-10 text-center font-semibold text-white">
+              {Math.round((cameraScale ?? 1) * 100)}%
+            </span>
+            <button
+              className="btn btn--ghost px-2 py-1"
+              onClick={() => adjustCameraScale(0.05)}
+              title="Increase camera zoom"
+            >
+              +
+            </button>
+            <button
+              className={`btn btn--ghost px-3 py-1 text-[11px] ${cameraFitMode === "fill" ? "bg-emerald-500 text-white" : ""}`}
+              onClick={setFullPreview}
+              title="Show dartboard only"
+            >
+              Full
+            </button>
+            <button
+              className={`btn btn--ghost px-3 py-1 text-[11px] ${cameraFitMode !== "fill" ? "bg-slate-200 text-slate-900" : ""}`}
+              onClick={setWidePreview}
+              title="Letterbox to wide view"
+            >
+              Wide
+            </button>
+          </div>
           <div className="mt-3 flex items-center justify-between gap-2">
             <button
               className="btn btn--ghost px-3 py-1 text-xs font-semibold"
