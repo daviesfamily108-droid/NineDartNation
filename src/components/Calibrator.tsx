@@ -1886,8 +1886,10 @@ export default function Calibrator() {
     }
   }
 
-  function onClickOverlay(e: React.MouseEvent<HTMLCanvasElement>) {
+  function onClickOverlay(e: React.PointerEvent<HTMLCanvasElement>) {
     console.debug('[Calibrator] onClickOverlay entry', phase, e.type);
+    e.stopPropagation();
+    e.preventDefault();
     // For selection mode allow adding anchor points, but for computed mode we interpret as a test click
     // Also allow camera mode when autocommit test mode is enabled so tests can simulate a click-to-detect
   const allowCameraClick = (phase === "camera" || phase === "capture") && autoCommitTestMode;
@@ -3273,12 +3275,10 @@ export default function Calibrator() {
                   )}
                   <canvas
                     ref={canvasRef}
-                    onPointerDown={onClickOverlay}
                     className={`absolute inset-0 h-full w-full transition-opacity duration-300 ${hasSnapshot ? "opacity-100 z-10" : "opacity-0 -z-10"}`}
                   />
                   <canvas
                     ref={overlayRef}
-                    onClick={onClickOverlay}
                     onPointerDown={onClickOverlay}
                     className="absolute inset-0 z-30 h-full w-full cursor-crosshair"
                   />
