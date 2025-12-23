@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import { useCameraSession } from "../store/cameraSession";
 
 /**
@@ -258,7 +258,7 @@ export default function PhoneCameraOverlay() {
       {/* Header - draggable */}
       <div
         // Header must accept pointer events so users can drag / open controls
-    className="phone-camera-header bg-gradient-to-r from-blue-600 to-blue-700 px-2 py-1 flex items-center justify-between cursor-grab active:cursor-grabbing select-none ndn-overlay-interactive"
+        className="phone-camera-header bg-gradient-to-r from-blue-600 to-blue-700 px-2 py-1 flex items-center justify-between cursor-grab active:cursor-grabbing select-none ndn-overlay-interactive"
         onMouseDown={handleMouseDown}
       >
         <div className="flex items-center gap-2">
@@ -271,7 +271,7 @@ export default function PhoneCameraOverlay() {
             className="text-white hover:bg-blue-800 px-1.5 py-0.5 rounded text-xs font-bold transition-colors ndn-overlay-interactive"
             title="Show controls"
           >
-            ⚙
+            ⚙️
           </button>
           <button
             onClick={() => setMinimized(!minimized)}
@@ -286,7 +286,7 @@ export default function PhoneCameraOverlay() {
       {/* Control buttons - shown when showControls is true and not minimized */}
       {!minimized && showControls && (
         // Controls must accept pointer events
-  <div className="bg-slate-800 border-t border-blue-500 px-2 py-2 flex gap-1 ndn-overlay-interactive">
+        <div className="bg-slate-800 border-t border-blue-500 px-2 py-2 flex gap-1 ndn-overlay-interactive">
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
@@ -309,7 +309,7 @@ export default function PhoneCameraOverlay() {
             }`}
             title="Reconnect phone camera"
           >
-            {isReconnecting ? "⟳ Reconnecting..." : "⟳ Reconnect"}
+            {isReconnecting ? "🔄 Reconnecting..." : "🔄 Reconnect"}
           </button>
         </div>
       )}

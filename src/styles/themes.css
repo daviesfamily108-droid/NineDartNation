@@ -75,11 +75,18 @@ html, body {
 
 /* Cards and panels should use themed surface */
 .card,
-.glass,
 .panel {
   background-color: var(--surface) !important;
   color: var(--text) !important;
   border-color: rgba(255,255,255,0.1) !important;
+}
+
+.glass {
+  background-color: rgba(255, 255, 255, 0.03) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: var(--text) !important;
 }
 
 /* Buttons with accent color */
@@ -90,7 +97,6 @@ html, body {
 
 /* Headers and text elements */
 .header {
-  background-color: var(--surface) !important;
   color: var(--text) !important;
 }
 

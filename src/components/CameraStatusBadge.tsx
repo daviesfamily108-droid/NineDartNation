@@ -1,5 +1,6 @@
-import { useEffect, useRef } from "react";
+﻿import { useEffect, useRef } from "react";
 import { useCameraSession } from "../store/cameraSession";
+import { sym } from "../ui/icons";
 
 /**
  * CameraStatusBadge
@@ -13,9 +14,10 @@ export default function CameraStatusBadge() {
 
   const videoEl = camera.getVideoElementRef();
   const sessionStream = camera.getMediaStream?.();
-  const hasActivePhoneStream = !!(sessionStream || videoEl?.srcObject);
-  const streaming =
-    camera.isStreaming && camera.mode === "phone" && hasActivePhoneStream;
+  const hasActiveStream = !!(sessionStream || videoEl?.srcObject);
+  // Show badge for ANY camera mode (local, phone, wifi) as long as it's streaming
+  const streaming = camera.isStreaming && hasActiveStream;
+  const statusLabel = streaming ? "Camera Active 🟢" : "Camera Offline 🔴";
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -61,9 +63,9 @@ export default function CameraStatusBadge() {
           ctx.font = "10px system-ui, sans-serif";
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillText("Camera", canvas.width / 2, canvas.height / 2);
+          ctx.fillText(statusLabel, canvas.width / 2, canvas.height / 2);
         }
-  } catch (e) {}
+      } catch (e) {}
       rafRef.current = requestAnimationFrame(render);
     };
 
@@ -79,7 +81,7 @@ export default function CameraStatusBadge() {
     try {
       // Toggle global overlay visibility via event (handled by overlay component)
       window.dispatchEvent(new CustomEvent("ndn:toggle-phone-overlay"));
-  } catch (e) {}
+    } catch (e) {}
   };
 
   return (
@@ -90,20 +92,25 @@ export default function CameraStatusBadge() {
       style={{ height: 36 }}
       title={
         streaming
-          ? "Camera connected – click to toggle overlay"
-          : "Camera not connected"
+          ? camera.mode === "phone"
+            ? "Camera connected ✅ – click to toggle overlay"
+            : "Camera connected ✅"
+          : "Camera not connected ❌"
       }
     >
       <canvas ref={canvasRef} width={64} height={36} className="block" />
-      <span className="pr-2 text-xs text-slate-100 select-none hidden xs:inline">
-        {streaming ? "Phone Cam" : "No Camera"}
+      <span
+        className="pr-2 text-xs text-slate-100 select-none hidden xs:inline"
+        aria-live="polite"
+      >
+        {statusLabel}
       </span>
       {/* Status tick */}
       <span
         className="absolute -top-1 -right-1 text-lg pointer-events-none drop-shadow"
         aria-hidden="true"
       >
-        {streaming ? "✅" : "⚪"}
+        {streaming ? sym("ok") : sym("dash")}
       </span>
     </button>
   );

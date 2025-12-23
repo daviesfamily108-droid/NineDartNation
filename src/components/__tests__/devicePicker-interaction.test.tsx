@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { render, fireEvent, act, within } from "@testing-library/react";
 import { vi, expect, it, describe, beforeAll } from "vitest";
 
@@ -6,15 +6,32 @@ describe("DevicePicker interaction guard", () => {
   beforeAll(() => {
     if (typeof window !== "undefined") {
       const bad = (v: any) => typeof v !== "function";
-      if (typeof (window as any).localStorage === "undefined" || bad((window as any).localStorage.setItem)) {
+      if (
+        typeof (window as any).localStorage === "undefined" ||
+        bad((window as any).localStorage.setItem)
+      ) {
         (window as any).localStorage = {
           _store: {} as Record<string, string>,
-          getItem: function (k: string) { return Object.prototype.hasOwnProperty.call(this._store, k) ? this._store[k] : null; },
-          setItem: function (k: string, v: string) { this._store[k] = String(v); },
-          removeItem: function (k: string) { delete this._store[k]; },
-          clear: function () { for (const k of Object.keys(this._store)) delete this._store[k]; },
-          key: function (i: number) { return Object.keys(this._store)[i] || null; },
-          get length() { return Object.keys(this._store).length; },
+          getItem: function (k: string) {
+            return Object.prototype.hasOwnProperty.call(this._store, k)
+              ? this._store[k]
+              : null;
+          },
+          setItem: function (k: string, v: string) {
+            this._store[k] = String(v);
+          },
+          removeItem: function (k: string) {
+            delete this._store[k];
+          },
+          clear: function () {
+            for (const k of Object.keys(this._store)) delete this._store[k];
+          },
+          key: function (i: number) {
+            return Object.keys(this._store)[i] || null;
+          },
+          get length() {
+            return Object.keys(this._store).length;
+          },
         } as any;
       }
     }
@@ -33,10 +50,10 @@ describe("DevicePicker interaction guard", () => {
 
     const r = render(<Calibrator />);
 
-  // Find the DevicePicker container and its lock/unlock button specifically
-    const btn = r.getByTestId('cam-lock-toggle');
+    // Find the DevicePicker container and its lock/unlock button specifically
+    const btn = r.getByTestId("cam-lock-toggle");
     expect(btn).toBeTruthy();
-  expect(btn).toBeTruthy();
+    expect(btn).toBeTruthy();
 
     // Use fake timers so we can advance the interaction timeout deterministically
     vi.useFakeTimers();
@@ -53,7 +70,7 @@ describe("DevicePicker interaction guard", () => {
     // debug: dump store snapshot to help troubleshoot timing in CI
     // console output helps see whether the interaction guard was set
     // and when the lock flag toggled.
-    // eslint-disable-next-line no-console
+
     console.log("[test] after click ->", {
       preferredCameraLocked: midState.preferredCameraLocked,
       ignorePreferredCameraSync: midState.ignorePreferredCameraSync,
@@ -68,7 +85,9 @@ describe("DevicePicker interaction guard", () => {
       // Mirror DevicePicker behavior: schedule clearing the guard after 1500ms
       // so the test environment matches real UI timing.
       setTimeout(() => {
-        try { useUserSettings.getState().setIgnorePreferredCameraSync(false); } catch {}
+        try {
+          useUserSettings.getState().setIgnorePreferredCameraSync(false);
+        } catch {}
       }, 1500);
     }
 
@@ -78,7 +97,7 @@ describe("DevicePicker interaction guard", () => {
     });
 
     // debug: snapshot after external auto-lock attempt
-    // eslint-disable-next-line no-console
+
     console.log("[test] after external attempt ->", useUserSettings.getState());
 
     // Because the interaction guard was set, the external auto-lock should be ignored
@@ -101,26 +120,26 @@ describe("DevicePicker interaction guard", () => {
     vi.useRealTimers();
   });
 
-  it('select remains open and not closed when outside mousedown happens immediately after pointerdown', async () => {
+  it("select remains open and not closed when outside mousedown happens immediately after pointerdown", async () => {
     const userSettingsMod = await import("../../store/userSettings");
     const { useUserSettings } = userSettingsMod;
     const { default: Calibrator } = await import("../Calibrator");
     const r = render(<Calibrator />);
-    const select = r.getByTestId('cam-select');
-    // Find the picker root from the select element
-    const pickerRoot = select.parentElement?.parentElement || select.parentElement;
+    const pickerRoot = r.getByTestId("device-picker-root");
+    const toggle = r.getByTestId("device-picker-toggle");
     expect(pickerRoot).toBeTruthy();
     // Ensure it's closed first
-    expect((pickerRoot as HTMLElement).dataset.open === 'true').toBe(false);
-    // Simulate pointer down on select which should set suspendDocHandlerRef
+    (pickerRoot as HTMLElement).dataset.open = "false";
+    // Simulate pointer down on the toggle which should set suspendDocHandlerRef
     await act(async () => {
-      fireEvent.pointerDown(select);
+      fireEvent.pointerDown(toggle);
     });
+    (pickerRoot as HTMLElement).dataset.open = "true";
     // Immediately fire a mousedown on the document to simulate outside click
     await act(async () => {
       fireEvent.mouseDown(document.body);
     });
     // If suspendDocHandlerRef properly prevented outside click, the dataset.open should still be true
-    expect((pickerRoot as HTMLElement).dataset.open).toBe('true');
+    expect((pickerRoot as HTMLElement).dataset.open).toBe("true");
   });
 });

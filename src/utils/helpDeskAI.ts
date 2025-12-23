@@ -1,4 +1,4 @@
-// Help Desk AI - Provides intelligent responses to common questions
+﻿// Help Desk AI - Provides intelligent responses to common questions
 export const HELP_TOPICS = {
   calibration: {
     keywords: [
@@ -179,7 +179,7 @@ export function analyzeUserQuestion(question: string): AIResponse | null {
     message: `I couldn't find a specific answer to your question. Common topics I can help with:\n\n${Object.values(
       HELP_TOPICS,
     )
-      .map((t) => `• ${t.title}`)
+      .map((t) => `· ${t.title}`)
       .join("\n")}\n\nOr I can connect you with an admin who can help further.`,
     followUp: "Would you like to speak with an admin?",
   };

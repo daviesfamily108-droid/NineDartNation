@@ -1,6 +1,11 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { dlog } from "../utils/logger";
 import { persist, createJSONStorage } from "zustand/middleware";
+
+const TEST_MODE =
+  process.env.NODE_ENV === "test" ||
+  (typeof import.meta !== "undefined" &&
+    (import.meta as any).env?.MODE === "test");
 
 export type CameraStreamMode = "local" | "phone" | "wifi";
 
@@ -91,7 +96,7 @@ export const useCameraSession = create<CameraSessionState>()(
       // Keep video element ref outside of state to avoid serialization issues
       getVideoElementRef: () => {
         const ref = videoElementRefHolder;
-        if (!ref) {
+        if (!ref && !TEST_MODE) {
           dlog("[cameraSession] ⚠️ getVideoElementRef called but ref is NULL");
         }
         return ref;
@@ -99,7 +104,7 @@ export const useCameraSession = create<CameraSessionState>()(
       setVideoElementRef: (ref) => {
         if (ref) {
           dlog(
-            "[cameraSession] ✅ setVideoElementRef called - storing HTMLVideoElement",
+            "[cameraSession] ✓ setVideoElementRef called - storing HTMLVideoElement",
             {
               tagName: ref.tagName,
               hasStream: !!ref.srcObject,

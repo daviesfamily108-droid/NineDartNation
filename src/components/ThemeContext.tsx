@@ -1,4 +1,6 @@
-import SeasonalProvider, { useTheme as useSeasonalTheme } from '../contexts/ThemeProvider';
+﻿import SeasonalProvider, {
+  useTheme as useSeasonalTheme,
+} from "../contexts/ThemeProvider";
 
 // Re-export a thin compatibility layer so existing code that imports
 // from "./components/ThemeContext" continues to work.

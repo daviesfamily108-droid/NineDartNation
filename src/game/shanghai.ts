@@ -1,4 +1,4 @@
-export type ShanghaiRound =
+﻿export type ShanghaiRound =
   | 1
   | 2
   | 3

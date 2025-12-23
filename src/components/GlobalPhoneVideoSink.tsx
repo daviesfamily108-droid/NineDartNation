@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+﻿import { useEffect, useRef } from "react";
 import { useCameraSession } from "../store/cameraSession";
 
 /**
@@ -16,11 +16,13 @@ export default function GlobalPhoneVideoSink() {
   const attemptRef = useRef<number>(0);
 
   // Ensure the global ref is registered for others to use
+  // ONLY if we are in phone or wifi mode. For local mode, the active component (Calibrator/CameraTile)
+  // will register its own video element ref.
   useEffect(() => {
-    if (vref.current) {
+    if (vref.current && (camera.mode === "phone" || camera.mode === "wifi")) {
       camera.setVideoElementRef(vref.current);
     }
-  }, [camera]);
+  }, [camera.mode]);
 
   // Apply the current stream and keep it playing
   useEffect(() => {

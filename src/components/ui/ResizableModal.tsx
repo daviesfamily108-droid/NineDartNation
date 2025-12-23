@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   useEffect,
   useRef,
   useState,
@@ -199,6 +199,17 @@ export default function ResizableModal({
   }
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!onClose) return;
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", handleKey, true);
+    return () => window.removeEventListener("keydown", handleKey, true);
+  }, [onClose]);
   const style: CSSProperties = fullScreen
     ? { width: "100%", height: "100%", maxWidth: "100%", maxHeight: "100%" }
     : {

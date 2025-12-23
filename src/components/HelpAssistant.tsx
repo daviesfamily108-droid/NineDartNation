@@ -1,12 +1,10 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { HelpCircle, MessageCircle, X, Send } from "lucide-react";
 import { apiFetch } from "../utils/api";
 import { useWS } from "./WSProvider";
 import HelpdeskChat from "./HelpdeskChat";
 
-interface HelpAssistantProps {}
-
-export default function HelpAssistant(_: HelpAssistantProps) {
+export default function HelpAssistant() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<
     Array<{
@@ -56,33 +54,6 @@ export default function HelpAssistant(_: HelpAssistantProps) {
     });
     return () => unsub();
   }, [ws, myRequest]);
-
-  const faq = {
-    "how to play":
-      "To play darts, select a game mode from the menu. For online play, join a match. For offline, start a local game.",
-    calibration:
-      "Go to Settings > Camera & Vision > Calibration Guide to set up your camera properly.",
-    premium:
-      'Premium unlocks all game modes. Click the "Upgrade to PREMIUM" button in online play.',
-    username: "Change your username once for free in Settings > Account.",
-    voice:
-      "Enable voice caller in Settings > Audio & Voice. Test the voice with the Test Voice button.",
-    friends: "Add friends in the Friends tab to play together.",
-    stats: "View your statistics in the Stats tab.",
-    settings: "Customize your experience in the Settings panel.",
-    support:
-      "Contact support via email or check the FAQ in Settings > Support.",
-    scoring:
-      "Auto-scoring assigns each detected dart to the correct board segment using the detection pipeline. You can review scores in the Match Summary after the round.",
-    autoscore:
-      "AutoScore attempts to place darts automatically. If a dart placement looks wrong, you can adjust it in the match review screen or disable immediate auto-commit in Settings.",
-    pairing:
-      "To pair a phone or camera, open the Pairing flow from the main menu and follow the QR / pairing code steps. Ensure both devices are on the same network.",
-    highlights:
-      "Highlights are saved when you checkout 50+ or visit 100+. You can download them from Settings > Highlights or save to your account.",
-    legal:
-      "See the Legal Notice in the footer for Privacy & Copyright information. Click the footer link to view the full policy.",
-  };
 
   const navigateToTab = (tabKey: string) => {
     try {
@@ -185,7 +156,7 @@ export default function HelpAssistant(_: HelpAssistantProps) {
       message.includes("camera pairing")
     ) {
       return {
-        text: "Use the Pairing flow to connect phones and cameras. Make sure devices are on the same Wi‑Fi and scan the QR code shown.",
+        text: "Use the Pairing flow to connect phones and cameras. Make sure devices are on the same Wi-Fi and scan the QR code shown.",
         links: [{ text: "Open Pairing", tab: "pairing" }],
       };
     }

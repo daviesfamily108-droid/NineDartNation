@@ -1,4 +1,4 @@
-// Demo pricing: base is £5 GBP. Convert to user currency for display.
+﻿// Demo pricing: base is £5 GBP. Convert to user currency for display.
 export const BASE_PRICE_GBP = 5;
 
 // Simple static FX rates for display (not for real billing). Updated rarely.

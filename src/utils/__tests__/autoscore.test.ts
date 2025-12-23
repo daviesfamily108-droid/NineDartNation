@@ -1,4 +1,4 @@
-import { scoreAtBoardPoint, BoardRadii, SectorOrder } from "../vision";
+﻿import { scoreAtBoardPoint, BoardRadii, SectorOrder } from "../vision";
 import { scoreFromImagePoint } from "../autoscore";
 import { applyHomography } from "../vision";
 
@@ -48,7 +48,10 @@ describe("scoreAtBoardPoint and image mapping", () => {
     const idx = SectorOrder.indexOf(13);
     const angle = (idx / SectorOrder.length) * 360 - 90; // deg
     const r = (BoardRadii.trebleInner + BoardRadii.trebleOuter) / 2;
-    const p = { x: r * Math.cos(degToRad(angle)), y: r * Math.sin(degToRad(angle)) };
+    const p = {
+      x: r * Math.cos(degToRad(angle)),
+      y: r * Math.sin(degToRad(angle)),
+    };
     const s = scoreAtBoardPoint(p);
     expect(s.base).toBe(39);
     expect(s.mult).toBe(3);

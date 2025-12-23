@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import { useToast } from "../store/toast";
 import { useMessages } from "../store/messages";
 import { censorProfanity } from "../utils/profanity";
@@ -147,10 +147,77 @@ export default function Friends({ user }: { user?: any }) {
     }
   }
 
+  async function acceptFriend(requestId: string) {
+    try {
+      await fetch("/api/friends/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, requestId }),
+      });
+      await refresh();
+      toast("Friend request accepted", { type: "success" });
+    } catch {}
+  }
+
+  async function declineFriend(requestId: string) {
+    try {
+      await fetch("/api/friends/decline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, requestId }),
+      });
+      await refresh();
+      toast("Friend request declined", { type: "info" });
+    } catch {}
+  }
+
+  async function cancelRequest(requestId: string) {
+    try {
+      await fetch("/api/friends/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, requestId }),
+      });
+      await refresh();
+      toast("Friend request cancelled", { type: "info" });
+    } catch {}
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById(
+      "message-input",
+    ) as HTMLTextAreaElement;
+    const message = input?.value;
+    if (!message || !messagePopup.toEmail) return;
+    try {
+      await fetch("/api/friends/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fromEmail: email,
+          toEmail: messagePopup.toEmail,
+          message,
+        }),
+      });
+      setMessagePopup({ show: false });
+      toast("Message sent", { type: "success" });
+    } catch {}
+  }
+
   const filtered = useMemo(() => {
     if (filter === "all") return friends;
     return friends.filter((f) => (f.status || "offline") === filter);
   }, [friends, filter]);
+
+  const statusSummary = useMemo(() => {
+    const summary = { online: 0, ingame: 0, offline: 0 };
+    for (const f of friends) {
+      if (f.status === "online") summary.online += 1;
+      else if (f.status === "ingame") summary.ingame += 1;
+      else summary.offline += 1;
+    }
+    return summary;
+  }, [friends]);
 
   async function spectate(roomId?: string | null) {
     if (!roomId) {
@@ -162,7 +229,7 @@ export default function Friends({ user }: { user?: any }) {
         detail: { roomId },
       });
       window.dispatchEvent(ev);
-      toast("Opening spectator view…", { type: "info" });
+      toast("Opening spectator view...", { type: "info" });
     } catch {}
   }
 
@@ -170,31 +237,62 @@ export default function Friends({ user }: { user?: any }) {
   const requestsCount = requests.length + outgoingRequests.length;
   return (
     <div className="card ndn-game-shell">
-      <h2 className="text-2xl font-bold text-brand-700 mb-2">Friends</h2>
+      <h2 className="text-2xl font-bold text-brand-700 mb-2">Friends 👥</h2>
       <p className="mb-2 text-brand-600">
-        Manage your friends. See who’s online, in-game, or offline; find new
+        Manage your friends. See who's online, in-game, or offline; find new
         teammates; and invite people to play.
       </p>
-      <div className="text-xs opacity-70 mb-3">
-        Online: {friends.filter((f) => f.status === "online").length} · In-game:{" "}
-        {friends.filter((f) => f.status === "ingame").length} · Offline:{" "}
-        {friends.filter((f) => !f.status || f.status === "offline").length}
+      <div className="grid gap-3 mb-4 grid-cols-2 sm:grid-cols-4">
+        {[
+          {
+            label: "Online",
+            value: statusSummary.online,
+            accent: "bg-emerald-500/10 border-emerald-500/40",
+          },
+          {
+            label: "In-Game",
+            value: statusSummary.ingame,
+            accent: "bg-amber-500/10 border-amber-500/40",
+          },
+          {
+            label: "Offline",
+            value: statusSummary.offline,
+            accent: "bg-slate-500/10 border-slate-500/40",
+          },
+          {
+            label: "Requests",
+            value: requestsCount,
+            accent: "bg-indigo-500/10 border-indigo-500/40",
+          },
+        ].map((stat) => (
+          <div
+            key={stat.label}
+            className={`rounded-2xl border px-3 py-2 text-center ${stat.accent}`}
+          >
+            <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
+              {stat.label}
+            </div>
+            <div className="text-2xl font-semibold text-white">
+              {stat.value}
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-        <div className="md:col-span-2 p-3 rounded-2xl bg-black/30 border border-white/10">
+        <div className="md:col-span-2 p-4 rounded-[28px] bg-gradient-to-br from-slate-900/80 to-indigo-900/60 border border-white/10 shadow-2xl">
           <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold text-white/90">Your Friends</div>
+            <div className="font-semibold text-white/90">Your Friends 👥</div>
           </div>
           <TabPills
             tabs={[
-              { key: "all", label: "All" },
-              { key: "online", label: "Online" },
-              { key: "ingame", label: "In-Game" },
-              { key: "offline", label: "Offline" },
+              { key: "all", label: "All 👥" },
+              { key: "online", label: "Online 🟢" },
+              { key: "ingame", label: "In-Game 🎮" },
+              { key: "offline", label: "Offline ⚪" },
               {
                 key: "requests",
-                label: `Requests ${requestsCount > 0 ? "(" + requestsCount + ")" : ""}`,
+                label: `Requests ${requestsCount > 0 ? "(" + requestsCount + ")" : ""} 📩`,
               },
             ]}
             active={filter}
@@ -202,7 +300,7 @@ export default function Friends({ user }: { user?: any }) {
             className="mb-3"
           />
           {filter === "requests" ? (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {requestsCount > 0 ? (
                 <>
                   {/* Incoming requests */}
@@ -210,7 +308,7 @@ export default function Friends({ user }: { user?: any }) {
                     requests.map((r) => (
                       <li
                         key={`incoming-${r.id || r.fromEmail}`}
-                        className="p-3 rounded bg-black/20 flex flex-col gap-2"
+                        className="p-3 rounded-2xl border border-white/10 bg-slate-900/40 flex flex-col gap-3"
                       >
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-lg">
@@ -222,104 +320,16 @@ export default function Friends({ user }: { user?: any }) {
                         </div>
                         <div className="flex gap-2">
                           <button
-                            className="btn bg-emerald-600 hover:bg-emerald-700"
-                            onClick={async () => {
-                              setLoading(true);
-                              try {
-                                const res = await fetch("/api/friends/accept", {
-                                  method: "POST",
-                                  headers: {
-                                    "Content-Type": "application/json",
-                                  },
-                                  body: JSON.stringify({
-                                    email,
-                                    requester: r.fromEmail,
-                                  }),
-                                });
-                                if (res.ok) {
-                                  // Remove from requests and add to friends immediately for better UX
-                                  setRequests((prev) =>
-                                    prev.filter((req) => req.id !== r.id),
-                                  );
-                                  // Add to friends list (we'll get the full data on next refresh, but show basic info now)
-                                  const newFriend = {
-                                    email: r.fromEmail,
-                                    username: r.fromUsername,
-                                    status: "offline" as const,
-                                  };
-                                  setFriends((prev) => [...prev, newFriend]);
-                                  // Also remove from outgoing if it exists
-                                  setOutgoingRequests((prev) =>
-                                    prev.filter(
-                                      (req) => req.toEmail !== r.fromEmail,
-                                    ),
-                                  );
-                                  toast("Friend request accepted", {
-                                    type: "success",
-                                  });
-                                  // Refresh in background to get complete data
-                                  setTimeout(() => refresh(), 100);
-                                } else {
-                                  toast("Failed to accept request", {
-                                    type: "error",
-                                  });
-                                }
-                              } catch (error) {
-                                toast("Error accepting request", {
-                                  type: "error",
-                                });
-                              } finally {
-                                setLoading(false);
-                              }
-                            }}
+                            onClick={() => acceptFriend(r.id)}
+                            className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/30 transition-colors"
                           >
-                            Accept
+                            Accept ✅
                           </button>
                           <button
-                            className="btn bg-rose-600 hover:bg-rose-700"
-                            onClick={async () => {
-                              setLoading(true);
-                              try {
-                                const res = await fetch(
-                                  "/api/friends/decline",
-                                  {
-                                    method: "POST",
-                                    headers: {
-                                      "Content-Type": "application/json",
-                                    },
-                                    body: JSON.stringify({
-                                      email,
-                                      requester: r.fromEmail,
-                                    }),
-                                  },
-                                );
-                                if (res.ok) {
-                                  // Remove from requests immediately for better UX
-                                  setRequests((prev) =>
-                                    prev.filter((req) => req.id !== r.id),
-                                  );
-                                  // Also remove from outgoing if it exists
-                                  setOutgoingRequests((prev) =>
-                                    prev.filter(
-                                      (req) => req.toEmail !== r.fromEmail,
-                                    ),
-                                  );
-                                  toast("Friend request declined", {
-                                    type: "info",
-                                  });
-                                  // Refresh in background to ensure consistency
-                                  setTimeout(() => refresh(), 100);
-                                } else {
-                                  toast("Failed to decline request", {
-                                    type: "error",
-                                  });
-                                }
-                              } finally {
-                                setLoading(false);
-                              }
-                            }}
+                            onClick={() => declineFriend(r.id)}
+                            className="px-3 py-1 rounded-lg bg-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/30 transition-colors"
                           >
-                            Decline
+                            Decline ❌
                           </button>
                         </div>
                       </li>
@@ -329,50 +339,21 @@ export default function Friends({ user }: { user?: any }) {
                     outgoingRequests.map((r) => (
                       <li
                         key={`outgoing-${r.id || r.toEmail}`}
-                        className="p-3 rounded bg-black/20 flex flex-col gap-2"
+                        className="p-3 rounded-2xl border border-white/10 bg-slate-900/40 flex flex-col gap-3"
                       >
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-lg">
                             {r.toUsername || r.toEmail || "Unknown User"}
                           </span>
-                          <span className="text-xs bg-amber-600/20 text-amber-400 px-2 py-1 rounded">
-                            Pending
-                          </span>
+                          <div className="px-3 py-1 rounded-lg bg-white/5 text-white/40 text-xs font-bold">
+                            Pending ⏳
+                          </div>
                         </div>
                         <button
-                          className="btn bg-slate-600 hover:bg-slate-700 self-start"
-                          onClick={async () => {
-                            setLoading(true);
-                            try {
-                              const res = await fetch("/api/friends/cancel", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  email,
-                                  friend: r.toEmail,
-                                }),
-                              });
-                              if (res.ok) {
-                                // Remove from outgoing requests immediately for better UX
-                                setOutgoingRequests((prev) =>
-                                  prev.filter((req) => req.id !== r.id),
-                                );
-                                toast("Friend request cancelled", {
-                                  type: "info",
-                                });
-                                // Refresh in background to ensure consistency
-                                setTimeout(() => refresh(), 100);
-                              } else {
-                                toast("Failed to cancel request", {
-                                  type: "error",
-                                });
-                              }
-                            } finally {
-                              setLoading(false);
-                            }
-                          }}
+                          onClick={() => cancelRequest(r.id)}
+                          className="px-3 py-1 rounded-lg bg-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/30 transition-colors"
                         >
-                          Cancel
+                          Cancel ✖️
                         </button>
                       </li>
                     ))}
@@ -382,99 +363,76 @@ export default function Friends({ user }: { user?: any }) {
               )}
             </ul>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {filtered.map((f) => (
                 <li
                   key={f.email}
-                  className="p-2 rounded bg-black/20 flex items-center justify-between"
+                  className="rounded-2xl border border-white/10 bg-slate-900/40 p-4 flex flex-col gap-3 shadow-lg"
                 >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-block w-2 h-2 rounded-full ${f.status === "online" ? "bg-emerald-400" : f.status === "ingame" ? "bg-amber-400" : "bg-slate-400"}`}
-                    ></span>
-                    <span className="font-semibold">
-                      {f.username || f.email}
-                    </span>
-                    <span className="text-xs opacity-70">
-                      {f.status || "offline"}
-                      {f.status !== "online" && f.lastSeen
-                        ? ` · ${timeAgo(f.lastSeen)}`
-                        : ""}
-                    </span>
-                    {f.status === "ingame" && f.match && (
-                      <span className="text-[10px] opacity-70 px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-600/30">
-                        {f.match.game} {labelForMode(f.match.mode)}{" "}
-                        {f.match.value}
-                        {f.match.game === "X01" && f.match.startingScore
-                          ? ` · ${f.match.startingScore}`
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`inline-block w-2.5 h-2.5 rounded-full ${
+                            f.status === "online"
+                              ? "bg-emerald-400"
+                              : f.status === "ingame"
+                                ? "bg-amber-400"
+                                : "bg-slate-400"
+                          }`}
+                        ></span>
+                        <span className="font-semibold text-white">
+                          {f.username || f.email}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        {f.status || "offline"}
+                        {f.status !== "online" && f.lastSeen
+                          ? ` · ${timeAgo(f.lastSeen)}`
                           : ""}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {f.status === "ingame" && f.roomId && (
+                      </div>
+                      {f.status === "ingame" && f.match && (
+                        <div className="text-[11px] inline-flex items-center gap-1 mt-2 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-3 py-0.5 text-indigo-200">
+                          <span className="font-medium">Live Match</span>
+                          <span>
+                            {f.match.game} {labelForMode(f.match.mode)}{" "}
+                            {f.match.value}
+                            {f.match.game === "X01" && f.match.startingScore
+                              ? ` · ${f.match.startingScore}`
+                              : ""}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {f.status === "ingame" && f.roomId && (
+                        <button
+                          onClick={() => spectate(f.roomId)}
+                          className="px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-400 text-xs font-bold hover:bg-indigo-500/30 transition-colors"
+                        >
+                          Spectate 👁️
+                        </button>
+                      )}
                       <button
-                        className="btn"
-                        onClick={() => spectate(f.roomId!)}
-                      >
-                        Spectate
-                      </button>
-                    )}
-                    <button
-                      className="btn"
-                      disabled={
-                        loading ||
-                        (f.status !== "online" && f.status !== "ingame")
-                      }
-                      onClick={async () => {
-                        setLoading(true);
-                        try {
-                          const res = await fetch("/api/friends/invite", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              fromEmail: email,
-                              toEmail: f.email,
-                              game: "X01",
-                              mode: "bestof",
-                              value: 3,
-                              startingScore: 501,
-                            }),
+                        onClick={() => {
+                          setMessagePopup({
+                            show: true,
+                            toEmail: f.email,
+                            toUser: f.username || f.email,
                           });
-                          const data = await res.json().catch(() => ({}));
-                          if (data?.delivered)
-                            toast("Invite sent", { type: "success" });
-                          else
-                            toast("Friend is offline; invite queued", {
-                              type: "info",
-                            });
-                        } finally {
-                          setLoading(false);
-                        }
-                      }}
-                    >
-                      Invite
-                    </button>
-                    <button
-                      className="btn"
-                      disabled={loading}
-                      onClick={() =>
-                        setMessagePopup({
-                          show: true,
-                          toUser: f.username || f.email,
-                          toEmail: f.email,
-                        })
-                      }
-                    >
-                      Message
-                    </button>
-                    <button
-                      className="btn bg-rose-600 hover:bg-rose-700"
-                      disabled={loading}
-                      onClick={() => removeFriend(f.email)}
-                    >
-                      Remove
-                    </button>
+                        }}
+                        className="flex-1 px-3 py-2 rounded-xl bg-indigo-500/20 text-indigo-400 text-xs font-bold hover:bg-indigo-500/30 transition-colors"
+                      >
+                        Message 💬
+                      </button>
+                      <button
+                        onClick={() => removeFriend(f.email)}
+                        className="px-3 py-2 rounded-xl bg-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/30 transition-colors"
+                        title="Remove Friend"
+                      >
+                        Remove 🗑️
+                      </button>
+                    </div>
                   </div>
                 </li>
               ))}
@@ -487,7 +445,7 @@ export default function Friends({ user }: { user?: any }) {
           )}
         </div>
 
-        <div className="p-3 rounded-2xl bg-black/20 border border-white/10">
+        <div className="p-4 rounded-[28px] bg-slate-950/70 border border-white/10 shadow-xl">
           <div className="font-semibold mb-2 text-white/90">Find Friends</div>
           <input
             className="input w-full mb-2"
@@ -495,11 +453,11 @@ export default function Friends({ user }: { user?: any }) {
             value={q}
             onChange={(e) => search(e.target.value)}
           />
-          <ul className="space-y-1 mb-3 max-h-48 overflow-auto">
+          <ul className="space-y-2 mb-3 max-h-48 overflow-auto">
             {results.map((r) => (
               <li
                 key={r.email}
-                className="flex items-center justify-between p-2 rounded bg-black/10"
+                className="flex items-center justify-between gap-2 p-3 rounded-2xl border border-white/10 bg-slate-900/40"
               >
                 <div className="flex items-center gap-2">
                   <span
@@ -508,24 +466,24 @@ export default function Friends({ user }: { user?: any }) {
                   <span>{r.username || r.email}</span>
                 </div>
                 <button
-                  className="btn"
-                  disabled={loading}
                   onClick={() => addFriend(r.email)}
+                  disabled={loading}
+                  className={`px-4 py-2 rounded-xl text-white text-sm font-bold transition-colors ${loading ? "bg-indigo-900/40 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"}`}
                 >
-                  Add
+                  {loading ? "Working…" : "Add ➕"}
                 </button>
               </li>
             ))}
             {results.length === 0 && (
-              <li className="text-xs opacity-60">Type to search…</li>
+              <li className="text-xs opacity-60">Type to search...</li>
             )}
           </ul>
           <div className="font-semibold mb-1 text-white/90">Suggested</div>
-          <ul className="space-y-1 max-h-48 overflow-auto">
+          <ul className="space-y-2 max-h-48 overflow-auto">
             {suggested.map((s) => (
               <li
                 key={s.email}
-                className="flex items-center justify-between p-2 rounded bg-black/10"
+                className="flex items-center justify-between gap-2 p-3 rounded-2xl border border-white/10 bg-slate-900/40"
               >
                 <div className="flex items-center gap-2">
                   <span
@@ -534,11 +492,11 @@ export default function Friends({ user }: { user?: any }) {
                   <span>{s.username || s.email}</span>
                 </div>
                 <button
-                  className="btn"
-                  disabled={loading}
                   onClick={() => addFriend(s.email)}
+                  disabled={loading}
+                  className={`px-4 py-2 rounded-xl text-white text-sm font-bold transition-colors ${loading ? "bg-indigo-900/40 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"}`}
                 >
-                  Add
+                  {loading ? "Working…" : "Add ➕"}
                 </button>
               </li>
             ))}
@@ -552,12 +510,12 @@ export default function Friends({ user }: { user?: any }) {
       {/* Direct Messages */}
       <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40">
         <div className="flex items-center justify-between mb-2">
-          <div className="font-semibold">Messages</div>
+          <div className="font-semibold">Messages 💬</div>
           <button
-            className="btn px-3 py-1 text-sm"
             onClick={() => msgs.markAllRead()}
+            className="text-xs text-indigo-400 font-bold hover:text-indigo-300 transition-colors"
           >
-            Mark all read
+            Mark all read ✅
           </button>
         </div>
         {msgs.inbox.length === 0 ? (
@@ -575,24 +533,22 @@ export default function Friends({ user }: { user?: any }) {
                   </div>
                   <div className="flex gap-2">
                     <button
-                      className="btn px-2 py-1 text-xs"
-                      onClick={() =>
+                      onClick={() => {
                         setMessagePopup({
                           show: true,
-                          toUser: m.from,
                           toEmail: m.from,
-                          replyTo: m.from,
-                        })
-                      }
+                          toUser: m.from,
+                        });
+                      }}
+                      className="px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-400 text-xs font-bold hover:bg-indigo-500/30 transition-colors"
                     >
-                      Reply
+                      Reply ↩️
                     </button>
                     <button
-                      className="btn bg-slate-700 hover:bg-slate-800 px-2 py-1 text-xs"
-                      title="Delete this message"
                       onClick={() => msgs.remove(m.id)}
+                      className="px-3 py-1 rounded-lg bg-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/30 transition-colors"
                     >
-                      Delete
+                      Delete 🗑️
                     </button>
                     <button
                       className="btn bg-rose-600 hover:bg-rose-700 px-2 py-1 text-xs"
@@ -633,7 +589,7 @@ export default function Friends({ user }: { user?: any }) {
           <div className="bg-slate-800 border border-slate-600 rounded-lg p-6 max-w-md w-full mx-4">
             <div className="text-center mb-4">
               <h3 className="text-lg font-semibold text-white">
-                Type Message To {messagePopup.toUser}
+                Send Message ✉️
               </h3>
             </div>
             {/* eslint-disable jsx-a11y/no-autofocus */}
@@ -646,39 +602,13 @@ export default function Friends({ user }: { user?: any }) {
             {/* eslint-enable jsx-a11y/no-autofocus */}
             <div className="flex gap-3 mt-4">
               <button
-                className="flex-1 btn bg-emerald-600 hover:bg-emerald-700"
-                onClick={async () => {
-                  const input = document.getElementById(
-                    "message-input",
-                  ) as HTMLTextAreaElement;
-                  const message = input?.value?.trim();
-                  if (!message) return;
-
-                  setLoading(true);
-                  try {
-                    await fetch("/api/friends/message", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({
-                        fromEmail: email,
-                        toEmail: messagePopup.toEmail,
-                        message,
-                      }),
-                    });
-                    toast("Message sent", { type: "success" });
-                    setMessagePopup({ show: false });
-                  } catch (error) {
-                    toast("Failed to send message", { type: "error" });
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                disabled={loading}
+                onClick={sendMessage}
+                className="px-6 py-2 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-colors"
               >
-                Send
+                Send Message 📤
               </button>
               <button
-                className="flex-1 btn bg-slate-600 hover:bg-slate-700"
+                className="btn bg-slate-600 hover:bg-slate-700"
                 onClick={() => setMessagePopup({ show: false })}
               >
                 Cancel

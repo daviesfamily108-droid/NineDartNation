@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Undo2 } from "lucide-react";
 
 interface MatchControlsProps {
@@ -16,8 +16,8 @@ interface MatchControlsProps {
 
 export default function MatchControls({
   inProgress = true,
-  startingScore = 501,
-  pendingEntries = [],
+  startingScore: _startingScore = 501,
+  pendingEntries: _pendingEntries = [],
   onAddVisit,
   onUndo,
   onEndLeg,
@@ -61,7 +61,7 @@ export default function MatchControls({
             setScore(0);
           }}
         >
-          Add Visit
+          Add Visit ➕
         </button>
         <button
           className="px-3 py-2 rounded-xl border border-slate-200"
@@ -93,13 +93,13 @@ export default function MatchControls({
             setScore(0);
           }}
         >
-          End Leg (Checkout {score || 0})
+          End Leg (Checkout {score || 0}) �
         </button>
         <button
           className="btn bg-slate-700 hover:bg-slate-800"
           onClick={() => onNextPlayer && onNextPlayer()}
         >
-          Next Player
+          Next Player 👤
         </button>
         <button
           className="btn bg-emerald-600 hover:bg-emerald-700"
@@ -107,7 +107,7 @@ export default function MatchControls({
             onEndGame && onEndGame();
           }}
         >
-          End Game
+          End Game �
         </button>
       </div>
     </div>

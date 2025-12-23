@@ -1,4 +1,4 @@
-import { useMatch } from "../store/match";
+﻿import { useMatch } from "../store/match";
 import { formatAvg } from "../utils/stats";
 // Icons not used directly in Scoreboard; MatchControls has its own icons
 import MatchControls from "./MatchControls";
@@ -33,7 +33,7 @@ export default function Scoreboard({
             (acc, L) => {
               acc.points += L.totalScoreStart - L.totalScoreRemaining;
               const legDarts = (L.visits || []).reduce(
-                (a, v) => a + (v.darts || 0) - (v.preOpenDarts || 0),
+                (a, v) => a + (v.darts || 0),
                 0,
               );
               acc.darts += legDarts;
@@ -136,7 +136,7 @@ export default function Scoreboard({
                   (acc, L) => {
                     acc.points += L.totalScoreStart - L.totalScoreRemaining;
                     const legDarts = (L.visits || []).reduce(
-                      (a, v) => a + (v.darts || 0) - (v.preOpenDarts || 0),
+                      (a, v) => a + (v.darts || 0),
                       0,
                     );
                     acc.darts += legDarts;
@@ -203,8 +203,18 @@ export default function Scoreboard({
                         <div className="text-xs text-slate-500">Darts</div>
                         <div className="text-xl font-bold">{dartsThrown}</div>
                       </div>
-                      <div className="p-2 rounded-xl bg-white/10 border border-white/10 metric-tile">
-                        <div className="text-xs text-slate-500">3-Dart Avg</div>
+                      <div className="p-3 rounded-xl bg-white/10 border border-white/10 metric-tile flex flex-col justify-center">
+                        <div className="text-xs text-slate-500">
+                          3-Dart Avg (Live)
+                        </div>
+                        <div className="text-xl font-bold">
+                          {formatAvg(p.currentThreeDartAvg ?? 0)}
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-white/10 border border-white/10 metric-tile flex flex-col justify-center">
+                        <div className="text-xs text-slate-500">
+                          3-Dart Avg (Match)
+                        </div>
                         <div className="text-xl font-bold">
                           {formatAvg(avg)}
                         </div>

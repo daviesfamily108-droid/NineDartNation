@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { broadcastMessage, subscribeMatchSync } from '../broadcast';
+﻿import { describe, it, expect } from "vitest";
+import { broadcastMessage, subscribeMatchSync } from "../broadcast";
 
-describe('broadcast helpers', () => {
-  it('subscribe receives messages from broadcastMessage via BroadcastChannel', async () => {
+describe("broadcast helpers", () => {
+  it("subscribe receives messages from broadcastMessage via BroadcastChannel", async () => {
     // Install a small mock BroadcastChannel that simulates multi-instance pub/sub
     const OriginalBC = (global as any).BroadcastChannel;
     try {
@@ -23,7 +23,8 @@ describe('broadcast helpers', () => {
             if (!set) return;
             for (const inst of Array.from(set)) {
               try {
-                if (inst !== this && inst.onmessage) inst.onmessage({ data: msg });
+                if (inst !== this && inst.onmessage)
+                  inst.onmessage({ data: msg });
               } catch {}
             }
           }, 0);
@@ -40,7 +41,7 @@ describe('broadcast helpers', () => {
         const unsub = subscribeMatchSync((msg: any) => {
           try {
             expect(msg).toBeDefined();
-            expect(msg.type).toBe('test-msg');
+            expect(msg.type).toBe("test-msg");
             unsub && unsub();
             resolve();
           } catch (e) {
@@ -49,10 +50,12 @@ describe('broadcast helpers', () => {
           }
         });
         // broadcast from another "tab" (the MockBC will forward to other instances)
-        broadcastMessage({ type: 'test-msg', payload: 123 });
+        broadcastMessage({ type: "test-msg", payload: 123 });
       });
     } finally {
-      try { (global as any).BroadcastChannel = OriginalBC; } catch {}
+      try {
+        (global as any).BroadcastChannel = OriginalBC;
+      } catch {}
     }
   });
 });

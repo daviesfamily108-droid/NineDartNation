@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Network device discovery utilities for wifi scoring devices
  */
 

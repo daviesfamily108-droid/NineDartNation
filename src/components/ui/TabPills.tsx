@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 
 type Tab = { key: string; label: string };
 
@@ -25,9 +25,15 @@ export default function TabPills({
               <button
                 key={t.key}
                 type="button"
-                onPointerDown={(e) => { (e as any).stopPropagation(); }}
-                onMouseDown={(e) => { e.stopPropagation(); }}
-                onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+                onPointerDown={(e) => {
+                  (e as any).stopPropagation();
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onTouchStart={(e) => {
+                  (e as any).stopPropagation?.();
+                }}
                 onClick={() => onChange(t.key)}
                 className={`transition-all select-none whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 active:scale-[0.98]
                   ${
@@ -38,7 +44,7 @@ export default function TabPills({
                 `}
                 aria-pressed={isActive}
               >
-                {t.label}
+                {t.label.includes("🎯") ? t.label : `${t.label} 🎯`}
               </button>
             );
           })}

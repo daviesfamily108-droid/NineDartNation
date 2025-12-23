@@ -1,4 +1,4 @@
-// Simple localStorage-based weekly quota for free online games
+﻿// Simple localStorage-based weekly quota for free online games
 // 3 free online games per week per user (by username). Premium users are exempt.
 
 const KEY = (user: string) => `ndn_online_quota_${user}`;

@@ -1,4 +1,4 @@
-export type CricketMark = 0 | 1 | 2 | 3;
+﻿export type CricketMark = 0 | 1 | 2 | 3;
 export type CricketNumber = 15 | 16 | 17 | 18 | 19 | 20 | 25; // 25 is bull (outer+inner)
 
 export type CricketState = {

@@ -1,4 +1,4 @@
-export function threeDartAverage(totalScore: number, darts: number): number {
+﻿export function threeDartAverage(totalScore: number, darts: number): number {
   if (darts === 0) return 0;
   return (totalScore / darts) * 3;
 }

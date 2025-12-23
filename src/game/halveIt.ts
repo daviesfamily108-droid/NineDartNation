@@ -1,4 +1,4 @@
-export type HalveItTarget =
+﻿export type HalveItTarget =
   | { kind: "ANY_NUMBER" }
   | { kind: "DOUBLE"; num: number }
   | { kind: "TRIPLE"; num: number }

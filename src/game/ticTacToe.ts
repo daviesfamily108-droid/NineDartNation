@@ -1,4 +1,4 @@
-export type TicCell = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+﻿export type TicCell = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 // Map grid cells to targets: center uses Bull; edges/corners use numbers.
 export const TTT_TARGETS: Record<

@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 
 type MatchControlState = {
   paused: boolean;
@@ -12,5 +12,9 @@ export const useMatchControl = create<MatchControlState>((set) => ({
   pauseEndsAt: null,
   pauseStartedAt: null,
   setPaused: (v, endsAt = null) =>
-    set({ paused: v, pauseEndsAt: endsAt ?? null, pauseStartedAt: v ? Date.now() : null }),
+    set({
+      paused: v,
+      pauseEndsAt: endsAt ?? null,
+      pauseStartedAt: v ? Date.now() : null,
+    }),
 }));

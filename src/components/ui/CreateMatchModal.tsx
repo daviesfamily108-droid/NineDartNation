@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useState, useRef } from "react";
+﻿import React, { useLayoutEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   allGames,
@@ -63,7 +63,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
   if (!portalEl) return null;
 
   return createPortal(
-  <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
       {/* A dedicated, accessible button covers the backdrop to capture clicks and keyboard input */}
       <button
         aria-label="Close dialog"
@@ -81,15 +81,17 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
         >
           ✕
         </button>
-        <h2 className="text-lg font-semibold mb-3">Create Match</h2>
-  <div className="grid grid-cols-1 gap-3">
+        <h2 className="text-lg font-semibold mb-3">Create Match 🎯</h2>
+        <div className="grid grid-cols-1 gap-3">
           <div>
-            <div className="text-sm opacity-80">Created By</div>
-            <div className="mt-1 p-2 bg-white/5 rounded text-white">{user}</div>
+            <div className="text-sm opacity-80">Created By 🎯</div>
+            <div className="mt-1 p-2 bg-white/5 rounded text-white">
+              {user} 🎯
+            </div>
           </div>
           <div>
             <label className="text-sm opacity-80" htmlFor="match-game">
-              Match Name (Game)
+              Match Name (Game) 🎯
             </label>
             <select
               id="match-game"
@@ -101,9 +103,15 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                 const opts = getStartOptionsForGame(v);
                 setStartingScore(opts?.[0]);
               }}
-                    onPointerDown={(e) => { (e as any).stopPropagation(); }}
-                    onMouseDown={(e) => { e.stopPropagation(); }}
-                    onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+              onPointerDown={(e) => {
+                (e as any).stopPropagation();
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+              }}
+              onTouchStart={(e) => {
+                (e as any).stopPropagation?.();
+              }}
             >
               {allGames.map((g) => (
                 <option key={g} value={g}>
@@ -115,16 +123,22 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
           {getStartOptionsForGame(game).length > 0 ? (
             <div>
               <label className="text-sm opacity-80" htmlFor="match-start">
-                {`${game} Starting Score`}
+                {`${game} Starting Score 🎯`}
               </label>
               <select
                 id="match-start"
                 className="ml-2 p-2 border border-white/10 bg-white/5 rounded text-white w-full"
                 value={startingScore}
                 onChange={(e) => setStartingScore(Number(e.target.value))}
-                onPointerDown={(e) => { (e as any).stopPropagation(); }}
-                onMouseDown={(e) => { e.stopPropagation(); }}
-                  onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+                onPointerDown={(e) => {
+                  (e as any).stopPropagation();
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onTouchStart={(e) => {
+                  (e as any).stopPropagation?.();
+                }}
               >
                 {getStartOptionsForGame(game).map((opt) => (
                   <option key={opt} value={opt}>
@@ -135,7 +149,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
             </div>
           ) : null}
           <div>
-            <div className="text-sm opacity-80">Mode</div>
+            <div className="text-sm opacity-80">Mode 🎯</div>
             <div className="flex gap-2 mt-1 justify-center">
               <label
                 className={`btn ${modeType === "bestof" ? "btn-primary" : "btn-ghost"}`}
@@ -156,7 +170,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                   }}
                   className="sr-only"
                 />{" "}
-                Best Of
+                Best Of 🎯
               </label>
               <label
                 className={`btn ${modeType === "firstto" ? "btn-primary" : "btn-ghost"}`}
@@ -173,13 +187,13 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                   }}
                   className="sr-only"
                 />{" "}
-                First To
+                First To 🎯
               </label>
             </div>
           </div>
           <div>
             <label className="text-sm opacity-80" htmlFor="match-legs">
-              {modeType === "bestof" ? "Best Of" : "First To"}
+              {modeType === "bestof" ? "Best Of 🎯" : "First To 🎯"}
             </label>
             <input
               id="match-legs"
@@ -195,7 +209,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
           </div>
           <div>
             <label className="text-sm opacity-80" htmlFor="match-avg">
-              Average Choice (±)
+              Average Choice (±) 🎯
             </label>
             <input
               id="match-avg"
@@ -208,7 +222,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
         </div>
         <div className="flex justify-end mt-4">
           <button className="btn btn-primary" onClick={handleCreate}>
-            Create Match
+            Create Match 🎯
           </button>
         </div>
       </div>

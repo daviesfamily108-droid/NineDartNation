@@ -1,4 +1,4 @@
-export type GolfHole =
+﻿export type GolfHole =
   | 1
   | 2
   | 3

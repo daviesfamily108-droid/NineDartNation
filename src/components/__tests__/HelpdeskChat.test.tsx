@@ -1,7 +1,13 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import React from "react";
 // using built-in vitest assertions
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from "@testing-library/react";
 import HelpdeskChat from "../HelpdeskChat";
 import { vi, describe, it, beforeEach, expect } from "vitest";
 

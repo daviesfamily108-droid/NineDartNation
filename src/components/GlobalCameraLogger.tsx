@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+﻿import { useEffect, useRef } from "react";
 import { dlog } from "../utils/logger";
 import { useCameraSession } from "../store/cameraSession";
 
@@ -109,21 +109,12 @@ export default function GlobalCameraLogger() {
             });
           const playing = () => {
             dlog("[GlobalCamera] video playing", { paused: v.paused });
-            try {
-              camera.setStreaming(true);
-            } catch {}
           };
           const pause = () => {
             dlog("[GlobalCamera] video pause");
-            try {
-              camera.setStreaming(false);
-            } catch {}
           };
           const ended = () => {
             dlog("[GlobalCamera] video ended");
-            try {
-              camera.setStreaming(false);
-            } catch {}
           };
           v.addEventListener("loadedmetadata", loadedmetadata);
           v.addEventListener("playing", playing);

@@ -185,14 +185,42 @@ function scoreAtBoardPoint(p) {
   let ang = Math.atan2(p.y, p.x);
   let deg = (ang * 180) / Math.PI;
   deg = (deg + 360 + 90) % 360; // 0 at top
-  const sector = SectorOrder[Math.floor(deg / 18)];
-  if (r <= BoardRadii.bullInner) return { base: 50, ring: 'INNER_BULL', sector: 25, mult: 2 };
-  if (r <= BoardRadii.bullOuter) return { base: 25, ring: 'BULL', sector: 25, mult: 1 };
-  if (r >= BoardRadii.doubleOuter) return { base: 0, ring: 'MISS', sector: null, mult: 0 };
-  if (r >= BoardRadii.doubleInner) return { base: sector * 2, ring: 'DOUBLE', sector: sector, mult: 2 };
-  if (r >= BoardRadii.trebleOuter) return { base: sector, ring: 'SINGLE', sector: sector, mult: 1 };
-  if (r >= BoardRadii.trebleInner) return { base: sector * 3, ring: 'TRIPLE', sector: sector, mult: 3 };
-  return { base: sector, ring: 'SINGLE', sector: sector, mult: 1 };
+  const index = Math.floor(((deg + 9) % 360) / 18);
+  const sector = SectorOrder[index];
+  
+  // Apply tolerance bands for robustness
+  const bullTol = 3.5;   // ±mm around bull boundaries
+  const bandTol = 3.0;   // ±mm for treble/double bands
+  const edgeTol = 2.0;   // ±mm beyond outer board edge considered MISS
+  
+  const bullInner = BoardRadii.bullInner;
+  const bullOuter = BoardRadii.bullOuter;
+  const trebInner = BoardRadii.trebleInner;
+  const trebOuter = BoardRadii.trebleOuter;
+  const dblInner = BoardRadii.doubleInner;
+  const dblOuter = BoardRadii.doubleOuter;
+  
+  // Outside board edge
+  if (r > dblOuter + edgeTol) return { base: 0, ring: 'MISS', sector: null, mult: 0 };
+  
+  // Bulls
+  if (r <= bullInner + bullTol) return { base: 50, ring: 'INNER_BULL', sector: 25, mult: 2 };
+  if (r <= bullOuter + bullTol) return { base: 25, ring: 'BULL', sector: 25, mult: 1 };
+  
+  // Double band (tolerant) - r >= 162-3=159 AND r <= 170+2=172 (within board)
+  if (r >= dblInner - bandTol && r <= dblOuter + edgeTol)
+    return { base: sector * 2, ring: 'DOUBLE', sector, mult: 2 };
+  
+  // Single outer band between trebleOuter and doubleInner - r >= 107-3=104 AND r < 162-3=159
+  if (r >= trebOuter - bandTol && r < dblInner - bandTol)
+    return { base: sector, ring: 'SINGLE', sector, mult: 1 };
+  
+  // Treble band (tolerant) - r >= 99-3=96 AND r < 107-3=104
+  if (r >= trebInner - bandTol && r < trebOuter - bandTol)
+    return { base: sector * 3, ring: 'TRIPLE', sector, mult: 3 };
+  
+  // Inner single (center region outside bulls and inside trebleInner)
+  return { base: sector, ring: 'SINGLE', sector, mult: 1 };
 }
 
 async function listHelpRequests() {
@@ -754,7 +782,17 @@ const cspDirectives = {
   frameAncestors: ["'none'"],
   imgSrc: ["'self'", 'data:', 'blob:'],
   styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://fonts.gstatic.com'],
-  connectSrc: ["'self'", 'ws:', 'wss:', 'https://ninedartnation.onrender.com', 'https://ninedartnation-1.onrender.com', 'https://ninedartnation.netlify.app', 'https://*.netlify.app'],
+  connectSrc: [
+    "'self'",
+    'ws:',
+    'wss:',
+    'https://ninedartnation.onrender.com',
+    'https://ninedartnation-1.onrender.com',
+    'https://ninedartnation.netlify.app',
+    'https://*.netlify.app',
+    'https://fonts.googleapis.com',
+    'https://fonts.gstatic.com',
+  ],
 }
 if (IS_DEV) {
   // Vite dev server

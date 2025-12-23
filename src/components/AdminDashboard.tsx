@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+﻿import { useEffect, useMemo, useState } from "react";
 import BarChart from "./BarChart";
 import TabPills from "./ui/TabPills";
 import { getGameModeStats } from "../store/profileStats";
@@ -9,7 +9,6 @@ import {
   getModeValueOptionsForGame,
 } from "../utils/games";
 import { useWS } from "./WSProvider";
-import StatusDot from "./ui/StatusDot";
 import CameraStatusBadge from "./CameraStatusBadge";
 import HelpdeskChat from "./HelpdeskChat";
 import { useCalibration } from "../store/calibration";
@@ -30,11 +29,11 @@ export default function AdminDashboard({ user }: { user: any }) {
     }
   })();
   const [admins, setAdmins] = useState<string[]>([]);
-  const [walletCreditEmail, setWalletCreditEmail] = useState('');
-  const [walletCreditAmount, setWalletCreditAmount] = useState('');
-  const [walletCreditCurrency, setWalletCreditCurrency] = useState('USD');
+  const [walletCreditEmail, setWalletCreditEmail] = useState("");
+  const [walletCreditAmount, setWalletCreditAmount] = useState("");
+  const [walletCreditCurrency, setWalletCreditCurrency] = useState("USD");
   const [email, setEmail] = useState("");
-  // status state removed: unused in current UI
+  const [status] = useState<any>(null);
   const [announcement, setAnnouncement] = useState("");
   const [loading, setLoading] = useState(false);
   const [tournaments, setTournaments] = useState<any[]>([]);
@@ -787,108 +786,24 @@ export default function AdminDashboard({ user }: { user: any }) {
   if (!isOwner) {
     return (
       <div className="card">
-        <h2 className="text-2xl font-bold mb-2">Admin</h2>
+        <h2 className="text-2xl font-bold mb-2">Admin 🛡️</h2>
         <div className="text-sm opacity-80">
-          You don’t have permission to manage admins.
-        </div>
-      </div>
-    );
-  }
-
-  /* Top help-requests strip for quick admin actions */
-  {
-    helpRequests.length > 0 && (
-      <div className="p-2 rounded-xl bg-amber-900/10 border border-amber-500/20 mt-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="font-semibold">Open Help Requests</span>
-            <span className="text-sm opacity-80">
-              {helpRequests.length} open
-            </span>
-          </div>
-          <div className="card mt-4">
-            <h3 className="text-xl font-semibold mb-3">Wallet Operations</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              <div className="p-4">
-                <h4 className="font-semibold mb-2">Credit Wallet</h4>
-                <div className="flex gap-2">
-                  <input className="input" placeholder="user@example.com" value={walletCreditEmail} onChange={(e) => setWalletCreditEmail(e.target.value)} />
-                  <input className="input" placeholder="Amount (10.00)" value={walletCreditAmount} onChange={(e) => setWalletCreditAmount(e.target.value)} />
-                  <select className="input" value={walletCreditCurrency} onChange={(e) => setWalletCreditCurrency(e.target.value)}><option>USD</option><option>GBP</option><option>EUR</option></select>
-                  <button className="btn" onClick={async () => {
-                    try {
-                      const token = localStorage.getItem('authToken')
-                      const headers: any = {'Content-Type': 'application/json'}
-                      if (token) headers.Authorization = `Bearer ${token}`
-                      const res = await fetch('/api/admin/wallet/credit', { method: 'POST', headers, body: JSON.stringify({ email: walletCreditEmail, currency: walletCreditCurrency, amount: walletCreditAmount }) })
-                      if (!res.ok) throw new Error('Failed')
-                      setWalletCreditEmail('')
-                      setWalletCreditAmount('')
-                      alert('Wallet credited')
-                    } catch (err) { alert('Failed to credit wallet') }
-                  }}>Credit</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              className="btn"
-              onClick={() => setSelectedRequest(helpRequests[0])}
-            >
-              Open Latest
-            </button>
-            <button className="btn btn-ghost" onClick={() => refresh()}>
-              Refresh
-            </button>
-          </div>
-        </div>
-        <div className="mt-2 flex gap-2 overflow-x-auto">
-          {helpRequests.slice(0, 6).map((hr: any) => (
-            <div
-              key={hr.id}
-              className="p-2 rounded bg-black/10 border border-white/10 min-w-[220px]"
-            >
-              <div className="font-medium">{hr.username || "Anonymous"}</div>
-              <div className="text-xs opacity-70">
-                {new Date(hr.ts || 0).toLocaleTimeString()}
-              </div>
-              <div className="text-sm truncate mt-1">{hr.message}</div>
-              <div className="mt-2 flex gap-2">
-                {hr.status === "open" ? (
-                  <button className="btn" onClick={() => claimHelp(hr.id)}>
-                    Claim
-                  </button>
-                ) : (
-                  <span className="text-xs opacity-70">
-                    {hr.status} by {hr.claimedBy || "—"}
-                  </span>
-                )}
-                <button className="btn" onClick={() => setSelectedRequest(hr)}>
-                  Chat
-                </button>
-              </div>
-            </div>
-          ))}
+          You don't have permission to manage admins.
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 ndn-game-shell">
-      {/* Top connection status strip */}
-      <div className="card p-2 rounded-xl bg-white/10 border border-white/10 flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2 text-sm">
-          <span className="font-semibold">Connection Status</span>
-          {ws ? (
-            <span className="inline-flex items-center gap-2">
-              <StatusDot status={ws.status} title={`WebSocket: ${ws.status}`} />
-              <span className="text-xs opacity-80">WS: {ws.status}</span>
-            </span>
-          ) : (
-            <span className="text-xs opacity-70">WS: unavailable</span>
-          )}
+    <div className="p-4 md:p-8 max-w-7xl mx-auto">
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
+        <div>
+          <h2 className="text-3xl font-black text-white tracking-tight">
+            Admin 🛡️
+          </h2>
+          <p className="text-white/40 font-medium">
+            System management and oversight
+          </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
           {/* Keep the green connected badge; no HTTP/HTTPS pills here */}
@@ -904,6 +819,61 @@ export default function AdminDashboard({ user }: { user: any }) {
           )}
         </div>
       </div>
+      {/* Top help-requests strip for quick admin actions */}
+      {helpRequests.length > 0 && (
+        <div className="p-2 rounded-xl bg-amber-900/10 border border-amber-500/20 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="font-semibold">Open Help Requests 🆘</span>
+              <span className="text-sm opacity-80">
+                {helpRequests.length} open
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                className="btn"
+                onClick={() => setSelectedRequest(helpRequests[0])}
+              >
+                Open Latest
+              </button>
+              <button className="btn btn-ghost" onClick={() => refresh()}>
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div className="mt-2 flex gap-2 overflow-x-auto">
+            {helpRequests.slice(0, 6).map((hr: any) => (
+              <div
+                key={hr.id}
+                className="p-2 rounded bg-black/10 border border-white/10 min-w-[220px]"
+              >
+                <div className="font-medium">{hr.username || "Anonymous"}</div>
+                <div className="text-xs opacity-70">
+                  {new Date(hr.ts || 0).toLocaleTimeString()}
+                </div>
+                <div className="text-sm truncate mt-1">{hr.message}</div>
+                <div className="mt-2 flex gap-2">
+                  {hr.status === "open" ? (
+                    <button className="btn" onClick={() => claimHelp(hr.id)}>
+                      Claim
+                    </button>
+                  ) : (
+                    <span className="text-xs opacity-70">
+                      {hr.status} by {hr.claimedBy || "—"}
+                    </span>
+                  )}
+                  <button
+                    className="btn"
+                    onClick={() => setSelectedRequest(hr)}
+                  >
+                    Chat
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {isOwner && (
         <TabPills
           tabs={[
@@ -994,7 +964,7 @@ export default function AdminDashboard({ user }: { user: any }) {
           )}
 
           <div className="card">
-            <h2 className="text-2xl font-bold mb-2">Admin Control</h2>
+            <h2 className="text-2xl font-bold mb-2">Admin Control ⚙️</h2>
             <div className="text-sm opacity-80 mb-3">
               Grant or revoke Admin to trusted users. Only the owner can perform
               these actions.
@@ -1067,7 +1037,9 @@ export default function AdminDashboard({ user }: { user: any }) {
           </div>
 
           <div className="card">
-            <h3 className="text-xl font-semibold mb-2">Announcements</h3>
+            <h3 className="text-xl font-bold mb-4 text-white/90">
+              Announcements 📢
+            </h3>
             <div className="text-sm opacity-80 mb-2">
               Send a message to all users. This will appear as a toast
               notification.
@@ -1240,6 +1212,70 @@ export default function AdminDashboard({ user }: { user: any }) {
                 <li className="opacity-60">No withdrawal requests.</li>
               )}
             </ul>
+          </div>
+
+          <div className="card">
+            <h3 className="text-xl font-semibold mb-3">Wallet Operations 💰</h3>
+            <div className="text-sm opacity-80 mb-3">
+              Manually credit user wallets. Use with caution.
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="p-4 rounded-lg bg-black/20 border border-white/5">
+                <h4 className="font-semibold mb-3">Credit Wallet</h4>
+                <div className="flex flex-wrap gap-3">
+                  <input
+                    className="input flex-1 min-w-[200px]"
+                    placeholder="user@example.com"
+                    value={walletCreditEmail}
+                    onChange={(e) => setWalletCreditEmail(e.target.value)}
+                  />
+                  <input
+                    className="input w-32"
+                    placeholder="Amount (10.00)"
+                    value={walletCreditAmount}
+                    onChange={(e) => setWalletCreditAmount(e.target.value)}
+                  />
+                  <select
+                    className="input w-24"
+                    value={walletCreditCurrency}
+                    onChange={(e) => setWalletCreditCurrency(e.target.value)}
+                  >
+                    <option>USD</option>
+                    <option>GBP</option>
+                    <option>EUR</option>
+                  </select>
+                  <button
+                    className="btn bg-indigo-600 hover:bg-indigo-700"
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem("authToken");
+                        const headers: any = {
+                          "Content-Type": "application/json",
+                        };
+                        if (token) headers.Authorization = `Bearer ${token}`;
+                        const res = await fetch("/api/admin/wallet/credit", {
+                          method: "POST",
+                          headers,
+                          body: JSON.stringify({
+                            email: walletCreditEmail,
+                            currency: walletCreditCurrency,
+                            amount: walletCreditAmount,
+                          }),
+                        });
+                        if (!res.ok) throw new Error("Failed");
+                        setWalletCreditEmail("");
+                        setWalletCreditAmount("");
+                        alert("Wallet credited");
+                      } catch (err) {
+                        alert("Failed to credit wallet");
+                      }
+                    }}
+                  >
+                    Credit
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="card">
@@ -1496,7 +1532,7 @@ export default function AdminDashboard({ user }: { user: any }) {
                     <span className="font-mono text-xs">{m.id}</span>
                     <span className="opacity-80">{m.creatorName}</span>
                     <span className="opacity-60">
-                      {m.game} {labelForMode(m.mode)} {m.value}{" "}
+                      {m.game} · {labelForMode(m.mode)} {m.value}{" "}
                       {m.game === "X01" ? `/${m.startingScore}` : ""}
                     </span>
                   </div>

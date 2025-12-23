@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Game-Mode-Specific Calibration Requirements
  *
  * Each game mode has different accuracy requirements:
@@ -14,6 +14,24 @@ export type CalibrationRequirement = {
   criticalZones: string[]; // Most important areas to focus on during calibration
   minConfidence: number; // Minimum acceptable calibration confidence (0-100)
 };
+
+export function getGlobalCalibrationConfidence(
+  errorPx: number | null,
+): number | null {
+  if (errorPx == null || Number.isNaN(errorPx as any) || errorPx < 0) {
+    return null;
+  }
+
+  let percentage: number;
+  if (errorPx <= 0.25) percentage = 99.5 + (0.25 - errorPx) * 2;
+  else if (errorPx <= 1.0) percentage = 98 + (1.0 - errorPx) * 2;
+  else if (errorPx <= 2.0) percentage = 95 + (2.0 - errorPx) * 3;
+  else if (errorPx <= 5.0) percentage = 90 + (5.0 - errorPx) * 1.66;
+  else percentage = Math.max(0, 90 - (errorPx - 5) * 5);
+
+  const clamped = Math.max(0, Math.min(100, percentage));
+  return Number(clamped.toFixed(1));
+}
 
 export const GAME_CALIBRATION_REQUIREMENTS: Record<
   string,
@@ -208,19 +226,36 @@ export function getCalibrationConfidenceForGame(
   gameMode: string,
   errorPx: number | null,
 ): number {
-  if (!errorPx || errorPx < 0) return 0;
+  // Treat missing/unknown error as unknown confidence. IMPORTANT: don't treat 0 as falsy.
+  if (errorPx == null || Number.isNaN(errorPx as any) || errorPx < 0) return 0;
 
   const req = GAME_CALIBRATION_REQUIREMENTS[gameMode];
-  if (!req) return 50; // Unknown game, neutral confidence
+  const tolerance = req?.tolerancePx ?? 12; // Default tolerance if game unknown
 
-  // Confidence drops as error increases beyond tolerance
-  if (errorPx <= req.tolerancePx) {
-    // Excellent calibration
-    return Math.min(100, 100 - (errorPx / req.tolerancePx) * 20);
+  // v2.6: High-precision confidence calculation
+  // 0.25px error = 99.5% (User's target)
+  // 1.0px error = 98%
+  // 2.0px error = 95%
+  // 5.0px error = 90%
+  // At tolerance = 85%
+  // Beyond tolerance = drops linearly to 0% at 3x tolerance
+
+  if (errorPx <= 0.25) return 99.5 + (0.25 - errorPx) * 2; // 99.5% to 100%
+  if (errorPx <= 1.0) return 98 + (1.0 - errorPx) * 2; // 98% to 99.5%
+  if (errorPx <= 2.0) return 95 + (2.0 - errorPx) * 3; // 95% to 98%
+  if (errorPx <= 5.0) return 90 + (5.0 - errorPx) * 1.66; // 90% to 95%
+
+  if (errorPx <= tolerance) {
+    // Linear from 90% down to 85% at tolerance
+    const range = tolerance - 5;
+    if (range <= 0) return 85;
+    return 85 + ((tolerance - errorPx) / range) * 5;
   } else {
-    // Poor calibration - drops steeply
-    const excess = errorPx - req.tolerancePx;
-    return Math.max(0, 50 - excess * 2);
+    // Beyond tolerance: drop linearly to 0 at 3x tolerance
+    // This is much less punishing than the previous version
+    const maxError = tolerance * 3;
+    if (errorPx >= maxError) return 0;
+    return 85 * (1 - (errorPx - tolerance) / (maxError - tolerance));
   }
 }
 
@@ -246,14 +281,22 @@ export function isCalibrationSuitableForGame(
 export function getCalibrationQualityText(
   gameMode: string,
   errorPx: number | null,
-): { quality: "excellent" | "good" | "fair" | "poor" | "none"; text: string } {
+): {
+  quality: "perfect" | "excellent" | "good" | "fair" | "poor" | "none";
+  text: string;
+} {
   if (!errorPx) {
     return { quality: "none", text: "Not calibrated" };
   }
 
   const confidence = getCalibrationConfidenceForGame(gameMode, errorPx);
 
-  if (confidence >= 90) {
+  if (confidence >= 99.5) {
+    return {
+      quality: "perfect",
+      text: `Perfect (${confidence.toFixed(1)}%)`,
+    };
+  } else if (confidence >= 90) {
     return {
       quality: "excellent",
       text: `Excellent (${Math.round(confidence)}%)`,

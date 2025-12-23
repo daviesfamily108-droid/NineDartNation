@@ -1,6 +1,13 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import React from "react";
-import { render, screen, act, within, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  act,
+  within,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 vi.mock("../../../store/profileStats", () => ({
   getAllTimeAvg: () => 37.0,
   getAllTimeFirstNineAvg: () => 36.0,
@@ -81,9 +88,9 @@ describe("MatchStartShowcase", () => {
     expect(renderError).toBeUndefined();
     // Debug: snapshot output (no-op in CI) — removed console.log to reduce test verbosity
 
-  // Initial countdown shown (either ring may be present in test environment)
-  const countdownEls = screen.getAllByText("3");
-  expect(countdownEls.length).toBeGreaterThanOrEqual(1);
+    // Initial countdown shown (either ring may be present in test environment)
+    const countdownEls = screen.getAllByText("3");
+    expect(countdownEls.length).toBeGreaterThanOrEqual(1);
     // Ensure 180s display matches match/career values upfront (1 match 180 / 5 career)
     const p1Card = screen.getByText("Player1").parentElement as HTMLElement;
     const p2Card = screen.getByText("Player2").parentElement as HTMLElement;
@@ -102,9 +109,9 @@ describe("MatchStartShowcase", () => {
     act(() => {
       vi.advanceTimersByTime(3000);
     });
-  // Now should show GO (one or more rings in JSDOM)
-  const goEls = screen.getAllByText("GO");
-  expect(goEls.length).toBeGreaterThanOrEqual(1);
+    // Now should show GO (one or more rings in JSDOM)
+    const goEls = screen.getAllByText("GO");
+    expect(goEls.length).toBeGreaterThanOrEqual(1);
     act(() => {
       vi.advanceTimersByTime(1000);
     });
@@ -152,7 +159,9 @@ describe("MatchStartShowcase", () => {
     });
     render(<Wrapper />);
     // Allow microtasks and timers to progress for the portal and focus code (using real timers)
-    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
+    await waitFor(() =>
+      expect(document.querySelector('[role="dialog"]')).toBeTruthy(),
+    );
     // Allow a tiny tick for any async mount to complete
     const dialog = document.querySelector('[role="dialog"]');
     expect(dialog).toBeTruthy();
@@ -163,7 +172,9 @@ describe("MatchStartShowcase", () => {
     ) as HTMLButtonElement;
     // react-focus-lock is mocked in setup to be a no-op; emulate focus manually
     startNow.focus();
-    await waitFor(() => expect(document.activeElement === startNow).toBeTruthy());
+    await waitFor(() =>
+      expect(document.activeElement === startNow).toBeTruthy(),
+    );
     const closeBtn = screen.getByRole("button", {
       name: /close match start showcase/i,
     });
@@ -213,13 +224,17 @@ describe("MatchStartShowcase", () => {
       vi.useRealTimers();
     });
     render(<Wrapper />);
-    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
+    await waitFor(() =>
+      expect(document.querySelector('[role="dialog"]')).toBeTruthy(),
+    );
     // Ensure focus & that Escape doesn't close overlay
     const startNow = document.querySelector(
       'button[aria-label="Start match now"]',
     ) as HTMLButtonElement;
     startNow.focus();
-    await waitFor(() => expect(document.activeElement === startNow).toBeTruthy());
+    await waitFor(() =>
+      expect(document.activeElement === startNow).toBeTruthy(),
+    );
     // Do not rely on synthetic Escape in jsdom tests; instead ensure focus remains and Close still works
     const closeBtn = screen.getByRole("button", {
       name: /close match start showcase/i,
@@ -255,7 +270,9 @@ describe("MatchStartShowcase", () => {
       vi.useRealTimers();
     });
     const { unmount } = render(<Wrapper />);
-    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
+    await waitFor(() =>
+      expect(document.querySelector('[role="dialog"]')).toBeTruthy(),
+    );
     const startNow = document.querySelector(
       'button[aria-label="Start match now"]',
     ) as HTMLButtonElement;

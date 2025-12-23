@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import type { Player } from "../../store/match";
 
 export default function CalibrationPopup({
@@ -24,19 +24,19 @@ export default function CalibrationPopup({
     <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 p-4">
       <div className="bg-slate-800 border border-slate-600 rounded-2xl p-6 max-w-2xl w-full">
         <h3 className="text-xl font-bold mb-4 text-center">
-          Calibration Check
+          Calibration Check 🎯
         </h3>
         <p className="text-sm opacity-70 mb-6 text-center">
-          Check your dartboard calibration before the match starts. Both players
-          must skip or confirm to begin.
+          Check your dartboard calibration before the match starts 🎯. Both
+          players must skip or confirm to begin 🎯.
         </p>
         {skippedPlayers.length > 0 && remainingPlayers.length > 0 && (
           <div className="mb-4 p-3 bg-blue-900/50 border border-blue-600 rounded-lg">
             <p className="text-sm text-blue-200">
               {skippedPlayers.map((p) => p.name).join(", ")}{" "}
-              {skippedPlayers.length === 1 ? "has" : "have"} chosen to skip.{" "}
+              {skippedPlayers.length === 1 ? "has" : "have"} chosen to skip 🎯.{" "}
               {remainingPlayers.map((p) => p.name).join(", ")}, would you like
-              to skip as well?
+              to skip as well 🎯?
             </p>
           </div>
         )}
@@ -57,6 +57,11 @@ export default function CalibrationPopup({
                 </div>
                 <div>
                   <div className="font-medium">{player.name}</div>
+                  <div className="text-xs text-slate-400">
+                    {playerCalibrations[player.name]
+                      ? "Calibrated ✅"
+                      : "Needs calibration"}
+                  </div>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -64,14 +69,14 @@ export default function CalibrationPopup({
                   className="btn btn-sm btn-ghost"
                   onClick={() => onOpenCalibrator(player.id)}
                 >
-                  Bull Up
+                  Bull Up 🎯
                 </button>
                 <button
                   className="btn btn-sm btn-primary"
                   onClick={() => onSkip(player.id)}
                   disabled={!!calibrationSkipped[player.id]}
                 >
-                  {calibrationSkipped[player.id] ? "Skipped ✓" : "Skip"}
+                  {calibrationSkipped[player.id] ? "Skipped ✓" : "Skip 🎯"}
                 </button>
               </div>
             </div>
@@ -83,7 +88,7 @@ export default function CalibrationPopup({
             disabled={!canStartMatch}
             onClick={onClose}
           >
-            Start Match
+            Start Match 🎯
           </button>
         </div>
       </div>

@@ -1,19 +1,16 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState, useRef } from "react";
 import {
   User,
   Trophy,
   Target,
   TrendingUp,
   Camera,
-  Shield,
   Edit3,
   Save,
   Star,
   Award,
   Zap,
   Crown,
-  Medal,
-  Heart,
   Settings,
   LogOut,
   CreditCard,
@@ -28,7 +25,12 @@ import {
   Hash,
 } from "lucide-react";
 import { useUserSettings } from "../store/userSettings";
-import { getAllTime, getRollingAvg, getAllTimeAvg, getGameModeStats } from "../store/profileStats";
+import {
+  getAllTime,
+  getRollingAvg,
+  getAllTimeAvg,
+  getGameModeStats,
+} from "../store/profileStats";
 import { formatAvg } from "../utils/stats";
 import { apiFetch } from "../utils/api";
 import ThemeToggle from "./ThemeToggle";
@@ -74,10 +76,16 @@ const Section = ({
           {title}
         </div>
         <div>
-          {isOpen ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          {isOpen ? (
+            <ChevronUp className="w-5 h-5" />
+          ) : (
+            <ChevronDown className="w-5 h-5" />
+          )}
         </div>
       </button>
-      {isOpen && <div className="p-4 pt-0 border-t border-white/10">{children}</div>}
+      {isOpen && (
+        <div className="p-4 pt-0 border-t border-white/10">{children}</div>
+      )}
     </div>
   );
 };
@@ -88,6 +96,8 @@ interface ProfilePanelProps {
 }
 
 export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
+  const [availableVoices, setAvailableVoices] =
+    useState<SpeechSynthesisVoice[]>([]);
   // Profile bio fields
   const [isEditing, setIsEditing] = useState(false);
   const [favPlayer, setFavPlayer] = useState("");
@@ -95,31 +105,81 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
   const [favDarts, setFavDarts] = useState("");
   const [bio, setBio] = useState("");
   const [profilePhoto, setProfilePhoto] = useState("");
-  
+
   // Account data
   const [wallet, setWallet] = useState<any | null>(null);
   const [subscription, setSubscription] = useState<any>(null);
-  
+
   // Achievements
   const [achievements, setAchievements] = useState([
-    { key: "first180", label: "First 180", unlocked: false, icon: "🎯", desc: "Score 180 in a match." },
-    { key: "hundredGames", label: "100 Games", unlocked: false, icon: "🏅", desc: "Play 100 games." },
-    { key: "tournamentWin", label: "Tournament Winner", unlocked: false, icon: "🥇", desc: "Win a tournament." },
-    { key: "bestLeg", label: "Best Leg", unlocked: false, icon: "⚡", desc: "Finish a leg in 12 darts or less." },
-    { key: "comeback", label: "Comeback", unlocked: false, icon: "🔥", desc: "Win after trailing by 3 legs." },
-    { key: "perfectGame", label: "Perfect Game", unlocked: false, icon: "💎", desc: "Win a match without missing a double." },
-    { key: "streakMaster", label: "Streak Master", unlocked: false, icon: "🌟", desc: "Win 5 matches in a row." },
-    { key: "nightOwl", label: "Night Owl", unlocked: false, icon: "🦉", desc: "Play a match after midnight." },
+    {
+      key: "first180",
+      label: "First 180",
+      unlocked: false,
+      icon: "🔥",
+      desc: "Score 180 in a match.",
+    },
+    {
+      key: "hundredGames",
+      label: "100 Games",
+      unlocked: false,
+      icon: "🏆",
+      desc: "Play 100 games.",
+    },
+    {
+      key: "tournamentWin",
+      label: "Tournament Winner",
+      unlocked: false,
+      icon: "🥇",
+      desc: "Win a tournament.",
+    },
+    {
+      key: "bestLeg",
+      label: "Best Leg",
+      unlocked: false,
+      icon: "⚡",
+      desc: "Finish a leg in 12 darts or less.",
+    },
+    {
+      key: "comeback",
+      label: "Comeback",
+      unlocked: false,
+      icon: "🔥",
+      desc: "Win after trailing by 3 legs.",
+    },
+    {
+      key: "perfectGame",
+      label: "Perfect Game",
+      unlocked: false,
+      icon: "💎",
+      desc: "Win a match without missing a double.",
+    },
+    {
+      key: "streakMaster",
+      label: "Streak Master",
+      unlocked: false,
+      icon: "🌟",
+      desc: "Win 5 matches in a row.",
+    },
+    {
+      key: "nightOwl",
+      label: "Night Owl",
+      unlocked: false,
+      icon: "🦉",
+      desc: "Play a match after midnight.",
+    },
   ]);
-  
+
   // Username change
   const [newUsername, setNewUsername] = useState("");
   const [changingUsername, setChangingUsername] = useState(false);
   const [usernameError, setUsernameError] = useState("");
-  
+
   // Expanded sections
-  const [expandedSection, setExpandedSection] = useState<string | null>("overview");
-  
+  const [expandedSection, setExpandedSection] = useState<string | null>(
+    "overview",
+  );
+
   // Settings from store
   const {
     favoriteDouble,
@@ -134,6 +194,52 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
     setAvgMode,
   } = useUserSettings();
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const synth = window.speechSynthesis;
+    const loadVoices = () => {
+      try {
+        const voices = synth.getVoices();
+        setAvailableVoices(
+          voices.filter((v) => (v.lang || "").toLowerCase().startsWith("en")),
+        );
+      } catch {}
+    };
+    loadVoices();
+    synth.addEventListener?.("voiceschanged", loadVoices);
+    return () => synth.removeEventListener?.("voiceschanged", loadVoices);
+  }, []);
+
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Limit size to 2MB
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Image size too large. Please choose an image under 2MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const result = reader.result as string;
+      setProfilePhoto(result);
+      // Auto-save photo immediately
+      const uname = user?.username || "";
+      if (uname) {
+        localStorage.setItem(`ndn:bio:profilePhoto:${uname}`, result);
+        window.dispatchEvent(
+          new CustomEvent("ndn:avatar-updated", {
+            detail: { username: uname, avatar: result },
+          }),
+        );
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Load bio data
   useEffect(() => {
     const uname = user?.username || "";
@@ -143,7 +249,9 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       setFavTeam(localStorage.getItem(`ndn:bio:favTeam:${uname}`) || "");
       setFavDarts(localStorage.getItem(`ndn:bio:favDarts:${uname}`) || "");
       setBio(localStorage.getItem(`ndn:bio:bio:${uname}`) || "");
-      setProfilePhoto(localStorage.getItem(`ndn:bio:profilePhoto:${uname}`) || "");
+      setProfilePhoto(
+        localStorage.getItem(`ndn:bio:profilePhoto:${uname}`) || "",
+      );
     } catch {}
   }, [user?.username]);
 
@@ -155,7 +263,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       prev.map((a) => ({
         ...a,
         unlocked: !!localStorage.getItem(`ndn:achieve:${a.key}:${uname}`),
-      }))
+      })),
     );
   }, [user?.username]);
 
@@ -166,7 +274,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       .then((r) => r.json())
       .then(setSubscription)
       .catch(() => {});
-    
+
     (async () => {
       try {
         const token = localStorage.getItem("authToken");
@@ -174,7 +282,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
         if (token) headers.Authorization = `Bearer ${token}`;
         const res = await fetch(
           `/api/wallet/balance?email=${encodeURIComponent(user.email)}`,
-          { headers }
+          { headers },
         );
         if (res.ok) setWallet(await res.json());
       } catch {}
@@ -193,7 +301,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       window.dispatchEvent(
         new CustomEvent("ndn:avatar-updated", {
           detail: { username: uname, avatar: profilePhoto },
-        })
+        }),
       );
       setIsEditing(false);
     } catch {}
@@ -205,14 +313,20 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
   const allTimeAvg = getAllTimeAvg(username);
   const rollingAvg = getRollingAvg(username);
   const gameModeStats = getGameModeStats(username);
-  
+
   // Calculate derived stats
-  const totalGames = Object.values(gameModeStats).reduce((sum, s) => sum + (s.played || 0), 0);
-  const totalWins = Object.values(gameModeStats).reduce((sum, s) => sum + (s.won || 0), 0);
+  const totalGames = Object.values(gameModeStats).reduce(
+    (sum, s) => sum + (s.played || 0),
+    0,
+  );
+  const totalWins = Object.values(gameModeStats).reduce(
+    (sum, s) => sum + (s.won || 0),
+    0,
+  );
 
   // Toggle section handler
   const handleSectionToggle = (id: string) => {
-    setExpandedSection(prev => prev === id ? null : id);
+    setExpandedSection((prev) => (prev === id ? null : id));
   };
 
   return (
@@ -222,16 +336,46 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-purple-500/10" />
         <div className="relative flex flex-col sm:flex-row items-center gap-6">
           {/* Avatar */}
-          <div className="relative">
-            <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center overflow-hidden border-4 border-white/20 shadow-xl">
+          <div className="relative group">
+            <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center overflow-hidden border-4 border-white/20 shadow-xl relative">
               {profilePhoto ? (
-                <img src={profilePhoto} alt="Avatar" className="w-full h-full object-cover" />
+                <img
+                  src={profilePhoto}
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <User className="w-12 h-12 sm:w-16 sm:h-16 text-white/80" />
               )}
+
+              {/* Hover overlay */}
+              <div
+                className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Camera className="w-8 h-8 text-white/80" />
+              </div>
             </div>
+
+            {/* Pencil Button */}
+            <button
+              className="absolute bottom-0 right-0 bg-indigo-600 hover:bg-indigo-500 text-white p-2 rounded-full shadow-lg border-2 border-slate-900 z-10 transition-transform hover:scale-110"
+              onClick={() => fileInputRef.current?.click()}
+              title="Change Profile Photo"
+            >
+              <Edit3 className="w-4 h-4" />
+            </button>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*"
+              onChange={handlePhotoUpload}
+            />
+
             {subscription?.status === "active" && (
-              <div className="absolute -bottom-1 -right-1 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full p-1.5 shadow-lg">
+              <div className="absolute -top-2 -right-2 bg-gradient-to-r from-yellow-400 to-orange-500 rounded-full p-1.5 shadow-lg z-20">
                 <Crown className="w-4 h-4 text-white" />
               </div>
             )}
@@ -243,7 +387,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
               {user?.username || "Guest"}
             </h1>
             <p className="text-white/60 text-sm mb-3">{user?.email || ""}</p>
-            
+
             {/* Quick stats row */}
             <div className="flex flex-wrap justify-center sm:justify-start gap-4">
               <div className="text-center">
@@ -253,9 +397,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
                 <div className="text-xs text-white/60">All-Time Avg</div>
               </div>
               <div className="text-center">
-                <div className="text-lg font-bold text-white">
-                  {totalGames}
-                </div>
+                <div className="text-lg font-bold text-white">{totalGames}</div>
                 <div className="text-xs text-white/60">Games</div>
               </div>
               <div className="text-center">
@@ -282,7 +424,11 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
             ) : (
               <button
                 onClick={() => {
-                  window.dispatchEvent(new CustomEvent("ndn:change-tab", { detail: { tab: "premium" } }));
+                  window.dispatchEvent(
+                    new CustomEvent("ndn:change-tab", {
+                      detail: { tab: "premium" },
+                    }),
+                  );
                 }}
                 className="px-3 py-1 rounded-full bg-gradient-to-r from-gray-600 to-gray-700 text-white text-sm font-semibold hover:from-yellow-500 hover:to-orange-500 transition-all"
               >
@@ -294,7 +440,14 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       </div>
 
       {/* Profile Overview Section */}
-      <Section id="overview" title="Profile Overview" icon={User} color="indigo" isOpen={expandedSection === "overview"} onToggle={handleSectionToggle}>
+      <Section
+        id="overview"
+        title="Profile Overview"
+        icon={User}
+        color="indigo"
+        isOpen={expandedSection === "overview"}
+        onToggle={handleSectionToggle}
+      >
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <span className="font-medium">Edit Profile</span>
@@ -318,7 +471,9 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
           {isEditing ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="text-xs text-white/60 mb-1 block">Favourite Player</label>
+                <label className="text-xs text-white/60 mb-1 block">
+                  Favourite Player
+                </label>
                 <input
                   className="input w-full"
                   value={favPlayer}
@@ -327,7 +482,9 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
                 />
               </div>
               <div>
-                <label className="text-xs text-white/60 mb-1 block">Favourite Team</label>
+                <label className="text-xs text-white/60 mb-1 block">
+                  Favourite Team
+                </label>
                 <input
                   className="input w-full"
                   value={favTeam}
@@ -336,7 +493,9 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
                 />
               </div>
               <div>
-                <label className="text-xs text-white/60 mb-1 block">Favourite Darts</label>
+                <label className="text-xs text-white/60 mb-1 block">
+                  Favourite Darts
+                </label>
                 <input
                   className="input w-full"
                   value={favDarts}
@@ -345,7 +504,9 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
                 />
               </div>
               <div>
-                <label className="text-xs text-white/60 mb-1 block">Profile Photo</label>
+                <label className="text-xs text-white/60 mb-1 block">
+                  Profile Photo
+                </label>
                 <input
                   type="file"
                   accept="image/*"
@@ -353,7 +514,8 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
                     const file = e.target.files?.[0];
                     if (file) {
                       const reader = new FileReader();
-                      reader.onload = () => setProfilePhoto(reader.result as string);
+                      reader.onload = () =>
+                        setProfilePhoto(reader.result as string);
                       reader.readAsDataURL(file);
                     }
                   }}
@@ -407,7 +569,14 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       </Section>
 
       {/* Statistics Section */}
-      <Section id="stats" title="My Statistics" icon={BarChart3} color="blue" isOpen={expandedSection === "stats"} onToggle={handleSectionToggle}>
+      <Section
+        id="stats"
+        title="My Statistics"
+        icon={BarChart3}
+        color="blue"
+        isOpen={expandedSection === "stats"}
+        onToggle={handleSectionToggle}
+      >
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white/5 rounded-lg p-3 text-center">
             <Target className="w-6 h-6 mx-auto mb-1 text-blue-400" />
@@ -431,12 +600,16 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
           </div>
           <div className="bg-white/5 rounded-lg p-3 text-center">
             <Star className="w-6 h-6 mx-auto mb-1 text-orange-400" />
-            <div className="text-lg font-bold">{allTimeStats.bestCheckout || 0}</div>
+            <div className="text-lg font-bold">
+              {allTimeStats.bestCheckout || 0}
+            </div>
             <div className="text-xs text-white/60">Highest Checkout</div>
           </div>
           <div className="bg-white/5 rounded-lg p-3 text-center">
             <Percent className="w-6 h-6 mx-auto mb-1 text-cyan-400" />
-            <div className="text-lg font-bold">{allTimeStats.best3?.toFixed(1) || 0}</div>
+            <div className="text-lg font-bold">
+              {allTimeStats.best3?.toFixed(1) || 0}
+            </div>
             <div className="text-xs text-white/60">Best 3-Dart Avg</div>
           </div>
           <div className="bg-white/5 rounded-lg p-3 text-center">
@@ -446,12 +619,18 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
           </div>
           <div className="bg-white/5 rounded-lg p-3 text-center">
             <Clock className="w-6 h-6 mx-auto mb-1 text-rose-400" />
-            <div className="text-lg font-bold">{allTimeStats.bestLegDarts || "-"}</div>
+            <div className="text-lg font-bold">
+              {allTimeStats.bestLegDarts || "-"}
+            </div>
             <div className="text-xs text-white/60">Best Leg (darts)</div>
           </div>
         </div>
         <button
-          onClick={() => window.dispatchEvent(new CustomEvent("ndn:change-tab", { detail: { tab: "stats" } }))}
+          onClick={() =>
+            window.dispatchEvent(
+              new CustomEvent("ndn:change-tab", { detail: { tab: "stats" } }),
+            )
+          }
           className="mt-4 w-full py-2 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg text-blue-400 text-sm transition-colors"
         >
           View Detailed Statistics →
@@ -459,7 +638,14 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       </Section>
 
       {/* Achievements Section */}
-      <Section id="achievements" title="Achievements & Badges" icon={Award} color="yellow" isOpen={expandedSection === "achievements"} onToggle={handleSectionToggle}>
+      <Section
+        id="achievements"
+        title="Achievements & Badges"
+        icon={Award}
+        color="yellow"
+        isOpen={expandedSection === "achievements"}
+        onToggle={handleSectionToggle}
+      >
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {achievements.map((a) => (
             <div
@@ -489,7 +675,14 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       </Section>
 
       {/* Preferences Section */}
-      <Section id="preferences" title="Game Preferences" icon={Settings} color="purple" isOpen={expandedSection === "preferences"} onToggle={handleSectionToggle}>
+      <Section
+        id="preferences"
+        title="Game Preferences"
+        icon={Settings}
+        color="purple"
+        isOpen={expandedSection === "preferences"}
+        onToggle={handleSectionToggle}
+      >
         <div className="space-y-4">
           {/* Favourite Double */}
           <div className="flex items-center justify-between">
@@ -500,8 +693,13 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
               onChange={(e) => setFavoriteDouble(e.target.value)}
             >
               <option value="">None</option>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20].map((n) => (
-                <option key={n} value={String(n)}>D{n}</option>
+              {[
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18,
+                19, 20,
+              ].map((n) => (
+                <option key={n} value={String(n)}>
+                  D{n}
+                </option>
               ))}
             </select>
           </div>
@@ -529,7 +727,9 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
                 onChange={(e) => setCallerEnabled(e.target.checked)}
                 className="w-4 h-4"
               />
-              <span className="text-xs text-white/60">{callerEnabled ? "On" : "Off"}</span>
+              <span className="text-xs text-white/60">
+                {callerEnabled ? "On" : "Off"}
+              </span>
             </div>
           </div>
 
@@ -548,6 +748,24 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
             </div>
           )}
 
+          {callerEnabled && (
+            <div className="flex items-center justify-between pl-4 gap-3">
+              <label className="text-sm text-white/60">Voice</label>
+              <select
+                className="input flex-1 text-sm"
+                value={callerVoice || ""}
+                onChange={(e) => setCallerVoice(e.target.value)}
+              >
+                <option value="">Default</option>
+                {availableVoices.map((voice) => (
+                  <option key={voice.voiceURI} value={voice.voiceURI}>
+                    {voice.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Theme */}
           <div>
             <label className="text-sm mb-2 block">Theme</label>
@@ -557,19 +775,36 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
       </Section>
 
       {/* Account & Subscription Section */}
-      <Section id="account" title="Account & Subscription" icon={CreditCard} color="green" isOpen={expandedSection === "account"} onToggle={handleSectionToggle}>
+      <Section
+        id="account"
+        title="Account & Subscription"
+        icon={CreditCard}
+        color="green"
+        isOpen={expandedSection === "account"}
+        onToggle={handleSectionToggle}
+      >
         <div className="space-y-4">
           {/* Subscription Status */}
           <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
             <div>
               <div className="font-medium">Subscription Status</div>
-              <div className={`text-sm ${subscription?.status === "active" ? "text-green-400" : "text-white/60"}`}>
-                {subscription?.status === "active" ? "Premium Active" : "Free Plan"}
+              <div
+                className={`text-sm ${subscription?.status === "active" ? "text-green-400" : "text-white/60"}`}
+              >
+                {subscription?.status === "active"
+                  ? "Premium Active"
+                  : "Free Plan"}
               </div>
             </div>
             {subscription?.status !== "active" && (
               <button
-                onClick={() => window.dispatchEvent(new CustomEvent("ndn:change-tab", { detail: { tab: "premium" } }))}
+                onClick={() =>
+                  window.dispatchEvent(
+                    new CustomEvent("ndn:change-tab", {
+                      detail: { tab: "premium" },
+                    }),
+                  )
+                }
                 className="px-4 py-2 bg-gradient-to-r from-yellow-500 to-orange-500 text-white rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
               >
                 Upgrade
@@ -583,7 +818,9 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
             <div className="text-lg font-bold">
               {wallet?.wallet?.balances
                 ? Object.entries(wallet.wallet.balances)
-                    .map(([c, v]: [string, any]) => `${c} ${(v / 100).toFixed(2)}`)
+                    .map(
+                      ([c, v]: [string, any]) => `${c} ${(v / 100).toFixed(2)}`,
+                    )
                     .join(" • ")
                 : "£0.00"}
             </div>
@@ -592,7 +829,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
           {/* Username Change */}
           <div className="p-3 bg-white/5 rounded-lg">
             <div className="font-medium mb-2">
-              Change Username 
+              Change Username
               <span className="text-xs text-white/60 ml-2">
                 ({user?.usernameChangeCount || 0}/2 free changes used)
               </span>
@@ -625,7 +862,9 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
                     });
                     if (!res.ok) {
                       const data = await res.json();
-                      throw new Error(data.error || "Failed to change username");
+                      throw new Error(
+                        data.error || "Failed to change username",
+                      );
                     }
                     setNewUsername("");
                     window.location.reload();
@@ -641,13 +880,17 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
                 {changingUsername ? "..." : "Change"}
               </button>
             </div>
-            {usernameError && <div className="text-red-400 text-xs mt-1">{usernameError}</div>}
+            {usernameError && (
+              <div className="text-red-400 text-xs mt-1">{usernameError}</div>
+            )}
           </div>
 
           {/* Logout & Data Export */}
           <div className="flex gap-2">
             <button
-              onClick={() => window.dispatchEvent(new CustomEvent("ndn:logout"))}
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent("ndn:logout"))
+              }
               className="flex-1 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
             >
               <LogOut className="w-4 h-4" /> Logout
@@ -661,7 +904,9 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
                   bio: { favPlayer, favTeam, favDarts, bio },
                   exportedAt: new Date().toISOString(),
                 };
-                const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+                const blob = new Blob([JSON.stringify(data, null, 2)], {
+                  type: "application/json",
+                });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;

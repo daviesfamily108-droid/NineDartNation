@@ -1,4 +1,4 @@
-// Generic autoscore provider helpers: parse vendor-agnostic payloads and subscribe via WebSocket
+﻿// Generic autoscore provider helpers: parse vendor-agnostic payloads and subscribe via WebSocket
 
 export type Ring =
   | "MISS"

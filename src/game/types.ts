@@ -1,4 +1,4 @@
-export type DartMult = "S" | "D" | "T";
+﻿export type DartMult = "S" | "D" | "T";
 export type Dart = { mult: DartMult; num: number } | { bull: 25 | 50 };
 
 export type DoublePracticeState = {

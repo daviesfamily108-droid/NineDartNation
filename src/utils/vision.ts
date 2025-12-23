@@ -1,4 +1,4 @@
-// Vision and calibration utilities for dartboard mapping
+﻿// Vision and calibration utilities for dartboard mapping
 // Standard dartboard: 18 inches (457.2 mm) outer diameter
 // Board dimensions follow standard measurements (millimeters)
 // - Inner bull radius: 6.35 mm (12.7 mm diameter)
@@ -35,7 +35,7 @@ export const SectorOrder = [
 ];
 
 // Basic 3x3 matrix operations
-function matMul3(a: Homography, b: Homography): Homography {
+export function matMul3(a: Homography, b: Homography): Homography {
   const r = new Array(9).fill(0);
   for (let i = 0; i < 3; i++) {
     for (let j = 0; j < 3; j++) {
@@ -74,6 +74,33 @@ export function scaleHomography(
     H[7],
     H[8],
   ] as Homography;
+}
+
+// Rotate a homography around the board center by angle (in radians, counter-clockwise)
+// Creates a rotation matrix R and applies it: H' = R * H
+export function rotateHomography(
+  H: Homography,
+  angleRadians: number,
+): Homography {
+  const cos = Math.cos(angleRadians);
+  const sin = Math.sin(angleRadians);
+  // Rotation matrix R = [cos -sin 0; sin cos 0; 0 0 1]
+  const R: Homography = [cos, -sin, 0, sin, cos, 0, 0, 0, 1];
+  // We want to rotate the board coordinates before applying the homography
+  // so the correct composition is H' = H * R (rotate board, then map to image).
+  // Applying R on the left (R * H) would instead rotate the image space.
+  return matMul3(H, R);
+}
+
+// Translate a homography on the destination/image side by (tx, ty): H' = T * H
+// Where T = [1 0 tx; 0 1 ty; 0 0 1]
+export function translateHomography(
+  H: Homography,
+  tx: number,
+  ty: number,
+): Homography {
+  const T: Homography = [1, 0, tx, 0, 1, ty, 0, 0, 1];
+  return matMul3(T, H);
 }
 
 export function invertHomography(H: Homography): Homography {
@@ -194,14 +221,22 @@ function gaussianSolve(M: number[][], v: number[]): number[] {
 // Canonical calibration targets in board space (mm)
 // We now anchor the homography with four evenly spaced double-ring sectors:
 // D20 (top), D6 (right), D3 (bottom), D11 (left), plus bullseye (center).
-export function canonicalRimTargets(): Point[] {
-  const doubleR = BoardRadii.doubleOuter;
+export function canonicalRimTargets(
+  mode: "center" | "outer" = "center",
+): Point[] {
+  // Target the CENTER of the double ring (166mm radius)
+  // This is more stable than the outer edge and ensures the point is
+  // clearly within the double segment, avoiding the outer light ring.
+  const radius =
+    mode === "outer"
+      ? (BoardRadii.doubleInner + BoardRadii.doubleOuter) / 2 // 166mm - center of double ring
+      : (BoardRadii.doubleInner + BoardRadii.doubleOuter) / 2;
   const targetSectors = [20, 6, 3, 11] as const;
   const rimPoints = targetSectors.map((sector) => {
     const idx = SectorOrder.indexOf(sector);
     const angle = (idx / SectorOrder.length) * Math.PI * 2 - Math.PI / 2;
-    const x = doubleR * Math.cos(angle);
-    const y = doubleR * Math.sin(angle);
+    const x = radius * Math.cos(angle);
+    const y = radius * Math.sin(angle);
     return {
       x: Math.abs(x) < 1e-9 ? 0 : x,
       y: Math.abs(y) < 1e-9 ? 0 : y,
@@ -230,6 +265,37 @@ export function sampleRing(
   return pts;
 }
 
+// Estimate sectorOffset from a calibrated homography so that sector 20 aligns to the image "top".
+// We measure the image-space angle from the mapped board center to the mapped D20 mid-point
+// and convert that angular discrepancy into an integer sector offset in steps of 18 degrees.
+export function estimateSectorOffsetFromHomography(
+  H: Homography,
+  mode: "center" | "outer" = "outer",
+): number {
+  // Board-space center and D20 mid-point
+  const centerImg = applyHomography(H, { x: 0, y: 0 });
+  const radius =
+    mode === "outer"
+      ? BoardRadii.doubleOuter
+      : (BoardRadii.doubleInner + BoardRadii.doubleOuter) / 2;
+  const d20Board = { x: 0, y: -radius }; // -Y points to top (sector 20 center)
+  const d20Img = applyHomography(H, d20Board);
+  const vx = d20Img.x - centerImg.x;
+  const vy = d20Img.y - centerImg.y;
+  // Image-space angle: atan2(y, x) in degrees, normalized to [0, 360)
+  let degImg = (Math.atan2(vy, vx) * 180) / Math.PI;
+  degImg = (degImg + 360) % 360;
+  // Desired top direction is -Y, which is 270 degrees in image atan2 convention
+  const desiredTop = 270; // degrees
+  let delta = degImg - desiredTop; // positive if rotated clockwise relative to desired top
+  // Normalize delta to [-180, 180)
+  delta = ((delta + 180) % 360) - 180;
+  // Convert angular delta to nearest sector steps (18 degrees per sector)
+  const offset = Math.round(delta / 18);
+  // Ensure offset in [0, 19] for consistency
+  return ((offset % 20) + 20) % 20;
+}
+
 export function rmsError(H: Homography, src: Point[], dst: Point[]): number {
   let e2 = 0;
   for (let i = 0; i < src.length; i++) {
@@ -241,10 +307,127 @@ export function rmsError(H: Homography, src: Point[], dst: Point[]): number {
   return Math.sqrt(e2 / src.length);
 }
 
+export interface RansacOptions {
+  thresholdPx?: number; // reprojection error threshold
+  maxIter?: number;
+  minInliers?: number;
+  rng?: () => number; // optional RNG for deterministic tests
+}
+
+// Robust homography estimation using RANSAC. Returns best H, inlier mask and inlier RMS error.
+export function ransacHomography(
+  src: Point[],
+  dst: Point[],
+  opts: RansacOptions = {},
+): { H: Homography | null; inliers: boolean[]; errorPx: number | null } {
+  const n = src.length;
+  if (n < 4 || dst.length < 4)
+    throw new Error("Need at least 4 correspondences");
+  const threshold = opts.thresholdPx ?? 8;
+  const maxIter = opts.maxIter ?? 500;
+  const minInliers = opts.minInliers ?? 4;
+  const rng = opts.rng ?? Math.random;
+
+  let bestH: Homography | null = null;
+  let bestInliers: boolean[] = new Array(n).fill(false);
+  let bestCount = 0;
+  let bestError = Infinity;
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    // pick 4 unique indices
+    const idxs = new Set<number>();
+    while (idxs.size < 4) {
+      idxs.add(Math.floor(rng() * n));
+    }
+    const chosen = Array.from(idxs);
+    const ssub: Point[] = [];
+    const dsub: Point[] = [];
+    for (const i of chosen) {
+      ssub.push(src[i]);
+      dsub.push(dst[i]);
+    }
+    let Htry: Homography;
+    try {
+      Htry = computeHomographyDLT(ssub, dsub);
+    } catch (e) {
+      continue; // singular or invalid, skip
+    }
+
+    // Count inliers
+    const inliers = new Array(n).fill(false);
+    let count = 0;
+    for (let i = 0; i < n; i++) {
+      const p = applyHomography(Htry, src[i]);
+      const dx = p.x - dst[i].x;
+      const dy = p.y - dst[i].y;
+      const dist = Math.hypot(dx, dy);
+      if (dist <= threshold) {
+        inliers[i] = true;
+        count++;
+      }
+    }
+
+    if (count < minInliers) continue;
+
+    // Recompute H using all inliers for better fit
+    const sIn: Point[] = [];
+    const dIn: Point[] = [];
+    for (let i = 0; i < n; i++) {
+      if (inliers[i]) {
+        sIn.push(src[i]);
+        dIn.push(dst[i]);
+      }
+    }
+    let Hrefined: Homography;
+    try {
+      Hrefined = computeHomographyDLT(sIn, dIn);
+    } catch (e) {
+      continue;
+    }
+    const err = rmsError(Hrefined, sIn, dIn);
+
+    // Choose better by inlier count first, then lower error
+    if (count > bestCount || (count === bestCount && err < bestError)) {
+      bestCount = count;
+      bestError = err;
+      bestH = Hrefined;
+      bestInliers = inliers.slice();
+    }
+  }
+
+  if (!bestH || bestCount < minInliers)
+    return { H: null, inliers: new Array(n).fill(false), errorPx: null };
+
+  // Compute final error over inliers
+  const sFin: Point[] = [];
+  const dFin: Point[] = [];
+  for (let i = 0; i < n; i++) {
+    if (bestInliers[i]) {
+      sFin.push(src[i]);
+      dFin.push(dst[i]);
+    }
+  }
+  const finalError = sFin.length > 0 ? rmsError(bestH, sFin, dFin) : null;
+  return { H: bestH, inliers: bestInliers, errorPx: finalError };
+}
+
 // Map an image point to board coordinates using inverse homography (image->board)
-export function imageToBoard(H_boardToImage: Homography, pImg: Point): Point {
-  const inv = invertHomography(H_boardToImage);
-  return applyHomography(inv as Homography, pImg);
+// Returns null if the homography cannot be inverted (singular matrix)
+export function imageToBoard(
+  H_boardToImage: Homography,
+  pImg: Point,
+): Point | null {
+  try {
+    const inv = invertHomography(H_boardToImage);
+    const result = applyHomography(inv as Homography, pImg);
+    // Validate that the result is finite (not NaN or Infinity)
+    if (!isFinite(result.x) || !isFinite(result.y)) {
+      return null;
+    }
+    return result;
+  } catch (e) {
+    return null;
+  }
 }
 
 // Compute score for a board coordinate (mm)
@@ -259,21 +442,114 @@ export function scoreAtBoardPoint(p: Point): {
   // Rotate so that sector 20 is at the top (negative Y). Top corresponds to -90 degrees (or 270)
   let deg = (ang * 180) / Math.PI;
   deg = (deg + 360 + 90) % 360; // shift so 0 deg is at top
-  const sector = SectorOrder[Math.floor(deg / 18)]; // deg now ranges 0..360 with 0 at top (clockwise ordering using array)
 
-  if (r <= BoardRadii.bullInner)
-    return { base: 50, ring: "INNER_BULL", sector: 25, mult: 2 };
-  if (r <= BoardRadii.bullOuter)
-    return { base: 25, ring: "BULL", sector: 25, mult: 1 };
-  if (r >= BoardRadii.doubleOuter)
+  // Shift by half a sector (9 degrees) to align boundaries.
+  // Sector 20 is centered at 0 deg, spanning -9 to +9.
+  // Adding 9 maps [-9, 9] to [0, 18], which floor divides to index 0.
+  const index = Math.floor(((deg + 9) % 360) / 18);
+  const sector = SectorOrder[index];
+
+  // Standard dartboard dimensions (mm)
+  const {
+    bullInner,
+    bullOuter,
+    trebleInner,
+    trebleOuter,
+    doubleInner,
+    doubleOuter,
+  } = BoardRadii;
+
+  // Apply minimal tolerance for wire-shots (0.75mm is approx half a wire width)
+  const tol = 0.75;
+
+  // Outside board edge
+  if (r > doubleOuter + tol)
     return { base: 0, ring: "MISS", sector: null, mult: 0 };
-  if (r >= BoardRadii.doubleInner)
+
+  // Double band
+  if (r >= doubleInner - tol)
     return { base: sector * 2, ring: "DOUBLE", sector, mult: 2 };
-  if (r >= BoardRadii.trebleOuter)
+
+  // Single outer band
+  if (r > trebleOuter + tol)
     return { base: sector, ring: "SINGLE", sector, mult: 1 };
-  if (r >= BoardRadii.trebleInner)
+
+  // Treble band
+  if (r >= trebleInner - tol)
     return { base: sector * 3, ring: "TRIPLE", sector, mult: 3 };
-  return { base: sector, ring: "SINGLE", sector, mult: 1 };
+
+  // Single inner band
+  if (r > bullOuter + tol)
+    return { base: sector, ring: "SINGLE", sector, mult: 1 };
+
+  // Bulls
+  if (r > bullInner + 0.5)
+    return { base: 25, ring: "BULL", sector: 25, mult: 1 };
+
+  return { base: 50, ring: "INNER_BULL", sector: 25, mult: 2 };
+}
+
+// Orientation-aware scoring: add theta (radians) to angle before sector mapping
+export function scoreAtBoardPointTheta(
+  p: Point,
+  theta: number,
+  sectorOffset: number = 0,
+): {
+  base: number;
+  ring: "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL";
+  sector: number | null;
+  mult: 0 | 1 | 2 | 3;
+} {
+  const r = Math.hypot(p.x, p.y);
+  const ang = Math.atan2(p.y, p.x) + (Number.isFinite(theta) ? theta : 0);
+  let deg = (ang * 180) / Math.PI;
+  deg = (deg + 360 + 90) % 360;
+  const index = Math.floor(((deg + 9) % 360) / 18);
+  const correctedIndex =
+    (((index + (Number.isFinite(sectorOffset) ? sectorOffset : 0)) % 20) + 20) %
+    20;
+  const sector = SectorOrder[correctedIndex];
+
+  // Standard dartboard dimensions (mm)
+  const {
+    bullInner,
+    bullOuter,
+    trebleInner,
+    trebleOuter,
+    doubleInner,
+    doubleOuter,
+  } = BoardRadii;
+
+  // Apply minimal tolerance for wire-shots
+  const tol = 0.75;
+
+  if (r > doubleOuter + tol)
+    return { base: 0, ring: "MISS", sector: null, mult: 0 };
+
+  if (r >= doubleInner - tol)
+    return { base: sector * 2, ring: "DOUBLE", sector, mult: 2 };
+
+  if (r > trebleOuter + tol)
+    return { base: sector, ring: "SINGLE", sector, mult: 1 };
+
+  if (r >= trebleInner - tol)
+    return { base: sector * 3, ring: "TRIPLE", sector, mult: 3 };
+
+  if (r > bullOuter + tol)
+    return { base: sector, ring: "SINGLE", sector, mult: 1 };
+
+  if (r > bullInner + 0.5)
+    return { base: 25, ring: "BULL", sector: 25, mult: 1 };
+
+  return { base: 50, ring: "INNER_BULL", sector: 25, mult: 2 };
+}
+
+// Check if a point is actually on the dartboard (within valid playing area)
+export function isPointOnBoard(p: Point): boolean {
+  const r = Math.hypot(p.x, p.y);
+  // A point is on the board if it's within the double outer radius (the edge of the board)
+  // No margin - we want strict checking to ensure darts are actually on the board
+  return r <= BoardRadii.doubleOuter;
 }
 
 export function drawPolyline(
@@ -374,4 +650,49 @@ export function refinePointsSobel(
   radius = 6,
 ): Point[] {
   return pts.map((p) => refinePointSobel(canvas, p, radius));
+}
+
+// Detect board orientation (theta) from calibration homography
+// The board has 4 calibration points on the double ring at sectors 20, 6, 3, 11 (top, right, bottom, left)
+// If the camera is rotated, these sectors will appear at different angles than expected
+// Returns theta in radians that can be used to correct sector calculations
+export function detectBoardOrientation(
+  H: Homography,
+  canonicalTargets: Point[],
+): number {
+  // Get the 4 double ring points (indices 0-3)
+  // In canonical orientation: index 0 = 20 (top), 1 = 6 (right), 2 = 3 (bottom), 3 = 11 (left)
+  const rimPoints = canonicalTargets.slice(0, 4);
+
+  // Map each board-space rim point to image space via homography
+  const imagePoints = rimPoints.map((p) => applyHomography(H, p));
+
+  // Compute the center of the points in image space
+  const centerX =
+    imagePoints.reduce((sum, p) => sum + p.x, 0) / imagePoints.length;
+  const centerY =
+    imagePoints.reduce((sum, p) => sum + p.y, 0) / imagePoints.length;
+
+  // Compute angles of each point relative to center in image space
+  // The first point (canonical 20, top) should be at angle -Ï€/2 (negative Y)
+  const expectedAngles = [-Math.PI / 2, 0, Math.PI / 2, Math.PI];
+  const actualAngles = imagePoints.map((p) =>
+    Math.atan2(p.y - centerY, p.x - centerX),
+  );
+
+  // Compute the rotation needed to align actual with expected
+  // Use the first point as reference (it's the most consistent)
+  let theta = expectedAngles[0] - actualAngles[0];
+
+  // Normalize theta to [-Ï€, Ï€]
+  while (theta > Math.PI) theta -= 2 * Math.PI;
+  while (theta < -Math.PI) theta += 2 * Math.PI;
+
+  return theta;
+}
+
+// Convert theta (radians) to human-readable degrees for UI display
+export function thetaToDegrees(theta: number | null): number {
+  if (theta === null) return 0;
+  return -(theta * 180) / Math.PI; // Negate because positive theta is CCW in math, but users think CW
 }

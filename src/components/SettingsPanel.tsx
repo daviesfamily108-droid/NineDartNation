@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import {
   User,
   Settings,
@@ -6,18 +6,16 @@ import {
   Camera,
   Gamepad2,
   Eye,
-  Mic,
   Save,
   Edit3,
   Shield,
   HelpCircle,
   MessageCircle,
-  X,
   Send,
   ChevronDown,
 } from "lucide-react";
 import { useUserSettings } from "../store/userSettings";
-import ThemeToggle from './ThemeToggle';
+import ThemeToggle from "./ThemeToggle";
 import { apiFetch } from "../utils/api";
 
 export default function SettingsPanel({ user }: { user?: any }) {
@@ -39,13 +37,13 @@ export default function SettingsPanel({ user }: { user?: any }) {
     autoscoreProvider,
     autoscoreWsUrl,
     autoCommitMode,
-    calibrationGuide,
-    preferredCameraId,
-    preferredCameraLabel,
+    calibrationGuide: _calibrationGuide,
+    preferredCameraId: _preferredCameraId,
+    preferredCameraLabel: _preferredCameraLabel,
     cameraEnabled,
     offlineLayout,
-    textSize,
-    boxSize,
+    textSize: _textSize,
+    boxSize: _boxSize,
     setFavoriteDouble,
     setCallerEnabled,
     setCallerVoice,
@@ -63,14 +61,16 @@ export default function SettingsPanel({ user }: { user?: any }) {
     setAutoscoreProvider,
     setAutoscoreWsUrl,
     setAutoCommitMode,
-    setCalibrationGuide,
-      preserveCalibrationOverlay,
-      setPreserveCalibrationOverlay,
-    setPreferredCamera,
+    setCalibrationGuide: _setCalibrationGuide,
+    preserveCalibrationOverlay,
+    setPreserveCalibrationOverlay,
+    preserveCalibrationOnCameraChange,
+    setPreserveCalibrationOnCameraChange,
+    setPreferredCamera: _setPreferredCamera,
     setCameraEnabled,
     setOfflineLayout,
-    setTextSize,
-    setBoxSize,
+    setTextSize: _setTextSize,
+    setBoxSize: _setBoxSize,
     dartTimerEnabled,
     dartTimerSeconds,
     setDartTimerEnabled,
@@ -85,14 +85,14 @@ export default function SettingsPanel({ user }: { user?: any }) {
       key: "first180",
       label: "First 180",
       unlocked: false,
-      icon: "🎯",
+      icon: "🔥",
       desc: "Score 180 in a match.",
     },
     {
       key: "hundredGames",
       label: "100 Games Played",
       unlocked: false,
-      icon: "🏅",
+      icon: "🏆",
       desc: "Play 100 games.",
     },
     {
@@ -131,7 +131,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
   // Listen for external requests to open the Profile/User pill (from Home or elsewhere)
   useEffect(() => {
-    function onOpenProfile(e: any) {
+    function onOpenProfile() {
       try {
         setExpandedPill("user");
       } catch {}
@@ -198,13 +198,16 @@ export default function SettingsPanel({ user }: { user?: any }) {
     // Fetch wallet balance
     (async () => {
       try {
-        const token = localStorage.getItem('authToken');
+        const token = localStorage.getItem("authToken");
         const headers: any = {};
         if (token) headers.Authorization = `Bearer ${token}`;
-        const res = await fetch(`/api/wallet/balance?email=${encodeURIComponent(user.email)}`, { headers })
-        if (res.ok) setWallet(await res.json())
+        const res = await fetch(
+          `/api/wallet/balance?email=${encodeURIComponent(user.email)}`,
+          { headers },
+        );
+        if (res.ok) setWallet(await res.json());
       } catch {}
-    })()
+    })();
   }, [user?.email]);
 
   const saveBio = () => {
@@ -357,6 +360,16 @@ export default function SettingsPanel({ user }: { user?: any }) {
       };
     }
 
+    const faqMatch = Object.entries(faq).find(([topic]) =>
+      message.includes(topic.toLowerCase()),
+    );
+    if (faqMatch) {
+      return {
+        text: faqMatch[1],
+        links: [{ text: "Open FAQ", tab: "settings" }],
+      };
+    }
+
     return {
       text: "I'm not sure about that. Try asking about playing, calibration, premium, username changes, voice settings, friends, stats, or settings.",
     };
@@ -378,7 +391,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
   // Username change state
   const [newUsername, setNewUsername] = useState("");
-  const [changingUsername, setChangingUsername] = useState(false);
+  const [changingUsername, _setChangingUsername] = useState(false);
   const [usernameError, setUsernameError] = useState("");
 
   // Available voices for caller
@@ -396,14 +409,12 @@ export default function SettingsPanel({ user }: { user?: any }) {
   }, []);
 
   // Highlights state
-  const [showHighlights, setShowHighlights] = useState(false);
+  const [_showHighlights, setShowHighlights] = useState(false);
 
   // Collapsible pill state
   const [expandedPill, setExpandedPill] = useState<
     "user" | "calibration" | "settings" | null
   >(null);
-
-  
 
   const PillButton = ({
     label,
@@ -416,14 +427,20 @@ export default function SettingsPanel({ user }: { user?: any }) {
     pill: "user" | "calibration" | "settings";
     color: string;
   }) => (
-  <button
-      onPointerDown={(e) => { (e as any).stopPropagation(); }}
-      onMouseDown={(e) => { e.stopPropagation(); }}
-      onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
-  onClick={() => setExpandedPill((prev) => (prev === pill ? null : pill))}
-  type="button"
-  data-testid={`pill-button-${pill}`}
-  className={`select-none whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 active:scale-[0.98] bg-gradient-to-r ${color} text-white flex items-center gap-2`}
+    <button
+      onPointerDown={(e) => {
+        (e as any).stopPropagation();
+      }}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+      }}
+      onTouchStart={(e) => {
+        (e as any).stopPropagation?.();
+      }}
+      onClick={() => setExpandedPill((prev) => (prev === pill ? null : pill))}
+      type="button"
+      data-testid={`pill-button-${pill}`}
+      className={`select-none whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 active:scale-[0.98] bg-gradient-to-r ${color} text-white flex items-center gap-2`}
     >
       <Icon className="w-4 h-4" /> {label}
       <ChevronDown
@@ -438,23 +455,38 @@ export default function SettingsPanel({ user }: { user?: any }) {
       <div className="relative rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-1">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-1">
           <PillButton
-            label="User Info"
+            label="User Info 👤"
             icon={User}
             pill="user"
-            color="from-indigo-500 to-fuchsia-500 shadow-indigo-500/30"
+            color="from-indigo-600 to-indigo-500"
+          />
+          <PillButton
+            label="Calibration 📍"
+            icon={Camera}
+            pill="calibration"
+            color="from-emerald-600 to-emerald-500"
+          />
+          <PillButton
+            label="App Settings ⚙️"
+            icon={Settings}
+            pill="settings"
+            color="from-purple-600 to-purple-500"
           />
         </div>
       </div>
 
       {/* USER INFO CONTENT */}
       {expandedPill === "user" && (
-        <div data-testid="pill-user-content" className="p-6 rounded-2xl border border-white/10 bg-white/[0.02] space-y-4">
+        <div
+          data-testid="pill-user-content"
+          className="p-6 rounded-2xl border border-white/10 bg-white/[0.02] space-y-4"
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Account */}
             <div className="card">
               <div className="p-3 rounded-xl border border-red-500/40 bg-red-500/10">
                 <div className="font-semibold mb-4 flex items-center gap-2 text-red-100">
-                  <User className="w-5 h-5" /> Account
+                  <User className="w-5 h-5" /> Account 👤
                 </div>
                 <div className="space-y-3">
                   <div className="flex justify-center gap-2">
@@ -464,50 +496,83 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       }
                       className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
                     >
-                      Logout
+                      Logout 🚪
                     </button>
                     <button
                       onClick={() => setShowHighlights(true)}
                       className="px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg font-medium transition-colors"
                     >
-                      Highlights
+                      Highlights ✨
                     </button>
                   </div>
                   <div className="mt-4 border-t pt-3">
-                    <div className="font-medium mb-2">Wallet</div>
+                    <div className="font-medium mb-2">Wallet 💰</div>
                     <div className="flex items-center gap-2">
-                      <div className="text-sm opacity-80 mr-4">Balance:{' '}
-                        <strong>{ wallet && wallet.wallet && Object.keys(wallet.wallet.balances || {}).length > 0 ?
-                          Object.entries(wallet.wallet.balances).map(([c, v]) => `${c} ${(v/100).toFixed(2)}`).join(' • ') : '0.00' }
+                      <div className="text-sm opacity-80 mr-4">
+                        Balance:{" "}
+                        <strong>
+                          {wallet &&
+                          wallet.wallet &&
+                          Object.keys(wallet.wallet.balances || {}).length > 0
+                            ? Object.entries(wallet.wallet.balances)
+                                .map(
+                                  ([c, v]) =>
+                                    `${c} ${(Number(v) / 100).toFixed(2)}`,
+                                )
+                                .join(" · ")
+                            : "0.00"}
                         </strong>
                       </div>
-                      <input className="input w-40" placeholder="Withdraw amount" value={''} onChange={() => {}} />
+                      <input
+                        className="input w-40"
+                        placeholder="Withdraw amount"
+                        value={""}
+                        onChange={() => {}}
+                      />
                       <select className="input">
                         <option>USD</option>
                         <option>GBP</option>
                         <option>EUR</option>
                       </select>
-                      <button className="btn" onClick={async () => {
-                        const email = user?.email || ''
-                        if (!email) return alert('Not signed in')
-                        const amt = prompt('Enter withdraw amount (e.g., 10.00)')
-                        if (!amt) return
-                        try {
-                          const token = localStorage.getItem('authToken')
-                          const headers: any = {'Content-Type': 'application/json'}
-                          if (token) headers.Authorization = `Bearer ${token}`
-                          const res = await fetch('/api/wallet/withdraw', { method: 'POST', headers, body: JSON.stringify({ email, amount: amt, currency: 'USD' }) })
-                          if (!res.ok) throw new Error('Failed')
-                          alert('Withdrawal requested')
-                        } catch (err) {
-                          alert('Failed to request withdrawal')
-                        }
-                      }}>Withdraw</button>
+                      <button
+                        className="btn"
+                        onClick={async () => {
+                          const email = user?.email || "";
+                          if (!email) return alert("Not signed in");
+                          const amt = prompt(
+                            "Enter withdraw amount (e.g., 10.00)",
+                          );
+                          if (!amt) return;
+                          try {
+                            const token = localStorage.getItem("authToken");
+                            const headers: any = {
+                              "Content-Type": "application/json",
+                            };
+                            if (token)
+                              headers.Authorization = `Bearer ${token}`;
+                            const res = await fetch("/api/wallet/withdraw", {
+                              method: "POST",
+                              headers,
+                              body: JSON.stringify({
+                                email,
+                                amount: amt,
+                                currency: "USD",
+                              }),
+                            });
+                            if (!res.ok) throw new Error("Failed");
+                            alert("Withdrawal requested");
+                          } catch (err) {
+                            alert("Failed to request withdrawal");
+                          }
+                        }}
+                      >
+                        Withdraw 💸
+                      </button>
                     </div>
                   </div>
                   <div className="border-t border-red-500/20 pt-3">
                     <div className="font-medium mb-2 text-red-100">
-                      Change Username (
+                      Change Username ✏️ (
                       {(() => {
                         const count = user?.usernameChangeCount || 0;
                         if (count < 2)
@@ -570,8 +635,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         : (() => {
                             const count = user?.usernameChangeCount || 0;
                             return count < 2
-                              ? "Change Username (FREE)"
-                              : "Change Username (£2)";
+                              ? "Change Username (FREE) ✏️"
+                              : "Change Username (£2) ✏️";
                           })()}
                     </button>
                   </div>
@@ -584,7 +649,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
               <div className="card">
                 <div className="p-3 rounded-xl border border-green-500/40 bg-green-500/10">
                   <div className="font-semibold mb-4 flex items-center gap-2 text-green-100">
-                    <Shield className="w-5 h-5" /> Premium
+                    <Shield className="w-5 h-5" /> Premium ✨
                   </div>
                   <div className="space-y-3 text-sm text-green-100">
                     <div>
@@ -597,7 +662,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         }
                       >
                         {subscription?.status === "active"
-                          ? "✓ Active"
+                          ? "✓ Active ✅"
                           : "Not Active"}
                       </span>
                     </div>
@@ -619,7 +684,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           }
                           className="w-full px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium transition-colors text-xs"
                         >
-                          Cancel Subscription
+                          Cancel Subscription ❌
                         </button>
                       )}
                   </div>
@@ -631,7 +696,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
             <div className="card">
               <div className="p-3 rounded-xl border border-cyan-500/40 bg-cyan-500/10">
                 <div className="font-semibold mb-4 flex items-center gap-2 text-cyan-100">
-                  <Eye className="w-5 h-5" /> Profile Photo
+                  <Eye className="w-5 h-5" /> Profile Photo 🖼️
                 </div>
                 <input
                   type="file"
@@ -654,7 +719,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
             <div className="card">
               <div className="p-3 rounded-xl border border-purple-500/40 bg-purple-500/10">
                 <div className="font-semibold mb-4 flex items-center gap-2 text-purple-100">
-                  <MessageCircle className="w-5 h-5" /> Online & Socials
+                  <MessageCircle className="w-5 h-5" /> Online & Socials �
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
@@ -669,7 +734,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       htmlFor="allowSpectate"
                       className="text-sm text-purple-100"
                     >
-                      Allow spectators
+                      Allow spectators 👁️
                     </label>
                   </div>
                 </div>
@@ -680,7 +745,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
             <div className="card">
               <div className="p-3 rounded-xl border border-orange-500/40 bg-orange-500/10">
                 <div className="font-semibold mb-4 flex items-center gap-2 text-orange-100">
-                  <Shield className="w-5 h-5" /> Data & Privacy
+                  <Shield className="w-5 h-5" /> Data & Privacy 🛡️
                 </div>
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
@@ -695,7 +760,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       htmlFor="allowAnalytics"
                       className="text-sm text-orange-100"
                     >
-                      Allow analytics
+                      Allow analytics 📊
                     </label>
                   </div>
                   <button
@@ -716,7 +781,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     }}
                     className="btn bg-orange-600 hover:bg-orange-700 w-full"
                   >
-                    Export My Data
+                    Export My Data 📥
                   </button>
                 </div>
               </div>
@@ -727,20 +792,20 @@ export default function SettingsPanel({ user }: { user?: any }) {
               <div className="p-3 rounded-xl border border-red-500/40 bg-red-500/10">
                 <div className="font-semibold mb-4 flex items-center gap-2">
                   <Shield className="w-5 h-5 text-red-400" /> Privacy &
-                  Copyright
+                  Copyright 🛡️
                 </div>
                 <div className="space-y-3 text-sm text-slate-300">
                   <div className="bg-red-500/20 border border-red-500/30 rounded-lg p-3">
                     <p className="font-semibold text-red-300 mb-2">
-                      ⚠️ Legal Notice
+                      ⚠️ Legal Notice ⚖️
                     </p>
                     <p className="mb-2 text-xs">
                       <strong>Copyright:</strong> All content is protected by
-                      copyright law.
+                      copyright law. 📜
                     </p>
                     <p className="text-xs">
                       <strong>Privacy:</strong> Your data is protected and
-                      unauthorized access is prohibited.
+                      unauthorized access is prohibited. 🔒
                     </p>
                   </div>
                 </div>
@@ -765,7 +830,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     }
                     className="btn bg-yellow-600 hover:bg-yellow-700 w-full text-sm"
                   >
-                    View Blocked Users
+                    View Blocked Users 🚫
                   </button>
                 </div>
               </div>
@@ -836,7 +901,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     }}
                     className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
                   >
-                    Permanently Delete Account
+                    Permanently Delete Account 🗑️
                   </button>
                 </div>
               </div>
@@ -859,7 +924,10 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
       {/* CALIBRATION CONTENT */}
       {expandedPill === "calibration" && (
-        <div data-testid="pill-calibration-content" className="p-6 rounded-2xl border border-white/10 bg-white/[0.02] space-y-4">
+        <div
+          data-testid="pill-calibration-content"
+          className="p-6 rounded-2xl border border-white/10 bg-white/[0.02] space-y-4"
+        >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Camera & Vision */}
             <div className="card">
@@ -910,9 +978,15 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           Aspect Ratio
                         </label>
                         <select
-                          onPointerDown={(e) => { (e as any).stopPropagation(); }}
-                          onMouseDown={(e) => { e.stopPropagation(); }}
-                          onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+                          onPointerDown={(e) => {
+                            (e as any).stopPropagation();
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                          }}
+                          onTouchStart={(e) => {
+                            (e as any).stopPropagation?.();
+                          }}
                           id="cameraAspect"
                           value={cameraAspect || "wide"}
                           onChange={(e) =>
@@ -932,9 +1006,15 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           Fit Mode
                         </label>
                         <select
-                          onPointerDown={(e) => { (e as any).stopPropagation(); }}
-                          onMouseDown={(e) => { e.stopPropagation(); }}
-                          onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+                          onPointerDown={(e) => {
+                            (e as any).stopPropagation();
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                          }}
+                          onTouchStart={(e) => {
+                            (e as any).stopPropagation?.();
+                          }}
                           id="cameraFitMode"
                           value={cameraFitMode || "fit"}
                           onChange={(e) =>
@@ -950,18 +1030,42 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         onClick={() => {}}
                         className="btn bg-indigo-600 hover:bg-indigo-700 w-full"
                       >
-                        Calibration Guide
+                        Calibration Guide 📖
                       </button>
                       <div className="flex items-center gap-3 mt-3">
                         <input
                           type="checkbox"
                           id="preserveOverlaySize"
                           checked={preserveCalibrationOverlay}
-                          onChange={(e) => setPreserveCalibrationOverlay(e.target.checked)}
+                          onChange={(e) =>
+                            setPreserveCalibrationOverlay(e.target.checked)
+                          }
                           className="w-4 h-4"
                         />
-                        <label htmlFor="preserveOverlaySize" className="text-sm">
+                        <label
+                          htmlFor="preserveOverlaySize"
+                          className="text-sm"
+                        >
                           Preserve overlay display size when locking calibration
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-3 mt-3">
+                        <input
+                          type="checkbox"
+                          id="preserveCalOnCamChange"
+                          checked={!!preserveCalibrationOnCameraChange}
+                          onChange={(e) =>
+                            setPreserveCalibrationOnCameraChange(
+                              e.target.checked,
+                            )
+                          }
+                          className="w-4 h-4"
+                        />
+                        <label
+                          htmlFor="preserveCalOnCamChange"
+                          className="text-sm"
+                        >
+                          Preserve calibration when switching camera devices
                         </label>
                       </div>
                       <div>
@@ -972,9 +1076,15 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           Auto-score Provider
                         </label>
                         <select
-                          onPointerDown={(e) => { (e as any).stopPropagation(); }}
-                          onMouseDown={(e) => { e.stopPropagation(); }}
-                          onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+                          onPointerDown={(e) => {
+                            (e as any).stopPropagation();
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                          }}
+                          onTouchStart={(e) => {
+                            (e as any).stopPropagation?.();
+                          }}
                           id="autoscoreProvider"
                           value={autoscoreProvider || "manual"}
                           onChange={(e) =>
@@ -1012,9 +1122,15 @@ export default function SettingsPanel({ user }: { user?: any }) {
                             Turn Advance
                           </label>
                           <select
-                            onPointerDown={(e) => { (e as any).stopPropagation(); }}
-                            onMouseDown={(e) => { e.stopPropagation(); }}
-                            onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+                            onPointerDown={(e) => {
+                              (e as any).stopPropagation();
+                            }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                            }}
+                            onTouchStart={(e) => {
+                              (e as any).stopPropagation?.();
+                            }}
                             id="autoCommitMode"
                             value={autoCommitMode || "wait-for-clear"}
                             onChange={(e) =>
@@ -1073,10 +1189,16 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         >
                           Voice
                         </label>
-                            <select
-                              onPointerDown={(e) => { (e as any).stopPropagation(); }}
-                              onMouseDown={(e) => { e.stopPropagation(); }}
-                              onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+                        <select
+                          onPointerDown={(e) => {
+                            (e as any).stopPropagation();
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                          }}
+                          onTouchStart={(e) => {
+                            (e as any).stopPropagation?.();
+                          }}
                           id="callerVoice"
                           value={callerVoice || ""}
                           onChange={(e) => setCallerVoice(e.target.value)}
@@ -1126,27 +1248,21 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       </div>
                       <button
                         onClick={() => {
-                          const phrases = [
-                            "Treble twenty... Treble twenty... One hundred and eighty!",
-                            "And he leaves... double sixteen.",
-                            "Lovely darts! One hundred and forty!",
-                            "Game shot! And the match!",
-                          ];
-                          const phrase = phrases[Math.floor(Math.random() * phrases.length)];
-                          const utterance = new SpeechSynthesisUtterance(phrase);
-                          utterance.voice =
-                            availableVoices.find(
-                              (v) => v.voiceURI === callerVoice,
-                            ) || null;
-                          utterance.volume = callerVolume || 1;
-                          utterance.rate = 0.92;
-                          utterance.pitch = 1.0;
-                          speechSynthesis.cancel();
-                          speechSynthesis.speak(utterance);
+                          const msg = new SpeechSynthesisUtterance(
+                            "One hundred and eighty!",
+                          );
+                          if (callerVoice) {
+                            const v = window.speechSynthesis
+                              .getVoices()
+                              .find((x) => x.voiceURI === callerVoice);
+                            if (v) msg.voice = v;
+                          }
+                          msg.volume = callerVolume || 1;
+                          window.speechSynthesis.speak(msg);
                         }}
-                        className="btn bg-purple-600 hover:bg-purple-700 w-full"
+                        className="btn bg-purple-600 hover:bg-purple-700 w-full text-sm"
                       >
-                        Test Voice
+                        Test Voice 🔊
                       </button>
                     </>
                   )}
@@ -1177,21 +1293,21 @@ export default function SettingsPanel({ user }: { user?: any }) {
             <div className="p-3 rounded-xl border border-indigo-500/40 bg-indigo-500/10">
               <div className="flex items-center justify-between mb-4">
                 <div className="font-semibold flex items-center gap-2">
-                  <User className="w-5 h-5 text-brand-400" /> Profile Bio
+                  <User className="w-5 h-5 text-brand-400" /> Profile Bio 👤
                 </div>
                 {!isEditing ? (
                   <button
                     onClick={() => setIsEditing(true)}
                     className="flex items-center gap-2 px-3 py-1 bg-blue-500/20 hover:bg-blue-500/30 rounded-lg text-blue-400 text-sm transition-colors"
                   >
-                    <Edit3 className="w-4 h-4" /> Edit
+                    <Edit3 className="w-4 h-4" /> Edit ✏️
                   </button>
                 ) : (
                   <button
                     onClick={saveBio}
                     className="flex items-center gap-2 px-3 py-1 bg-green-500/20 hover:bg-green-500/30 rounded-lg text-green-400 text-sm transition-colors"
                   >
-                    <Save className="w-4 h-4" /> Save
+                    <Save className="w-4 h-4" /> Save 💾
                   </button>
                 )}
               </div>
@@ -1201,7 +1317,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                   <>
                     <div>
                       <label className="block text-sm mb-1">
-                        Favorite Player
+                        Favorite Player 👤
                       </label>
                       <input
                         type="text"
@@ -1212,7 +1328,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     </div>
                     <div>
                       <label className="block text-sm mb-1">
-                        Favorite Team
+                        Favorite Team 🛡️
                       </label>
                       <input
                         type="text"
@@ -1223,7 +1339,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     </div>
                     <div>
                       <label className="block text-sm mb-1">
-                        Favorite Darts
+                        Favorite Darts 🎯
                       </label>
                       <input
                         type="text"
@@ -1233,7 +1349,9 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm mb-1">Bio / Quote</label>
+                      <label className="block text-sm mb-1">
+                        Bio / Quote 💬
+                      </label>
                       <textarea
                         value={bio}
                         onChange={(e) => setBio(e.target.value)}
@@ -1247,25 +1365,25 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     <div>
                       Favorite Player:{" "}
                       <span className="text-brand-300">
-                        {favPlayer || "Not set"}
+                        {favPlayer || "Not set"} 👤
                       </span>
                     </div>
                     <div>
                       Favorite Team:{" "}
                       <span className="text-brand-300">
-                        {favTeam || "Not set"}
+                        {favTeam || "Not set"} 🛡️
                       </span>
                     </div>
                     <div>
                       Favorite Darts:{" "}
                       <span className="text-brand-300">
-                        {favDarts || "Not set"}
+                        {favDarts || "Not set"} 🎯
                       </span>
                     </div>
                     <div>
                       Bio:{" "}
                       <span className="text-brand-300">
-                        {bio || "No bio set"}
+                        {bio || "No bio set"} 💬
                       </span>
                     </div>
                   </>
@@ -1279,6 +1397,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
             <div className="p-3 rounded-xl border border-green-500/40 bg-green-500/10">
               <div className="font-semibold mb-4 flex items-center gap-2">
                 <Gamepad2 className="w-5 h-5 text-green-400" /> Game Preferences
+                �
               </div>
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
@@ -1290,7 +1409,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     className="w-4 h-4"
                   />
                   <label htmlFor="dartTimerEnabled" className="text-sm">
-                    Enable per-dart throw timer
+                    Enable per-dart throw timer ⏱️
                   </label>
                 </div>
                 {dartTimerEnabled && (
@@ -1322,9 +1441,13 @@ export default function SettingsPanel({ user }: { user?: any }) {
                   >
                     Favorite Finish Double
                   </label>
-                        <select
-                          onPointerDown={(e) => { (e as any).stopPropagation(); }}
-                          onMouseDown={(e) => { e.stopPropagation(); }}
+                  <select
+                    onPointerDown={(e) => {
+                      (e as any).stopPropagation();
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                    }}
                     id="favoriteDouble"
                     value={favoriteDouble}
                     onChange={(e) => setFavoriteDouble(e.target.value)}
@@ -1373,7 +1496,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
           <div className="card">
             <div className="p-3 rounded-xl border border-pink-500/40 bg-pink-500/10">
               <div className="font-semibold mb-4 flex items-center gap-2">
-                <Eye className="w-5 h-5 text-pink-400" /> UI & Accessibility
+                <Eye className="w-5 h-5 text-pink-400" /> UI & Accessibility 👁️
               </div>
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
@@ -1385,7 +1508,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     className="w-4 h-4"
                   />
                   <label htmlFor="autoStartOffline" className="text-sm">
-                    Auto-start offline games
+                    Auto-start offline games 🚀
                   </label>
                 </div>
                 <div className="flex items-center gap-3">
@@ -1397,7 +1520,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     className="w-4 h-4"
                   />
                   <label htmlFor="rememberLastOffline" className="text-sm">
-                    Remember last offline game settings
+                    Remember last offline game settings 💾
                   </label>
                 </div>
                 <div>
@@ -1449,7 +1572,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
           <div className="card">
             <div className="p-3 rounded-xl border border-yellow-500/30 bg-yellow-500/6">
               <div className="font-semibold mb-4 flex items-center gap-2">
-                <Settings className="w-5 h-5 text-yellow-400" /> Theme
+                <Settings className="w-5 h-5 text-yellow-400" /> Theme �
               </div>
               <div>
                 <ThemeToggle />
@@ -1462,6 +1585,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
             <div className="p-3 rounded-xl border border-blue-500/40 bg-blue-500/10">
               <div className="font-semibold mb-4 flex items-center gap-2">
                 <HelpCircle className="w-5 h-5 text-blue-400" /> Support & Help
+                �
               </div>
               <div className="space-y-2">
                 <p className="text-sm opacity-80">
@@ -1471,7 +1595,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                   href="mailto:support@ninedartnation.com"
                   className="btn bg-blue-600 hover:bg-blue-700 w-full text-xs"
                 >
-                  Email Support
+                  Email Support 📧
                 </a>
               </div>
             </div>
@@ -1482,7 +1606,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
             <div className="p-3 rounded-xl border border-cyan-500/40 bg-cyan-500/10">
               <div className="font-semibold mb-4 flex items-center gap-2">
                 <MessageCircle className="w-5 h-5 text-cyan-400" /> Help
-                Assistant
+                Assistant 🤖
               </div>
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {helpMessages.map((msg, i) => (
@@ -1542,7 +1666,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
         <div className="p-3 rounded-xl border border-yellow-500/40 bg-yellow-500/10">
           <div className="font-semibold mb-4 flex items-center gap-2">
             <HelpCircle className="w-5 h-5 text-yellow-400" /> Achievements &
-            Badges
+            Badges �
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {achievements.map((a) => (

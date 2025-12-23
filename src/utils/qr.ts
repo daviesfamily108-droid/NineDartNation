@@ -1,4 +1,4 @@
-import QRCode from "qrcode";
+﻿import QRCode from "qrcode";
 
 async function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -11,7 +11,7 @@ async function loadImage(src: string): Promise<HTMLImageElement> {
 
 export type QrLogoOptions = {
   logoUrl: string;
-  // Fraction of the QR's min(width,height) for the logo box. 0.18–0.24 is typical.
+  // Fraction of the QR's min(width,height) for the logo box. 0.18-0.24 is typical.
   logoScale?: number;
   // Add a white rounded mask under the logo to preserve scan contrast
   mask?: boolean;

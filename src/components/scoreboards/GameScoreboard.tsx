@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Universal Game Scoreboard Component
  * Displays game-specific stats based on the game mode and current game state
  * Works for Online, Offline, and Tournament modes
@@ -326,7 +326,7 @@ function ScoreRow({
 }) {
   return (
     <div className="flex justify-between">
-      <span className="opacity-70">{label}:</span>
+      <span className="opacity-70">{label} 🎯:</span>
       <span
         className={`${mono ? "font-mono" : ""} ${bold ? "font-semibold" : ""} ${
           highlight ? "text-emerald-300" : ""
@@ -354,19 +354,19 @@ function AvgDifferenceRow({
   let diffColor = "text-slate-300";
 
   if (isNeutral) {
-    diffText = "= All-time";
+    diffText = "= All-time 🎯";
     diffColor = "text-slate-300";
   } else if (isPositive) {
-    diffText = `+${diff.toFixed(2)} vs avg`;
+    diffText = `+${diff.toFixed(2)} vs avg 🎯`;
     diffColor = "text-emerald-400";
   } else {
-    diffText = `${diff.toFixed(2)} vs avg`;
+    diffText = `${diff.toFixed(2)} vs avg 🎯`;
     diffColor = "text-orange-400";
   }
 
   return (
     <div className="flex justify-between">
-      <span className="opacity-70">AVG vs Avg:</span>
+      <span className="opacity-70">AVG vs Avg 🎯:</span>
       <span className={`font-mono font-semibold ${diffColor}`}>{diffText}</span>
     </div>
   );
@@ -383,11 +383,11 @@ function formatCricketClosed(closed?: Record<number, number>): string {
 }
 
 function getCricketStatus(player: PlayerStats): string {
-  if (!player.closed) return "Starting";
+  if (!player.closed) return "Starting 🎯";
   const closedCount = Object.values(player.closed).filter(
     (c) => c === 3,
   ).length;
-  if (closedCount === 0) return "No marks";
-  if (closedCount < 7) return `${closedCount}/7`;
-  return "Closing in";
+  if (closedCount === 0) return "No marks 🎯";
+  if (closedCount < 7) return `${closedCount}/7 🎯`;
+  return "Closing in 🎯";
 }

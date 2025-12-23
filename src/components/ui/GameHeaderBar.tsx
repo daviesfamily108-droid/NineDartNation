@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+﻿import type { ReactNode } from "react";
 
 // Glassy sticky header bar used across Offline and Online match UIs for visual parity
 export default function GameHeaderBar({
@@ -18,7 +18,7 @@ export default function GameHeaderBar({
     >
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900/30 via-slate-900/10 to-transparent" />
       <div className="flex items-center gap-2 text-xs sm:text-sm leading-none flex-wrap">
-        {left}
+        {left} 🎯
       </div>
       <div className="flex items-center gap-1 flex-wrap justify-end">
         {right}

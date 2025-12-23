@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { render, act, waitFor } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 
@@ -65,7 +65,8 @@ vi.mock("../../store/userSettings", () => {
     setHideCameraOverlay: () => {},
     preferredCameraLocked: false,
   };
-  const useUserSettings = (selector: any) => (selector ? selector(state) : state);
+  const useUserSettings = (selector: any) =>
+    selector ? selector(state) : state;
   useUserSettings.setState = (s: any) => {
     const obj = typeof s === "function" ? s(state) : s;
     Object.assign(state, obj);
@@ -87,12 +88,20 @@ function mockEnumerateDevices(list: MediaDeviceInfo[]) {
 
 describe("CameraView auto-select OBS virtual camera", () => {
   beforeEach(() => {
-    try { vi.resetAllMocks(); } catch {}
-    try { vi.resetModules(); } catch {}
+    try {
+      vi.resetAllMocks();
+    } catch {}
+    try {
+      vi.resetModules();
+    } catch {}
   });
   afterEach(() => {
-    try { vi.restoreAllMocks(); } catch {}
-    try { vi.resetModules(); } catch {}
+    try {
+      vi.restoreAllMocks();
+    } catch {}
+    try {
+      vi.resetModules();
+    } catch {}
   });
 
   // The auto-select effect requires a fully-reactive mocked store —
@@ -105,20 +114,29 @@ describe("CameraView auto-select OBS virtual camera", () => {
     ];
     mockEnumerateDevices(devices);
 
-  const { useUserSettings } = await vi.importActual<any>("../../store/userSettings");
-  // Ensure initial state has no preference
-  useUserSettings.setState?.({ preferredCameraId: undefined, preferredCameraLocked: false });
-  const CameraView = (await vi.importActual<any>("../CameraView")).default;
+    const { useUserSettings } = await vi.importActual<any>(
+      "../../store/userSettings",
+    );
+    // Ensure initial state has no preference
+    useUserSettings.setState?.({
+      preferredCameraId: undefined,
+      preferredCameraLocked: false,
+    });
+    const CameraView = (await vi.importActual<any>("../CameraView")).default;
     // Render the component; the enumerateDevices effect should run and call setPreferredCamera
     await act(async () => {
       const { render } = await vi.importActual<any>("@testing-library/react");
       render(<CameraView />);
     });
     // Wait for the enumerateDevices async call to settle and effect to run
-    await waitFor(() => {
-      const select = document.querySelector<HTMLSelectElement>("div.card select");
-      if (!select) throw new Error("select not found");
-      expect(select.value).toBe("obs1");
-    }, { timeout: 1000 });
+    await waitFor(
+      () => {
+        const select =
+          document.querySelector<HTMLSelectElement>("div.card select");
+        if (!select) throw new Error("select not found");
+        expect(select.value).toBe("obs1");
+      },
+      { timeout: 1000 },
+    );
   });
 });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import ResizableModal from "./ui/ResizableModal";
 import InstallAppButton from "./InstallAppButton";
 

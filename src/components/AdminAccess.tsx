@@ -1,11 +1,12 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useToast } from "../store/toast";
+import { getApiBaseUrl } from "../utils/api";
 
 export default function AdminAccess({ user }: { user?: any }) {
   const [subscription, setSubscription] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const API_URL = (import.meta as any).env?.VITE_API_URL || "";
+  const API_URL = getApiBaseUrl();
   const toast = useToast();
 
   useEffect(() => {

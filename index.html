@@ -22,31 +22,5 @@
   <body class="bg-slate-50">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      // Offer a global hook for an 'Install App' prompt. Many browsers fire
-      // `beforeinstallprompt` when the PWA criteria are met.
-      (function () {
-        try {
-          window.deferredInstallPrompt = null;
-          window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            window.deferredInstallPrompt = e;
-          });
-          window.promptInstallApp = async function () {
-            try {
-              const p = window.deferredInstallPrompt;
-              if (!p) return false;
-              p.prompt();
-              const choice = await p.userChoice;
-              return choice && choice.outcome === 'accepted';
-            } catch (err) {
-              return false;
-            }
-          };
-        } catch (e) {
-          // ignore on non-browser contexts
-        }
-      })();
-    </script>
   </body>
 </html>

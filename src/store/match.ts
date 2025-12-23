@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { useAudit } from "./audit";
 import { broadcastMessage } from "../utils/broadcast";
 
@@ -43,9 +43,16 @@ export type MatchState = {
 };
 
 function calcThreeDartAvg(leg: Leg): number {
-  if (leg.dartsThrown === 0) return 0;
+  // Exclude any 'preOpenDarts' from the divisor (these darts are thrown before
+  // scoring opens in double-in games and should not count toward the average).
+  const totalPreOpen = (leg.visits || []).reduce(
+    (acc, v) => acc + (v.preOpenDarts || 0),
+    0,
+  );
+  const dartsForAvg = Math.max(0, leg.dartsThrown - totalPreOpen);
+  if (dartsForAvg === 0) return 0;
   const scored = leg.totalScoreStart - leg.totalScoreRemaining;
-  return (scored / leg.dartsThrown) * 3;
+  return (scored / dartsForAvg) * 3;
 }
 
 function finishedLegStats(leg: Leg) {
@@ -127,7 +134,7 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
             legs: [],
           }) as Player,
       );
-      console.debug('[useMatch] newMatch', playerNames, startingScore, roomId);
+      console.debug("[useMatch] newMatch", playerNames, startingScore, roomId);
       return {
         players,
         currentPlayerIdx: 0,
@@ -140,12 +147,21 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
 
   addVisit: (score, darts, meta) =>
     set((state) => {
-      console.debug('[useMatch] addVisit', { score, darts, inProgress: state.inProgress, currentPlayerIdx: state.currentPlayerIdx, players: state.players.length });
+      console.debug("[useMatch] addVisit", {
+        score,
+        darts,
+        inProgress: state.inProgress,
+        currentPlayerIdx: state.currentPlayerIdx,
+        players: state.players.length,
+      });
       if (!state.inProgress) return state;
-      const p = state.players[state.currentPlayerIdx];
+      const playerIdx = state.currentPlayerIdx;
+      const oldPlayer = state.players[playerIdx];
       // ensure a current leg exists
-      let leg = p.legs[p.legs.length - 1];
-      if (!leg || leg.finished) {
+      const oldLeg = oldPlayer.legs[oldPlayer.legs.length - 1];
+      let leg: Leg;
+      let legsArr: Leg[];
+      if (!oldLeg || oldLeg.finished) {
         leg = {
           visits: [],
           totalScoreStart: state.startingScore,
@@ -155,7 +171,10 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
           checkoutScore: null,
           startTime: Date.now(),
         };
-        p.legs.push(leg);
+        legsArr = [...oldPlayer.legs, leg];
+      } else {
+        leg = { ...oldLeg, visits: [...oldLeg.visits] };
+        legsArr = [...oldPlayer.legs.slice(0, -1), leg];
       }
       const preRem = leg.totalScoreRemaining;
       const postRem = Math.max(0, preRem - score);
@@ -169,19 +188,27 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
       });
       leg.dartsThrown += darts;
       leg.totalScoreRemaining = postRem;
+      // Create new player object with updated leg and currentThreeDartAvg
+      const p: Player = { ...oldPlayer, legs: legsArr };
       // Audit record (best-effort; ignore failures)
       try {
         const bust = score === 0 && darts > 0 && postRem === preRem;
         const finish = postRem === 0;
         const avgPayload: any = {};
-        if (leg.dartsThrown % 3 === 0) {
+        // Exclude pre-open darts from the divisor used for averages
+        const totalPreOpen = (leg.visits || []).reduce(
+          (acc, v) => acc + (v.preOpenDarts || 0),
+          0,
+        );
+        const dartsForAvg = Math.max(0, leg.dartsThrown - totalPreOpen);
+        if (dartsForAvg > 0 && (dartsForAvg % 3 === 0 || finish)) {
           const avg = calcThreeDartAvg(leg);
           if (Math.abs((p.currentThreeDartAvg ?? 0) - avg) > 0.0001) {
             p.currentThreeDartAvg = avg;
           }
           avgPayload.threeDartAvg = avg;
         }
-  useAudit.getState().recordVisit("x01-match", darts, score, {
+        useAudit.getState().recordVisit("x01-match", darts, score, {
           preOpenDarts: meta?.preOpenDarts ?? 0,
           preRemaining: preRem,
           postRemaining: postRem,
@@ -192,53 +219,99 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
       } catch {}
       try {
         // notify other windows a visit occurred
-        broadcastMessage({ type: "visit", score, darts, playerIdx: state.currentPlayerIdx, ts: Date.now() });
+        broadcastMessage({
+          type: "visit",
+          score,
+          darts,
+          playerIdx: state.currentPlayerIdx,
+          ts: Date.now(),
+        });
       } catch {}
-      return { ...state };
+      // Create new players array with the updated player to trigger re-render
+      const newPlayers = state.players.map((pl, i) =>
+        i === playerIdx ? p : pl,
+      );
+      return { ...state, players: newPlayers };
     }),
 
   undoVisit: () =>
     set((state) => {
-      const p = state.players[state.currentPlayerIdx];
-      const leg = p.legs[p.legs.length - 1];
-      if (!leg || leg.finished || leg.visits.length === 0) return state;
-      const last = leg.visits.pop()!;
-      leg.dartsThrown -= last.darts;
-      leg.totalScoreRemaining += last.score;
-      return { ...state };
+      const playerIdx = state.currentPlayerIdx;
+      const oldPlayer = state.players[playerIdx];
+      const oldLeg = oldPlayer.legs[oldPlayer.legs.length - 1];
+      if (!oldLeg || oldLeg.finished || oldLeg.visits.length === 0)
+        return state;
+      const newVisits = oldLeg.visits.slice(0, -1);
+      const last = oldLeg.visits[oldLeg.visits.length - 1];
+      const newLeg: Leg = {
+        ...oldLeg,
+        visits: newVisits,
+        dartsThrown: oldLeg.dartsThrown - last.darts,
+        totalScoreRemaining: oldLeg.totalScoreRemaining + last.score,
+      };
+      const newLegs = [...oldPlayer.legs.slice(0, -1), newLeg];
+      const newPlayer: Player = { ...oldPlayer, legs: newLegs };
+      const newPlayers = state.players.map((pl, i) =>
+        i === playerIdx ? newPlayer : pl,
+      );
+      return { ...state, players: newPlayers };
     }),
 
   endLeg: (checkoutScore) =>
     set((state) => {
-      const p = state.players[state.currentPlayerIdx];
-      const leg = p.legs[p.legs.length - 1];
-      if (!leg || leg.finished) return state;
-      leg.finished = true;
-      leg.checkoutScore = checkoutScore;
-      leg.endTime = Date.now();
-      if (leg.totalScoreRemaining === 0) {
-        p.legsWon += 1;
+      const playerIdx = state.currentPlayerIdx;
+      const oldPlayer = state.players[playerIdx];
+      const oldLeg = oldPlayer.legs[oldPlayer.legs.length - 1];
+      if (!oldLeg || oldLeg.finished) return state;
+      const endTime = Date.now();
+      const newLeg: Leg = {
+        ...oldLeg,
+        finished: true,
+        checkoutScore,
+        endTime,
+      };
+      const newLegs = [...oldPlayer.legs.slice(0, -1), newLeg];
+      let newLegsWon = oldPlayer.legsWon;
+      let newBestLeg = state.bestLegThisMatch;
+      if (newLeg.totalScoreRemaining === 0) {
+        newLegsWon += 1;
         // Check if this leg is the new best for this match (fewest darts)
-        const best = state.bestLegThisMatch;
-        if (!best || leg.dartsThrown < best.darts) {
-          state.bestLegThisMatch = {
-            playerId: p.id,
-            darts: leg.dartsThrown,
-            timestamp: leg.endTime,
+        if (!newBestLeg || newLeg.dartsThrown < newBestLeg.darts) {
+          newBestLeg = {
+            playerId: oldPlayer.id,
+            darts: newLeg.dartsThrown,
+            timestamp: endTime,
           };
         }
       }
+      const newPlayer: Player = {
+        ...oldPlayer,
+        legs: newLegs,
+        legsWon: newLegsWon,
+      };
+      const newPlayers = state.players.map((pl, i) =>
+        i === playerIdx ? newPlayer : pl,
+      );
       try {
-        broadcastMessage({ type: "endLeg", checkoutScore, playerIdx: state.currentPlayerIdx, ts: Date.now() });
+        broadcastMessage({
+          type: "endLeg",
+          checkoutScore,
+          playerIdx: state.currentPlayerIdx,
+          ts: Date.now(),
+        });
       } catch {}
-      return { ...state };
+      return { ...state, players: newPlayers, bestLegThisMatch: newBestLeg };
     }),
 
   nextPlayer: () =>
     set((state) => {
       const next = (state.currentPlayerIdx + 1) % state.players.length;
       try {
-        broadcastMessage({ type: "nextPlayer", currentPlayerIdx: next, ts: Date.now() });
+        broadcastMessage({
+          type: "nextPlayer",
+          currentPlayerIdx: next,
+          ts: Date.now(),
+        });
       } catch {}
       return { ...state, currentPlayerIdx: next };
     }),
@@ -246,21 +319,29 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
   endGame: () =>
     set((state) => {
       // Only now compute best/worst 3-dart, best 9-dart, best checkout
-      for (const p of state.players) updatePlayerEndOfGameStats(p);
+      // Create new player objects with updated stats
+      const newPlayers = state.players.map((p) => {
+        const updated = { ...p };
+        updatePlayerEndOfGameStats(updated);
+        return updated;
+      });
       try {
         broadcastMessage({ type: "endGame", ts: Date.now() });
       } catch {}
-      return { ...state, inProgress: false };
+      return { ...state, players: newPlayers, inProgress: false };
     }),
 
   importState: (newState) => set(() => ({ ...newState })),
   setPlayerCurrentAverage: (playerIndex, avg) =>
     set((state) => {
-      const p = state.players[playerIndex];
-      if (!p) return state;
-      if (Math.abs((p.currentThreeDartAvg ?? 0) - avg) > 0.0001) {
-        p.currentThreeDartAvg = avg;
-        return { ...state };
+      const oldPlayer = state.players[playerIndex];
+      if (!oldPlayer) return state;
+      if (Math.abs((oldPlayer.currentThreeDartAvg ?? 0) - avg) > 0.0001) {
+        const newPlayer: Player = { ...oldPlayer, currentThreeDartAvg: avg };
+        const newPlayers = state.players.map((pl, i) =>
+          i === playerIndex ? newPlayer : pl,
+        );
+        return { ...state, players: newPlayers };
       }
       return state;
     }),

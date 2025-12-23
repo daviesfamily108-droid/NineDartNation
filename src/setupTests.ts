@@ -1,4 +1,4 @@
-// Test setup hooks for Vitest
+﻿// Test setup hooks for Vitest
 // Provide a harmless global.fetch fallback for tests to avoid "Invalid URL" warnings
 // when code calls fetch with a relative URL (Node's fetch requires an absolute URL).
 // The mock is intentionally conservative: it returns a basic successful JSON response.
@@ -47,25 +47,58 @@ vi.mock("react-focus-lock", () => ({
   default: ({ children }: any) => React.createElement("div", null, children),
 }));
 
-// Ensure a robust localStorage stub is present for tests that import persisted stores
-if (typeof (globalThis as any).localStorage === "undefined") {
-  const store: Record<string, string> = {};
-  (globalThis as any).localStorage = {
-    getItem: (k: string) => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null),
-    setItem: (k: string, v: string) => {
-      store[k] = String(v);
-    },
-    removeItem: (k: string) => {
-      delete store[k];
-    },
-    clear: () => {
-      for (const k of Object.keys(store)) delete store[k];
-    },
-    key: (i: number) => Object.keys(store)[i] || null,
-    get length() {
-      return Object.keys(store).length;
-    },
-  } as Storage;
+// Suppress expected act() warnings from BOARD_CLEAR_GRACE_MS timeout in orphan finalization tests
+// These warnings occur because setTimeout in enqueueVisitCommit fires after test completion
+// and cannot be wrapped in act() without breaking the test logic. This is unavoidable without
+// restructuring the deferred commit mechanism.
+const originalError = console.error;
+
+console.error = function (...args: any[]) {
+  const msg = String(args[0] || "");
+  // Filter out the specific act() warning about CameraView state updates and
+  // more generic act() warnings that are known and not actionable for these tests.
+  if (msg.includes("not wrapped in act(")) {
+    return; // Suppress this expected warning
+  }
+  originalError.apply(console, args);
+};
+
+// NOTE: Removed test-only uncaughtException handler for BroadcastChannel mismatch.
+// We prefer to provide a robust BroadcastChannel mock inside `setupTests.ts`
+// so tests don't rely on swallowing runtime exceptions. Keep the mock polyfill
+// above in place (MockBC) to avoid Node-native BroadcastChannel behavior.
+
+// Ensure a robust localStorage stub is present for tests that import persisted stores.
+// Some environments expose a non-functional localStorage placeholder; ensure the
+// essential methods exist regardless.
+{
+  const existing = (globalThis as any).localStorage;
+  const hasFns =
+    existing &&
+    typeof existing.getItem === "function" &&
+    typeof existing.setItem === "function" &&
+    typeof existing.removeItem === "function";
+
+  if (!hasFns) {
+    const store: Record<string, string> = {};
+    (globalThis as any).localStorage = {
+      getItem: (k: string) =>
+        Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null,
+      setItem: (k: string, v: string) => {
+        store[k] = String(v);
+      },
+      removeItem: (k: string) => {
+        delete store[k];
+      },
+      clear: () => {
+        for (const k of Object.keys(store)) delete store[k];
+      },
+      key: (i: number) => Object.keys(store)[i] || null,
+      get length() {
+        return Object.keys(store).length;
+      },
+    } as Storage;
+  }
 }
 
 // Polyfill matchMedia for the jsdom environment used by Vitest
@@ -87,18 +120,115 @@ if (typeof (globalThis as any).matchMedia !== "function") {
 // Polyfill MediaStream for jsdom so components that check srcObject instanceof MediaStream work
 if (typeof (globalThis as any).MediaStream === "undefined") {
   (globalThis as any).MediaStream = class {
-    getTracks() { return []; }
+    getTracks() {
+      return [];
+    }
+    getVideoTracks() {
+      return [];
+    }
+    getAudioTracks() {
+      return [];
+    }
     addTrack() {}
     removeTrack() {}
   };
 }
 
+// HTMLMediaElement.play/pause stub for jsdom environment to avoid Not implemented warnings
+if (
+  typeof (globalThis as any).HTMLMediaElement !== "undefined" &&
+  typeof (globalThis as any).HTMLMediaElement.prototype.play !== "function"
+) {
+  (globalThis as any).HTMLMediaElement.prototype.play = function () {
+    try {
+      // some code base checks for a Promise return
+      return Promise.resolve();
+    } catch (e) {
+      return Promise.resolve();
+    }
+  };
+}
+if (
+  typeof (globalThis as any).HTMLMediaElement !== "undefined" &&
+  typeof (globalThis as any).HTMLMediaElement.prototype.pause !== "function"
+) {
+  (globalThis as any).HTMLMediaElement.prototype.pause = function () {
+    /* no-op */
+  };
+}
+
 // Minimal navigator.mediaDevices.getUserMedia stub
 if (typeof (globalThis as any).navigator?.mediaDevices === "undefined") {
-  (globalThis as any).navigator = (globalThis as any).navigator || {};
-  (globalThis as any).navigator.mediaDevices = {
-    getUserMedia: async (_: any) => new (globalThis as any).MediaStream(),
-  };
+  // In some environments (notably when Vitest uses different pools),
+  // `window.navigator` can be a read-only getter. Avoid assigning to it.
+  try {
+    const nav = (globalThis as any).navigator;
+    Object.defineProperty(nav, "mediaDevices", {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: {
+        getUserMedia: async (_: any) => new (globalThis as any).MediaStream(),
+        enumerateDevices: async () => [],
+        addEventListener: (_name: string, _fn: (...args: any[]) => void) => {},
+        removeEventListener: (
+          _name: string,
+          _fn: (...args: any[]) => void,
+        ) => {},
+        ondevicechange: null,
+      },
+    });
+  } catch (e) {
+    // Last resort: patch existing navigator if possible
+    try {
+      (globalThis as any).navigator.mediaDevices = (globalThis as any).navigator
+        .mediaDevices || {
+        getUserMedia: async (_: any) => new (globalThis as any).MediaStream(),
+        enumerateDevices: async () => [],
+        addEventListener: (_name: string, _fn: (...args: any[]) => void) => {},
+        removeEventListener: (
+          _name: string,
+          _fn: (...args: any[]) => void,
+        ) => {},
+        ondevicechange: null,
+      };
+    } catch {}
+  }
+} else {
+  try {
+    // If mediaDevices exists but lacks enumerateDevices, add safe defaults
+    if (
+      typeof (globalThis as any).navigator.mediaDevices.enumerateDevices !==
+      "function"
+    ) {
+      (globalThis as any).navigator.mediaDevices.enumerateDevices =
+        async () => [];
+    }
+    if (
+      typeof (globalThis as any).navigator.mediaDevices.addEventListener !==
+      "function"
+    ) {
+      (globalThis as any).navigator.mediaDevices.addEventListener = (
+        name: string,
+        fn: (...args: any[]) => void,
+      ) => {};
+    }
+    if (
+      typeof (globalThis as any).navigator.mediaDevices.removeEventListener !==
+      "function"
+    ) {
+      (globalThis as any).navigator.mediaDevices.removeEventListener = (
+        name: string,
+        fn: (...args: any[]) => void,
+      ) => {};
+    }
+    if (
+      typeof (globalThis as any).navigator.mediaDevices.ondevicechange ===
+      "undefined"
+    ) {
+      (globalThis as any).navigator.mediaDevices.ondevicechange = null;
+    }
+  } catch (e) {}
 }
 
 // Polyfill createImageBitmap to short-circuit actual bitmap creation in tests
@@ -116,16 +246,16 @@ if (typeof (globalThis as any).createImageBitmap !== "function") {
 // to control the worker response for detect requests in Calibrator tests.
 if (typeof (globalThis as any).Worker === "undefined") {
   class TestWorker {
-    listeners: Record<string, Function[]> = {};
+    listeners: Record<string, Array<(ev: any) => void>> = {};
     onmessage: ((ev: any) => void) | null = null;
     constructor(_url?: string, _opts?: any) {
       // no-op
     }
-    addEventListener(name: string, cb: Function) {
+    addEventListener(name: string, cb: (ev: any) => void) {
       this.listeners[name] = this.listeners[name] || [];
       this.listeners[name].push(cb);
     }
-    removeEventListener(name: string, cb: Function) {
+    removeEventListener(name: string, cb: (ev: any) => void) {
       if (!this.listeners[name]) return;
       this.listeners[name] = this.listeners[name].filter((f) => f !== cb);
     }
@@ -172,12 +302,20 @@ if (typeof (globalThis as any).Worker === "undefined") {
     stroke: () => undefined,
     moveTo: () => undefined,
     lineTo: () => undefined,
-  setLineDash: () => undefined,
+    setLineDash: () => undefined,
     fillText: () => undefined,
     measureText: () => ({ width: 0 }),
-    getImageData: (x: number, y: number, w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+    getImageData: (x: number, y: number, w: number, h: number) => ({
+      data: new Uint8ClampedArray(w * h * 4),
+      width: w,
+      height: h,
+    }),
     putImageData: () => undefined,
-    createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+    createImageData: (w: number, h: number) => ({
+      data: new Uint8ClampedArray(w * h * 4),
+      width: w,
+      height: h,
+    }),
     drawImage: () => undefined,
     setTransform: () => undefined,
     save: () => undefined,
@@ -194,16 +332,61 @@ if (typeof (globalThis as any).Worker === "undefined") {
   } as any;
 }
 
+// Provide a global BroadcastChannel polyfill for tests to avoid using Node's
+// native BroadcastChannel which can dispatch non-DOM MessageEvent objects and
+// throws inside jsdom/Node test environments. Tests can still override it by
+// setting globalThis.BroadcastChannel in specific test files.
+try {
+  // Always replace any existing BroadcastChannel in the test environment with
+  // our MockBC to avoid Node's native implementation which dispatches
+  // non-DOM MessageEvent objects that jsdom cannot accept in dispatchEvent.
+  const channels = new Map<string, Set<any>>();
+  class MockBC {
+    name: string;
+    onmessage: ((e: any) => void) | null = null;
+    constructor(name: string) {
+      this.name = name;
+      const set = channels.get(name) || new Set();
+      set.add(this);
+      channels.set(name, set);
+    }
+    postMessage(msg: any) {
+      setTimeout(() => {
+        const set = channels.get(this.name);
+        if (!set) return;
+        for (const inst of Array.from(set)) {
+          try {
+            if (inst !== this && typeof inst.onmessage === "function")
+              inst.onmessage({ data: msg });
+          } catch {}
+        }
+      }, 0);
+    }
+    close() {
+      const set = channels.get(this.name);
+      if (!set) return;
+      set.delete(this);
+    }
+  }
+  try {
+    (globalThis as any).BroadcastChannel = MockBC;
+    if (typeof window !== "undefined")
+      (window as any).BroadcastChannel = MockBC;
+  } catch {}
+} catch (e) {}
+
 // Global test cleanup: remove any left-over portals, root elements, and clear mocks/timers
 afterEach(() => {
   try {
     // Remove any match-start portals (used by MatchStartShowcase)
-    const portals = Array.from(document.querySelectorAll('.ndn-match-start-portal'));
+    const portals = Array.from(
+      document.querySelectorAll(".ndn-match-start-portal"),
+    );
     portals.forEach((p) => p.parentElement?.removeChild(p));
   } catch {}
 
   try {
-    const root = document.getElementById('root');
+    const root = document.getElementById("root");
     if (root && root.parentElement) root.parentElement.removeChild(root);
   } catch {}
 
@@ -214,11 +397,19 @@ afterEach(() => {
 
   try {
     // Clear localStorage between tests
-    try { (globalThis as any).localStorage?.clear?.(); } catch {}
+    try {
+      (globalThis as any).localStorage?.clear?.();
+    } catch {}
   } catch {}
 
   // Reset Vitest mocks and timers
-  try { vi.resetAllMocks(); } catch {}
-  try { vi.restoreAllMocks(); } catch {}
-  try { vi.useRealTimers(); } catch {}
+  try {
+    vi.resetAllMocks();
+  } catch {}
+  try {
+    vi.restoreAllMocks();
+  } catch {}
+  try {
+    vi.useRealTimers();
+  } catch {}
 });

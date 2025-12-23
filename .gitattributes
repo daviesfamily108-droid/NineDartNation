@@ -1,6 +1,9 @@
 # Auto-detect text files and perform LF normalization
 * text=auto
 
+# Default all text to LF to keep Prettier/ESLint stable across platforms
+* text eol=lf
+
 # Mark images/binaries
 *.png binary
 *.jpg binary

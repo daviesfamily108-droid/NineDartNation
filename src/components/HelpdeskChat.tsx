@@ -1,6 +1,6 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
+﻿import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useWS } from "./WSProvider";
-import { X, Send, Zap, Clock, User } from "lucide-react";
+import { X, Send, Zap, User } from "lucide-react";
 import { analyzeUserQuestion, getEstimatedWaitTime } from "../utils/helpDeskAI";
 
 export default function HelpdeskChat({
@@ -118,7 +118,7 @@ export default function HelpdeskChat({
         const aiMsg = {
           fromName: "AI Assistant",
           message:
-            "✅ Great! Glad I could help. Feel free to reach out anytime you need assistance.",
+            "✓ Great! Glad I could help. Feel free to reach out anytime you need assistance.",
           ts: Date.now(),
           admin: true,
         };
@@ -257,7 +257,7 @@ export default function HelpdeskChat({
                 {m.actions && m.actions.length > 0 && (
                   <div className="mt-3 space-y-2">
                     <div className="text-xs font-semibold opacity-80">
-                      🎯 Try these calibration points:
+                      📍 Try these calibration points:
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
                       {m.actions.map((action: any) => (

@@ -1,4 +1,4 @@
-import { StrictMode } from "react";
+﻿import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
 // Mobile-only overrides loaded after the main stylesheet to strongly
@@ -9,6 +9,7 @@ import ResetPassword from "./components/ResetPassword";
 import { WSProvider } from "./components/WSProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { installApiInterceptor } from "./utils/api";
+import { setupInstallPromptHooks } from "./utils/installPrompt";
 
 // In some hosting setups, third-party or legacy code may expect a global React.
 // This ensures `React` is available at runtime to prevent 'React is not defined' errors.
@@ -17,6 +18,7 @@ try {
 } catch (e) {}
 
 installApiInterceptor();
+setupInstallPromptHooks();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -35,17 +37,15 @@ function Root() {
 }
 
 // Register service worker to enable PWA install & offline capability when available
-if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
   try {
     navigator.serviceWorker
-      .register('/sw.js')
+      .register("/sw.js")
       .then((reg) => {
-        // eslint-disable-next-line no-console
-        console.debug('[ServiceWorker] Registered', reg);
+        console.debug("[ServiceWorker] Registered", reg);
       })
       .catch((err) => {
-        // eslint-disable-next-line no-console
-        console.warn('[ServiceWorker] Registration failed', err);
+        console.warn("[ServiceWorker] Registration failed", err);
       });
   } catch (e) {
     // ignore

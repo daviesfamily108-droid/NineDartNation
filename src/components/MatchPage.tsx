@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import CameraView from "./CameraView";
 import GameHeaderBar from "./ui/GameHeaderBar";
 import GameScoreboard from "./scoreboards/GameScoreboard";
@@ -11,13 +11,17 @@ import PauseTimerBadge from "./ui/PauseTimerBadge";
 
 export default function MatchPage() {
   const match = useMatch();
-  const setMatchState = useMatch().importState;
-  const setControl = useMatchControl((s) => s.setPaused);
-  const control = useMatchControl();
-  const [ready, setReady] = useState(false);
-  const setRemotePending = usePendingVisit((s) => s.setVisit);
-  const resetRemotePending = usePendingVisit((s) => s.reset);
-  const remotePending = usePendingVisit((s) => ({ entries: s.entries, darts: s.darts, total: s.total }));
+  const _setMatchState = useMatch().importState;
+  const _setControl = useMatchControl((s) => s.setPaused);
+  const _control = useMatchControl();
+  const [_ready, setReady] = useState(false);
+  const _setRemotePending = usePendingVisit((s) => s.setVisit);
+  const _resetRemotePending = usePendingVisit((s) => s.reset);
+  const remotePending = usePendingVisit((s) => ({
+    entries: s.entries,
+    darts: s.darts,
+    total: s.total,
+  }));
   const [remoteFrame, setRemoteFrame] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,7 +35,9 @@ export default function MatchPage() {
       }
       if (snapshot?.control) {
         try {
-          useMatchControl.getState().setPaused(snapshot.control.paused, snapshot.control.pauseEndsAt);
+          useMatchControl
+            .getState()
+            .setPaused(snapshot.control.paused, snapshot.control.pauseEndsAt);
         } catch {}
       }
     } catch {}
@@ -44,7 +50,12 @@ export default function MatchPage() {
         if (msg.type === "snapshot" && msg.state) {
           if (msg.state.match) useMatch.getState().importState(msg.state.match);
           if (msg.state.control)
-            useMatchControl.getState().setPaused(msg.state.control.paused, msg.state.control.pauseEndsAt);
+            useMatchControl
+              .getState()
+              .setPaused(
+                msg.state.control.paused,
+                msg.state.control.pauseEndsAt,
+              );
         }
         // Helper: read snapshot if available and import
         const tryImportSnapshot = () => {
@@ -52,7 +63,10 @@ export default function MatchPage() {
             const s = readMatchSnapshot();
             if (s && s.match) {
               useMatch.getState().importState(s.match);
-              if (s.control) useMatchControl.getState().setPaused(s.control.paused, s.control.pauseEndsAt);
+              if (s.control)
+                useMatchControl
+                  .getState()
+                  .setPaused(s.control.paused, s.control.pauseEndsAt);
               return true;
             }
           } catch {}
@@ -76,10 +90,12 @@ export default function MatchPage() {
         // future message types: addVisit, nextPlayer, endGame etc.
         if (msg.type === "pendingVisit") {
           try {
-            const pIdx = msg.playerIdx ?? match.currentPlayerIdx;
+            const _pIdx = msg.playerIdx ?? match.currentPlayerIdx;
             // update pending visit store so scoreboard/pending dots render
             try {
-              usePendingVisit.getState().setVisit(msg.entries || [], msg.darts || 0, msg.total || 0);
+              usePendingVisit
+                .getState()
+                .setVisit(msg.entries || [], msg.darts || 0, msg.total || 0);
             } catch (e) {}
             if (msg.frame) setRemoteFrame(msg.frame);
           } catch (e) {}
@@ -89,7 +105,9 @@ export default function MatchPage() {
             // Prefer to import a full snapshot written by the committing window
             const ok = tryImportSnapshot();
             // Always clear any remote pending preview
-            try { usePendingVisit.getState().reset(); } catch (e) {}
+            try {
+              usePendingVisit.getState().reset();
+            } catch (e) {}
             // If no snapshot available, we keep the pending cleared and rely on
             // subsequent snapshot or other messages to bring state in sync.
             if (!ok) {
@@ -109,7 +127,10 @@ export default function MatchPage() {
                 const matchState = {
                   roomId: cur.roomId,
                   players: cur.players,
-                  currentPlayerIdx: typeof msg.currentPlayerIdx === 'number' ? msg.currentPlayerIdx : ((cur.currentPlayerIdx + 1) % (cur.players?.length || 1)),
+                  currentPlayerIdx:
+                    typeof msg.currentPlayerIdx === "number"
+                      ? msg.currentPlayerIdx
+                      : (cur.currentPlayerIdx + 1) % (cur.players?.length || 1),
                   startingScore: cur.startingScore,
                   inProgress: cur.inProgress,
                   bestLegThisMatch: cur.bestLegThisMatch,
@@ -200,21 +221,24 @@ export default function MatchPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
           <div className="md:col-span-2">
             <div className="card p-2">
-              <CameraView />
+              <CameraView hideInlinePanels={true} />
             </div>
           </div>
           <div>
             <div className="card p-2">
-      <GameScoreboard
-        gameMode={((match as any)?.game || "X01") as any}
+              <GameScoreboard
+                gameMode={((match as any)?.game || "X01") as any}
                 players={(match.players || []).map((p: any, idx: number) => ({
                   name: p.name || `Player ${idx + 1}`,
                   isCurrentTurn: idx === (match.currentPlayerIdx || 0),
                   legsWon: p.legsWon || 0,
-                  score: p.legs?.[p.legs.length - 1]?.totalScoreRemaining || undefined,
+                  score:
+                    p.legs?.[p.legs.length - 1]?.totalScoreRemaining ||
+                    undefined,
                   lastScore:
                     p.legs && p.legs.length
-                      ? p.legs[p.legs.length - 1].visits.slice(-1)[0]?.score || 0
+                      ? p.legs[p.legs.length - 1].visits.slice(-1)[0]?.score ||
+                        0
                       : 0,
                 }))}
               />
@@ -229,22 +253,36 @@ export default function MatchPage() {
             <div className="w-16 h-10 bg-black rounded overflow-hidden flex-shrink-0">
               {remoteFrame ? (
                 // small thumbnail from remote camera
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={remoteFrame} alt="opponent camera" className="w-full h-full object-cover" />
+                <img
+                  src={remoteFrame}
+                  alt="opponent camera"
+                  className="w-full h-full object-cover"
+                />
               ) : (
-                <div className="w-full h-full bg-gray-800 flex items-center justify-center text-xs">No preview</div>
+                <div className="w-full h-full bg-gray-800 flex items-center justify-center text-xs">
+                  No preview
+                </div>
               )}
             </div>
             <div className="flex-1 text-sm">
-              <div className="font-medium">{(match.players || [])[match.currentPlayerIdx]?.name || 'Player'}</div>
-              <div className="text-xs text-slate-300">Remaining: 
+              <div className="font-medium">
+                {(match.players || [])[match.currentPlayerIdx]?.name ||
+                  "Player"}
+              </div>
+              <div className="text-xs text-slate-300">
+                Remaining:
                 <span className="ml-1 font-semibold">
                   {(() => {
                     const p = (match.players || [])[match.currentPlayerIdx];
                     const leg = p?.legs?.[p.legs?.length - 1];
-                    const remaining = leg ? leg.totalScoreRemaining : match.startingScore;
+                    const remaining = leg
+                      ? leg.totalScoreRemaining
+                      : match.startingScore;
                     const pending = (remotePending && remotePending.total) || 0;
-                    const shown = typeof remaining === 'number' ? Math.max(0, remaining - pending) : remaining;
+                    const shown =
+                      typeof remaining === "number"
+                        ? Math.max(0, remaining - pending)
+                        : remaining;
                     return shown;
                   })()}
                 </span>
@@ -257,7 +295,7 @@ export default function MatchPage() {
               {remotePending.entries?.length ? (
                 remotePending.entries.map((e: any, i: number) => (
                   <div key={i} className="px-2 py-1 bg-white/5 rounded text-sm">
-                    {e.value}
+                    {e.rawValue ?? e.value}
                   </div>
                 ))
               ) : (

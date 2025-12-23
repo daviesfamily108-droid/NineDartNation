@@ -1,4 +1,4 @@
-export type AllTimeTotals = {
+﻿export type AllTimeTotals = {
   darts: number;
   scored: number;
   fnDarts?: number;
@@ -13,7 +13,7 @@ export type AllTimeTotals = {
   worstFNAvg?: number; // worst per-leg first-nine average
   num180s?: number;
 };
-type StatEntry = {
+export type StatEntry = {
   t: number;
   darts: number;
   scored: number;
@@ -175,6 +175,10 @@ function setSeries(name: string, entries: StatEntry[]) {
       new CustomEvent("ndn:stats-updated", { detail: { name } }),
     );
   } catch {}
+}
+
+export function getStatSeries(name: string): StatEntry[] {
+  return getSeries(name);
 }
 
 function pruneOld(entries: StatEntry[], maxAgeMs: number): StatEntry[] {

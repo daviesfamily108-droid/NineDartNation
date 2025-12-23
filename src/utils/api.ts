@@ -1,6 +1,13 @@
-export type ApiPath = string;
+﻿export type ApiPath = string;
 
 let cachedBaseUrl: string | null = null;
+const fallbackRemoteEnv =
+  ((import.meta as any)?.env?.VITE_REMOTE_API_FALLBACK as string | undefined) ||
+  "";
+const REMOTE_API_FALLBACK = (
+  fallbackRemoteEnv.trim() || "https://ninedartnation.onrender.com"
+).replace(/\/$/, "");
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
 function computeApiBase(): string {
   if (cachedBaseUrl) return cachedBaseUrl;
@@ -8,7 +15,16 @@ function computeApiBase(): string {
     (import.meta as any)?.env?.VITE_API_URL as string | undefined
   )?.trim();
   if (envUrl) {
-    cachedBaseUrl = envUrl.replace(/\/$/, "");
+    const normalized = envUrl.replace(/\/$/, "");
+    if (
+      typeof window !== "undefined" &&
+      /https?:\/\/(localhost|127\.0\.0\.1)(:\\d+)?/i.test(normalized) &&
+      !LOCAL_HOSTS.has(window.location.hostname)
+    ) {
+      cachedBaseUrl = REMOTE_API_FALLBACK;
+      return cachedBaseUrl;
+    }
+    cachedBaseUrl = normalized;
     return cachedBaseUrl;
   }
   if (typeof window !== "undefined") {
@@ -39,6 +55,10 @@ function normalizePath(path: ApiPath): string {
 
 export function resolveApiUrl(path: ApiPath): string {
   return normalizePath(path);
+}
+
+export function getApiBaseUrl(): string {
+  return computeApiBase();
 }
 
 export function apiFetch(path: ApiPath, init?: RequestInit) {

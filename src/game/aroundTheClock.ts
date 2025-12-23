@@ -1,4 +1,4 @@
-export type ATCState = {
+﻿export type ATCState = {
   target: number; // 1..20 then 25 (outer bull) then 50 (inner)
   finished: boolean;
 };

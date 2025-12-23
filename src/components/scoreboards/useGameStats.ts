@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Hook to convert OfflinePlay game state to GameScoreboard format
  */
 

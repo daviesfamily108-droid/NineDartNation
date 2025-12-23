@@ -1,4 +1,4 @@
-/* eslint-disable jsx-a11y/media-has-caption */
+﻿/* eslint-disable jsx-a11y/media-has-caption */
 import {
   useCallback,
   useEffect,
@@ -23,6 +23,7 @@ import {
   type USBDevice,
 } from "../utils/networkDevices";
 import { apiFetch } from "../utils/api";
+import { getPreferredWsUrl } from "../utils/ws";
 
 type CameraTileProps = {
   label?: string;
@@ -57,16 +58,19 @@ type CameraTileProps = {
   onClose?: () => void;
   onOpen?: () => void;
   layout?: "classic" | "modern";
+  /** Override the global fit mode for this tile only. */
+  tileFitModeOverride?: "fit" | "fill";
 };
 
 export default function CameraTile({
   label,
   autoStart,
-  scale: scaleOverride,
+  scale: scaleOverrideProp,
   className,
   aspect = "inherit",
   style,
   fill = false,
+  tileFitModeOverride: tileFitModeOverrideProp,
 }: CameraTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const cameraSession = useCameraSession();
@@ -202,7 +206,7 @@ export default function CameraTile({
         const origin = `${isSecure ? "https" : "http"}://${u.host}${u.pathname.endsWith("/ws") ? "" : u.pathname}`;
         const base = origin.replace(/\/?ws$/i, "");
         return `${base}/mobile-cam.html?code=${code}`;
-  } catch (e) {}
+      } catch (e) {}
     }
     // Fallback to local development: prefer LAN host if detected
     const host = lanHost || window.location.hostname;
@@ -247,43 +251,6 @@ export default function CameraTile({
   // Intentionally disabled automatic regeneration of phone pairing codes.
   // Codes will only be created when the user explicitly requests it (button click).
   // This prevents a code expiring and the UI silently generating a new one while pairing.
-
-  useEffect(() => {
-    if (
-      !cameraEnabledSetting ||
-      (autoscoreProvider &&
-        autoscoreProvider !== "built-in" &&
-        autoscoreProvider !== "external-ws")
-    )
-      return;
-    if (autoStart === undefined) return;
-    if (autoStart) {
-      let cancelled = false;
-      const desiredLabel = preferredCameraLabel || "default";
-      const timer = window.setTimeout(() => {
-        if (cancelled || streaming) return;
-        start().catch((err) =>
-          console.warn(
-            `[CameraTile] Auto-start failed for ${desiredLabel}:`,
-            err,
-          ),
-        );
-      }, 200);
-      return () => {
-        cancelled = true;
-        window.clearTimeout(timer);
-      };
-    }
-    stop();
-  }, [
-    autoStart,
-    streaming,
-    cameraEnabledSetting,
-    autoscoreProvider,
-    preferredCameraLabel,
-    start,
-    stop,
-  ]);
 
   // If the user selected Phone Camera, bind the global stream into this tile
   useEffect(() => {
@@ -343,7 +310,7 @@ export default function CameraTile({
 
     try {
       // Prefer saved camera if available
-      const { preferredCameraId, setPreferredCamera } =
+      const { preferredCameraId, setPreferredCamera: _setPreferredCamera } =
         useUserSettings.getState();
       const constraints: MediaStreamConstraints = preferredCameraId
         ? { video: { deviceId: { exact: preferredCameraId } }, audio: false }
@@ -373,7 +340,14 @@ export default function CameraTile({
       }
       // Camera started successfully - no automatic preference updates
     } catch {}
-  }, [mode, preferredCameraLabel, cameraSession, registerStream, startPhonePairing, startWifiConnection]);
+  }, [
+    mode,
+    preferredCameraLabel,
+    cameraSession,
+    registerStream,
+    startPhonePairing,
+    startWifiConnection,
+  ]);
   const stop = useCallback(() => {
     if (videoRef.current && videoRef.current.srcObject) {
       const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
@@ -383,6 +357,47 @@ export default function CameraTile({
       registerStream(null);
     }
   }, [registerStream]);
+
+  // Auto-start/stop the tile when requested.
+  useEffect(() => {
+    if (
+      !cameraEnabledSetting ||
+      (autoscoreProvider &&
+        autoscoreProvider !== "built-in" &&
+        autoscoreProvider !== "external-ws")
+    )
+      return;
+
+    if (autoStart === undefined) return;
+
+    if (autoStart) {
+      let cancelled = false;
+      const desiredLabel = preferredCameraLabel || "default";
+      const timer = window.setTimeout(() => {
+        if (cancelled || streaming) return;
+        start().catch((err) =>
+          console.warn(
+            `[CameraTile] Auto-start failed for ${desiredLabel}:`,
+            err,
+          ),
+        );
+      }, 200);
+      return () => {
+        cancelled = true;
+        window.clearTimeout(timer);
+      };
+    }
+
+    stop();
+  }, [
+    autoStart,
+    streaming,
+    cameraEnabledSetting,
+    autoscoreProvider,
+    preferredCameraLabel,
+    start,
+    stop,
+  ]);
 
   async function startWifiConnection() {
     setDiscoveringWifi(true);
@@ -582,32 +597,7 @@ export default function CameraTile({
   // Phone pairing via WebRTC
   function ensureWS() {
     if (ws && ws.readyState === WebSocket.OPEN) return ws;
-    const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined;
-    const normalizedEnv =
-      envUrl && envUrl.length > 0
-        ? envUrl.endsWith("/ws")
-          ? envUrl
-          : envUrl.replace(/\/$/, "") + "/ws"
-        : undefined;
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const sameOrigin = `${proto}://${window.location.host}/ws`;
-    const host = window.location.hostname;
-    const isLocalhost = host === "localhost" || host === "127.0.0.1";
-    const isRenderHost = host.endsWith("onrender.com");
-    // Preferred production fallback (avoids Netlify origin which lacks WS server)
-    const renderWS = `wss://ninedartnation.onrender.com/ws`;
-    let url = normalizedEnv;
-    if (!url) {
-      if (isLocalhost) {
-        url = `${proto}://${host}:8787/ws`;
-      } else if (isRenderHost) {
-        url = sameOrigin;
-      } else {
-        url = renderWS;
-      }
-    }
-    // As a safety net for unusual ports, fall back to same-origin if all else fails
-    if (!url) url = sameOrigin;
+    const url = getPreferredWsUrl();
     const socket = new WebSocket(url);
     setWs(socket);
     return socket;
@@ -730,7 +720,8 @@ export default function CameraTile({
       usbDevices={usbDevices}
       discoveringWifi={discoveringWifi}
       discoveringUsb={discoveringUsb}
-      scaleOverride={scaleOverride}
+      scaleOverride={scaleOverrideProp}
+      tileFitModeOverride={tileFitModeOverrideProp}
       className={className}
       aspect={aspect}
       style={style}
@@ -768,6 +759,8 @@ function CameraFrame(props: any) {
     usbDevices,
     discoveringWifi,
     discoveringUsb,
+    scaleOverride,
+    tileFitModeOverride,
     className,
     aspect,
     style,
@@ -838,13 +831,12 @@ function CameraFrame(props: any) {
   // Respect stored aspect unless we're explicitly in full-bleed fill mode,
   // in which case drop the aspect box so the video can truly cover the area.
   const { cameraFitMode: globalFitMode } = useUserSettings();
-  const effectiveFitMode: "fit" | "fill" = fill
-    ? "fill"
-    : globalFitMode || "fill";
+  const effectiveFitMode: "fit" | "fill" =
+    tileFitModeOverride || (fill ? "fill" : globalFitMode || "fill");
   // In fill mode we guarantee no black bars: never allow downscaling below 1.0
   const scale = (() => {
-    const raw = Number(props.scaleOverride ?? cameraScale ?? 1);
-    const clamped = Math.max(0.5, Math.min(1.25, raw));
+    const raw = Number(scaleOverride ?? cameraScale ?? 1);
+    const clamped = Math.max(0.5, Math.min(2.0, raw));
     return effectiveFitMode === "fill" ? Math.max(1, clamped) : clamped;
   })();
   const aspectChoice: "wide" | "square" | "portrait" | "classic" | "free" =
@@ -875,7 +867,7 @@ function CameraFrame(props: any) {
   const containerStyle: CSSProperties = { ...(style || {}) };
 
   const viewportClass = fill
-    ? "relative flex-1 min-h-[420px] bg-black"
+    ? "relative flex-1 min-h-0 bg-black"
     : "relative w-full bg-black";
 
   const commonVideoProps = {
@@ -1085,7 +1077,7 @@ function CameraFrame(props: any) {
             <div className="mt-2 p-2 rounded bg-slate-900/60 border border-slate-700/50 text-slate-200">
               <div className="font-semibold mb-1">Troubleshooting</div>
               <ul className="list-disc pl-4 space-y-1">
-                <li>Phone and desktop must be on the same Wi‑Fi network.</li>
+                <li>Phone and desktop must be on the same Wi-Fi network.</li>
                 <li>
                   Allow the server through your firewall (ports 8787 and{" "}
                   {httpsInfo?.https ? httpsInfo.port : 8788}).
@@ -1201,7 +1193,7 @@ function CameraFrame(props: any) {
                       onClick={() => connectToUsbDevice(device)}
                       disabled={device.status === "connecting"}
                     >
-                      {device.status === "connecting" ? "..." : "Connect"}
+                      {device.status === "connecting" ? "..." : "Connect 🔌"}
                     </button>
                   </div>
                 ))}
@@ -1210,18 +1202,18 @@ function CameraFrame(props: any) {
                     className="px-1 py-0.5 rounded bg-slate-700 text-[9px]"
                     onClick={startUsbConnection}
                   >
-                    Rescan USB
+                    Rescan USB 🔍
                   </button>
                 </div>
               </div>
             ) : (
               <div className="text-center">
-                <div className="mb-1 opacity-70">No USB devices found</div>
+                <div className="mb-1 opacity-70">No USB devices found ❌</div>
                 <button
                   className="px-1 py-0.5 rounded bg-slate-700 text-[9px]"
                   onClick={startUsbConnection}
                 >
-                  Scan USB
+                  Scan USB 🔍
                 </button>
               </div>
             )}
@@ -1233,10 +1225,10 @@ function CameraFrame(props: any) {
           <div className="flex items-center justify-between mb-2">
             <div>
               <div className="text-[10px] uppercase tracking-wide text-slate-500">
-                Camera modes
+                Camera modes ⚙️
               </div>
               <div className="text-sm font-semibold text-slate-900">
-                Reconnect camera
+                Reconnect camera 🔄
               </div>
             </div>
             <span className="text-xs text-slate-500">
@@ -1265,7 +1257,7 @@ function CameraFrame(props: any) {
                   </div>
                   {isActive && (
                     <div className="text-[10px] text-emerald-500 mt-2">
-                      Active
+                      Active ✅
                     </div>
                   )}
                 </button>

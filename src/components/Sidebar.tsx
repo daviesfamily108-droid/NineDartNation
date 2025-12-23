@@ -1,5 +1,4 @@
-import {
-  Bell,
+﻿import {
   Camera,
   LayoutDashboard,
   Lock,
@@ -36,15 +35,15 @@ type TabDefinition = {
 };
 
 export function getTabs(user: any): TabDefinition[] {
-  const baseTabs = [
-    { key: "score", label: "Home", icon: LayoutDashboard },
-  { key: "online", label: "Online Play", icon: Users },
-    { key: "offline", label: "Offline", icon: Trophy },
-    { key: "tournaments", label: "Tournaments", icon: Trophy },
-    { key: "friends", label: "Friends", icon: Users },
-    { key: "stats", label: "Stats", icon: Trophy },
-    { key: "calibrate", label: "Calibrate", icon: Camera },
-    { key: "settings", label: "Settings", icon: Settings },
+  const baseTabs: TabDefinition[] = [
+    { key: "score", label: "Home 🏠", icon: LayoutDashboard },
+    { key: "online", label: "Online Play 🌐", icon: Users },
+    { key: "offline", label: "Offline 🏆", icon: Trophy },
+    { key: "tournaments", label: "Tournaments 🏟️", icon: Trophy },
+    { key: "friends", label: "Friends 👥", icon: Users },
+    { key: "stats", label: "Stats 📊", icon: Trophy },
+    { key: "calibrate", label: "Calibrate 📍", icon: Camera },
+    { key: "settings", label: "Settings ⚙️", icon: Settings },
   ];
   // Admin tab visibility handled in Sidebar via hook (client-side fetch)
   // A premium user should not see the 'PREMIUM' tab. Check subscription details
@@ -57,10 +56,13 @@ export function getTabs(user: any): TabDefinition[] {
     if (!sub) return !!u.fullAccess; // fallback
     if (sub.fullAccess) {
       if (sub.expiresAt) {
-        const exp = typeof sub.expiresAt === 'string' ? Date.parse(sub.expiresAt) : Number(sub.expiresAt);
+        const exp =
+          typeof sub.expiresAt === "string"
+            ? Date.parse(sub.expiresAt)
+            : Number(sub.expiresAt);
         if (!isNaN(exp)) return exp > Date.now();
       }
-      if (sub.status) return sub.status === 'active';
+      if (sub.status) return sub.status === "active";
       return true; // generic fullAccess true
     }
     return false;
@@ -69,7 +71,7 @@ export function getTabs(user: any): TabDefinition[] {
   if (!isSubscriptionActive(user)) {
     baseTabs.push({
       key: "fullaccess",
-      label: "PREMIUM £€$",
+      label: "PREMIUM £€$ ✨",
       icon: PoundSterling,
     });
   }
@@ -105,7 +107,7 @@ export function buildTabList(user: any, isAdmin: boolean): TabDefinition[] {
   if (isAdmin && !tabs.some((t) => t.key === "admin")) {
     const adminTab = {
       key: "admin",
-      label: "Admin",
+      label: "Admin 🛡️",
       icon: Settings,
     } as const;
     const insertIdx = tabs.findIndex((t) => t.key === "settings");
@@ -260,7 +262,7 @@ export function Sidebar({
         style={{ fontWeight: 700, fontSize: "1.1rem", letterSpacing: "0.02em" }}
       >
         <MessageCircle className="w-6 h-6" />
-        <span className="truncate">BullseyeDartsLeague</span>
+        <span className="truncate">BullseyeDartsLeague 🎯</span>
       </button>
       {/* NineDartNation Discord tab */}
       <button
@@ -270,7 +272,7 @@ export function Sidebar({
         style={{ fontWeight: 700, fontSize: "1.1rem", letterSpacing: "0.02em" }}
       >
         <MessageCircle className="w-6 h-6" />
-        <span className="truncate">NineDartNation</span>
+        <span className="truncate">NineDartNation 🎯</span>
       </button>
       {/* Discord about dialog via portal */}
       {showDiscord &&
@@ -297,7 +299,7 @@ export function Sidebar({
                     ✕
                   </button>
                   <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-[#8ea1e1]">
-                    <MessageCircle className="w-6 h-6" /> BullseyeDartsLeague
+                    <MessageCircle className="w-6 h-6" /> BullseyeDartsLeague 🎯
                   </h3>
                   <div className="mb-4 text-lg font-semibold">
                     Join this fantastic Online Darts League with divisions and
@@ -309,7 +311,7 @@ export function Sidebar({
                     rel="noopener noreferrer nofollow"
                     className="btn bg-[#5865F2] text-white w-full font-bold text-lg"
                   >
-                    Join Discord
+                    Join Discord 💬
                   </a>
                 </div>
               </FocusLock>
@@ -342,10 +344,10 @@ export function Sidebar({
                     ✕
                   </button>
                   <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-[#8ea1e1]">
-                    <MessageCircle className="w-6 h-6" /> NineDartNation
+                    <MessageCircle className="w-6 h-6" /> NineDartNation 🎯
                   </h3>
                   <div className="mb-4 text-lg font-semibold">
-                    Join the NineDartNation Discord community
+                    Join the NineDartNation 🎯 Discord community
                   </div>
                   <a
                     href="https://discord.gg/Q33J5FTVve"
@@ -353,7 +355,7 @@ export function Sidebar({
                     rel="noopener noreferrer nofollow"
                     className="btn bg-[#5865F2] text-white w-full font-bold text-lg"
                   >
-                    Join Discord
+                    Join Discord 💬
                   </a>
                 </div>
               </FocusLock>

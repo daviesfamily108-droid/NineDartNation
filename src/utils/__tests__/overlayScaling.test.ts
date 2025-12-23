@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+﻿import { describe, it, expect } from "vitest";
 import { sampleRing, scaleHomography, BoardRadii } from "../vision";
 
 describe("Overlay scaling math", () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
+﻿import { useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   getAllTimeAvg,
@@ -23,10 +23,12 @@ function StatBlock({
   scale?: number;
 }) {
   return (
-    <div className={`flex flex-col items-center gap-1 ${className}`}>
-      <div className="text-xs opacity-70">{label}</div>
+    <div className={`flex flex-col items-center gap-0 ${className}`}>
+      <div className="text-[8px] opacity-70 uppercase font-bold tracking-tighter leading-none">
+        {label}
+      </div>
       <div
-        className="text-2xl sm:text-3xl font-bold transform transition-transform duration-200 ease-out"
+        className="text-sm sm:text-base font-black transform transition-transform duration-200 ease-out leading-none"
         style={{ transform: `scale(${scale})` }}
       >
         {value}
@@ -46,7 +48,17 @@ function PlayerCalibrationPreview({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const calib = playerCalibrations[player.name];
-  const isCalibrated = !!calib;
+  // For the local user, read from the calibration store so the UI updates
+  // immediately after calibrating (and during hydration), even if the
+  // playerCalibrations map hasn't been fetched/updated yet.
+  const localHasH = useCalibration((s) => !!s.H);
+  const isLocalPlayer = !!(
+    (user?.username &&
+      player?.name &&
+      player.name.toLowerCase() === user.username.toLowerCase()) ||
+    player?.name === "You"
+  );
+  const isCalibrated = isLocalPlayer ? localHasH : !!calib;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -54,17 +66,17 @@ function PlayerCalibrationPreview({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const radius = Math.min(centerX, centerY) - 2;
+
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     try {
       // Draw a simple dartboard circle
-      const centerX = canvas.width / 2;
-      const centerY = canvas.height / 2;
-      const radius = Math.min(centerX, centerY) - 2;
-
       // Outer circle
-      if (typeof ctx.stroke === 'function') {
+      if (typeof ctx.stroke === "function") {
         ctx.strokeStyle = "#fff";
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -73,7 +85,7 @@ function PlayerCalibrationPreview({
       }
 
       // Bullseye
-      if (typeof ctx.fill === 'function') {
+      if (typeof ctx.fill === "function") {
         ctx.fillStyle = "#f00";
         ctx.beginPath();
         ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
@@ -86,21 +98,23 @@ function PlayerCalibrationPreview({
     // If calibrated, draw calibration points
     if (isCalibrated) {
       try {
-        if (typeof ctx.fill === 'function') ctx.fillStyle = "#0f0";
-      // Draw some sample points (simplified)
-      const points = [
-        [centerX - radius * 0.5, centerY],
-        [centerX + radius * 0.5, centerY],
-        [centerX, centerY - radius * 0.5],
-        [centerX, centerY + radius * 0.5],
-      ];
-      points.forEach(([x, y]) => {
-        try {
-          if (typeof ctx.beginPath === 'function') ctx.beginPath();
-          if (typeof ctx.arc === 'function') ctx.arc(x, y, 2, 0, 2 * Math.PI);
-          if (typeof ctx.fill === 'function') ctx.fill();
-        } catch {}
-      });
+        if (typeof ctx.fill === "function") ctx.fillStyle = "#0f0";
+
+        // Draw some sample points (simplified)
+        const points: Array<[number, number]> = [
+          [centerX - radius * 0.5, centerY],
+          [centerX + radius * 0.5, centerY],
+          [centerX, centerY - radius * 0.5],
+          [centerX, centerY + radius * 0.5],
+        ];
+
+        points.forEach(([x, y]) => {
+          try {
+            if (typeof ctx.beginPath === "function") ctx.beginPath();
+            if (typeof ctx.arc === "function") ctx.arc(x, y, 2, 0, 2 * Math.PI);
+            if (typeof ctx.fill === "function") ctx.fill();
+          } catch {}
+        });
       } catch (e) {
         // ignore
       }
@@ -108,17 +122,17 @@ function PlayerCalibrationPreview({
   }, [isCalibrated]);
 
   return (
-    <div className="flex items-center gap-2 mt-1">
+    <div className="flex items-center gap-2 mt-1 bg-white/5 p-1.5 rounded-lg border border-white/10">
       <canvas
         ref={canvasRef}
         width={40}
         height={40}
-        className="border border-white/20 rounded"
+        className="border border-white/20 rounded-md bg-black/60 shadow-inner"
       />
       <span
-        className={`text-xs ${isCalibrated ? "text-green-400" : "text-gray-400"}`}
+        className={`text-xs font-black tracking-tight ${isCalibrated ? "text-emerald-400" : "text-rose-400/70"}`}
       >
-        {isCalibrated ? "Calibrated" : "Not Calibrated"}
+        {isCalibrated ? "Calibrated ✅" : "Not Calibrated ❌"}
       </span>
     </div>
   );
@@ -134,15 +148,22 @@ function RecentForm({ player, limit = 3 }: { player: Player; limit?: number }) {
       const legVisits = (leg.visits || []) as any[];
       for (let j = legVisits.length - 1; j >= 0 && visits.length < limit; j--) {
         const v = legVisits[j];
-        visits.push({ score: Number(v?.score || 0), darts: Number(v?.darts || 3) });
+        visits.push({
+          score: Number(v?.score || 0),
+          darts: Number(v?.darts || 3),
+        });
       }
     }
   } catch (e) {}
-  if (!visits.length) return <div className="text-xs opacity-60">No recent visits</div>;
+  if (!visits.length)
+    return <div className="text-[10px] opacity-60">No visits 📉</div>;
   return (
-    <div className="flex gap-2 items-center">
+    <div className="flex gap-1 items-center">
       {visits.map((v, idx) => (
-        <div key={idx} className={`text-xs px-2 py-0.5 rounded ${v.score >= 100 ? 'bg-emerald-600/20 text-emerald-300' : v.score >= 60 ? 'bg-amber-500/10 text-amber-300' : 'bg-white/6 text-gray-200'}`}>
+        <div
+          key={idx}
+          className={`text-[10px] px-1.5 py-0.5 rounded-md font-black shadow-sm ${v.score >= 100 ? "bg-emerald-600/70 text-emerald-300 ring-1 ring-emerald-500/50" : v.score >= 60 ? "bg-amber-500/60 text-amber-300 ring-1 ring-amber-500/50" : "bg-white/20 text-gray-200 ring-1 ring-white/20"}`}
+        >
           {v.score}
         </div>
       ))}
@@ -152,23 +173,72 @@ function RecentForm({ player, limit = 3 }: { player: Player; limit?: number }) {
 
 import FocusLock from "react-focus-lock";
 import CalibrationPopup from "./CalibrationPopup";
-function ProgressRing({ secondsLeft, totalSeconds, size = 84, stroke = 8, color = 'emerald' }: { secondsLeft: number; totalSeconds: number; size?: number; stroke?: number; color?: 'emerald' | 'amber' }) {
+import CameraTile from "../CameraTile";
+function ProgressRing({
+  secondsLeft,
+  totalSeconds,
+  size = 60,
+  stroke = 6,
+  color = "emerald",
+}: {
+  secondsLeft: number;
+  totalSeconds: number;
+  size?: number;
+  stroke?: number;
+  color?: "emerald" | "amber";
+}) {
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const percent = Math.max(0, Math.min(1, totalSeconds > 0 ? secondsLeft / totalSeconds : 0));
+  const percent = Math.max(
+    0,
+    Math.min(1, totalSeconds > 0 ? secondsLeft / totalSeconds : 0),
+  );
   const dash = circumference * (1 - percent);
-  const colorHex = color === 'emerald' ? '#34d399' : '#f59e0b';
+  const colorHex = color === "emerald" ? "#34d399" : "#f59e0b";
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
       <defs>
         <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="1" stdDeviation="3" floodColor="#000" floodOpacity="0.45" />
+          <feDropShadow
+            dx="0"
+            dy="1"
+            stdDeviation="3"
+            floodColor="#000"
+            floodOpacity="0.45"
+          />
         </filter>
       </defs>
-      <circle cx={size/2} cy={size/2} r={radius} fill="transparent" stroke="rgba(255,255,255,0.06)" strokeWidth={stroke} />
-      <circle cx={size/2} cy={size/2} r={radius} fill="transparent" stroke={colorHex} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={dash} transform={`rotate(-90 ${size/2} ${size/2})`} style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))' }} />
-      <text x="50%" y="50%" fill="white" fontSize={size * 0.33} fontWeight={700} dominantBaseline="middle" textAnchor="middle">
-        {secondsLeft > 0 ? secondsLeft : 'GO'}
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="transparent"
+        stroke="rgba(255,255,255,0.06)"
+        strokeWidth={stroke}
+      />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={radius}
+        fill="transparent"
+        stroke={colorHex}
+        strokeWidth={stroke}
+        strokeLinecap="round"
+        strokeDasharray={circumference}
+        strokeDashoffset={dash}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))" }}
+      />
+      <text
+        x="50%"
+        y="50%"
+        fill="white"
+        fontSize={size * 0.28}
+        fontWeight={900}
+        dominantBaseline="middle"
+        textAnchor="middle"
+      >
+        {secondsLeft > 0 ? secondsLeft : "GO! 🚀"}
       </text>
     </svg>
   );
@@ -180,11 +250,6 @@ export default function MatchStartShowcase({
   onDone,
   onRequestClose,
   initialSeconds = 15,
-  roomId,
-  onChoice,
-  choices = {},
-  bullActive = false,
-  onBullThrow,
   showCalibrationDefault = false,
   disableEscClose = false,
 }: {
@@ -194,17 +259,11 @@ export default function MatchStartShowcase({
   onDone?: () => void;
   onRequestClose?: () => void;
   initialSeconds?: number;
-  roomId?: string;
-  onChoice?: (choice: "bull" | "skip") => void;
-  choices?: Record<string, string>;
-  bullActive?: boolean;
-  onBullThrow?: (score: number) => void;
   showCalibrationDefault?: boolean;
   disableEscClose?: boolean;
 }) {
   // Debug logs removed
   const [seconds, setSeconds] = useState(initialSeconds || 15);
-  const [scaleState, setScaleState] = useState(1);
   // Overlay visibility is controlled by parent; the component should be controlled using `open` and `onRequestClose`.
   const visible = !!open;
   const [showCalibration, setShowCalibration] = useState(false);
@@ -247,7 +306,6 @@ export default function MatchStartShowcase({
   }, [players, showCalibrationDefault]);
 
   const allPlayersSkipped = players.every((p) => calibrationSkipped[p.id]);
-  const canStartMatch = allPlayersSkipped;
 
   // visibility is controlled by parent via `open` prop
 
@@ -268,9 +326,6 @@ export default function MatchStartShowcase({
     } catch {}
     // Hide app content from screen readers while overlay is open
     const appRoot = document.getElementById("root");
-    const prevAria: string | null = appRoot
-      ? appRoot.getAttribute("aria-hidden")
-      : null;
     try {
       if (appRoot) appRoot.setAttribute("aria-hidden", "true");
     } catch {}
@@ -323,8 +378,11 @@ export default function MatchStartShowcase({
         for (const player of players) {
           if (user?.username && player.name === user.username) {
             // Local user: use store
-            const { H, imageSize, overlaySize, locked } = useCalibration.getState();
-            if (H && locked) calibs[player.name] = { H, imageSize, overlaySize, locked };
+            const { H, imageSize, overlaySize, locked } =
+              useCalibration.getState();
+            // Treat local calibration as valid when we have a homography.
+            // `locked` is a workflow/UI flag and shouldn't cause the pre-match UI to say "Not Calibrated".
+            if (H) calibs[player.name] = { H, imageSize, overlaySize, locked };
           } else {
             // Remote user: fetch from server
             try {
@@ -346,9 +404,6 @@ export default function MatchStartShowcase({
     }
     // Only start countdown when all players have skipped calibration
     if (allPlayersSkipped) {
-      if (seconds <= 3 && seconds > 0) {
-        setScaleState((s) => s + 0.4);
-      }
       if (seconds <= 0) {
         // countdown reached 0, scheduling close
         // Done; small delay to let the "Game On" message show
@@ -391,6 +446,8 @@ export default function MatchStartShowcase({
           const bestCheckout = getAllTimeBestCheckout(p.name);
           const bestLeg = getAllTimeBestLeg(p.name);
           const all = getAllTime(p.name);
+          const lifetimeScored = all.scored || 0;
+          const lifetimeDarts = all.darts || 0;
           const career180s = getAllTime180s(p.name);
           // Count match 180s for the provided player
           let match180s = 0;
@@ -410,6 +467,8 @@ export default function MatchStartShowcase({
             bestCheckout,
             bestLeg,
             one80s,
+            lifetimeScored,
+            lifetimeDarts,
           };
         } catch (err) {
           // Swallow errors computing stats to avoid breaking render in tests
@@ -421,6 +480,8 @@ export default function MatchStartShowcase({
             bestCheckout: "—",
             bestLeg: "—",
             one80s: "—",
+            lifetimeScored: 0,
+            lifetimeDarts: 0,
           };
         }
       }),
@@ -465,37 +526,61 @@ export default function MatchStartShowcase({
   };
 
   const overlay = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="match-start-heading"
         tabIndex={-1}
+        className="w-full max-w-4xl"
       >
         <FocusLock returnFocus={true}>
-          <div ref={hostRef}>
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-8 md:p-12 max-w-7xl w-full backdrop-blur-sm shadow-2xl">
-              <div className="flex items-center justify-between mb-8">
-                <div
-                  id="match-start-heading"
-                  className="text-2xl font-bold opacity-90"
-                >
-                  Match Starting Soon
+          <div ref={hostRef} className="relative">
+            {/* Decorative background glow */}
+            <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 rounded-[3rem] blur-3xl -z-10 opacity-50 animate-pulse" />
+
+            <div className="bg-[#13111C] border border-white/10 rounded-3xl p-4 md:p-6 w-full shadow-2xl ring-1 ring-white/5 relative overflow-hidden">
+              {/* Background pattern */}
+              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none mix-blend-overlay"></div>
+
+              <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-3 mb-4 border-b border-white/5 pb-3">
+                <div>
+                  <div className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-0.5">
+                    Get Ready 🚀
+                  </div>
+                  <div
+                    id="match-start-heading"
+                    className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/10 tracking-tighter"
+                  >
+                    Match Starting Soon 🎯
+                  </div>
                 </div>
-                <div className="flex items-center gap-4 flex-col sm:flex-row">
-                  {/* show smaller ring on small screens */}
-                  <div className="flex items-center justify-center">
-                    <div className="block sm:hidden">
-                      <ProgressRing secondsLeft={seconds} totalSeconds={initialSeconds || 15} size={64} stroke={6} color={seconds > 5 ? "emerald" : "amber"} />
-                    </div>
-                    <div className="hidden sm:block">
-                      <ProgressRing secondsLeft={seconds} totalSeconds={initialSeconds || 15} size={84} stroke={8} color={seconds > 5 ? "emerald" : "amber"} />
+
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-emerald-500/70 blur-[4rem] rounded-full animate-pulse"></div>
+                      <div className="relative">
+                        <ProgressRing
+                          secondsLeft={seconds}
+                          totalSeconds={initialSeconds || 15}
+                          size={60}
+                          stroke={6}
+                          color={seconds > 5 ? "emerald" : "amber"}
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-xl font-black text-white tabular-nums">
+                            {seconds}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+
+                  <div className="flex flex-col gap-1.5 sm:flex-row">
                     <button
                       ref={startNowRef}
-                      className="btn btn-lg bg-gradient-to-r from-emerald-400 to-indigo-500 text-white shadow-lg transform hover:scale-105 w-full sm:w-auto"
+                      className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 transition-all duration-200 active:scale-95 text-xs"
                       onClick={() => {
                         try {
                           onDone?.();
@@ -515,97 +600,152 @@ export default function MatchStartShowcase({
                       }}
                       aria-label="Start match now"
                     >
-                      Start Now
+                      Start Now ▶️
                     </button>
                     <button
                       ref={closeRef}
-                      className="btn btn-ghost btn-sm text-white/80 w-full sm:w-auto"
+                      className="px-3 py-1.5 rounded-lg bg-white/5 text-white/70 font-semibold hover:bg-white/10 hover:text-white transition-colors text-xs"
                       onClick={() => {
                         try {
-                          onDone?.();
-                        } catch {}
-                        try {
-                          document
-                            .getElementById("root")
-                            ?.removeAttribute("aria-hidden");
-                        } catch {}
-                        try {
-                          setTimeout(() => {
-                            try {
-                              onRequestClose?.();
-                            } catch {}
-                          }, 0);
+                          onRequestClose?.();
                         } catch {}
                       }}
-                      aria-label="Close match start showcase"
                     >
-                      Close
+                      Close ✖️
                     </button>
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                {stats.map((st) => (
+
+              <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5 mb-4">
+                {/* VS Badge for Desktop */}
+                <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-16 h-16 bg-[#13111C] rounded-full items-center justify-center border-2 border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
+                  <span className="text-xl font-black text-white/20 italic tracking-tighter">
+                    VS ⚔️
+                  </span>
+                </div>
+
+                {stats.map((st, idx) => (
                   <div
                     key={st.id}
-                    className="p-6 rounded-2xl bg-gradient-to-tr from-slate-800/70 to-slate-700/60 border border-white/6 flex flex-col items-center shadow-2xl w-full"
+                    className={`group relative p-3 md:p-4 rounded-3xl border border-white/5 flex flex-col items-center shadow-xl transition-all duration-300 hover:border-white/10 hover:bg-white/[0.02] max-h-[80vh] overflow-hidden ${idx === 0 ? "bg-gradient-to-br from-indigo-500/5 to-transparent" : "bg-gradient-to-bl from-emerald-500/5 to-transparent"}`}
                   >
-                    <div className="w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-emerald-400 flex items-center justify-center text-2xl font-bold text-white mb-4 shadow-xl ring-1 ring-white/10">
-                      {st.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")
-                        .toUpperCase()
-                        .slice(0, 2)}
+                    <div className="flex items-center gap-3 mb-2 w-full">
+                      <div
+                        className={`w-12 h-12 shrink-0 rounded-xl rotate-3 group-hover:rotate-6 transition-transform duration-300 flex items-center justify-center text-xl font-black text-white shadow-lg ring-2 ring-white/10 ${idx === 0 ? "bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/50" : "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/50"}`}
+                      >
+                        {st.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase()
+                          .slice(0, 2)}
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <div className="text-2xl font-black text-white tracking-tighter truncate">
+                          {st.name} 👤
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {user && user.username === st.name && (
+                            <div className="text-[0.5rem] font-bold uppercase tracking-wider bg-white/10 text-white/60 px-1.5 py-0.5 rounded-md">
+                              You ⭐
+                            </div>
+                          )}
+                          <PlayerCalibrationPreview
+                            player={players.find((p) => p.id === st.id) as any}
+                            user={user}
+                            playerCalibrations={playerCalibrations}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-xl font-semibold mb-2 text-center">
-                      {st.name}
-                    </div>
-                    <div className="mb-2 flex items-center gap-2">
-                      {user && user.username === st.name ? (
-                        <div className="text-xs bg-emerald-600/20 text-emerald-300 px-2 py-0.5 rounded">You</div>
-                      ) : null}
-                      <PlayerCalibrationPreview player={players.find((p) => p.id === st.id) as any} user={user} playerCalibrations={playerCalibrations} />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 w-full">
+
+                    <div className="grid grid-cols-4 gap-1 w-full bg-black/50 rounded-xl p-2 border border-white/10 shadow-2xl">
                       <StatBlock
-                        label="3-Dart Avg"
+                        label="Avg 📊"
                         value={st.avg3}
-                        scale={getScaleFor(seconds)}
+                        scale={getScaleFor(seconds) * 0.7}
+                        className="p-0.5"
                       />
                       <StatBlock
-                        label="First-9 Avg"
+                        label="F9 📈"
                         value={st.best9}
-                        scale={getScaleFor(seconds)}
+                        scale={getScaleFor(seconds) * 0.7}
+                        className="p-0.5"
                       />
                       <StatBlock
-                        label="Best Checkout"
+                        label="CO 🏆"
                         value={st.bestCheckout || "—"}
-                        scale={getScaleFor(seconds)}
+                        scale={getScaleFor(seconds) * 0.7}
+                        className="p-0.5"
                       />
                       <StatBlock
-                        label="Best Leg"
+                        label="Leg ⚡"
                         value={st.bestLeg || "—"}
-                        scale={getScaleFor(seconds)}
+                        scale={getScaleFor(seconds) * 0.7}
+                        className="p-0.5"
                       />
                     </div>
-                    <div className="mt-4 opacity-70 text-sm">
-                      180s (match / career): {st.one80s}
+
+                    <div className="grid grid-cols-2 gap-2 w-full mt-2 text-[0.6rem]">
+                      <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/5 border border-white/5">
+                        <span className="tracking-widest uppercase text-white/40">
+                          Lifetime pts
+                        </span>
+                        <span className="text-white/90 font-semibold">
+                          {st.lifetimeScored.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/5 border border-white/5">
+                        <span className="tracking-widest uppercase text-white/40">
+                          Lifetime darts
+                        </span>
+                        <span className="text-white/90 font-semibold">
+                          {st.lifetimeDarts.toLocaleString()}
+                        </span>
+                      </div>
                     </div>
-                    <div className="mt-2 w-full flex justify-center md:justify-center">
-                      <RecentForm player={players.find((p) => p.id === st.id) as Player} limit={3} />
+
+                    <div className="mt-2 flex items-center justify-between w-full px-1">
+                      <div className="flex items-center gap-2 text-sm text-white/40 font-black">
+                        <span>180s 🔥:</span>
+                        <span className="text-white/90">{st.one80s} ✨</span>
+                      </div>
+                      <RecentForm
+                        player={players.find((p) => p.id === st.id) as Player}
+                        limit={3}
+                      />
                     </div>
+
+                    {/* Pre-match live camera preview (uses the global camera session) */}
+                    {idx === 0 && (
+                      <div className="w-full mt-2">
+                        <div className="rounded-lg overflow-hidden border border-white/10 bg-black/30">
+                          {/* Show the full board (no crop) */}
+                          <div className="w-full h-[200px] sm:h-[250px] md:h-[320px] flex flex-col">
+                            <CameraTile
+                              autoStart
+                              fill
+                              aspect="wide"
+                              tileFitModeOverride="fit"
+                              scale={1}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
-              <div className="text-center">
+
+              <div className="text-center pt-6 border-t border-white/50">
                 {seconds <= 1 ? (
-                  <div className="text-3xl font-bold text-emerald-400">
-                    Good luck — Game on! 🎯
+                  <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 animate-bounce tracking-tighter py-4">
+                    GAME ON! 🚀
                   </div>
                 ) : (
-                  <div className="text-lg opacity-70">
-                    {players.map((p) => p.name).join(" vs ")}
+                  <div className="text-lg font-black text-white/80 uppercase tracking-[1em]">
+                    {players.map((p) => p.name).join(" vs ")} ⚔️
                   </div>
                 )}
               </div>
@@ -626,6 +766,7 @@ export default function MatchStartShowcase({
             setCalibrationSkipped((prev) => ({ ...prev, [id]: true }))
           }
           onOpenCalibrator={(id: string) => {
+            setCalibrationSkipped((prev) => ({ ...prev, [id]: false }));
             try {
               window.dispatchEvent(
                 new CustomEvent("ndn:change-tab", {

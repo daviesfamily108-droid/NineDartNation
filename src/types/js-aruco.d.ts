@@ -1,4 +1,4 @@
-declare module "js-aruco" {
+﻿declare module "js-aruco" {
   export namespace AR {
     interface Corner {
       x: number;

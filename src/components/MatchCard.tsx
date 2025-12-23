@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { labelForMode, type ModeKey } from "../utils/games";
 
 type Tournament = {
@@ -55,7 +55,7 @@ export default function MatchCard({
           disabled={disabled}
           onClick={() => (joined ? onLeave && onLeave(t) : onJoin && onJoin(t))}
         >
-          {joined ? "Already Joined" : "Join Now"}
+          {joined ? "Already Joined! ✅" : "Join Now ⚔️"}
         </button>
       </div>
     </li>

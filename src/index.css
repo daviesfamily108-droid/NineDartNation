@@ -6,6 +6,40 @@
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
+
+/* Performance optimizations for smooth scrolling */
+#ndn-main-scroll {
+  contain: layout style;
+  scroll-behavior: auto; /* Changed from smooth - smooth causes perceived lag */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; /* iOS momentum scrolling */
+}
+
+/* GPU-accelerated scrollable containers */
+.overflow-y-auto,
+.overflow-auto,
+[style*="overflowY: auto"] {
+  -webkit-overflow-scrolling: touch;
+  will-change: scroll-position;
+  transform: translateZ(0);
+}
+
+/* Reduce animation on preference */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* GPU-accelerated transitions for smoother UI */
+.card, .btn, .glass {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
 /* Theme classes for dynamic switching */
 html, :host {
   -webkit-text-size-adjust: 100%;
@@ -91,7 +125,8 @@ button, .btn, input, select, textarea {
 .theme-default .input {
   background: #18122B !important;
   color: #F5F5F5 !important;
-  border: 1px solid #635985 !important;
+  border: 1.5px solid #A084E8 !important;
+  box-shadow: 0 4px 15px rgba(143, 67, 238, 0.15) !important;
 }
 .theme-default .tab {
   background: #393053 !important;
@@ -155,16 +190,19 @@ select[class*="bg-white"][class*="text-white"], select.bg-white.text-white, .bg-
 }
 
 
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   background: radial-gradient(1200px 600px at 10% 10%, #222046 0%, transparent 60%),
               radial-gradient(1000px 500px at 90% 90%, #5b2bb766 0%, transparent 60%),
               linear-gradient(120deg, #18122B 0%, #5B4DA2 60%, #8F43EE 100%);
   color: #F5F5F5;
   font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
-  min-height: 100vh;
   letter-spacing: 0.01em;
   position: relative;
-  overflow-x: hidden;
 }
 
 .background-animated {
@@ -262,6 +300,8 @@ body {
 }
 
 .header {
+  position: relative;
+  z-index: 50;
   background: linear-gradient(90deg, #5b6cff 0%, #8F43EE 100%);
   box-shadow: 0 8px 24px -12px rgba(143, 67, 238, 0.45);
   border-radius: 1.25rem;
@@ -318,6 +358,13 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  max-width: none;
+}
+
+.camera-fullwidth-card .camera-fullwidth-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
 }
 
 /* Positioning helper: allow an inner filling area to absolutely span the shell
@@ -470,15 +517,43 @@ body {
   border-radius: 1rem;
   border: 1.5px solid #A084E8;
   padding: 0.75rem 1.25rem;
-  background: rgba(160,132,232,0.08);
+  background: rgba(24, 18, 43, 0.8);
   color: #F5F5F5;
   font-size: 1rem;
-  box-shadow: 0 1px 4px rgba(160,132,232,0.08);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+.input:hover {
+  border-color: #8F43EE;
+  background: rgba(24, 18, 43, 0.9);
 }
 .input:focus {
   outline: none;
   border-color: #8F43EE;
   box-shadow: 0 0 0 3px rgba(143,67,238,0.35);
+}
+
+.input-compact {
+  padding: 0.4rem 0.75rem !important;
+  font-size: 0.875rem !important;
+  border-radius: 0.75rem !important;
+}
+
+/* Custom styling for select elements to match the site's "in colour" theme */
+select.input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23A084E8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1.2em;
+  padding-right: 3rem;
+  cursor: pointer;
+}
+
+select.input option {
+  background-color: #18122B;
+  color: #F5F5F5;
+  padding: 10px;
 }
 
 .tab {

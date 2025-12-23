@@ -1,4 +1,4 @@
-import React, { useEffect, type ReactNode } from "react";
+﻿import React, { useEffect, type ReactNode } from "react";
 import FocusLock from "react-focus-lock";
 
 type DrawerProps = {
@@ -55,9 +55,11 @@ export default function Drawer({
         <FocusLock returnFocus={true}>
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 sticky top-0 bg-slate-900 z-10">
-            <div className="text-lg font-semibold">{title}</div>
+            <div className="text-lg font-semibold">
+              {title?.includes("🎯") ? title : `${title} 🎯`}
+            </div>
             <button className="btn px-3 py-1 text-sm" onClick={onClose}>
-              Close
+              Close 🎯
             </button>
           </div>
           {/* Body */}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useMatchControl } from "../../store/matchControl";
 
 function fmt(ms: number) {
@@ -10,7 +10,11 @@ function fmt(ms: number) {
   return `${mm}:${ss}`;
 }
 
-export default function PauseTimerBadge({ compact = false }: { compact?: boolean }) {
+export default function PauseTimerBadge({
+  compact = false,
+}: {
+  compact?: boolean;
+}) {
   const pauseEndsAt = useMatchControl((s) => s.pauseEndsAt);
   const pauseStartedAt = useMatchControl((s) => s.pauseStartedAt);
   const paused = useMatchControl((s) => s.paused);
@@ -36,11 +40,16 @@ export default function PauseTimerBadge({ compact = false }: { compact?: boolean
       aria-atomic="true"
       aria-label={`Match paused, ${Math.ceil(remaining / 1000)} seconds remaining`}
     >
-      <div className={`px-2 py-1 rounded-full bg-amber-600 text-black text-xs font-semibold ${compact ? "" : "mr-2"}`}>
-        Paused {fmt(remaining)}
+      <div
+        className={`px-2 py-1 rounded-full bg-amber-600 text-black text-xs font-semibold ${compact ? "" : "mr-2"}`}
+      >
+        Paused {fmt(remaining)} 🎯
       </div>
       {!compact && (
-        <div className="w-40 h-2 bg-white/10 rounded overflow-hidden mt-1" aria-hidden>
+        <div
+          className="w-40 h-2 bg-white/10 rounded overflow-hidden mt-1"
+          aria-hidden
+        >
           <div
             className="h-2 bg-amber-400"
             style={{ width: `${Math.round(pct * 100)}%` }}

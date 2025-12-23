@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import type { Ring } from "../utils/scoring";
 
 export type PendingEntry = { label: string; value: number; ring: Ring };

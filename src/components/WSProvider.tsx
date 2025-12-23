@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   createContext,
   useCallback,
   useContext,
@@ -8,6 +8,7 @@ import React, {
   useState,
   type ReactNode,
 } from "react";
+import { getWsCandidates } from "../utils/ws";
 
 type WSMessage = any;
 
@@ -38,27 +39,7 @@ export function WSProvider({ children }: { children: ReactNode }) {
 
   const ensureEndpoints = () => {
     if (endpointsRef.current) return endpointsRef.current;
-    const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined;
-    if (envUrl && envUrl.length > 0) {
-      const normalized = envUrl.endsWith("/ws")
-        ? envUrl
-        : envUrl.replace(/\/$/, "") + "/ws";
-      endpointsRef.current = [normalized];
-      return endpointsRef.current;
-    }
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    const host = window.location.hostname;
-    const sameOrigin = `${proto}://${window.location.host}`; // includes port if present
-    // Candidate endpoints: prefer same-origin first (works when server serves SPA),
-    // then common local ports for dev fallbacks.
-    const bases = [
-      sameOrigin + "/ws",
-      `${proto}://${host}/ws`,
-      `${proto}://${host}:8787/ws`,
-      `${proto}://${host}:3000/ws`,
-    ];
-    // Deduplicate
-    endpointsRef.current = Array.from(new Set(bases));
+    endpointsRef.current = getWsCandidates();
     return endpointsRef.current;
   };
 

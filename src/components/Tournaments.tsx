@@ -1,18 +1,17 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+﻿import { useEffect, useMemo, useState, useRef } from "react";
 import {
   getModeOptionsForGame,
-  getModeValueOptionsForGame,
   labelForMode,
   type ModeKey,
 } from "../utils/games";
 import { useMatch } from "../store/match";
 import MatchCard from "./MatchCard";
 import MatchStartShowcase from "./ui/MatchStartShowcase";
-import ResizableModal from "./ui/ResizableModal";
 import { useToast } from "../store/toast";
 import { useWS } from "./WSProvider";
 import { apiFetch } from "../utils/api";
 import { useUserSettings } from "../store/userSettings";
+import GameCalibrationStatus from "./GameCalibrationStatus";
 
 type Tournament = {
   id: string;
@@ -38,6 +37,10 @@ type Tournament = {
   creatorName?: string;
 };
 
+const isTouch =
+  typeof window !== "undefined" &&
+  ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+
 export default function Tournaments({ user }: { user: any }) {
   const toast = useToast();
   const wsGlobal = (() => {
@@ -49,37 +52,48 @@ export default function Tournaments({ user }: { user: any }) {
   })();
   // Persisted match preferences (used when creating or joining)
   const {
-    matchType = "singles",
-    setMatchType,
-    teamAName = "Team A",
-    setTeamAName,
-    teamBName = "Team B",
-    setTeamBName,
+    matchType: _matchType = "singles",
+    setMatchType: _setMatchType,
+    teamAName: _teamAName = "Team A",
+    setTeamAName: _setTeamAName,
+    teamBName: _teamBName = "Team B",
+    setTeamBName: _setTeamBName,
   } = useUserSettings();
   const [list, setList] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [_fetchError, setFetchError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<number | null>(null);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showDemoStart, setShowDemoStart] = useState(false);
   const [showStartShowcase, setShowStartShowcase] = useState(false);
-  const startedShowcasedRef = useRef(false);
-  const match = useMatch();
-  const endSummaryPrevRef = useRef(!!useMatch.getState().inProgress);
-  useEffect(() => {
-    const prev = endSummaryPrevRef.current;
-    const now = !!match.inProgress;
-    // Reset the showcased flag when match ends
-    if (!now) startedShowcasedRef.current = false;
-    // When match starts, show the start showcase once
-    if (now && !startedShowcasedRef.current) {
-      startedShowcasedRef.current = true;
-      setShowStartShowcase(true);
-    }
-    endSummaryPrevRef.current = now;
-  }, [match.inProgress, match.players]);
+  const _startedShowcasedRef = useRef(false);
+
+  const [form, setForm] = useState({
+    title: "",
+    game: "X01",
+    mode: "501",
+    value: 0,
+    description: "",
+    startAt: new Date().toISOString().slice(0, 16),
+    checkinMinutes: 15,
+    capacity: 16,
+    startingScore: 501,
+    requireCalibration: false,
+  });
+
+  // Prestart / Bull Up Logic for Tournaments
+  const [joinMatch, setJoinMatch] = useState<any>(null);
+  const [joinTimer, setJoinTimer] = useState(30);
+  const [joinChoice, setJoinChoice] = useState<"bull" | "skip" | null>(null);
+  const [remoteChoices, setRemoteChoices] = useState<Record<string, string>>(
+    {},
+  );
+  const [_bullActive, setBullActive] = useState(false);
+  const [_bullThrown, setBullThrown] = useState(false);
+  const [_bullLocalThrow, setBullLocalThrow] = useState<any>(null);
+  const [_bullWinner, setBullWinner] = useState<string | null>(null);
   const [leaveAsk, setLeaveAsk] = useState<{
     open: boolean;
     t: Tournament | null;
@@ -88,27 +102,117 @@ export default function Tournaments({ user }: { user: any }) {
     open: boolean;
     t: Tournament | null;
   }>({ open: false, t: null });
-  const [form, setForm] = useState({
-    title: "Community X01 Tournament",
-    game: "X01",
-    mode: "bestof" as ModeKey,
-    value: 3,
-    description: "",
-    startAt: new Date(Date.now() + 2 * 60 * 60 * 1000)
-      .toISOString()
-      .slice(0, 16), // local yyyy-mm-ddThh:mm
-    checkinMinutes: 15,
-    capacity: 8,
-    startingScore: 501,
-    requireCalibration: false,
-  });
-  const isTouch = (() => {
+  const serverPrestartRef = useRef(false);
+  const _joinAcceptRef = useRef<HTMLButtonElement>(null);
+  const [participants, setParticipants] = useState<Record<string, string>>({});
+
+  // Listen for match-prestart events (same as OnlinePlay)
+  useEffect(() => {
+    if (!wsGlobal) return;
+    const unsub = wsGlobal.addListener((msg) => {
+      try {
+        if (msg?.type === "match-prestart") {
+          // Someone accepted the invite; show prestart and update join match if it matches
+          const m = msg.match || null;
+          if (m) m.prestartEndsAt = msg.prestartEndsAt;
+          // Ensure we know the creator's username
+          try {
+            if (m?.creatorId && m?.creatorName)
+              setParticipants((prev) => ({
+                ...prev,
+                [m.creatorId]: m.creatorName,
+              }));
+          } catch {}
+          serverPrestartRef.current = true;
+          setJoinMatch(m);
+          const endsAt = msg.prestartEndsAt || Date.now();
+          setJoinTimer(
+            Math.max(
+              0,
+              Math.ceil(((endsAt || Date.now()) - Date.now()) / 1000),
+            ),
+          );
+          setTimeout(() => {
+            serverPrestartRef.current = false;
+          }, 0);
+          // reset diffuse state
+          setJoinChoice(null);
+          setRemoteChoices({});
+          setBullActive(false);
+          setBullThrown(false);
+          setBullWinner(null);
+        }
+        if (msg?.type === "match-start") {
+          // If the started match matches our current join request, close the modal
+          if (joinMatch && msg.roomId === joinMatch.id) {
+            setJoinMatch(null);
+            setJoinChoice(null);
+            setRemoteChoices({});
+          }
+        }
+        if (msg?.type === "prestart-choice-notify") {
+          const { roomId, playerId, choice } = msg;
+          if (!roomId || !choice) return;
+          setRemoteChoices((prev) => ({ ...(prev || {}), [playerId]: choice }));
+        }
+        if (msg?.type === "prestart-bull") {
+          setBullActive(true);
+          setBullThrown(false);
+          setBullLocalThrow(null);
+        }
+        if (msg?.type === "prestart-bull-winner") {
+          setBullWinner(msg.winnerId || null);
+          setBullActive(false);
+          setBullThrown(false);
+        }
+        if (msg?.type === "prestart-bull-tie") {
+          // reset to allow another round
+          setBullWinner(null);
+          setBullActive(false);
+          setBullThrown(false);
+        }
+      } catch (err) {}
+    });
+    return unsub;
+  }, [wsGlobal, joinChoice, joinMatch]);
+
+  // Join timer
+  useEffect(() => {
+    if (!joinMatch) return;
+    if (serverPrestartRef.current) return;
+    // If a server-supplied prestart exists, do not override joinTimer
+    if ((joinMatch as any).prestartEndsAt) return;
+    setJoinTimer(30);
+    setJoinChoice(null);
+    setRemoteChoices({});
+    const t = setInterval(() => setJoinTimer((v) => Math.max(0, v - 1)), 1000);
+    return () => clearInterval(t);
+  }, [joinMatch]);
+
+  // Watch for match start (inProgress)
+  const inProgress = useMatch((s) => s.inProgress);
+  const match = useMatch((s) => ({
+    players: s.players,
+    currentPlayerIdx: s.currentPlayerIdx,
+    roomId: s.roomId,
+  }));
+  useEffect(() => {
+    if (!inProgress) return;
+    setShowStartShowcase(true);
+  }, [inProgress]);
+
+  const sendPrestartChoice = (choice: "bull" | "skip") => {
+    setJoinChoice(choice);
     try {
-      return "ontouchstart" in window || (navigator.maxTouchPoints || 0) > 0;
-    } catch {
-      return false;
-    }
-  })();
+      if (wsGlobal?.connected && joinMatch?.id) {
+        wsGlobal.send({
+          type: "prestart-choice",
+          roomId: joinMatch.id,
+          choice,
+        });
+      }
+    } catch {}
+  };
 
   async function refresh() {
     try {
@@ -130,9 +234,13 @@ export default function Tournaments({ user }: { user: any }) {
       setLastRefresh(Date.now());
     } catch (err: any) {
       try {
-        setFetchError(String(err?.message || err));
+        if (typeof window !== "undefined") {
+          setFetchError(String(err?.message || err));
+        }
       } catch {
-        setFetchError("unknown");
+        if (typeof window !== "undefined") {
+          setFetchError("unknown");
+        }
       }
     }
   }
@@ -474,6 +582,24 @@ export default function Tournaments({ user }: { user: any }) {
     () => list.filter((t) => t.status === "scheduled" && !t.official),
     [list],
   );
+
+  // Pagination for Created Game Lobby
+  const [createdPage, setCreatedPage] = useState(1);
+  const itemsPerPage = 16;
+  const createdTotalPages = Math.ceil(created.length / itemsPerPage);
+  const paginatedCreated = created.slice(
+    (createdPage - 1) * itemsPerPage,
+    createdPage * itemsPerPage,
+  );
+
+  // Pagination for Community List
+  const [communityPage, setCommunityPage] = useState(1);
+  const communityTotalPages = Math.ceil(community.length / itemsPerPage);
+  const paginatedCommunity = community.slice(
+    (communityPage - 1) * itemsPerPage,
+    communityPage * itemsPerPage,
+  );
+
   const nextOfficial = useMemo(() => {
     const upcoming = official
       .filter((t) => t.status === "scheduled")
@@ -489,7 +615,7 @@ export default function Tournaments({ user }: { user: any }) {
   return (
     <div className="card ndn-game-shell">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-2xl font-bold">Tournaments</h2>
+        <h2 className="text-2xl font-bold">Tournaments 🎯</h2>
       </div>
       <div className="ndn-shell-body">
         {/* Create Tournament + and default match prefs on a single header row */}
@@ -499,7 +625,7 @@ export default function Tournaments({ user }: { user: any }) {
           </div>
           <div className="shrink-0">
             <button className="btn" onClick={() => setShowCreate(true)}>
-              Create Tournament +
+              Create Tournament + 🎯
             </button>
             {((import.meta as any).env?.DEV ||
               email === "daviesfamily108@gmail.com") && (
@@ -507,7 +633,7 @@ export default function Tournaments({ user }: { user: any }) {
                 className="btn btn-ghost ml-2"
                 onClick={() => setShowDemoStart(true)}
               >
-                Demo Start Showcase
+                Demo Start Showcase 🎯
               </button>
             )}
           </div>
@@ -519,6 +645,7 @@ export default function Tournaments({ user }: { user: any }) {
               { id: "0", name: "Demo A", legsWon: 0, legs: [] },
               { id: "1", name: "Demo B", legsWon: 0, legs: [] },
             ]}
+            user={user}
             onDone={() => setShowDemoStart(false)}
           />
         )}
@@ -526,6 +653,7 @@ export default function Tournaments({ user }: { user: any }) {
         {showStartShowcase && (
           <MatchStartShowcase
             players={(match.players || []) as any}
+            user={user}
             onDone={() => setShowStartShowcase(false)}
           />
         )}
@@ -546,7 +674,7 @@ export default function Tournaments({ user }: { user: any }) {
                 No created tournaments yet.
               </li>
             )}
-            {created.map((t) => (
+            {paginatedCreated.map((t) => (
               <MatchCard
                 key={t.id}
                 t={t}
@@ -561,6 +689,32 @@ export default function Tournaments({ user }: { user: any }) {
               />
             ))}
           </ul>
+          {/* Pagination controls for Created Game Lobby */}
+          {createdTotalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between text-sm">
+              <button
+                className="text-slate-300 hover:text-white transition-colors"
+                onClick={() => setCreatedPage((p) => Math.max(p - 1, 1))}
+                disabled={createdPage === 1}
+              >
+                &larr; Previous
+              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400">
+                  Page {createdPage} of {createdTotalPages}
+                </span>
+                <button
+                  className="text-slate-300 hover:text-white transition-colors"
+                  onClick={() =>
+                    setCreatedPage((p) => Math.min(p + 1, createdTotalPages))
+                  }
+                  disabled={createdPage === createdTotalPages}
+                >
+                  Next &rarr;
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         {/* Persistent banner for next official weekly tournament */}
         {nextOfficial && (
@@ -568,7 +722,7 @@ export default function Tournaments({ user }: { user: any }) {
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
               <div>
                 <div className="text-sm uppercase tracking-wide text-indigo-300 font-semibold">
-                  Weekly Official Tournament
+                  Weekly Official Tournament 🎯
                 </div>
                 <div className="font-bold">{nextOfficial.title}</div>
                 <div className="text-sm opacity-80">
@@ -634,7 +788,9 @@ export default function Tournaments({ user }: { user: any }) {
                     hasJoined(nextOfficial) ? "Already Joined" : "Join Now"
                   }
                 >
-                  {hasJoined(nextOfficial) ? "Already Joined!" : "Join Now"}
+                  {hasJoined(nextOfficial)
+                    ? "Already Joined! 🎯"
+                    : "Join Now 🎯"}
                 </button>
               </div>
             </div>
@@ -647,7 +803,7 @@ export default function Tournaments({ user }: { user: any }) {
         )}
         <div className="space-y-4">
           <section>
-            <div className="font-semibold mb-1">Official</div>
+            <div className="font-semibold mb-1">Official 🎯</div>
             <div className="text-xs opacity-70 mb-2">
               {cooldownUntil && cooldownUntil > Date.now() ? (
                 <>
@@ -764,7 +920,7 @@ export default function Tournaments({ user }: { user: any }) {
                       }}
                       aria-label={hasJoined(t) ? "Already Joined" : "Join Now"}
                     >
-                      {hasJoined(t) ? "Already Joined!" : "Join Now"}
+                      {hasJoined(t) ? "Already Joined! 🎯" : "Join Now 🎯"}
                     </button>
                     {/* Delete button when you are the creator (owner-created official) and it hasn't started */}
                     {t.status === "scheduled" &&
@@ -793,9 +949,9 @@ export default function Tournaments({ user }: { user: any }) {
           </section>
 
           <section>
-            <div className="font-semibold mb-1">Community</div>
+            <div className="font-semibold mb-1">Community 🎯</div>
             <ul className="space-y-2">
-              {community.map((t) => (
+              {paginatedCommunity.map((t) => (
                 <li
                   key={t.id}
                   className="p-3 rounded bg-black/10 flex items-center justify-between relative"
@@ -870,6 +1026,32 @@ export default function Tournaments({ user }: { user: any }) {
                 </li>
               )}
             </ul>
+            {/* Pagination Controls for Community */}
+            {communityTotalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-4 pt-2 border-t border-white/10">
+                <button
+                  className="btn btn-sm btn-ghost"
+                  disabled={communityPage === 1}
+                  onClick={() => setCommunityPage((p) => Math.max(1, p - 1))}
+                >
+                  Previous
+                </button>
+                <span className="text-sm opacity-70">
+                  Page {communityPage} of {communityTotalPages}
+                </span>
+                <button
+                  className="btn btn-sm btn-ghost"
+                  disabled={communityPage === communityTotalPages}
+                  onClick={() =>
+                    setCommunityPage((p) =>
+                      Math.min(communityTotalPages, p + 1),
+                    )
+                  }
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </section>
         </div>
 
@@ -877,9 +1059,9 @@ export default function Tournaments({ user }: { user: any }) {
           <div className="mb-4">
             <div className="card relative">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xl font-semibold">Create Tournament</h3>
+                <h3 className="text-xl font-semibold">Create Tournament 🎯</h3>
                 <button className="btn" onClick={() => setShowCreate(false)}>
-                  Close
+                  Close 🎯
                 </button>
               </div>
               <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 pr-1">
@@ -1071,6 +1253,92 @@ export default function Tournaments({ user }: { user: any }) {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Join Modal (simplified) */}
+        {joinMatch && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="join-heading"
+            tabIndex={-1}
+            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4"
+          >
+            <div className="bg-slate-800 rounded-2xl p-6 max-w-md w-full">
+              <div id="join-heading" className="text-lg font-bold mb-2">
+                Match Ready
+              </div>
+              <div className="mb-3">
+                {joinMatch.game} - {joinMatch.modeType} · {joinMatch.legs} legs
+              </div>
+              <div className="text-sm opacity-80 mb-3">
+                Created by {joinMatch.createdBy}
+              </div>
+              <div className="mb-3">
+                <GameCalibrationStatus gameMode={joinMatch.game} compact />
+              </div>
+              {joinMatch.startingScore && (
+                <div className="mb-3">
+                  Starting score:{" "}
+                  <span className="font-mono">{joinMatch.startingScore}</span>
+                </div>
+              )}
+              {/* Match start showcase overlay */}
+              <MatchStartShowcase
+                open={showStartShowcase}
+                players={match.players as any}
+                user={user}
+                onRequestClose={() => {}}
+                onDone={() => {}}
+              />
+              <div className="mb-3">
+                Timer: <span className="font-mono">{joinTimer}s</span>
+              </div>
+              {(joinTimer <= 15 || (joinMatch as any)?.prestartEndsAt) && (
+                <div className="mb-3">
+                  Choose:{" "}
+                  <div className="flex gap-2">
+                    <button
+                      className={`btn ${joinChoice === "bull" ? "btn-primary" : "btn-ghost"}`}
+                      onClick={() => sendPrestartChoice("bull")}
+                    >
+                      Bull Up
+                    </button>
+                    <button
+                      className={`btn ${joinChoice === "skip" ? "btn-primary" : "btn-ghost"}`}
+                      onClick={() => sendPrestartChoice("skip")}
+                    >
+                      Skip
+                    </button>
+                  </div>
+                  <div className="text-xs opacity-70 mt-2">
+                    {joinChoice
+                      ? `You chose: ${joinChoice}`
+                      : "Please choose Bull Up or Skip before accepting"}
+                  </div>
+                  {Object.keys(remoteChoices).length > 0 && (
+                    <div
+                      className="text-xs opacity-70 mt-2"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {Object.entries(remoteChoices).map(([pid, choice]) => (
+                        <div key={pid}>
+                          {participants[pid] || pid} chose: {choice}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {joinChoice === "skip" && (
+                    <div className="text-xs opacity-70 mt-2">
+                      Skip requires both players to click Skip. Waiting for
+                      opponent...
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

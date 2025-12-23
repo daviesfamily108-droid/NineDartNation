@@ -1,4 +1,4 @@
-import { create } from "zustand";
+﻿import { create } from "zustand";
 import { dlog, dinfo } from "../utils/logger";
 
 type LastOffline = {
@@ -22,18 +22,22 @@ type SettingsState = {
   compactHeader: boolean;
   allowSpectate: boolean;
   // UI tuning
-  cameraScale: number; // 0.5 .. 1.25
+  cameraScale: number; // 0.5 .. 2.0
   cameraAspect?: "wide" | "square";
   cameraFitMode?: "fit" | "fill";
   // External autoscore provider
-  autoscoreProvider?: "built-in" | "external-ws" | "manual";
+  autoscoreProvider?: "built-in" | "built-in-v2" | "external-ws" | "manual";
   autoscoreWsUrl?: string;
   autoCommitMode?: "wait-for-clear" | "immediate";
   // Allow immediate autocommit when playing online/tournaments
   allowAutocommitInOnline?: boolean;
   calibrationGuide: boolean;
+  // Use RANSAC-based homography for auto-detection
+  calibrationUseRansac?: boolean;
   // Preserve calibration overlay display size when calibration is locked
   preserveCalibrationOverlay: boolean;
+  // When true, don't auto-override the calibration state when camera device changes or auto detection runs
+  preserveCalibrationOnCameraChange: boolean;
   // Devices & preferences
   preferredCameraId?: string;
   preferredCameraLabel?: string;
@@ -68,7 +72,9 @@ type SettingsState = {
   setCameraAspect: (a: "wide" | "square") => void;
   setCameraFitMode: (m: "fit" | "fill") => void;
   setCalibrationGuide: (v: boolean) => void;
+  setCalibrationUseRansac: (v: boolean) => void;
   setPreserveCalibrationOverlay: (v: boolean) => void;
+  setPreserveCalibrationOnCameraChange: (v: boolean) => void;
   setPreferredCamera: (
     id: string | undefined,
     label?: string,
@@ -79,7 +85,9 @@ type SettingsState = {
   setHideCameraOverlay: (v: boolean) => void;
   setIgnorePreferredCameraSync: (v: boolean) => void;
   setOfflineLayout: (mode: "classic" | "modern") => void;
-  setAutoscoreProvider: (p: "built-in" | "external-ws" | "manual") => void;
+  setAutoscoreProvider: (
+    p: "built-in" | "built-in-v2" | "external-ws" | "manual",
+  ) => void;
   setAutoscoreWsUrl: (u: string) => void;
   setAutoCommitMode: (mode: "wait-for-clear" | "immediate") => void;
   setAllowAutocommitInOnline: (v: boolean) => void;
@@ -117,7 +125,9 @@ function load(): Pick<
   | "cameraAspect"
   | "cameraFitMode"
   | "calibrationGuide"
+  | "calibrationUseRansac"
   | "preserveCalibrationOverlay"
+  | "preserveCalibrationOnCameraChange"
   | "preferredCameraId"
   | "preferredCameraLabel"
   | "preferredCameraLocked"
@@ -127,6 +137,7 @@ function load(): Pick<
   | "autoscoreProvider"
   | "autoscoreWsUrl"
   | "autoCommitMode"
+  | "allowAutocommitInOnline"
   | "textSize"
   | "boxSize"
   | "matchType"
@@ -163,14 +174,15 @@ function load(): Pick<
         calibrationGuide: true,
         preferredCameraId: undefined,
         preferredCameraLabel: undefined,
-          preserveCalibrationOverlay: true,
+        preserveCalibrationOverlay: true,
+        preserveCalibrationOnCameraChange: true,
         cameraEnabled: true,
         hideCameraOverlay: false,
         offlineLayout: "modern",
         autoscoreProvider: "built-in",
         autoscoreWsUrl: "",
         autoCommitMode: "wait-for-clear",
-  allowAutocommitInOnline: false,
+        allowAutocommitInOnline: false,
         textSize: "medium",
         boxSize: "medium",
         matchType: "singles",
@@ -219,12 +231,18 @@ function load(): Pick<
         j.cameraFitMode === "fit" || j.cameraFitMode === "fill"
           ? j.cameraFitMode
           : "fit",
+      calibrationUseRansac:
+        typeof j.calibrationUseRansac === "boolean"
+          ? j.calibrationUseRansac
+          : true,
       autoscoreProvider:
         j.autoscoreProvider === "external-ws"
           ? "external-ws"
           : j.autoscoreProvider === "manual"
             ? "manual"
-            : "built-in",
+            : j.autoscoreProvider === "built-in-v2"
+              ? "built-in-v2"
+              : "built-in",
       autoscoreWsUrl:
         typeof j.autoscoreWsUrl === "string" ? j.autoscoreWsUrl : "",
       autoCommitMode:
@@ -239,6 +257,10 @@ function load(): Pick<
       preserveCalibrationOverlay:
         typeof j.preserveCalibrationOverlay === "boolean"
           ? j.preserveCalibrationOverlay
+          : true,
+      preserveCalibrationOnCameraChange:
+        typeof j.preserveCalibrationOnCameraChange === "boolean"
+          ? j.preserveCalibrationOnCameraChange
           : true,
       preferredCameraLabel:
         typeof j.preferredCameraLabel === "string"
@@ -268,7 +290,7 @@ function load(): Pick<
         typeof j.dartTimerSeconds === "number" && isFinite(j.dartTimerSeconds)
           ? Math.max(3, Math.min(60, j.dartTimerSeconds))
           : 10,
-    x01DoubleIn: typeof j.x01DoubleIn === "boolean" ? j.x01DoubleIn : false,
+      x01DoubleIn: typeof j.x01DoubleIn === "boolean" ? j.x01DoubleIn : false,
     };
   } catch {
     return {
@@ -288,10 +310,11 @@ function load(): Pick<
       cameraAspect: "wide",
       cameraFitMode: "fit",
       calibrationGuide: true,
+      calibrationUseRansac: true,
       preferredCameraId: undefined,
       preferredCameraLabel: undefined,
       preferredCameraLocked: false,
-        preserveCalibrationOverlay: true,
+      preserveCalibrationOverlay: true,
       cameraEnabled: true,
       hideCameraOverlay: false,
       offlineLayout: "modern",
@@ -377,7 +400,7 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     set({ ignorePreferredCameraSync: v });
   },
   setCameraScale: (n) => {
-    const s = Math.max(0.5, Math.min(1.25, n));
+    const s = Math.max(0.5, Math.min(2.0, n));
     save({ cameraScale: s });
     set({ cameraScale: s });
   },
@@ -412,14 +435,22 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     save({ calibrationGuide: v });
     set({ calibrationGuide: v });
   },
+  setCalibrationUseRansac: (v) => {
+    save({ calibrationUseRansac: v } as any);
+    set({ calibrationUseRansac: v } as any);
+  },
   setPreserveCalibrationOverlay: (v) => {
     save({ preserveCalibrationOverlay: v } as any);
     set({ preserveCalibrationOverlay: v });
   },
+  setPreserveCalibrationOnCameraChange: (v) => {
+    save({ preserveCalibrationOnCameraChange: v } as any);
+    set({ preserveCalibrationOnCameraChange: !!v });
+  },
   setPreferredCamera: (id, label, force = false) => {
     try {
       const state = get();
-        // Intentionally no logs here to avoid noisy console output in user flows
+      // Intentionally no logs here to avoid noisy console output in user flows
       if (state.preferredCameraLocked && !force) {
         // Locked: ignore programmatic updates unless explicitly forced by user action
         console.log(
@@ -428,15 +459,18 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
         return;
       }
     } catch {}
-  // Avoid redundant writes and accidental clears when values are unchanged.
+    // Avoid redundant writes and accidental clears when values are unchanged.
     try {
       const prev = get();
-      if (prev.preferredCameraId === id && prev.preferredCameraLabel === label) {
+      if (
+        prev.preferredCameraId === id &&
+        prev.preferredCameraLabel === label
+      ) {
         // Nothing changed; avoid writing to storage to reduce unexpected updates
         return;
       }
     } catch {}
-  // No logging on successful save to keep runtime output quiet
+    // No logging on successful save to keep runtime output quiet
     save({ preferredCameraId: id, preferredCameraLabel: label });
     set({ preferredCameraId: id, preferredCameraLabel: label });
   },
@@ -449,7 +483,9 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
         // Ignore attempts to auto-lock while the user has signalled they're
         // interacting with the picker. This prevents the lock "bouncing"
         // back on immediately after a user unlocks and selects a new camera.
-        console.debug('[USERSETTINGS] Ignoring auto-lock due to ignorePreferredCameraSync');
+        console.debug(
+          "[USERSETTINGS] Ignoring auto-lock due to ignorePreferredCameraSync",
+        );
         return;
       }
     } catch {}

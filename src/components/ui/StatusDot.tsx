@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 
 type Props = {
   status: "connecting" | "connected" | "disconnected";
@@ -13,7 +13,7 @@ export default function StatusDot({ status, title, size = 12 }: Props) {
       <span
         role="img"
         aria-label="Connecting"
-        title={title || "Connecting…"}
+        title={title || "Connecting… 🎯"}
         className="inline-flex items-center justify-center"
         style={{ width: s, height: s }}
       >
@@ -49,7 +49,7 @@ export default function StatusDot({ status, title, size = 12 }: Props) {
       <span
         role="img"
         aria-label="Connected"
-        title={title || "Connected"}
+        title={title || "Connected 🎯"}
         className="inline-flex items-center justify-center"
         style={{ width: s, height: s }}
       >
@@ -63,7 +63,7 @@ export default function StatusDot({ status, title, size = 12 }: Props) {
     <span
       role="img"
       aria-label="Disconnected"
-      title={title || "Not connected"}
+      title={title || "Not connected 🎯"}
       className="inline-flex items-center justify-center"
       style={{ width: s, height: s }}
     >

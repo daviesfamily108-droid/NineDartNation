@@ -1,8 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
+﻿import { describe, it, expect, vi } from "vitest";
 import { runDetectionAndNotify } from "../detectionNotifier";
 
 describe("runDetectionAndNotify", () => {
-  it("calls onAutoDart when detector returns a good detection", () => {
+  it("calls onAutoDart when detector returns a good detection", async () => {
     const detector = {
       detect: (frame: any) => ({ tip: { x: 0, y: 0 }, confidence: 0.95 }),
     };
@@ -12,11 +12,17 @@ describe("runDetectionAndNotify", () => {
       [0, 1, 0],
       [0, 0, 1],
     ];
-    runDetectionAndNotify(detector, null, H, { w: 320, h: 240 }, onAutoDart);
+    await runDetectionAndNotify(
+      detector,
+      null,
+      H,
+      { w: 320, h: 240 },
+      onAutoDart,
+    );
     expect(onAutoDart).toHaveBeenCalled();
   });
 
-  it("does not call onAutoDart for low confidence", () => {
+  it("does not call onAutoDart for low confidence", async () => {
     const detector = {
       detect: (frame: any) => ({ tip: { x: 0, y: 0 }, confidence: 0.2 }),
     };
@@ -26,7 +32,13 @@ describe("runDetectionAndNotify", () => {
       [0, 1, 0],
       [0, 0, 1],
     ];
-    runDetectionAndNotify(detector, null, H, { w: 320, h: 240 }, onAutoDart);
+    await runDetectionAndNotify(
+      detector,
+      null,
+      H,
+      { w: 320, h: 240 },
+      onAutoDart,
+    );
     expect(onAutoDart).not.toHaveBeenCalled();
   });
 });

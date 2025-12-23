@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useMatch } from "../store/match";
 
 export default function MatchSettings() {
@@ -19,7 +19,7 @@ export default function MatchSettings() {
 
   return (
     <div className="card">
-      <h2 className="text-xl font-semibold mb-4">Start New Match</h2>
+      <h2 className="text-xl font-semibold mb-4">Start New Match ⚔️</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label
@@ -65,7 +65,7 @@ export default function MatchSettings() {
       </div>
       <div className="mt-3">
         <button className="btn" onClick={startMatch}>
-          Start Match
+          Start Match 🚀
         </button>
       </div>
     </div>

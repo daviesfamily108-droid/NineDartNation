@@ -1,4 +1,4 @@
-import { DartDetector } from "../dartDetector";
+﻿import { DartDetector } from "../dartDetector";
 
 function makeImageData(width: number, height: number, gray = 100) {
   const data = new Uint8ClampedArray(width * height * 4);
@@ -15,7 +15,7 @@ describe("DartDetector basic detection - small blob", () => {
   it("detects a small synthetic dart blob when configured", () => {
     const width = 160;
     const height = 120;
-  const det = new DartDetector({ minArea: 6, thresh: 1, requireStableN: 1 });
+    const det = new DartDetector({ minArea: 6, thresh: 1, requireStableN: 1 });
 
     const bg = makeImageData(width, height, 100);
     det.updateBackground(bg, 1.0);
@@ -43,8 +43,8 @@ describe("DartDetector basic detection - small blob", () => {
     }
     expect(detection).not.toBeNull();
     if (detection) {
-        expect(detection.tip.x).toBeGreaterThanOrEqual(centerX - 6);
-        expect(detection.tip.x).toBeLessThanOrEqual(centerX + 6);
+      expect(detection.tip.x).toBeGreaterThanOrEqual(centerX - 6);
+      expect(detection.tip.x).toBeLessThanOrEqual(centerX + 6);
       expect(detection.confidence).toBeGreaterThan(0.3);
     }
   });

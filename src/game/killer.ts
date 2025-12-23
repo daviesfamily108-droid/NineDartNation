@@ -1,4 +1,4 @@
-export type KillerState = {
+﻿export type KillerState = {
   number: number; // assigned sector 1..20
   lives: number; // start with 3
   isKiller: boolean; // became killer by hitting own double

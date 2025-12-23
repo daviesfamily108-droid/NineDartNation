@@ -1,4 +1,4 @@
-// Very lightweight checkout suggestions. For proper coverage consider a full table.
+﻿// Very lightweight checkout suggestions. For proper coverage consider a full table.
 // Returns up to a few route strings like "T20 T20 D20" for a given remaining.
 
 /**
@@ -10,36 +10,41 @@ export function getRecommendedVoices(): SpeechSynthesisVoice[] {
     const synth = window.speechSynthesis;
     if (!synth) return [];
     const voices = synth.getVoices();
-    
+
     // Prioritize British English voices (they sound best for darts)
-    const britishVoices = voices.filter(v => 
-      v.lang.startsWith('en-GB') || 
-      v.name.toLowerCase().includes('british') ||
-      v.name.toLowerCase().includes('uk')
+    const britishVoices = voices.filter(
+      (v) =>
+        v.lang.startsWith("en-GB") ||
+        v.name.toLowerCase().includes("british") ||
+        v.name.toLowerCase().includes("uk"),
     );
-    
+
     // Then other English voices
-    const otherEnglish = voices.filter(v => 
-      v.lang.startsWith('en') && 
-      !britishVoices.includes(v)
+    const otherEnglish = voices.filter(
+      (v) => v.lang.startsWith("en") && !britishVoices.includes(v),
     );
-    
+
     // Premium/natural voices tend to have these keywords
-    const isPremiumVoice = (v: SpeechSynthesisVoice) => 
-      v.name.toLowerCase().includes('natural') ||
-      v.name.toLowerCase().includes('premium') ||
-      v.name.toLowerCase().includes('neural') ||
-      v.name.toLowerCase().includes('enhanced') ||
-      v.name.includes('Google') ||
-      v.name.includes('Microsoft') && !v.name.includes('David') && !v.name.includes('Zira');
-    
+    const isPremiumVoice = (v: SpeechSynthesisVoice) =>
+      v.name.toLowerCase().includes("natural") ||
+      v.name.toLowerCase().includes("premium") ||
+      v.name.toLowerCase().includes("neural") ||
+      v.name.toLowerCase().includes("enhanced") ||
+      v.name.includes("Google") ||
+      (v.name.includes("Microsoft") &&
+        !v.name.includes("David") &&
+        !v.name.includes("Zira"));
+
     // Sort each group by premium/natural voices first
-    const sortByQuality = (a: SpeechSynthesisVoice, b: SpeechSynthesisVoice) => {
+    const sortByQuality = (
+      a: SpeechSynthesisVoice,
+      b: SpeechSynthesisVoice,
+    ) => {
       const aScore = isPremiumVoice(a) ? 1 : 0;
       const bScore = isPremiumVoice(b) ? 1 : 0;
       return bScore - aScore;
     };
-    
+
     return [
       ...britishVoices.sort(sortByQuality),
       ...otherEnglish.sort(sortByQuality),
@@ -262,7 +267,8 @@ export function sayScore(
         `No score there for ${name}.`,
         `${name}, unfortunately, no score.`,
       ];
-      msg.text = noScorePhrases[Math.floor(Math.random() * noScorePhrases.length)];
+      msg.text =
+        noScorePhrases[Math.floor(Math.random() * noScorePhrases.length)];
       msg.rate = 0.95;
       msg.pitch = 0.95;
     } else if (scored >= 140) {
@@ -284,7 +290,7 @@ export function sayScore(
       msg.rate = 0.95;
       msg.pitch = 0.98;
     }
-    
+
     if (voiceName) {
       const v = synth.getVoices().find((v) => v.name === voiceName);
       if (v) msg.voice = v;
@@ -312,7 +318,7 @@ export function sayDart(
   try {
     const synth = window.speechSynthesis;
     if (!synth) return;
-    
+
     // Convert label to natural spoken form
     // Labels come in various formats:
     // Short: "T20", "D16", "S5", "BULL", "DBULL", "MISS 0"
@@ -320,7 +326,7 @@ export function sayDart(
     let spoken = label;
     let isExciting = false;
     let isMiss = false;
-    
+
     // Handle long format (from camera detection): "TRIPLE 20", "DOUBLE 16", etc.
     if (label.startsWith("TRIPLE ")) {
       const num = label.slice(7);
@@ -334,7 +340,11 @@ export function sayDart(
     } else if (label.startsWith("INNER_BULL") || label === "DBULL") {
       spoken = "Bullseye!";
       isExciting = true;
-    } else if (label.startsWith("BULL ") || label === "BULL" || label === "OUTER_BULL") {
+    } else if (
+      label.startsWith("BULL ") ||
+      label === "BULL" ||
+      label === "OUTER_BULL"
+    ) {
       spoken = "Bull";
     }
     // Handle short format: "T20", "D16", "S5"
@@ -351,10 +361,10 @@ export function sayDart(
       spoken = missPhrases[Math.floor(Math.random() * missPhrases.length)];
       isMiss = true;
     }
-    
+
     const msg = new SpeechSynthesisUtterance();
     msg.text = spoken;
-    
+
     // Natural speech patterns - slower than a robot, with expression
     if (isExciting) {
       msg.rate = 0.9;
@@ -366,7 +376,7 @@ export function sayDart(
       msg.rate = 0.92;
       msg.pitch = 1.0;
     }
-    
+
     if (voiceName) {
       const v = synth.getVoices().find((v) => v.name === voiceName);
       if (v) msg.voice = v;
@@ -374,7 +384,7 @@ export function sayDart(
     if (typeof opts?.volume === "number")
       msg.volume = Math.max(0, Math.min(1, opts.volume));
     else msg.volume = 1;
-    
+
     try {
       synth.cancel();
     } catch {}

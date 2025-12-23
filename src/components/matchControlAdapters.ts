@@ -1,4 +1,4 @@
-// Small adapter helpers to convert generic MatchControls onAddVisit callbacks to the local handlers
+﻿// Small adapter helpers to convert generic MatchControls onAddVisit callbacks to the local handlers
 export function makeOnlineAddVisitAdapter(
   submitVisitManual: (v: number) => void,
 ) {

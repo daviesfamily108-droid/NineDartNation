@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import {
   Eye,
   EyeOff,
@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   MessageCircle,
 } from "lucide-react";
+import { getApiBaseUrl } from "../utils/api";
 
 // Demo admin values removed: unused in codebase
 
@@ -21,8 +22,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Use VITE_API_URL for API requests, fallback to relative path for local dev
-  const API_URL = (import.meta as any).env?.VITE_API_URL || "";
+  const API_URL = getApiBaseUrl();
 
   async function handleSignIn(e: any) {
     e.preventDefault();
@@ -35,7 +35,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       void import("./OfflinePlay");
       void import("./Scoreboard");
       void import("./StatsPanel");
-  } catch (e) {}
+    } catch (e) {}
     if (!username || !password) {
       setError("Username and password required.");
       setLoading(false);
@@ -147,211 +147,217 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
-      {/* Animated background accents */}
-      <div className="background-animated" />
-      <div className="relative z-10 w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 p-4">
-        {/* Auth Card */}
-        <form
-          className="card w-full space-y-4"
-          onSubmit={
-            mode === "signin"
-              ? handleSignIn
-              : mode === "signup"
-                ? handleSignUp
-                : handleReset
-          }
-        >
-          <div className="flex flex-col items-center justify-center gap-2 mb-2 text-center">
-            <h1 className="logo text-center">NINE-DART-NATION 🎯</h1>
-            <span className="badge">Welcome</span>
-          </div>
-          <h2 className="text-2xl font-bold">
+    <div className="min-h-screen flex items-center justify-center bg-[#0F0C1D] p-4 relative overflow-hidden">
+      {/* Background decorative elements */}
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] bg-indigo-500/10 blur-[120px] rounded-full" />
+        <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-purple-500/10 blur-[120px] rounded-full" />
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/40 tracking-tighter mb-2">
+            NINE-DART-NATION 🎯
+          </h1>
+          <p className="text-white/40 font-medium uppercase tracking-[0.3em] text-xs">
             {mode === "signin"
-              ? "Sign In"
+              ? "Sign In 🔑"
               : mode === "signup"
-                ? "Create Account"
-                : "Reset Password"}
-          </h2>
-          {(mode === "signup" || mode === "reset") && (
-            <input
-              className="input w-full"
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          )}
-          {mode !== "reset" && (
-            <input
-              className="input w-full"
-              type="text"
-              placeholder="Username or Email"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-          )}
-          {mode !== "reset" && (
-            <div className="relative">
+                ? "Create Account ✨"
+                : "Reset Password 🔄"}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-center gap-3 mb-6">
+          {[
+            { key: "signin", label: "Sign In" },
+            { key: "signup", label: "Sign Up" },
+            { key: "reset", label: "Reset" },
+          ].map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => setMode(option.key as typeof mode)}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold tracking-wide transition-all ${mode === option.key ? "bg-white text-indigo-600" : "bg-white/5 text-white/70 hover:bg-white/10"}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="bg-white/[0.03] border border-white/10 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-2xl">
+          <form
+            className="space-y-4"
+            onSubmit={
+              mode === "signin"
+                ? handleSignIn
+                : mode === "signup"
+                  ? handleSignUp
+                  : handleReset
+            }
+          >
+            {(mode === "signup" || mode === "reset") && (
               <input
-                className="input w-full pr-10"
-                type={showPassword ? "text" : "password"}
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
+                className="input w-full"
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
-                onFocus={() => setShowPassword(false)}
-                onBlur={() => setShowPassword(false)}
               />
+            )}
+            {mode !== "reset" && (
+              <input
+                className="input w-full"
+                type="text"
+                placeholder="Username or Email"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            )}
+            {mode !== "reset" && (
+              <div className="relative">
+                <input
+                  className="input w-full pr-10"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                  onFocus={() => setShowPassword(false)}
+                  onBlur={() => setShowPassword(false)}
+                />
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-white"
+                  tabIndex={-1}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setShowPassword(true);
+                  }}
+                  onMouseUp={(e) => {
+                    e.preventDefault();
+                    setShowPassword(false);
+                  }}
+                  onMouseLeave={() => setShowPassword(false)}
+                  onTouchStart={(e) => {
+                    e.preventDefault();
+                    setShowPassword(true);
+                  }}
+                  onTouchEnd={(e) => {
+                    e.preventDefault();
+                    setShowPassword(false);
+                  }}
+                  aria-label="Toggle password visibility"
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
+              </div>
+            )}
+            {mode === "signup" && (
+              <input
+                className="input w-full"
+                type="text"
+                placeholder="Password Reminder (optional)"
+                value={reminder}
+                onChange={(e) => setReminder(e.target.value)}
+              />
+            )}
+            {error && (
+              <div className="text-red-400 font-semibold text-sm">{error}</div>
+            )}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg shadow-indigo-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-50 disabled:hover:scale-100"
+            >
+              {loading ? (
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Processing...
+                </div>
+              ) : mode === "signin" ? (
+                "Sign In 🔑"
+              ) : mode === "signup" ? (
+                "Sign Up ✨"
+              ) : (
+                "Send Reset Link 📧"
+              )}
+            </button>
+
+            {mode === "signin" && (
               <button
                 type="button"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-white"
-                tabIndex={-1}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  setShowPassword(true);
-                }}
-                onMouseUp={(e) => {
-                  e.preventDefault();
-                  setShowPassword(false);
-                }}
-                onMouseLeave={() => setShowPassword(false)}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  setShowPassword(true);
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  setShowPassword(false);
-                }}
-                aria-label="Toggle password visibility"
+                onClick={handleSendUsername}
+                className="w-full py-2 text-xs font-bold text-white/30 hover:text-white/60 transition-colors"
               >
-                {showPassword ? (
-                  <EyeOff className="w-5 h-5" />
-                ) : (
-                  <Eye className="w-5 h-5" />
-                )}
+                Email me my username 📧
               </button>
-            </div>
-          )}
-          {mode === "signup" && (
-            <input
-              className="input w-full"
-              type="text"
-              placeholder="Password Reminder (optional)"
-              value={reminder}
-              onChange={(e) => setReminder(e.target.value)}
-            />
-          )}
-          {error && (
-            <div className="text-red-400 font-semibold text-sm">{error}</div>
-          )}
-          <button className="btn w-full" type="submit" disabled={loading}>
-            {loading
-              ? "Signing In..."
-              : mode === "signin"
-                ? "Sign In"
-                : mode === "signup"
-                  ? "Sign Up"
-                  : "Send Reset Link"}
-          </button>
-          {mode === "reset" && (
-            <button
-              className="btn w-full mt-2 bg-white/10 hover:bg-white/20"
-              type="button"
-              onClick={handleSendUsername}
-              disabled={loading}
-            >
-              Email me my username
-            </button>
-          )}
-          <div className="flex justify-between text-sm mt-2">
-            <button
-              type="button"
-              className="underline"
-              onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-              disabled={loading}
-            >
-              {mode === "signin"
-                ? "Need an account? Sign Up"
-                : "Already have an account? Sign In"}
-            </button>
-            <button
-              type="button"
-              className="underline"
-              onClick={() => setMode("reset")}
-              disabled={loading}
-            >
-              Forgot password?
-            </button>
-          </div>
-        </form>
+            )}
+          </form>
+        </div>
 
-        {/* Hints / Teaser Panel */}
-        <aside className="card w-full">
-          <h3 className="text-xl font-bold mb-3">What’s inside</h3>
-          <ul className="space-y-3">
-            <li className="flex items-start gap-3">
-              <Users className="w-5 h-5 text-indigo-300 mt-1" />
-              <div>
-                <div className="font-semibold">Online & Friends</div>
-                <div className="text-sm text-slate-200/90">
-                  Challenge friends, chat, and join leagues.
+        <div className="mt-12 grid grid-cols-1 gap-4">
+          <div className="p-6 rounded-3xl bg-white/[0.02] border border-white/5">
+            <h3 className="text-xl font-bold mb-3 text-white/90">
+              What's inside 📦
+            </h3>
+            <ul className="space-y-3">
+              <li className="flex items-start gap-3">
+                <Users className="w-5 h-5 text-indigo-300 mt-1" />
+                <div>
+                  <div className="font-semibold">Online & Friends</div>
+                  <div className="text-sm text-slate-200/90">
+                    Challenge friends, chat, and join leagues.
+                  </div>
                 </div>
-              </div>
-            </li>
-            <li className="flex items-start gap-3">
-              <BarChart3 className="w-5 h-5 text-indigo-300 mt-1" />
-              <div>
-                <div className="font-semibold">Deep Stats</div>
-                <div className="text-sm text-slate-200/90">
-                  Track 3-dart averages, best legs, and more.
+              </li>
+              <li className="flex items-start gap-3">
+                <BarChart3 className="w-5 h-5 text-indigo-300 mt-1" />
+                <div>
+                  <div className="font-semibold">Deep Stats</div>
+                  <div className="text-sm text-slate-200/90">
+                    Track 3-dart averages, best legs, and more.
+                  </div>
                 </div>
-              </div>
-            </li>
-            <li className="flex items-start gap-3">
-              <Trophy className="w-5 h-5 text-indigo-300 mt-1" />
-              <div>
-                <div className="font-semibold">Game Modes</div>
-                <div className="text-sm text-slate-200/90">
-                  Start with 3 free online games upon signup. After that,
-                  PREMIUM is required to play all games.
+              </li>
+              <li className="flex items-start gap-3">
+                <Trophy className="w-5 h-5 text-indigo-300 mt-1" />
+                <div>
+                  <div className="font-semibold">Game Modes</div>
+                  <div className="text-sm text-slate-200/90">
+                    Start with 3 free online games upon signup. After that,
+                    PREMIUM is required to play all games.
+                  </div>
                 </div>
-              </div>
-            </li>
-            <li className="flex items-start gap-3">
-              <ShieldCheck className="w-5 h-5 text-indigo-300 mt-1" />
-              <div>
-                <div className="font-semibold">Premium Perks</div>
-                <div className="text-sm text-slate-200/90">
-                  Polished UI, upcoming features, and early access.
+              </li>
+              <li className="flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-indigo-300 mt-1" />
+                <div>
+                  <div className="font-semibold">Premium Perks</div>
+                  <div className="text-sm text-slate-200/90">
+                    Polished UI, upcoming features, and early access.
+                  </div>
                 </div>
-              </div>
-            </li>
-          </ul>
-          <a
-            href={
-              (import.meta as any).env?.VITE_DISCORD_INVITE_URL ||
-              "https://discord.gg/8GtbZ6RU"
-            }
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn mt-4 flex items-center justify-center gap-2"
-          >
-            <MessageCircle className="w-5 h-5" /> Join BullseyeDartsLeague
-          </a>
-          <a
-            href="https://discord.gg/NineDartNation"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn mt-2 flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20"
-          >
-            <MessageCircle className="w-5 h-5" /> Join NineDartNation
-          </a>
-        </aside>
+              </li>
+              <li className="flex items-start gap-3">
+                <MessageCircle className="w-5 h-5 text-indigo-300 mt-1" />
+                <div>
+                  <div className="font-semibold">Live Support</div>
+                  <div className="text-sm text-slate-200/90">
+                    Chat with moderators whenever you need a hand.
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   );

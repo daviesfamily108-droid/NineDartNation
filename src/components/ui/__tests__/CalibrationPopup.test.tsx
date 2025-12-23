@@ -1,6 +1,13 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import React from "react";
-import { render, screen, fireEvent, within, act, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  within,
+  act,
+  waitFor,
+} from "@testing-library/react";
 import CalibrationPopup from "../CalibrationPopup";
 import { describe, test, expect, vi, beforeEach } from "vitest";
 

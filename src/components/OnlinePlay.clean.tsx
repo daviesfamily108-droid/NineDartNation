@@ -1,4 +1,14 @@
-import React, { useState, useMemo, useEffect } from "react";
+﻿import React, { useState, useMemo, useEffect, useRef } from "react";
+import {
+  Search,
+  Filter,
+  Zap,
+  Target,
+  Trophy,
+  Users,
+  Clock,
+  ChevronDown,
+} from "lucide-react";
 import CreateMatchModal from "./ui/CreateMatchModal";
 import GameCalibrationStatus from "./GameCalibrationStatus";
 import MatchStartShowcase from "./ui/MatchStartShowcase";
@@ -21,6 +31,22 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [serverMatches, setServerMatches] = useState<any[]>([]);
   const inProgress = useMatch((s) => s.inProgress);
   const players = useMatch((s) => s.players);
+  const [focusMode, setFocusMode] = useState(false);
+  const matchesRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!focusMode) return;
+    function onDocClick(e: MouseEvent) {
+      try {
+        if (!matchesRef.current) return;
+        if (!matchesRef.current.contains(e.target as Node)) {
+          setFocusMode(false);
+        }
+      } catch {}
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [focusMode]);
   const [showStartShowcase, setShowStartShowcase] = useState<boolean>(false);
   const startedShowcasedRef = React.useRef(false);
   useEffect(() => {
@@ -29,6 +55,25 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     startedShowcasedRef.current = true;
     setShowStartShowcase(true);
   }, [inProgress]);
+
+  // Allow the overlay to show again the next time a match starts.
+  useEffect(() => {
+    if (inProgress) return;
+    startedShowcasedRef.current = false;
+  }, [inProgress]);
+
+  // Announce presence to server so it knows our username
+  useEffect(() => {
+    if (wsGlobal?.connected && user?.username) {
+      try {
+        wsGlobal.send({
+          type: "presence",
+          username: user.username,
+          email: user.email || "",
+        });
+      } catch {}
+    }
+  }, [wsGlobal?.connected, user]);
 
   // Global quit handler (from CameraView Quit / Pause modal)
   useEffect(() => {
@@ -49,7 +94,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joinMatch, setJoinMatch] = useState<any | null>(null);
   const joinAcceptRef = React.useRef<HTMLButtonElement | null>(null);
-  const [selfId, setSelfId] = useState<string | null>(null);
+  const [_selfId, setSelfId] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Record<string, string>>({});
   const [joinTimer, setJoinTimer] = useState(30);
   const serverPrestartRef = React.useRef(false);
@@ -63,8 +108,22 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [bullLocalThrow, setBullLocalThrow] = useState<number | null>(null);
   const [bullThrown, setBullThrown] = useState(false);
 
+  // Filter & Sort State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterGame, setFilterGame] = useState<
+    "all" | "x01" | "cricket" | "bermuda" | "gotcha"
+  >("all");
+  const [filterMode, setFilterMode] = useState<"all" | "first_to" | "best_of">(
+    "all",
+  );
+  const [sortBy, setSortBy] = useState<"newest" | "oldest">("newest");
+
+  // Pagination State
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 16;
+
   const currentRoom = rooms[currentRoomIdx];
-  const maxMatchesPerRoom = 12;
+  const maxMatchesPerRoom = 16; // Updated to 16 as requested
   const worldLobby = useMemo(() => {
     if (serverMatches && serverMatches.length) return serverMatches as any[];
     return rooms.flatMap((r) =>
@@ -77,8 +136,60 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     const local = currentRoom?.matches || [];
     const ids = new Set(local.map((m: any) => m.id));
     const others = (worldLobby || []).filter((m: any) => !ids.has(m.id));
-    return [...local, ...others];
-  }, [currentRoom, worldLobby]);
+    let all = [...local, ...others];
+
+    // 1. Search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      all = all.filter(
+        (m) =>
+          (m.game || "").toLowerCase().includes(q) ||
+          (m.createdBy || m.creatorName || "").toLowerCase().includes(q) ||
+          (m.id || "").toLowerCase().includes(q),
+      );
+    }
+
+    // 2. Filter Game
+    if (filterGame !== "all") {
+      all = all.filter((m) => (m.game || "").toLowerCase() === filterGame);
+    }
+
+    // 3. Filter Mode
+    if (filterMode !== "all") {
+      // normalize modeType. Some might be 'first_to' or 'bestof'
+      all = all.filter((m) => {
+        const mt = (m.modeType || "").replace("_", "").toLowerCase(); // 'firstto', 'bestof'
+        const target = filterMode.replace("_", "").toLowerCase();
+        return mt.includes(target);
+      });
+    }
+
+    // 4. Sort
+    all.sort((a, b) => {
+      const tA = a.createdAt || 0;
+      const tB = b.createdAt || 0;
+      return sortBy === "newest" ? tB - tA : tA - tB;
+    });
+
+    return all;
+  }, [currentRoom, worldLobby, searchQuery, filterGame, filterMode, sortBy]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, filterGame, filterMode, sortBy, currentRoomIdx]);
+
+  const totalPages = Math.ceil(combinedMatches.length / itemsPerPage);
+  const paginatedMatches = combinedMatches.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage,
+  );
+
+  const handleQuickJoin = () => {
+    if (combinedMatches.length > 0) {
+      requestJoin(combinedMatches[0]);
+    }
+  };
 
   const handleCreateMatch = (payload: any) => {
     const newMatch = {
@@ -90,17 +201,31 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       startingScore: payload.startingScore,
       createdAt: Date.now(),
     };
-    // Optimistically add to current room
-    setRooms((prev) =>
-      prev.map((r, idx) =>
-        idx === currentRoomIdx
-          ? { ...r, matches: [newMatch, ...r.matches] }
-          : r,
-      ),
-    );
+
+    // Only add optimistically if we are NOT connected to the server
+    // Otherwise, we wait for the server to broadcast the new match to avoid duplicates
+    if (!wsGlobal?.connected) {
+      setRooms((prev) =>
+        prev.map((r, idx) =>
+          idx === currentRoomIdx
+            ? { ...r, matches: [newMatch, ...r.matches] }
+            : r,
+        ),
+      );
+    }
+
     // If we have a server WS connection, send a create-match message
     try {
       if (wsGlobal?.connected) {
+        // Ensure presence is sent before creating match to guarantee correct attribution
+        if (user?.username) {
+          wsGlobal.send({
+            type: "presence",
+            username: user.username,
+            email: user.email || "",
+          });
+        }
+
         wsGlobal.send({
           type: "create-match",
           game: payload.game,
@@ -231,6 +356,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   }, [joinMatch]);
 
   const handleJoinAccept = () => {
+    // Show the pre-game overlay immediately for snappy UX.
+    setShowStartShowcase(true);
     // Send accept (invite-response) to server if we have a match prestart
     try {
       if (wsGlobal?.connected && joinMatch?.id) {
@@ -247,8 +374,18 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
   const requestJoin = (m: any) => {
     setJoinMatch(m);
+    // Show the pre-game overlay immediately while the server processes the join.
+    setShowStartShowcase(true);
     try {
       if (wsGlobal?.connected) {
+        // Ensure presence is sent before joining
+        if (user?.username) {
+          wsGlobal.send({
+            type: "presence",
+            username: user.username,
+            email: user.email || "",
+          });
+        }
         wsGlobal.send({ type: "join-match", matchId: m.id, calibrated: true });
       }
     } catch {}
@@ -284,7 +421,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           />
         )}
         <h2 className="text-3xl font-bold text-black dark:text-white mb-4">
-          Online Play
+          Online Lobby 🌐
         </h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
           <div className="rounded-xl border border-slate-700 bg-black/10 p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
@@ -297,18 +434,19 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 </div>
                 <div style={{ width: 12 }} />
                 <button className="btn btn-ghost" onClick={newRoom}>
-                  New Room
+                  New Room 🚪
                 </button>
               </div>
               <div className="shrink-0 flex items-center gap-2">
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-primary flex items-center gap-2"
                   onClick={() => setShowCreateModal(true)}
                   disabled={
                     (currentRoom?.matches?.length || 0) >= maxMatchesPerRoom
                   }
                 >
-                  Create Match +
+                  <Trophy className="w-4 h-4" />
+                  Create Match + ⚔️
                 </button>
                 {(currentRoom?.matches?.length || 0) >= maxMatchesPerRoom && (
                   <div className="text-xs text-rose-400 mt-1">
@@ -319,62 +457,281 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             </div>
 
             <p className="mb-2" />
+
+            {/* Filters & Controls */}
+            {!inProgress && (
+              <div className="mb-4 p-3 rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-white/5 flex flex-col gap-3 shadow-lg">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex-1 min-w-[200px] relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                    <input
+                      type="text"
+                      placeholder="Search matches, players..."
+                      className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-black/40 border border-white/10 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    className="btn bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-lg shadow-indigo-500/20 flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+                    onClick={handleQuickJoin}
+                    disabled={combinedMatches.length === 0}
+                  >
+                    <Zap className="w-4 h-4 fill-current" />
+                    <span className="font-medium">Quick Join ⚡</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">
+                  <Filter className="w-4 h-4" />
+                  <span>Filters</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="input input-compact cursor-pointer font-bold"
+                      value={filterGame}
+                      onChange={(e) => setFilterGame(e.target.value as any)}
+                    >
+                      <option value="all">All Games 🎯</option>
+                      <option value="x01">X01</option>
+                      <option value="cricket">Cricket</option>
+                      <option value="bermuda">Bermuda</option>
+                      <option value="gotcha">Gotcha</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="input input-compact cursor-pointer font-bold"
+                      value={filterMode}
+                      onChange={(e) => setFilterMode(e.target.value as any)}
+                    >
+                      <option value="all">All Modes 🏆</option>
+                      <option value="first_to">First To</option>
+                      <option value="best_of">Best Of</option>
+                    </select>
+                  </div>
+
+                  <div className="flex-1" />
+                  <div className="flex items-center gap-2">
+                    <button
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all ${focusMode ? "bg-red-600 text-white" : "bg-white/5 text-white/80 hover:bg-white/10"}`}
+                      onClick={() => setFocusMode((s) => !s)}
+                      aria-pressed={focusMode}
+                      title="Toggle focus mode: hide small details and show focused view"
+                    >
+                      {focusMode ? "Exit Focus 🔍" : "Focus Mode 🔍"}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="input input-compact cursor-pointer font-bold"
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as any)}
+                    >
+                      <option value="newest">Newest First 🆕</option>
+                      <option value="oldest">Oldest First</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="flex-1 overflow-auto">
-              <h3 className="font-semibold underline mb-3">
-                Matches in this Room
+              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                <Users className="w-5 h-5 text-indigo-400" />
+                Active Matches �️
               </h3>
-              <div className="mb-3 p-3 rounded-xl border border-slate-700 bg-black/10">
+              <div className="mb-3 p-1 rounded-xl border border-slate-700/50 bg-black/10">
                 <div className="mb-4">
                   {(combinedMatches.length || 0) === 0 ? (
-                    <div className="text-sm opacity-60">
-                      No matches in this room yet.
+                    <div className="flex flex-col items-center justify-center py-12 text-center opacity-60">
+                      <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                        <Target className="w-8 h-8 text-white/20" />
+                      </div>
+                      <p className="text-lg font-medium mb-1">
+                        No matches found
+                      </p>
+                      <p className="text-sm max-w-xs mx-auto">
+                        Create a new match to get started or try adjusting your
+                        filters.
+                      </p>
                     </div>
-                  ) : (
-                    <div
-                      className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[28rem] overflow-auto"
-                      data-testid="matches-grid"
-                    >
-                      {combinedMatches.map((m: any) => (
-                        <div
-                          key={m.id}
-                          className="p-3 rounded border bg-black/10 flex items-start justify-between h-24"
-                          data-testid={`match-${m.id}`}
-                        >
-                          <div>
-                            <div className="font-semibold text-sm">
-                              {m.game}{" "}
-                              {m.modeType === "bestof"
-                                ? "(Best Of)"
-                                : "(First To)"}{" "}
-                              - {m.legs} legs
-                            </div>
-                            {m.startingScore && (
-                              <div className="text-xs opacity-80">
-                                Starting:{" "}
-                                <span className="font-mono">
-                                  {m.startingScore}
-                                </span>
-                              </div>
-                            )}
-                            <div className="text-xs opacity-70 flex items-center gap-2">
-                              Created by: {m.createdBy}
-                              {m.roomName && (
-                                <div className="ml-2 inline-flex items-center gap-2 text-xs uppercase px-2 py-0.5 rounded-full bg-white/5 border border-white/10">
-                                  Room: {m.roomName}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="ml-4 shrink-0">
+                  ) : null}
+
+                  {(combinedMatches.length || 0) !== 0 && (
+                    <div className="relative">
+                      {focusMode && (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+                          <div className="pointer-events-auto bg-red-600/95 text-white px-6 py-3 rounded-lg shadow-lg text-lg font-bold transform transition-all duration-200 ease-out">
                             <button
-                              className="btn btn-sm"
-                              onClick={() => requestJoin(m)}
+                              onClick={() => setFocusMode(false)}
+                              className="w-full text-center"
                             >
-                              Join Now!
+                              FOCUS MODE — Click to exit
                             </button>
                           </div>
                         </div>
-                      ))}
+                      )}
+                      <div
+                        ref={matchesRef}
+                        className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[28rem] overflow-auto p-2 ${focusMode ? "opacity-90" : ""}`}
+                        data-testid="matches-grid"
+                      >
+                        {paginatedMatches.map((m: any) => (
+                          <div
+                            key={m.id}
+                            className="group relative p-5 rounded-xl border border-white/5 bg-gradient-to-br from-slate-800/80 to-slate-900/80 hover:from-slate-800 hover:to-slate-900 transform transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/10 flex flex-col gap-4 h-24"
+                            data-testid={`match-${m.id}`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-3">
+                                  {!focusMode && (
+                                    <div className="w-9 h-9 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 group-hover:border-indigo-500/40 transition-colors text-xs font-bold">
+                                      {m.createdBy
+                                        ? (m.createdBy || "U")
+                                            .substring(0, 2)
+                                            .toUpperCase()
+                                        : (m.creatorName || "U")
+                                            .substring(0, 2)
+                                            .toUpperCase()}
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <div className="font-bold text-white group-hover:text-indigo-300 transition-colors truncate">
+                                      {m.game}
+                                    </div>
+                                    <div className="text-xs text-white/50 flex items-center gap-1">
+                                      <Clock className="w-3 h-3" />
+                                      {new Date(m.createdAt).toLocaleTimeString(
+                                        [],
+                                        { hour: "2-digit", minute: "2-digit" },
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              {m.roomName && (
+                                <div className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-white/5 border border-white/10 text-white/60">
+                                  {m.roomName}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex flex-col gap-1 text-sm text-white/70 bg-black/20 p-2 rounded-lg">
+                              <div className="flex items-center gap-2">
+                                <span className="px-1.5 py-0.5 rounded bg-white/10 text-xs font-medium">
+                                  {m.modeType === "bestof"
+                                    ? "Best Of"
+                                    : "First To"}
+                                </span>
+                                <span className="font-mono text-indigo-300">
+                                  {m.legs}
+                                </span>
+                                <span>legs</span>
+                                {m.startingScore && (
+                                  <>
+                                    <span className="w-1 h-1 rounded-full bg-white/20" />
+                                    <span className="font-mono text-amber-300">
+                                      {m.startingScore}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              {!focusMode && (
+                                <div className="text-xs text-white/40 flex items-center gap-1 mt-1">
+                                  <Users className="w-3 h-3" />
+                                  Created by:{" "}
+                                  <span className="text-white/60">
+                                    {m.createdBy || m.creatorName || "Unknown"}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-between mt-auto pt-2 border-t border-white/5">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {!focusMode && (
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+                                      {(m.createdBy || m.creatorName || "U")
+                                        .substring(0, 2)
+                                        .toUpperCase()}
+                                    </div>
+                                    <span className="text-xs text-white/60 truncate max-w-[120px]">
+                                      {m.createdBy || m.creatorName}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center justify-end">
+                                <button
+                                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-lg shadow-indigo-500/20 px-4"
+                                  onClick={() => requestJoin(m)}
+                                >
+                                  Join ⚔️
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-center gap-4 mt-4 pt-2 border-t border-white/5">
+                      <button
+                        className="btn btn-sm btn-ghost text-white/60 hover:text-white disabled:opacity-30"
+                        disabled={currentPage === 1}
+                        onClick={() =>
+                          setCurrentPage((p) => Math.max(1, p - 1))
+                        }
+                      >
+                        <ChevronDown className="w-4 h-4 rotate-90" />
+                        Previous
+                      </button>
+                      <div className="flex items-center gap-1">
+                        {Array.from(
+                          { length: Math.min(5, totalPages) },
+                          (_, i) => {
+                            // Logic to show window of pages around current
+                            let p = i + 1;
+                            if (totalPages > 5) {
+                              if (currentPage > 3) p = currentPage - 2 + i;
+                              if (p > totalPages) p = totalPages - 4 + i;
+                            }
+                            return (
+                              <button
+                                key={p}
+                                className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                                  currentPage === p
+                                    ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25"
+                                    : "bg-white/5 text-white/60 hover:bg-white/10"
+                                }`}
+                                onClick={() => setCurrentPage(p)}
+                              >
+                                {p}
+                              </button>
+                            );
+                          },
+                        )}
+                      </div>
+                      <button
+                        className="btn btn-sm btn-ghost text-white/60 hover:text-white disabled:opacity-30"
+                        disabled={currentPage === totalPages}
+                        onClick={() =>
+                          setCurrentPage((p) => Math.min(totalPages, p + 1))
+                        }
+                      >
+                        Next
+                        <ChevronDown className="w-4 h-4 -rotate-90" />
+                      </button>
                     </div>
                   )}
                 </div>
@@ -405,10 +762,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           >
             <div className="bg-slate-800 rounded-2xl p-6 max-w-md w-full">
               <div id="join-heading" className="text-lg font-bold mb-2">
-                Join Match
+                Join Match ⚔️
               </div>
               <div className="mb-3">
-                {joinMatch.game} - {joinMatch.modeType} • {joinMatch.legs} legs
+                {joinMatch.game} - {joinMatch.modeType} · {joinMatch.legs} legs
               </div>
               <div className="text-sm opacity-80 mb-3">
                 Created by {joinMatch.createdBy}

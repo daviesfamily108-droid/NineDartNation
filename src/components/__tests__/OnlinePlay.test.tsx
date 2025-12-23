@@ -1,6 +1,12 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import React from "react";
-import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  act,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import { vi } from "vitest";
 // Mock WSProvider to avoid real network connections during unit tests
 let __wsListeners: ((msg: any) => void)[] = [];
@@ -66,7 +72,9 @@ describe("OnlinePlay", () => {
       useMatch.getState().newMatch(["Alice", "Bob"], 501);
     });
     // Expect the overlay dialog to appear; be tolerant of async timing
-    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy(), { timeout: 2000 });
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy(), {
+      timeout: 2000,
+    });
   });
 
   test("prestart choices and bull flow via WS", async () => {
@@ -99,7 +107,15 @@ describe("OnlinePlay", () => {
     // Choose Bull Up - should send prestart-choice message
     const bullBtn = await screen.findByText("Bull Up");
     fireEvent.click(bullBtn);
-    await waitFor(() => expect(__sendSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "prestart-choice", roomId: "m-1", choice: "bull" })));
+    await waitFor(() =>
+      expect(__sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "prestart-choice",
+          roomId: "m-1",
+          choice: "bull",
+        }),
+      ),
+    );
     expect(__sendSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "prestart-choice",
@@ -127,7 +143,15 @@ describe("OnlinePlay", () => {
     const input = (await screen.findByRole("spinbutton")) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "50" } });
     throwBtn.click();
-    await waitFor(() => expect(__sendSpy).toHaveBeenCalledWith(expect.objectContaining({ type: "prestart-bull-throw", roomId: "m-1", score: 50 })));
+    await waitFor(() =>
+      expect(__sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "prestart-bull-throw",
+          roomId: "m-1",
+          score: 50,
+        }),
+      ),
+    );
     // Server declares winner and then starts match
     act(() => {
       useWS().__emit({
@@ -168,8 +192,9 @@ describe("OnlinePlay", () => {
       });
     });
     // The match item should appear and show the Room badge text
-    const badges = await screen.findAllByText(/Room: room-99/);
-    expect(badges.length).toBeGreaterThanOrEqual(1);
+    // Use a more flexible check since the text might be split across elements
+    const matchItem = await screen.findByTestId("match-m-world-10");
+    expect(matchItem.textContent).toContain("room-99");
   });
 
   test("renders a 3-column grid and card height for matches", async () => {

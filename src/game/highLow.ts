@@ -1,4 +1,4 @@
-export type HighLowState = {
+﻿export type HighLowState = {
   round: number;
   score: number;
   target: "HIGH" | "LOW";

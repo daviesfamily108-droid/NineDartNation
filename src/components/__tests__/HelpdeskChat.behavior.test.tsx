@@ -1,6 +1,12 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import React from "react";
-import { render, screen, fireEvent, act, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+} from "@testing-library/react";
 import { vi, describe, it, beforeEach, expect } from "vitest";
 
 let listener: any = null;

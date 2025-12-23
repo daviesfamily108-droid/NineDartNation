@@ -1,4 +1,4 @@
-export const freeGames = ["X01", "Double Practice"] as const;
+﻿export const freeGames = ["X01", "Double Practice"] as const;
 export type ModeKey =
   | "bestof"
   | "firstto"

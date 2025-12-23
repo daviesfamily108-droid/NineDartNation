@@ -1,4 +1,4 @@
-export const isDev = ((import.meta as any).env?.DEV || false) as boolean;
+﻿export const isDev = ((import.meta as any).env?.DEV || false) as boolean;
 export function dlog(...args: any[]) {
   if (isDev) console.debug(...args);
 }

@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import React from "react";
 import {
   render,
@@ -42,7 +42,9 @@ describe("HelpAssistant escalation", () => {
     ) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "blorp unknown topic" } });
     fireEvent.keyPress(input, { key: "Enter", code: "Enter", charCode: 13 });
-    await waitFor(() => screen.getByText(/connect you to a member of our admin team/i));
+    await waitFor(() =>
+      screen.getByText(/connect you to a member of our admin team/i),
+    );
 
     // the assistant will ask to connect to an admin; wait for that prompt
     await waitFor(() =>

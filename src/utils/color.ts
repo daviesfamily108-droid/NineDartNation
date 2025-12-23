@@ -1,4 +1,4 @@
-// Lightweight color helpers: dominant color from image (best-effort) and string->color fallback
+﻿// Lightweight color helpers: dominant color from image (best-effort) and string->color fallback
 
 export function stringToColor(input: string): string {
   // Simple deterministic hash -> HSL -> hex

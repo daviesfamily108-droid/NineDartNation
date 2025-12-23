@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { render, act, waitFor } from "@testing-library/react";
 import CameraView from "../CameraView";
 import { useUserSettings } from "../../store/userSettings";
@@ -22,13 +22,17 @@ test("preferredCameraId is not cleared when the selected camera is unavailable (
   ];
 
   // Render CameraView and attempt to start camera
-  const { container } = render(<CameraView /> as any);
+  const { container } = render((<CameraView />) as any);
 
   // Dispatch start-camera event to instruct CameraTile/CameraView to start
   act(() => {
-    window.dispatchEvent(new CustomEvent("ndn:start-camera", { detail: { mode: "local" } }));
+    window.dispatchEvent(
+      new CustomEvent("ndn:start-camera", { detail: { mode: "local" } }),
+    );
   });
-  await waitFor(() => expect(useUserSettings.getState().preferredCameraId).toBe(deviceId));
+  await waitFor(() =>
+    expect(useUserSettings.getState().preferredCameraId).toBe(deviceId),
+  );
 
   expect(useUserSettings.getState().preferredCameraId).toBe(deviceId);
   expect(useUserSettings.getState().preferredCameraLabel).toBe(label);

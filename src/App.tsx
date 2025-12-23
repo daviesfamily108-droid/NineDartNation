@@ -1,8 +1,15 @@
-import React, { useEffect, useRef, useState, Suspense } from "react";
+﻿import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  Suspense,
+} from "react";
 import { MobileTabBar, Sidebar, TabKey } from "./components/Sidebar";
 const Home = React.lazy(() => import("./components/Home"));
 import ScrollFade from "./components/ScrollFade";
 import Calibrator from "./components/Calibrator";
+import CameraView from "./components/CameraView";
 const OfflinePlay = React.lazy(() => import("./components/OfflinePlay"));
 const Friends = React.lazy(() => import("./components/Friends"));
 import Toaster from "./components/Toaster";
@@ -10,12 +17,22 @@ import AdminDashboard from "./components/AdminDashboard";
 import SettingsPanel from "./components/SettingsPanel";
 import Auth from "./components/Auth";
 import { ThemeProvider } from "./components/ThemeContext";
-import { Bell } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Bell,
+  CalendarDays,
+  Handshake,
+  MessageCircle,
+  Trophy,
+  Users,
+} from "lucide-react";
 import { useWS } from "./components/WSProvider";
-import StatusDot from "./components/ui/StatusDot";
 import { getRollingAvg, getAllTimeAvg } from "./store/profileStats";
+import { useMatch } from "./store/match";
 import { useUserSettings } from "./store/userSettings";
 import { useCalibration } from "./store/calibration";
+import { apiFetch, getApiBaseUrl } from "./utils/api";
 import "./styles/premium.css";
 import "./styles/themes.css";
 const OnlinePlay = React.lazy(() => import("./components/OnlinePlay.clean"));
@@ -34,6 +51,7 @@ import AddToHomeButton from "./components/AddToHomeButton";
 import Footer from "./components/Footer";
 import AutoPauseManager from "./components/AutoPauseManager";
 import MatchPage from "./components/MatchPage";
+import { useToast } from "./store/toast";
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -59,10 +77,15 @@ export default function App() {
     }
     setUser((prev: any) => {
       const merged = { ...prev, ...next };
-      if (prev?.subscription && !next?.subscription) merged.subscription = prev.subscription;
+      if (prev?.subscription && !next?.subscription)
+        merged.subscription = prev.subscription;
       if (next?.subscription) merged.subscription = next.subscription;
       // Keep fullAccess aligned with subscription unless explicitly provided
-      merged.fullAccess = !!(merged.subscription?.fullAccess || next?.fullAccess || merged.fullAccess);
+      merged.fullAccess = !!(
+        merged.subscription?.fullAccess ||
+        next?.fullAccess ||
+        merged.fullAccess
+      );
       return merged;
     });
   }
@@ -71,16 +94,32 @@ export default function App() {
     "1";
   const [minimalUI, setMinimalUI] = useState<boolean>(false);
   const [allTimeAvg, setAllTimeAvg] = useState<number>(0);
+  const [avgDelta, setAvgDelta] = useState<number>(0);
   const { avgMode } = useUserSettings();
-  const { H: calibH, locked: calibLocked, errorPx } = useCalibration();
+  const cameraEnabled = useUserSettings((s) => s.cameraEnabled);
+  const matchInProgress = useMatch((s) => s.inProgress);
+  const isCompact = matchInProgress && tab !== "score";
+  const { H: calibH, locked: calibLocked } = useCalibration();
+  const toast = useToast();
+  const prevCalibrated = useRef(!!(calibH && calibLocked));
+  const normalizedDelta = Math.abs(avgDelta) >= 0.05 ? avgDelta : 0;
+  const API_URL = getApiBaseUrl();
+
+  useEffect(() => {
+    const isCalibrated = !!(calibH && calibLocked);
+    // Notify if calibration is lost (transition from calibrated to uncalibrated)
+    if (prevCalibrated.current && !isCalibrated) {
+      toast("Calibration lost. Please recalibrate.", { type: "info" });
+    }
+    prevCalibrated.current = isCalibrated;
+  }, [calibH, calibLocked, toast]);
 
   // Restore user from token on mount (run once only)
   useEffect(() => {
     const token = localStorage.getItem("authToken");
     if (!token) return;
-    
+
     // Validate token with server
-    const API_URL = (import.meta as any).env?.VITE_API_URL || "";
     fetch(`${API_URL}/api/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -89,8 +128,14 @@ export default function App() {
         if (data?.user) {
           setUserWithMerge(data.user);
           try {
-            const cached = localStorage.getItem(`ndn:subscription:${data.user.email}`);
-            if (cached) setUserWithMerge({ ...data.user, subscription: JSON.parse(cached) });
+            const cached = localStorage.getItem(
+              `ndn:subscription:${data.user.email}`,
+            );
+            if (cached)
+              setUserWithMerge({
+                ...data.user,
+                subscription: JSON.parse(cached),
+              });
           } catch (e) {}
           fetchSubscription(data.user);
         } else {
@@ -102,7 +147,7 @@ export default function App() {
         // Network error, keep token for offline retry
       });
   }, []);
-  
+
   // Handle minimal UI delay when user is present
   useEffect(() => {
     if (user && MINIMAL_UI) {
@@ -130,8 +175,9 @@ export default function App() {
       try {
         localStorage.removeItem("mockUser");
         localStorage.removeItem("authToken");
-        if (user?.email) localStorage.removeItem(`ndn:subscription:${user.email}`);
-  } catch (e) {}
+        if (user?.email)
+          localStorage.removeItem(`ndn:subscription:${user.email}`);
+      } catch (e) {}
       setUser(null);
       setTab("score");
     };
@@ -141,13 +187,43 @@ export default function App() {
   }, []);
   // Refresh all-time avg when user changes or stats update
   useEffect(() => {
-    if (!user?.username) return;
-    const refresh = () =>
-      setAllTimeAvg(
+    if (!user?.username) {
+      setAvgDelta(0);
+      return;
+    }
+    const refresh = () => {
+      const nextAvg =
         avgMode === "24h"
           ? getRollingAvg(user.username)
-          : getAllTimeAvg(user.username),
-      );
+          : getAllTimeAvg(user.username);
+      setAllTimeAvg(nextAvg);
+      const key = `ndn:allTimeAvgSnapshot:${user.username}`;
+      const now = Date.now();
+      const DAY = 1000 * 60 * 60 * 24;
+      try {
+        const raw = localStorage.getItem(key);
+        if (!raw) {
+          localStorage.setItem(
+            key,
+            JSON.stringify({ value: nextAvg, ts: now }),
+          );
+          setAvgDelta(0);
+          return;
+        }
+        const parsed = JSON.parse(raw);
+        const baseline = Number(parsed?.value) || 0;
+        const delta = nextAvg - baseline;
+        setAvgDelta(Number.isFinite(delta) ? delta : 0);
+        if (!parsed?.ts || now - Number(parsed.ts) >= DAY) {
+          localStorage.setItem(
+            key,
+            JSON.stringify({ value: nextAvg, ts: now }),
+          );
+        }
+      } catch {
+        setAvgDelta(0);
+      }
+    };
     refresh();
     const onUpdate = () => refresh();
     window.addEventListener("ndn:stats-updated", onUpdate as any);
@@ -243,7 +319,6 @@ export default function App() {
       const pendingUsername = localStorage.getItem("pendingUsernameChange");
       if (pendingUsername && user?.email) {
         // Call the change username API
-        const API_URL = (import.meta as any).env?.VITE_API_URL || "";
         fetch(`${API_URL}/api/change-username`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -300,7 +375,6 @@ export default function App() {
     const subscription = urlParams.get("subscription");
     if (subscription === "success" && user?.email) {
       // Refresh user data to get updated subscription status
-      const API_URL = (import.meta as any).env?.VITE_API_URL || "";
       fetch(`${API_URL}/api/auth/me`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
@@ -347,7 +421,7 @@ export default function App() {
         );
       const touchScreen =
         "ontouchstart" in window || navigator.maxTouchPoints > 0;
-  const verySmallScreen = width < 769;
+      const verySmallScreen = width < 769;
 
       // Determine device type
       const isTablet =
@@ -372,7 +446,7 @@ export default function App() {
     try {
       mqMobile.addEventListener("change", update);
       mqTablet.addEventListener("change", update);
-  } catch (e) {}
+    } catch (e) {}
 
     return () => {
       window.removeEventListener("resize", update);
@@ -380,9 +454,74 @@ export default function App() {
       try {
         mqMobile.removeEventListener("change", update);
         mqTablet.removeEventListener("change", update);
-  } catch (e) {}
+      } catch (e) {}
     };
   }, []);
+
+  // Enable swipe gestures on mobile/tablet to toggle navigation drawer
+  useEffect(() => {
+    if (!isMobile) return;
+
+    const target: HTMLElement | Document = appRef.current || document;
+    let startX = 0;
+    let startY = 0;
+    let tracking = false;
+
+    const MIN_DISTANCE = 60;
+    const MAX_VERTICAL_DRIFT = 70;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      startX = touch.clientX;
+      startY = touch.clientY;
+      tracking = true;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!tracking || event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      const deltaY = touch.clientY - startY;
+      if (Math.abs(deltaY) > MAX_VERTICAL_DRIFT) {
+        tracking = false;
+      }
+    };
+
+    const handleTouchEnd = (event: TouchEvent) => {
+      if (!tracking) return;
+      tracking = false;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const deltaX = touch.clientX - startX;
+      const deltaY = touch.clientY - startY;
+      if (
+        Math.abs(deltaX) < MIN_DISTANCE ||
+        Math.abs(deltaX) < Math.abs(deltaY)
+      )
+        return;
+      if (deltaX > 0) {
+        setNavOpen(true);
+      } else {
+        setNavOpen(false);
+      }
+    };
+
+    const handleTouchCancel = () => {
+      tracking = false;
+    };
+
+    target.addEventListener("touchstart", handleTouchStart, { passive: true });
+    target.addEventListener("touchmove", handleTouchMove, { passive: true });
+    target.addEventListener("touchend", handleTouchEnd);
+    target.addEventListener("touchcancel", handleTouchCancel);
+
+    return () => {
+      target.removeEventListener("touchstart", handleTouchStart);
+      target.removeEventListener("touchmove", handleTouchMove);
+      target.removeEventListener("touchend", handleTouchEnd);
+      target.removeEventListener("touchcancel", handleTouchCancel);
+    };
+  }, [isMobile, setNavOpen]);
 
   // Global logout handler: return to sign-in screen and clear minimal local user context
   useEffect(() => {
@@ -390,8 +529,9 @@ export default function App() {
       try {
         // Clear any lightweight local flags (keep stats unless explicitly reset)
         localStorage.removeItem("ndn:avatar");
-        if (user?.email) localStorage.removeItem(`ndn:subscription:${user.email}`);
-  } catch (e) {}
+        if (user?.email)
+          localStorage.removeItem(`ndn:subscription:${user.email}`);
+      } catch (e) {}
       setUser(null);
       setTab("score");
     };
@@ -416,8 +556,8 @@ export default function App() {
           const email = (user?.email || "").toLowerCase();
           if (ws && next && email)
             ws.send({ type: "presence", username: next, email });
-  } catch (e) {}
-  } catch (e) {}
+        } catch (e) {}
+      } catch (e) {}
     };
     window.addEventListener("ndn:username-changed" as any, onName as any);
     return () =>
@@ -444,7 +584,7 @@ export default function App() {
         ) {
           setTab(tab as TabKey);
         }
-  } catch (e) {}
+      } catch (e) {}
     };
     window.addEventListener("ndn:change-tab" as any, onTabChange as any);
     return () =>
@@ -459,17 +599,75 @@ export default function App() {
       const data = await res.json();
       // Keep the full user object but attach the subscription so other components
       // can make decisions based on more detailed subscription metadata (expiresAt, source, status).
-      setUserWithMerge({ ...u, fullAccess: !!data?.fullAccess, subscription: data });
+      setUserWithMerge({
+        ...u,
+        fullAccess: !!data?.fullAccess,
+        subscription: data,
+      });
       try {
-        if (u?.email) localStorage.setItem(`ndn:subscription:${u.email}`, JSON.stringify(data));
+        if (u?.email)
+          localStorage.setItem(
+            `ndn:subscription:${u.email}`,
+            JSON.stringify(data),
+          );
       } catch {}
-  } catch (e) {}
+    } catch (e) {}
   }
 
   // Header notification state: show an alert if subscription is expiring in <= 3 days, or expired
   const [showSubscriptionsBell, setShowSubscriptionsBell] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [siteNotifications, setSiteNotifications] = useState<any[]>([]);
+  const [friendRequestCount, setFriendRequestCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+  const notificationAnchorRef = useRef<HTMLDivElement | null>(null);
+
+  const refreshNotifications = useCallback(async () => {
+    if (!user?.email) return [] as any[];
+    try {
+      const token = localStorage.getItem("authToken");
+      const headers: Record<string, string> = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(
+        `/api/notifications?email=${encodeURIComponent(user.email)}`,
+        { headers },
+      );
+      if (!res.ok) return [];
+      return (await res.json()) || [];
+    } catch (err) {
+      return [];
+    }
+  }, [user?.email]);
+
+  const refreshFriendCounts = useCallback(async () => {
+    if (!user?.email) {
+      setFriendRequestCount(0);
+      setUnreadMessageCount(0);
+      return;
+    }
+    try {
+      const [requestsRes, messagesRes] = await Promise.all([
+        apiFetch(
+          `/api/friends/requests?email=${encodeURIComponent(user.email)}`,
+        ),
+        apiFetch(
+          `/api/friends/messages?email=${encodeURIComponent(user.email)}`,
+        ),
+      ]);
+      const requests = requestsRes.ok
+        ? await requestsRes.json()
+        : { requests: [] };
+      const messages = messagesRes.ok
+        ? await messagesRes.json()
+        : { messages: [] };
+      setFriendRequestCount(requests.requests?.length || 0);
+      setUnreadMessageCount(
+        (messages.messages || []).filter((m: any) => !m.read).length,
+      );
+    } catch (err) {
+      console.error("Failed to refresh friend notifications:", err);
+    }
+  }, [user?.email]);
 
   useEffect(() => {
     if (!user?.subscription) {
@@ -480,7 +678,10 @@ export default function App() {
     const now = Date.now();
     let expiresAt: number | null = null;
     if (sub?.expiresAt) {
-      expiresAt = typeof sub.expiresAt === 'string' ? Date.parse(sub.expiresAt) : Number(sub.expiresAt);
+      expiresAt =
+        typeof sub.expiresAt === "string"
+          ? Date.parse(sub.expiresAt)
+          : Number(sub.expiresAt);
     }
     // Consider this expiring soon when it's within 3 days (259200000 ms)
     const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
@@ -494,7 +695,7 @@ export default function App() {
       return;
     }
     // For stripe subscriptions, a 'status' === 'active' means no bell, else show if status !== 'active'
-    if (sub?.source === 'stripe' && sub?.status && sub.status !== 'active') {
+    if (sub?.source === "stripe" && sub?.status && sub.status !== "active") {
       setShowSubscriptionsBell(true);
       return;
     }
@@ -503,24 +704,38 @@ export default function App() {
 
   // Fetch site notifications & keep in sync
   useEffect(() => {
-    if (!user?.email) return;
     let mounted = true;
-    async function fetchNotifs() {
-      try {
-        const token = localStorage.getItem('authToken');
-        const headers: any = { };
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`, { headers });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (mounted) setSiteNotifications(data || []);
-      } catch (err) {
-        // noop
-      }
+    if (!user?.email) {
+      setSiteNotifications([]);
+      return () => {
+        mounted = false;
+      };
     }
-    fetchNotifs();
-    const int = setInterval(fetchNotifs, 30000);
-    return () => { mounted = false; clearInterval(int); };
+    const poll = async () => {
+      const data = await refreshNotifications();
+      if (!mounted) return;
+      setSiteNotifications(data || []);
+    };
+    poll();
+    const int = setInterval(poll, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(int);
+    };
+  }, [refreshNotifications, user?.email]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    refreshFriendCounts();
+    const interval = setInterval(refreshFriendCounts, 30000);
+    return () => clearInterval(interval);
+  }, [refreshFriendCounts, user?.email]);
+
+  useEffect(() => {
+    if (!user?.email) {
+      setFriendRequestCount(0);
+      setUnreadMessageCount(0);
+    }
   }, [user?.email]);
 
   // If subscription is expiring soon or expired, write a persistent notification server-side
@@ -529,29 +744,51 @@ export default function App() {
     const sub = user.subscription as any;
     const now = Date.now();
     let expiresAt: number | null = null;
-    if (sub?.expiresAt) expiresAt = typeof sub.expiresAt === 'string' ? Date.parse(sub.expiresAt) : Number(sub.expiresAt);
+    if (sub?.expiresAt)
+      expiresAt =
+        typeof sub.expiresAt === "string"
+          ? Date.parse(sub.expiresAt)
+          : Number(sub.expiresAt);
     const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
     async function addSubscriptionNotification(type: string, message: string) {
       try {
-        const token = localStorage.getItem('authToken');
-        const headers: any = { 'Content-Type': 'application/json' };
+        const token = localStorage.getItem("authToken");
+        const headers: any = { "Content-Type": "application/json" };
         if (token) headers.Authorization = `Bearer ${token}`;
-        await fetch('/api/notifications', {
-          method: 'POST',
+        await fetch("/api/notifications", {
+          method: "POST",
           headers,
           body: JSON.stringify({ email: user.email, message, type }),
         });
-  } catch (e) {}
+      } catch (e) {}
     }
     if (expiresAt && expiresAt > now && expiresAt - now <= THREE_DAYS_MS) {
-      addSubscriptionNotification('sub_expiring', `Your premium subscription expires in ${Math.ceil((expiresAt - now) / (24*60*60*1000))} day(s)`);
+      addSubscriptionNotification(
+        "sub_expiring",
+        `Your premium subscription expires in ${Math.ceil((expiresAt - now) / (24 * 60 * 60 * 1000))} day(s)`,
+      );
       return;
     }
     if (expiresAt && expiresAt <= now && !user?.fullAccess) {
-      addSubscriptionNotification('sub_expired', 'Your premium subscription has ended');
+      addSubscriptionNotification(
+        "sub_expired",
+        "Your premium subscription has ended",
+      );
       return;
     }
   }, [user?.email, user?.subscription, user?.fullAccess]);
+
+  useEffect(() => {
+    if (!notificationsOpen) return;
+    // Only handle Escape key - click outside is handled by the modal backdrop
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setNotificationsOpen(false);
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [notificationsOpen]);
 
   if (!user) {
     return (
@@ -559,7 +796,8 @@ export default function App() {
         onAuth={(u: any) => {
           try {
             const cached = localStorage.getItem(`ndn:subscription:${u.email}`);
-            if (cached) setUserWithMerge({ ...u, subscription: JSON.parse(cached) });
+            if (cached)
+              setUserWithMerge({ ...u, subscription: JSON.parse(cached) });
             else setUserWithMerge(u);
           } catch {
             setUserWithMerge(u);
@@ -569,7 +807,62 @@ export default function App() {
       />
     );
   }
-  const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username || "NDN")}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`;
+  const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    user.username || "NDN",
+  )}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`;
+  const notificationText = (n: any) =>
+    `${n.type || ""} ${n.message || ""}`.trim();
+  const tournamentNotifs = siteNotifications.filter((n) =>
+    /(tournament|bracket)/i.test(notificationText(n)),
+  ).length;
+  const checkinNotifs = siteNotifications.filter((n) =>
+    /(check[-_\s]?in)/i.test(notificationText(n)),
+  ).length;
+  const matchInviteNotifs = siteNotifications.filter((n) =>
+    /(match|invite)/i.test(notificationText(n)),
+  ).length;
+  const unreadSiteCount = siteNotifications.filter((n) => !n.read).length;
+  const totalBadgeCount = Math.min(
+    99,
+    unreadSiteCount + friendRequestCount + unreadMessageCount,
+  );
+  const notificationPanelItems = [
+    {
+      key: "tournaments",
+      label: "Tournament Closures",
+      description: "Bracket updates, payouts, and notices.",
+      count: tournamentNotifs,
+      icon: Trophy,
+    },
+    {
+      key: "checkins",
+      label: "Check-ins",
+      description: "Venue reminders and start-of-round checks.",
+      count: checkinNotifs,
+      icon: CalendarDays,
+    },
+    {
+      key: "match-invites",
+      label: "Match Invites",
+      description: "Pending matches ready to accept.",
+      count: matchInviteNotifs,
+      icon: Handshake,
+    },
+    {
+      key: "friend-requests",
+      label: "Friend Requests",
+      description: "Accept or decline new connections.",
+      count: friendRequestCount,
+      icon: Users,
+    },
+    {
+      key: "messages",
+      label: "Messages",
+      description: "Unread chats and replies.",
+      count: unreadMessageCount,
+      icon: MessageCircle,
+    },
+  ];
   return (
     <ThemeProvider>
       <div
@@ -592,214 +885,163 @@ export default function App() {
           )}
           {/* Wrap header + scroller in a column so header stays static and only content scrolls below it */}
           <div className="flex flex-col h-full overflow-hidden">
-            <div className="pt-1 xs:pt-2">
+            <div className="pt-1 xs:pt-2 relative z-50">
               <header
                 id="ndn-header"
-                className={`header glass flex-col xs:flex-col sm:flex-row gap-2 xs:gap-2 sm:gap-3`}
+                data-testid="ndn-header"
+                className={`header glass flex items-center justify-between gap-2 sm:gap-4 transition-all duration-200 ${
+                  isCompact ? "py-1 px-3" : "py-3 px-6"
+                }`}
+                style={{ willChange: "transform" }}
               >
-                {/* Left: Brand */}
-                <div className="flex items-center gap-2 order-1">
-                  <h1>
+                {/* Left: Brand + Greeting */}
+                <div className="flex flex-col justify-center gap-1 shrink-0 min-w-[220px]">
+                  {user?.username && (
+                    <div className="flex flex-col gap-0.5 text-left -translate-y-[2px]">
+                      <div className="flex items-center gap-2">
+                        <div className="relative shrink-0">
+                          <img
+                            src={avatar || fallbackAvatar}
+                            alt="avatar"
+                            className="w-7 h-7 sm:w-9 sm:h-9 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
+                          />
+                          <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium text-white/80">
+                          Welcome,{" "}
+                          <span className="font-black text-white">
+                            {user.username}
+                          </span>{" "}
+                          👋
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap text-[11px] sm:text-xs text-white/60">
+                        <span className="uppercase tracking-[0.3em] text-white/35 text-[9px]">
+                          All-Time 3-Dart Avg
+                        </span>
+                        <span className="text-base sm:text-lg font-black text-white tracking-tight">
+                          {allTimeAvg.toFixed(1)}
+                        </span>
+                        {normalizedDelta !== 0 ? (
+                          <span
+                            className={`flex items-center gap-1 text-[11px] sm:text-xs font-semibold ${
+                              normalizedDelta > 0
+                                ? "text-emerald-300"
+                                : "text-rose-300"
+                            }`}
+                          >
+                            {normalizedDelta > 0 ? (
+                              <ArrowUpRight className="w-3 h-3" />
+                            ) : (
+                              <ArrowDownRight className="w-3 h-3" />
+                            )}
+                            {normalizedDelta > 0 ? "+" : ""}
+                            {normalizedDelta.toFixed(1)} vs yesterday
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-white/40">
+                            Steady today
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Center brand display */}
+                <div className="flex-1 flex justify-center px-2">
+                  <h1 className="w-full sm:w-auto">
                     <button
                       type="button"
-                      className="text-lg xs:text-xl sm:text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap cursor-pointer select-none"
+                      className="w-full sm:w-auto flex items-center justify-center rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-base xs:text-xl sm:text-2xl font-black text-white tracking-tighter drop-shadow-lg whitespace-nowrap cursor-pointer select-none hover:bg-black/50 transition-colors"
                       onClick={() => {
                         setTab("score");
                       }}
                       title={"Go Home"}
                     >
-                      NINE-DART-NATION 🎯
+                      <span className="xs:hidden">NDN 🎯</span>
+                      <span className="hidden xs:inline">
+                        NINE-DART-NATION 🎯
+                      </span>
                     </button>
                   </h1>
                 </div>
-                {/* Middle: Welcome band (full width on mobile) */}
-                <div className="order-3 xs:order-3 sm:order-2 w-full sm:w-auto flex-1 flex flex-col items-center justify-center text-center sm:text-left !text-black">
-                  <span
-                    className="text-sm xs:text-base sm:text-base md:text-lg font-semibold flex items-center gap-2 max-w-full truncate !text-black"
-                    style={{ color: "#000000", WebkitTextFillColor: "#000000" }}
-                  >
-                    <span className="hidden xs:inline !text-black">
-                      Welcome
-                    </span>
-                    <img
-                      src={avatar || fallbackAvatar}
-                      alt="avatar"
-                      className="w-5 h-5 xs:w-6 xs:h-6 sm:w-6 sm:h-6 md:w-7 md:h-7 rounded-full ring-2 ring-white/20"
-                    />
-                    <span
-                      className="truncate !text-black"
-                      style={{
-                        color: "#000000",
-                        WebkitTextFillColor: "#000000",
+
+                {/* Right: Status + Actions */}
+                <div
+                  className="flex items-center gap-1.5 sm:gap-3 shrink-0"
+                  ref={notificationAnchorRef}
+                >
+                  {/* Calibration Status (Desktop) */}
+                  {!isMobile && calibLocked && calibH && (
+                    <button
+                      onClick={() => setTab("calibrate")}
+                      className="flex px-3 py-1.5 text-[10px] rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition-all items-center gap-2 group"
+                      title="Click to adjust calibration"
+                    >
+                      <div className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </div>
+                      <span className="font-bold tracking-wide uppercase hidden lg:inline">
+                        Calibrated ✅
+                      </span>
+                    </button>
+                  )}
+
+                  <div className="flex items-center gap-1 sm:gap-2 bg-black/20 p-1 rounded-full border border-white/5">
+                    <button
+                      className="px-2 sm:px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full bg-white/5 hover:bg-white/10 text-white transition-all"
+                      onClick={() => {
+                        const el = appRef.current;
+                        if (!el) return;
+                        if (!document.fullscreenElement)
+                          el.requestFullscreen().catch(() => {});
+                        else document.exitFullscreen().catch(() => {});
                       }}
                     >
-                      {user.username}🎯
-                    </span>
-                  </span>
-                  <span
-                    className="hidden xs:inline text-xs xs:text-xs sm:text-xs md:text-sm !text-black"
-                    style={{ color: "#000000", WebkitTextFillColor: "#000000" }}
-                  >
-                    All-time 3-dart avg:{" "}
-                    <span
-                      className="font-semibold !text-black"
-                      style={{
-                        color: "#000000",
-                        WebkitTextFillColor: "#000000",
-                      }}
+                      {isFullscreen ? "Exit" : "Full"}
+                    </button>
+                    <CameraStatusBadge />
+                  </div>
+
+                  {!isCompact && (
+                    <div className="hidden sm:flex items-center ml-2 space-x-2">
+                      <AddToHomeButton />
+                      <InstallPicker />
+                    </div>
+                  )}
+
+                  {!isCompact && !isMobile && (
+                    <button
+                      className="relative flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-white/10 bg-white/5 text-white transition hover:bg-white/10 shadow-lg"
+                      onClick={() => setNotificationsOpen(true)}
+                      title="Notifications"
                     >
-                      {allTimeAvg.toFixed(2)}
-                    </span>
-                  </span>
+                      <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400" />
+                      {totalBadgeCount > 0 && (
+                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white shadow-xl ring-2 ring-[#13111C]">
+                          {totalBadgeCount > 9 ? "9+" : totalBadgeCount}
+                        </span>
+                      )}
+                    </button>
+                  )}
+
                   {isMobile && (
                     <button
-                      className="btn px-3 py-1 xs:px-3 xs:py-1 sm:px-3 sm:py-1 mt-1 text-sm xs:text-sm"
-                      aria-label="Open navigation"
-                      onClick={() => setNavOpen(true)}
+                      className="relative p-2 rounded-xl bg-indigo-600 text-white shadow-lg active:scale-95 transition-transform"
+                      onClick={() => setNotificationsOpen(true)}
+                      aria-label="Open Notifications"
+                      title="Notifications"
                     >
-                      ☰ Menu
-                    </button>
-                  )}
-                </div>
-                {/* Calibration Status - visible across all tabs */}
-                {calibLocked && calibH && (
-                  <button
-                    onClick={() => setTab("calibrate")}
-                    className="order-4 sm:order-4 md:order-3 px-3 py-1 text-xs sm:text-sm rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 border border-emerald-400/50 transition-colors"
-                    title="Click to adjust calibration"
-                  >
-                    ✓ Calibration Active{" "}
-                    {errorPx != null && `• ${errorPx.toFixed(1)}px`}
-                  </button>
-                )}
-                {/* Right: Status + Actions */}
-                <div className="order-2 md:order-3 ml-0 md:ml-auto flex items-center gap-2 flex-wrap">
-                  <button
-                    className="px-3 py-1 text-sm rounded-full bg-white/5 hover:bg-white/10 border border-white/10"
-                    onClick={() => {
-                      const el = appRef.current;
-                      if (!el) return;
-                      if (!document.fullscreenElement)
-                        el.requestFullscreen().catch(() => {});
-                      else document.exitFullscreen().catch(() => {});
-                    }}
-                    title={
-                      isFullscreen ? "Exit Full Screen" : "Enter Full Screen"
-                    }
-                  >
-                    {isFullscreen ? "Exit Full Screen" : "Full Screen"}
-                  </button>
-                  {tab === "online" && (
-                    <button
-                      className="text-[10px] md:text-xs px-3 py-1 rounded-full bg-indigo-500/25 text-indigo-100 border border-indigo-400/40 hover:bg-indigo-500/40"
-                      title="Open a simulated online match"
-                      onClick={() => {
-                        setTimeout(() => {
-                          try {
-                            window.dispatchEvent(
-                              new CustomEvent("ndn:online-match-demo", {
-                                detail: { game: "X01", start: 501 },
-                              }),
-                            );
-                          } catch (e) {}
-                        }, 40);
-                      }}
-                    >
-                      ONLINE DEMO
-                    </button>
-                  )}
-                  {/* Camera status badge */}
-                  <CameraStatusBadge />
-                  
-                  {ws ? (
-                    <span className="ml-0 md:ml-2">
-                      <StatusDot status={ws.status} />
-                    </span>
-                  ) : null}
-                  {/* Subscription expiration / warning bell - move after WS status */}
-                  {/* (Notifications are positioned after StatusDot to appear to the right of the connected badge) */}
-                  {(siteNotifications.length > 0 || showSubscriptionsBell) && (
-                    <>
-                      <div className="relative ml-2 flex items-center space-x-2">
-                      <button
-                        className="px-2 py-1 text-sm rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-2"
-                        onClick={() => setNotificationsOpen((s) => !s)}
-                        aria-label="View notifications"
-                        title="Notifications"
-                      >
-                        <Bell className="w-5 h-5 text-amber-400" />
-                        {/* Unread count */}
-                        {siteNotifications.filter(n => !n.read).length > 0 && (
-                          <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-rose-500 rounded-full">{siteNotifications.filter(n => !n.read).length > 9 ? '9+' : siteNotifications.filter(n => !n.read).length}</span>
-                        )}
-                      </button>
-                      {notificationsOpen && (
-                        <div className="absolute right-0 mt-2 w-80 card p-3 z-50">
-                          <div className="font-semibold mb-2">Notifications</div>
-                          <div className="space-y-2">
-                            {siteNotifications.length === 0 && (
-                              <div className="text-sm opacity-70">No notifications</div>
-                            )}
-                            {siteNotifications.map((n) => (
-                              <div key={n.id} className={`p-2 rounded ${n.type?.startsWith('sub') ? 'bg-amber-900/10' : 'bg-black/10'}`}>
-                                <div className="text-sm mb-1">{n.message}</div>
-                                <div className="text-xs opacity-60 flex items-center justify-between">
-                                  <span>{new Date(n.createdAt).toLocaleString()}</span>
-                                  <div className="flex gap-2 items-center">
-                                    {!n.read && (
-                                      <button
-                                        className="text-xs px-2 py-0.5 rounded bg-emerald-600 text-black"
-                                          onClick={async () => {
-                                          try {
-                                            const btnToken = localStorage.getItem('authToken');
-                                            const headers: any = { 'Content-Type': 'application/json' };
-                                            if (btnToken) headers.Authorization = `Bearer ${btnToken}`;
-                                            await fetch(`/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`, { method: 'PATCH', headers, body: JSON.stringify({ read: true }) });
-                                            const btnRefetchToken = localStorage.getItem('authToken');
-                                            const refetchHeaders: any = {};
-                                            if (btnRefetchToken) refetchHeaders.Authorization = `Bearer ${btnRefetchToken}`;
-                                            const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`, { headers: refetchHeaders });
-                                            if (res.ok) setSiteNotifications(await res.json());
-                                          } catch (e) {}
-                                        }}
-                                      >
-                                        Mark read
-                                      </button>
-                                    )}
-                                    <button
-                                      className="text-xs px-2 py-0.5 rounded bg-rose-600 text-white"
-                                      onClick={async () => {
-                                        try {
-                                            const btnDeleteToken = localStorage.getItem('authToken');
-                                            const headers: any = {};
-                                            if (btnDeleteToken) headers.Authorization = `Bearer ${btnDeleteToken}`;
-                                            await fetch(`/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`, { method: 'DELETE', headers });
-                                          const token = localStorage.getItem('authToken');
-                                          const refetchHeaders: any = {};
-                                          if (token) refetchHeaders.Authorization = `Bearer ${token}`;
-                                          const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`, { headers: refetchHeaders });
-                                          if (res.ok) setSiteNotifications(await res.json());
-                                        } catch (e) {}
-                                      }}
-                                    >
-                                      Clear
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
+                      <Bell className="w-5 h-5 text-amber-300" />
+                      {totalBadgeCount > 0 && (
+                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white shadow-xl ring-2 ring-[#13111C]">
+                          {totalBadgeCount > 9 ? "9+" : totalBadgeCount}
+                        </span>
                       )}
-                      </div>
-                      {/* Add an install picker next to the notifications to allow users to install or download a native build */}
-                      <div className="hidden sm:flex items-center ml-2 space-x-2">
-                        <AddToHomeButton />
-                        <InstallPicker />
-                      </div>
-                    </>
+                    </button>
                   )}
-                  {/* Protocol pill removed per request: keep green connected badge only */}
                 </div>
               </header>
             </div>
@@ -819,10 +1061,15 @@ export default function App() {
             <main
               id="ndn-main-scroll"
               className="space-y-4 flex-1 overflow-y-auto pr-1 flex flex-col"
+              style={{
+                willChange: "scroll-position",
+                transform: "translateZ(0)", // GPU-accelerated scrolling
+                WebkitOverflowScrolling: "touch", // Smooth scrolling on iOS
+              }}
             >
               {tab === "settings" && (
                 <Suspense
-                  fallback={<div className="p-4">Loading settings…</div>}
+                  fallback={<div className="p-4">Loading settings...</div>}
                 >
                   <ScrollFade className="flex-1 min-h-0">
                     <SettingsPanel user={user} />
@@ -830,14 +1077,16 @@ export default function App() {
                 </Suspense>
               )}
               {tab === "score" && (
-                <Suspense fallback={<div className="p-4">Loading home…</div>}>
+                <Suspense fallback={<div className="p-4">Loading home...</div>}>
                   <ScrollFade className="flex-1 min-h-0">
                     <Home user={user} />
                   </ScrollFade>
                 </Suspense>
               )}
               {tab === "online" && (
-                <Suspense fallback={<div className="p-4">Loading online…</div>}>
+                <Suspense
+                  fallback={<div className="p-4">Loading online...</div>}
+                >
                   <ScrollFade className="flex-1 min-h-0">
                     <OnlinePlay user={user} />
                   </ScrollFade>
@@ -845,7 +1094,7 @@ export default function App() {
               )}
               {tab === "offline" && (
                 <Suspense
-                  fallback={<div className="p-4">Loading offline…</div>}
+                  fallback={<div className="p-4">Loading offline...</div>}
                 >
                   <ScrollFade className="flex-1 min-h-0">
                     <OfflinePlay user={user} />
@@ -860,7 +1109,7 @@ export default function App() {
               </div>
               {tab === "friends" && (
                 <Suspense
-                  fallback={<div className="p-4">Loading friends…</div>}
+                  fallback={<div className="p-4">Loading friends...</div>}
                 >
                   <ScrollFade className="flex-1 min-h-0">
                     <Friends user={user} />
@@ -868,7 +1117,9 @@ export default function App() {
                 </Suspense>
               )}
               {tab === "stats" && (
-                <Suspense fallback={<div className="p-4">Loading stats…</div>}>
+                <Suspense
+                  fallback={<div className="p-4">Loading stats...</div>}
+                >
                   <ScrollFade className="flex-1 min-h-0">
                     <StatsPanel user={user} />
                   </ScrollFade>
@@ -876,7 +1127,7 @@ export default function App() {
               )}
               {tab === "tournaments" && (
                 <Suspense
-                  fallback={<div className="p-4">Loading tournaments…</div>}
+                  fallback={<div className="p-4">Loading tournaments...</div>}
                 >
                   <ScrollFade className="flex-1 min-h-0">
                     <Tournaments user={user} />
@@ -884,7 +1135,9 @@ export default function App() {
                 </Suspense>
               )}
               {tab === "admin" && (
-                <Suspense fallback={<div className="p-4">Loading admin…</div>}>
+                <Suspense
+                  fallback={<div className="p-4">Loading admin...</div>}
+                >
                   <ScrollFade className="flex-1 min-h-0">
                     <div className="flex-1 min-h-0 space-y-6">
                       <AdminDashboard user={user} />
@@ -895,7 +1148,7 @@ export default function App() {
               )}
               {tab === "fullaccess" && (
                 <Suspense
-                  fallback={<div className="p-4">Loading admin access…</div>}
+                  fallback={<div className="p-4">Loading admin access...</div>}
                 >
                   <ScrollFade className="flex-1 min-h-0">
                     <AdminAccess user={user} />
@@ -921,9 +1174,270 @@ export default function App() {
       {/* Debug banner removed - not shown to users in production builds */}
       {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
       {!minimalUI && <GlobalCameraLogger />}
+      {/* Full Screen Notification Modal - Moved to root level for proper overlay */}
+      {notificationsOpen && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+          onClick={() => setNotificationsOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="relative w-full max-w-4xl max-h-[85vh] overflow-y-auto rounded-3xl border border-white/10 bg-[#13111C] p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Background pattern */}
+            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none mix-blend-overlay"></div>
+            {/* Decorative glow */}
+            <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none"></div>
+            <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none"></div>
+
+            <button
+              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-white transition z-10"
+              onClick={() => setNotificationsOpen(false)}
+              aria-label="Close notifications"
+            >
+              ×
+            </button>
+
+            <div className="relative z-10 flex items-center gap-4 mb-8 border-b border-white/5 pb-6">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-amber-400 shadow-lg shadow-amber-500/10 ring-1 ring-white/10">
+                <Bell className="h-8 w-8" />
+              </div>
+              <div>
+                <h2 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/50 tracking-tight">
+                  Notifications
+                </h2>
+                <p className="text-sm text-white/50 font-medium">
+                  Stay updated with your latest activity
+                </p>
+              </div>
+            </div>
+
+            <div className="relative z-10">
+              {/* Premium Warning */}
+              {showSubscriptionsBell && (
+                <div className="mb-8 rounded-2xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 flex flex-col sm:flex-row items-start gap-5 shadow-lg shadow-amber-500/5">
+                  <div className="p-3 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 ring-1 ring-amber-500/30">
+                    <Trophy className="h-6 w-6" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-bold text-lg text-amber-200">
+                      Premium Subscription Alert
+                    </h3>
+                    <p className="text-sm text-amber-100/70 mt-1 leading-relaxed">
+                      Your premium subscription is expiring soon or has expired.
+                      Renew now to keep full access to all features!
+                    </p>
+                    <button
+                      onClick={() => {
+                        setNotificationsOpen(false);
+                        setTab("settings");
+                      }}
+                      className="mt-4 px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold text-sm hover:shadow-lg hover:shadow-amber-500/25 hover:scale-105 transition-all duration-200"
+                    >
+                      Manage Subscription
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+                {notificationPanelItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div
+                      key={item.key}
+                      className="group flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 hover:border-white/10 transition-all duration-200 cursor-pointer hover:shadow-xl hover:shadow-black/20 hover:-translate-y-0.5"
+                      onClick={() => {
+                        setNotificationsOpen(false);
+                        if (
+                          item.key === "friend-requests" ||
+                          item.key === "messages"
+                        )
+                          setTab("friends");
+                        if (item.key === "tournaments") setTab("tournaments");
+                        // Add other navigations as needed
+                      }}
+                    >
+                      <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-500/20 group-hover:text-indigo-300 group-hover:scale-110 transition-all duration-300 ring-1 ring-white/5">
+                        <Icon className="h-6 w-6" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-white group-hover:text-indigo-200 transition-colors">
+                          {item.label}
+                        </h3>
+                        <p className="text-xs text-white/50 group-hover:text-white/70 transition-colors">
+                          {item.description}
+                        </p>
+                      </div>
+                      {item.count > 0 && (
+                        <span className="px-3 py-1 rounded-full bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-500/30 animate-pulse">
+                          {item.count}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xs font-bold text-white/40 uppercase tracking-[0.2em]">
+                  Recent Activity
+                </h3>
+                {siteNotifications.length > 0 && (
+                  <span className="text-xs font-medium text-white/30 bg-white/5 px-2 py-1 rounded-md">
+                    {siteNotifications.length} total
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                {siteNotifications.length === 0 ? (
+                  <div className="text-center py-16 rounded-3xl border border-dashed border-white/10 bg-white/[0.02]">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-white/5 flex items-center justify-center text-white/20">
+                      <Bell className="h-8 w-8" />
+                    </div>
+                    <p className="text-white/40 font-medium">
+                      No recent notifications
+                    </p>
+                    <p className="text-xs text-white/20 mt-1">
+                      You're all caught up!
+                    </p>
+                  </div>
+                ) : (
+                  siteNotifications.map((n) => (
+                    <div
+                      key={n.id}
+                      className={`relative overflow-hidden rounded-2xl border p-5 transition-all duration-200 group ${n.read ? "bg-white/[0.02] border-white/5 hover:bg-white/5" : "bg-white/10 border-white/10 hover:bg-white/15 shadow-lg shadow-black/20"}`}
+                    >
+                      {!n.read && (
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-rose-500 to-orange-500"></div>
+                      )}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={`text-[0.65rem] font-bold uppercase tracking-wider px-2 py-1 rounded-md ring-1 ring-inset ${n.read ? "bg-white/5 text-white/40 ring-white/5" : "bg-rose-500/10 text-rose-300 ring-rose-500/20"}`}
+                          >
+                            {n.type || "General"}
+                          </span>
+                          <span className="text-xs text-white/30 font-medium">
+                            {new Date(n.createdAt).toLocaleDateString(
+                              undefined,
+                              {
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              },
+                            )}
+                          </span>
+                        </div>
+                        {!n.read && (
+                          <span className="self-start sm:self-auto rounded-full bg-rose-500 px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-widest text-white shadow-sm shadow-rose-500/20">
+                            New
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-sm font-medium text-white/90 leading-relaxed pl-1">
+                        {n.message}
+                      </p>
+
+                      {n.link && (
+                        <a
+                          href={n.link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors bg-emerald-500/10 px-3 py-1.5 rounded-lg hover:bg-emerald-500/20"
+                        >
+                          Open Link ↗
+                        </a>
+                      )}
+
+                      <div className="mt-4 flex items-center gap-3 border-t border-white/5 pt-3 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                        {!n.read && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                const token = localStorage.getItem("authToken");
+                                await fetch(
+                                  `/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`,
+                                  {
+                                    method: "PATCH",
+                                    headers: {
+                                      "Content-Type": "application/json",
+                                      Authorization: `Bearer ${token}`,
+                                    },
+                                    body: JSON.stringify({ read: true }),
+                                  },
+                                );
+                                const updated = await refreshNotifications();
+                                if (updated) setSiteNotifications(updated);
+                              } catch (err) {}
+                            }}
+                            className="text-xs font-bold text-white/50 hover:text-white transition-colors uppercase tracking-wider"
+                          >
+                            Mark as read
+                          </button>
+                        )}
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!confirm("Delete this notification?")) return;
+                            try {
+                              const token = localStorage.getItem("authToken");
+                              await fetch(
+                                `/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`,
+                                {
+                                  method: "DELETE",
+                                  headers: { Authorization: `Bearer ${token}` },
+                                },
+                              );
+                              const updated = await refreshNotifications();
+                              if (updated) setSiteNotifications(updated);
+                            } catch (err) {}
+                          }}
+                          className="text-xs font-bold text-rose-400/50 hover:text-rose-400 transition-colors ml-auto uppercase tracking-wider"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Global phone camera overlay - visibility controlled by store */}
       {/* Keep a hidden global video element alive across navigation */}
       {!minimalUI && <GlobalPhoneVideoSink />}
+      {/* Camera warm-up: keep an offscreen CameraView mounted when camera is enabled so
+          entering game modes (offline/online/tournaments) shows the feed instantly. */}
+      {cameraEnabled && (
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            left: -9999,
+            width: 320,
+            height: 240,
+            overflow: "hidden",
+            pointerEvents: "none",
+            opacity: 0,
+          }}
+        >
+          <CameraView
+            showToolbar={false}
+            hideInlinePanels
+            scoringMode="custom"
+            immediateAutoCommit={false}
+          />
+        </div>
+      )}
     </ThemeProvider>
   );
 }

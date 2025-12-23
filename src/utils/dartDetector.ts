@@ -1,4 +1,4 @@
-// High-accuracy dart detector for built-in autoscore
+﻿// High-accuracy dart detector for built-in autoscore
 // Strategy:
 // - Maintain a grayscale background model (running average) when no darts are present
 // - For each frame, compute abs-diff mask vs background and apply a 3x3 morphological closing to reduce noise
@@ -103,6 +103,7 @@ export class DartDetector {
     const bg = this.bg!;
     if (!this.initialized) {
       this.updateBackground(frame, 1.0);
+      console.log("[DETECTOR] Background not initialized yet");
       return null;
     }
 
@@ -196,6 +197,15 @@ export class DartDetector {
     if (!bestIdxs || bestArea < this.minArea || bestArea > this.maxArea) {
       // Slowly update background when no valid detection to adapt lighting
       if (!recent) this.updateBackground(frame, 0.02);
+      // Log occasionally to show why rejection happens
+      if (Math.random() < 0.02) {
+        console.log("[DETECTOR] No valid blob:", {
+          bestArea,
+          minArea: this.minArea,
+          maxArea: this.maxArea,
+          hasBlob: !!bestIdxs,
+        });
+      }
       return null;
     }
 
@@ -263,9 +273,13 @@ export class DartDetector {
       ry = dyc / rlen;
     const cosAng = Math.max(-1, Math.min(1, vx * rx + vy * ry));
     const angDeg = (Math.acos(cosAng) * 180) / Math.PI;
-  if (angDeg > this.angMaxDeg) {
+    if (angDeg > this.angMaxDeg) {
       // likely glare or non-radial artifact
       if (!recent) this.updateBackground(frame, 0.02);
+      console.log("[DETECTOR] Rejected - angle too large:", {
+        angDeg,
+        maxAllowed: this.angMaxDeg,
+      });
       return null;
     }
 
@@ -310,10 +324,26 @@ export class DartDetector {
     // Optionally, we can inpaint the blob into background upon acceptance by caller
 
     // Temporal stabilization: require 2+ consistent frames for the same dart
-  const stable = this._isStable({ x: tipX + 0.5, y: tipY + 0.5 }, bestArea);
-    if (!stable) return null;
+    const stable = this._isStable({ x: tipX + 0.5, y: tipY + 0.5 }, bestArea);
+    if (!stable) {
+      console.log("[DETECTOR] Waiting for stability:", {
+        stableCount: this.stableCount,
+        needFrames: this.requireStableN,
+      });
+      return null;
+    }
     // Debounce
-    if (recent) return null;
+    if (recent) {
+      console.log("[DETECTOR] In cooldown period");
+      return null;
+    }
+
+    console.log("[DETECTOR] ✅ DART FOUND!", {
+      tipX,
+      tipY,
+      area: bestArea,
+      confidence,
+    });
 
     return {
       tip: { x: tipX + 0.5, y: tipY + 0.5 },

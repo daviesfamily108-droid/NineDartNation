@@ -1,4 +1,4 @@
-export type AmCricketMark = 0 | 1 | 2 | 3;
+﻿export type AmCricketMark = 0 | 1 | 2 | 3;
 export type AmCricketNumber = 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 20 | 25;
 
 export type AmCricketState = {

@@ -1,7 +1,8 @@
-import React, {
+﻿import React, {
   PropsWithChildren,
   useEffect,
   useRef,
+  useState,
   type CSSProperties,
 } from "react";
 
@@ -16,83 +17,48 @@ export default function ScrollFade({
   style,
 }: ScrollFadeProps) {
   const ref = useRef<HTMLDivElement | null>(null);
+  const [maskHeight, setMaskHeight] = useState(0);
 
-  // Clip content under the sticky header so text never shows over it
+  // Use CSS-based mask with GPU acceleration instead of DOM manipulation
   useEffect(() => {
     let raf = 0;
-    const updateClip = () => {
-      const wrapper = ref.current;
-      if (!wrapper) return;
-      const header = document.getElementById(
-        "ndn-header",
-      ) as HTMLElement | null;
+    let lastMaskHeight = 0;
+
+    const updateMask = () => {
+      const header = document.getElementById("ndn-header");
       if (!header) {
-        wrapper.style.clipPath = "";
+        if (lastMaskHeight !== 0) {
+          lastMaskHeight = 0;
+          setMaskHeight(0);
+        }
         return;
       }
-      const scroller = document.getElementById(
-        "ndn-main-scroll",
-      ) as HTMLElement | null;
+      const scroller = document.getElementById("ndn-main-scroll");
       const scrollTop = scroller ? scroller.scrollTop : window.scrollY || 0;
-      // Hide content under the sticky header by rendering a lightweight mask
-      // element at the top of the wrapper. Using an overlay avoids layout shifts
-      // and prevents clip-path + transform interactions that can cause rendering
-      // artifacts in some browsers.
       const headerH = header.getBoundingClientRect().height;
-      const overlap = scrollTop > 0 ? headerH : 0;
-      try {
-        // Find or create the mask node
-        let mask = wrapper.querySelector(
-          "[data-ndn-top-mask]",
-        ) as HTMLElement | null;
-        if (!mask) {
-          mask = document.createElement("div");
-          mask.setAttribute("data-ndn-top-mask", "1");
-          // keep it non-interactive and on top of the wrapper content
-          Object.assign(mask.style, {
-            position: "absolute",
-            left: "0px",
-            right: "0px",
-            top: "0px",
-            height: "0px",
-            pointerEvents: "none",
-            zIndex: "20",
-            background:
-              "linear-gradient(to bottom, rgba(17,24,39,1), rgba(17,24,39,0))",
-          });
-          wrapper.style.position = wrapper.style.position || "relative";
-          wrapper.insertBefore(mask, wrapper.firstChild);
-        }
-        if (overlap > 0) {
-          mask.style.height = `${overlap}px`;
-          mask.style.display = "";
-        } else {
-          mask.style.height = "0px";
-          mask.style.display = "none";
-        }
-        // keep layout position unchanged
-        wrapper.style.marginTop = "0px";
-      } catch (e) {
-        wrapper.style.marginTop = "0px";
+      const newMaskHeight = scrollTop > 0 ? headerH : 0;
+
+      // Only update state if mask height changed significantly
+      if (Math.abs(newMaskHeight - lastMaskHeight) > 1) {
+        lastMaskHeight = newMaskHeight;
+        setMaskHeight(newMaskHeight);
       }
     };
-    updateClip();
+
+    updateMask();
+
     const onScrollOrResize = () => {
       if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(updateClip);
+      raf = requestAnimationFrame(updateMask);
     };
-    // Listen to the app's main scroll container instead of window
+
     const scroller = document.getElementById("ndn-main-scroll");
-    scroller?.addEventListener(
-      "scroll",
-      onScrollOrResize as any,
-      { passive: true } as any,
-    );
-    // Fallback to window for safety (mobile or non-standard layouts)
+    scroller?.addEventListener("scroll", onScrollOrResize, { passive: true });
     window.addEventListener("scroll", onScrollOrResize, { passive: true });
-    window.addEventListener("resize", onScrollOrResize);
+    window.addEventListener("resize", onScrollOrResize, { passive: true });
+
     return () => {
-      scroller?.removeEventListener("scroll", onScrollOrResize as any);
+      scroller?.removeEventListener("scroll", onScrollOrResize);
       window.removeEventListener("scroll", onScrollOrResize);
       window.removeEventListener("resize", onScrollOrResize);
       if (raf) cancelAnimationFrame(raf);
@@ -100,7 +66,33 @@ export default function ScrollFade({
   }, []);
 
   return (
-    <div ref={ref} className={className} style={style}>
+    <div
+      ref={ref}
+      className={className}
+      style={{
+        ...style,
+        position: "relative",
+        willChange: "transform",
+        transform: "translateZ(0)", // Force GPU layer
+      }}
+    >
+      {maskHeight > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            top: 0,
+            height: maskHeight,
+            pointerEvents: "none",
+            zIndex: 20,
+            background:
+              "linear-gradient(to bottom, rgba(17,24,39,1), rgba(17,24,39,0))",
+            willChange: "height",
+            transform: "translateZ(0)",
+          }}
+        />
+      )}
       {children}
     </div>
   );

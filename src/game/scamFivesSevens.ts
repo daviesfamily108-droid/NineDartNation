@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Scam, Fives, and Sevens game logic
  * All three follow a similar score-race pattern:
  * - Players accumulate scores

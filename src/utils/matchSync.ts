@@ -1,4 +1,4 @@
-// Lightweight match state sync helper using BroadcastChannel + localStorage
+﻿// Lightweight match state sync helper using BroadcastChannel + localStorage
 import { useMatch } from "../store/match";
 import { useMatchControl } from "../store/matchControl";
 import { broadcastMessage, subscribeMatchSync } from "./broadcast";
@@ -26,8 +26,8 @@ function getSnapshotState() {
     // UI hints: some UI state like selectedMode is local to OfflinePlay; try to include a cached value if present
     let ui: any = {};
     try {
-      if (typeof localStorage !== 'undefined') {
-        const sel = localStorage.getItem('ndn:selectedMode');
+      if (typeof localStorage !== "undefined") {
+        const sel = localStorage.getItem("ndn:selectedMode");
         ui.selectedMode = sel || null;
       }
     } catch (e) {
@@ -51,9 +51,10 @@ export function writeMatchSnapshot() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     // broadcast snapshot
     try {
-      const bc = new BroadcastChannel(CHANNEL);
-      bc.postMessage({ type: "snapshot", state });
-      bc.close();
+      // Use the app-wide broadcast helper to ensure we don't instantiate a
+      // native Node BroadcastChannel directly (which can throw in tests).
+      // This lets unit tests mock BroadcastChannel or fall back to localStorage.
+      broadcastMessage({ type: "snapshot", state });
     } catch {}
   } catch (e) {}
 }

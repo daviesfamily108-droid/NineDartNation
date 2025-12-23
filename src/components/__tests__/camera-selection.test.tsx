@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { render, cleanup } from "@testing-library/react";
 import OfflinePlay from "../OfflinePlay";
 import { useUserSettings } from "../../store/userSettings";

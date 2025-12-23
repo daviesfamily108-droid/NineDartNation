@@ -1,4 +1,13 @@
-import { BoardRadii, drawPolyline, sampleRing, scaleHomography, type Point, applyHomography, drawCross, refinePointSobel, imageToBoard } from "../utils/vision";
+﻿import {
+  BoardRadii,
+  drawPolyline,
+  sampleRing,
+  scaleHomography,
+  type Point,
+  applyHomography,
+  refinePointSobel,
+  imageToBoard,
+} from "../utils/vision";
 import {
   useCallback,
   useEffect,
@@ -7,6 +16,7 @@ import {
   forwardRef,
   useImperativeHandle,
 } from "react";
+import type { MutableRefObject } from "react";
 import { dlog } from "../utils/logger";
 import { useUserSettings } from "../store/userSettings";
 import { useCalibration } from "../store/calibration";
@@ -41,14 +51,85 @@ const AUTO_COMMIT_HOLD_MS = 200;
 // Use a small cooldown even in tests to reduce non-deterministic duplicate commits
 const AUTO_COMMIT_COOLDOWN_MS = process.env.NODE_ENV === "test" ? 150 : 400;
 const AUTO_STREAM_IGNORE_MS = process.env.NODE_ENV === "test" ? 0 : 450;
-const DETECTION_ARM_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 5000;
-const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 150;
+const DETECTION_ARM_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 1000;
+const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 10;
 // Raise confidence threshold slightly to further reduce ghost detections
-const AUTO_COMMIT_CONFIDENCE = 0.9;
+const AUTO_COMMIT_CONFIDENCE = 0.7;
+// Real-world reliability: require the detected tip to be stable (low jitter)
+// across multiple frames before allowing a commit.
+// Real cameras often have small inter-frame jitter; requiring too many stable
+// frames can cause missed darts. These values aim to block flicker while still
+// committing quickly once the dart is actually in the board.
+const TIP_STABLE_MIN_FRAMES = process.env.NODE_ENV === "test" ? 1 : 2;
+const TIP_STABLE_MAX_JITTER_PX = process.env.NODE_ENV === "test" ? 999 : 7;
+// After any detection appears/disappears, wait briefly before arming so we don't
+// commit on motion blur or lighting flicker.
+const DETECTION_SETTLE_MS = process.env.NODE_ENV === "test" ? 0 : 450;
 const BOARD_CLEAR_GRACE_MS = 6500;
-const DISABLE_CAMERA_OVERLAY = true;
+const DISABLE_CAMERA_OVERLAY = false;
+// Unit tests for this repo run under Vitest and rely on CameraView's autoscore
+// effect running. We keep "TEST_MODE" disabled and use explicit NODE_ENV checks
+// for small test-only knobs.
+const TEST_MODE = false;
 
-  type AutoCandidate = {
+type FitTransform = {
+  // Map a point in the processing canvas (video pixel space) into the
+  // calibration image space used by the homography.
+  toCalibration: (pVideoPx: Point) => Point;
+};
+
+function makeFitTransform(params: {
+  videoW: number;
+  videoH: number;
+  calibW: number;
+  calibH: number;
+  fitMode: "fit" | "fill";
+}): FitTransform {
+  const { videoW, videoH, calibW, calibH, fitMode } = params;
+  const sx = videoW / calibW;
+  const sy = videoH / calibH;
+  // We assume the processing canvas matches the intrinsic video size (vw/vh).
+  // The mismatch happens because calibration was captured against a different
+  // sized image (calibW/calibH). Additionally, UI fit-mode can implicitly crop
+  // the visible region, which affects where the user thinks the tip is.
+  //
+  // We correct by projecting the *video-space* point back into calibration-space
+  // under the same contain/cover rules.
+  const vr = videoW / videoH;
+  const cr = calibW / calibH;
+  let cropXCal = 0;
+  let cropYCal = 0;
+
+  if (fitMode === "fill") {
+    // Cover: calibration image is effectively cropped to match the video aspect.
+    // Determine how much of the calibration image would be cropped.
+    if (vr > cr) {
+      // video is wider => crop calibration left/right
+      const targetWCal = calibH * vr;
+      cropXCal = Math.max(0, (targetWCal - calibW) / 2);
+    } else if (vr < cr) {
+      // video is taller => crop calibration top/bottom
+      const targetHCal = calibW / vr;
+      cropYCal = Math.max(0, (targetHCal - calibH) / 2);
+    }
+  } else {
+    // Contain: no crop, but there would be letterbox on display.
+    // Since detector works in full video pixels, we only need uniform scaling.
+    cropXCal = 0;
+    cropYCal = 0;
+  }
+
+  return {
+    toCalibration: (pVideoPx: Point) => {
+      // First map video px -> calibration px via simple scale
+      const p = { x: pVideoPx.x / sx, y: pVideoPx.y / sy };
+      // Then undo cover-cropping in calibration space (if any)
+      return { x: p.x + cropXCal, y: p.y + cropYCal };
+    },
+  };
+}
+
+type AutoCandidate = {
   value: number;
   ring: Ring;
   label: string;
@@ -85,43 +166,58 @@ export type CameraViewHandle = {
 
 export default forwardRef(function CameraView(
   {
-  onVisitCommitted,
-  showToolbar = true,
-  onAutoDart,
-  immediateAutoCommit = false,
-  hideInlinePanels = false,
-  scoringMode = "x01",
-  onGenericDart,
-  onGenericReplace,
-  x01DoubleInOverride,
-  onAddVisit,
-  onEndLeg,
-  cameraAutoCommit = "camera",
+    onVisitCommitted,
+    showToolbar = true,
+    onAutoDart,
+    immediateAutoCommit = false,
+    hideInlinePanels = false,
+    scoringMode = "x01",
+    onGenericDart,
+    onGenericReplace,
+    x01DoubleInOverride,
+    onAddVisit,
+    onEndLeg,
+    cameraAutoCommit = "camera",
   }: {
-  onVisitCommitted?: (score: number, darts: number, finished: boolean) => void;
-  showToolbar?: boolean;
-  onAutoDart?: (
-    value: number,
-    ring: "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
-    info?: { sector: number | null; mult: 0 | 1 | 2 | 3; calibrationValid?: boolean; pBoard?: Point | null },
-  ) => boolean | void | Promise<boolean | void>;
-  immediateAutoCommit?: boolean;
-  hideInlinePanels?: boolean;
-  scoringMode?: "x01" | "custom";
-  onGenericDart?: (value: number, ring: Ring, meta: { label: string }) => void;
-  onGenericReplace?: (
-    value: number,
-    ring: Ring,
-    meta: { label: string },
-  ) => void;
-  x01DoubleInOverride?: boolean;
-  onAddVisit?: (score: number, darts: number, meta?: any) => void;
-  onEndLeg?: (score?: number) => void;
+    onVisitCommitted?: (
+      score: number,
+      darts: number,
+      finished: boolean,
+    ) => void;
+    showToolbar?: boolean;
+    onAutoDart?: (
+      value: number,
+      ring: "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
+      info?: {
+        sector: number | null;
+        mult: 0 | 1 | 2 | 3;
+        calibrationValid?: boolean;
+        pBoard?: Point | null;
+      },
+    ) => boolean | void | Promise<boolean | void>;
+    immediateAutoCommit?: boolean;
+    hideInlinePanels?: boolean;
+    scoringMode?: "x01" | "custom";
+    onGenericDart?: (
+      value: number,
+      ring: Ring,
+      meta: { label: string },
+    ) => void;
+    onGenericReplace?: (
+      value: number,
+      ring: Ring,
+      meta: { label: string },
+    ) => void;
+    x01DoubleInOverride?: boolean;
+    onAddVisit?: (score: number, darts: number, meta?: any) => void;
+    onEndLeg?: (score?: number) => void;
     cameraAutoCommit?: "camera" | "parent" | "both";
   },
   ref: any,
 ) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(
+    null,
+  ) as MutableRefObject<HTMLVideoElement | null>;
   const {
     preferredCameraId,
     preferredCameraLabel,
@@ -144,7 +240,9 @@ export default forwardRef(function CameraView(
     callerVoice,
     callerVolume,
   } = useUserSettings();
-  const preserveCalibrationOverlay = useUserSettings((s) => s.preserveCalibrationOverlay);
+  const preserveCalibrationOverlay = useUserSettings(
+    (s) => s.preserveCalibrationOverlay,
+  );
   const manualOnly = autoscoreProvider === "manual";
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>(
     [],
@@ -152,7 +250,20 @@ export default forwardRef(function CameraView(
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [streaming, setStreaming] = useState(false);
+  const [videoReady, setVideoReady] = useState(false); // Track when video has dimensions
   const cameraSession = useCameraSession();
+  const handleVideoRef = useCallback(
+    (el: HTMLVideoElement | null) => {
+      (videoRef as unknown as { current: HTMLVideoElement | null }).current =
+        el;
+      try {
+        cameraSession.setVideoElementRef?.(el);
+      } catch (e) {
+        // Ignore when session store isn't available (should not happen)
+      }
+    },
+    [cameraSession],
+  );
   const isPhoneCamera = preferredCameraLabel === "Phone Camera";
   const sessionStream = cameraSession.getMediaStream?.() || null;
   const sessionStreaming = cameraSession.isStreaming;
@@ -161,12 +272,69 @@ export default forwardRef(function CameraView(
     cameraSession.mode === "phone" &&
     sessionStreaming &&
     !!sessionStream;
-  const effectiveStreaming = streaming || sessionStreaming || process.env.NODE_ENV === "test";
+  const effectiveStreaming =
+    streaming || sessionStreaming || process.env.NODE_ENV === "test";
+
   const [cameraStarting, setCameraStarting] = useState(false);
-  const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
-  const { H, imageSize, overlaySize, reset: resetCalibration, _hydrated, locked, errorPx } = useCalibration();
-  const ERROR_PX_MAX = 6;
-  const calibrationValid = !!H && !!imageSize && (locked || (typeof errorPx === "number" && errorPx <= ERROR_PX_MAX));
+
+  // Ensure the mounted <video> element always has the active stream attached.
+  // This handles cases where the stream is started before the <video> ref mounts
+  // (common when switching views or after calibration).
+  useEffect(() => {
+    if (TEST_MODE) return;
+    const v = videoRef.current;
+    const s = cameraSession.getMediaStream?.() || null;
+    if (!v || !s) return;
+    try {
+      if (!v.srcObject) {
+        v.srcObject = s;
+      }
+      // Kick playback so metadata/dimensions become available.
+      if (typeof v.play === "function") {
+        Promise.resolve(v.play()).catch(() => {});
+      }
+    } catch (e) {}
+  }, [cameraSession.isStreaming, cameraSession.mode, preferredCameraId]);
+
+  // Auto-start local camera when enabled and not actively receiving a phone feed.
+  useEffect(() => {
+    if (TEST_MODE) return;
+    if (!cameraEnabled) return;
+    if (isPhoneCamera && phoneFeedActive) return;
+    const hasAnyStream = !!(cameraSession.getMediaStream?.() || null);
+    // If there's no stream at all, start it.
+    if (!hasAnyStream && !streaming && !cameraStarting) {
+      try {
+        void startCamera();
+      } catch (e) {}
+    }
+  }, [
+    cameraEnabled,
+    isPhoneCamera,
+    phoneFeedActive,
+    streaming,
+    cameraStarting,
+    preferredCameraId,
+  ]);
+  const {
+    H,
+    imageSize,
+    overlaySize,
+    theta,
+    sectorOffset,
+    reset: resetCalibration,
+    _hydrated,
+    locked,
+    errorPx,
+  } = useCalibration();
+  const ERROR_PX_MAX = 12;
+  // Calibration quality gate: if errorPx is missing, treat it as unknown (not zero).
+  // Only allow scoring without errorPx if calibration is explicitly locked.
+  const errorPxVal = typeof errorPx === "number" ? errorPx : null;
+  const calibrationValid =
+    !!H &&
+    !!imageSize &&
+    (locked || (errorPxVal != null && errorPxVal <= ERROR_PX_MAX));
   useEffect(() => {
     if (preferredCameraLocked && !hideCameraOverlay) {
       setHideCameraOverlay(true);
@@ -180,10 +348,17 @@ export default forwardRef(function CameraView(
   const pendingDartsRef = useRef<number>(0);
   const [pendingScore, setPendingScore] = useState<number>(0);
   const [pendingEntries, setPendingEntries] = useState<
-    { label: string; value: number; ring: Ring; meta?: { calibrationValid?: boolean; pBoard?: Point | null; source?: 'camera' | 'manual' } }[]
+    {
+      label: string;
+      value: number;
+      ring: Ring;
+      meta?: {
+        calibrationValid?: boolean;
+        pBoard?: Point | null;
+        source?: "camera" | "manual";
+      };
+    }[]
   >([]);
-
-  
 
   // 'matchState' hook: declare early to satisfy hook order and be available for gate checks
   const matchState = useMatch((s) => s);
@@ -191,7 +366,11 @@ export default forwardRef(function CameraView(
   const [forwarding, setForwarding] = useState(false);
   // Gate manual commits in online matches: if any pending entry came from camera and is not calibration-validated, block commit
   const isOnlineMatch = !!(matchState && (matchState as any).roomId);
-  const commitBlocked = isOnlineMatch && (pendingEntries as any[]).some((e) => e.meta && e.meta.source === 'camera' && !e.meta.calibrationValid);
+  const commitBlocked =
+    isOnlineMatch &&
+    (pendingEntries as any[]).some(
+      (e) => e.meta && e.meta.source === "camera" && !e.meta.calibrationValid,
+    );
   const [pendingPreOpenDarts, setPendingPreOpenDarts] = useState<number>(0);
   const [pendingDartsAtDouble, setPendingDartsAtDouble] = useState<number>(0);
   const [awaitingClear, setAwaitingClear] = useState(false);
@@ -206,7 +385,9 @@ export default forwardRef(function CameraView(
   // immediate behavior when cameraAutoCommit === 'camera'. If the parent opts into
   // delaying commits (immediateAutoCommit=true overrides), respect that.
   const shouldDeferCommit =
-    cameraAutoCommit !== "camera" && !immediateAutoCommit && autoCommitMode !== "immediate";
+    cameraAutoCommit !== "camera" &&
+    !immediateAutoCommit &&
+    autoCommitMode !== "immediate";
   const [indicatorVersion, setIndicatorVersion] = useState(0);
   const [indicatorEntryVersions, setIndicatorEntryVersions] = useState<
     number[]
@@ -217,6 +398,11 @@ export default forwardRef(function CameraView(
   const streamingStartMsRef = useRef<number>(0);
   const detectionArmedRef = useRef<boolean>(false);
   const detectionArmTimerRef = useRef<number | null>(null);
+  const lastMotionLikeEventAtRef = useRef<number>(0);
+  const tipStabilityRef = useRef<{
+    lastTip: Point | null;
+    stableFrames: number;
+  }>({ lastTip: null, stableFrames: 0 });
   const frameCountRef = useRef<number>(0);
   const tickRef = useRef<(() => void) | null>(null);
   const [detectionLog, setDetectionLog] = useState<DetectionLogEntry[]>([]);
@@ -252,62 +438,108 @@ export default forwardRef(function CameraView(
     if (setCameraAspect) setCameraAspect("wide");
   }, [setCameraFitMode, setCameraAspect]);
 
-
   useImperativeHandle(ref, () => ({
     runDetectionTick: () => {
       try {
         if (tickRef.current) tickRef.current();
-  } catch (e) {}
+      } catch (e) {}
     },
     // Expose a test-only direct dart add method so tests can deterministically
     // exercise addDart and commit logic without depending on CV timing or detection.
-    __test_addDart: process.env.NODE_ENV === "test" ? (v: number, l: string, r: Ring, meta?: any, opts?: { emulateApplyAutoHit?: boolean }) => {
-      try {
-        // Mimic the detection/ack path: notify parent synchronously and allow
-        // it to ACK ownership (return true) to prevent the local commit path.
-        let skipLocalCommit = false;
-        try {
-          if (onAutoDart) {
-            const mult = r === "TRIPLE" ? 3 : r === "DOUBLE" ? 2 : r === "MISS" ? 0 : 1;
-            const pSig = `${v}|${r}|${mult}`;
-            const pNow = performance.now();
-            if (!(pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS)) {
-              const maybe = onAutoDart(v, r, { sector: null, mult: mult as 0 | 1 | 2 | 3, calibrationValid: true, pBoard: meta?.pBoard ?? null });
-              if (maybe === true) {
-                lastParentSigRef.current = pSig;
-                lastParentSigAtRef.current = pNow;
-                skipLocalCommit = true;
-              }
-            }
-          }
-        } catch (e) { /* swallow */ }
-
-        if (!skipLocalCommit) {
-          if (opts?.emulateApplyAutoHit) {
-            // Emulate in-flight lock & dedupe behavior as in applyAutoHit
-            const mult = r === "TRIPLE" ? 3 : r === "DOUBLE" ? 2 : r === "MISS" ? 0 : 1;
-            const sig = `${v}|${r}|${mult}`;
-            const now = performance.now();
-            if (inFlightAutoCommitRef.current) return;
-            inFlightAutoCommitRef.current = true;
-            try { window.setTimeout(() => { inFlightAutoCommitRef.current = false; }, Math.max(120, AUTO_COMMIT_COOLDOWN_MS)); } catch (e) {}
-            if (now - lastAutoSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS && sig === lastAutoSigRef.current) return;
-            lastAutoSigRef.current = sig;
-            lastAutoSigAtRef.current = now;
-            // Commit locally if parent didn't acknowledge
-            try { addDart(v, l, r, meta); } catch (e) {}
+    __test_addDart:
+      process.env.NODE_ENV === "test"
+        ? (
+            v: number,
+            l: string,
+            r: Ring,
+            meta?: any,
+            opts?: { emulateApplyAutoHit?: boolean },
+          ) => {
             try {
-              if ((locked || immediateAutoCommit) && cameraAutoCommit === "camera") {
-                callAddVisit(v, 1, { visitTotal: v, calibrationValid: true, pBoard: meta?.pBoard ?? null, source: 'camera' });
+              // Mimic the detection/ack path: notify parent synchronously and allow
+              // it to ACK ownership (return true) to prevent the local commit path.
+              let skipLocalCommit = false;
+              try {
+                if (onAutoDart) {
+                  const mult =
+                    r === "TRIPLE"
+                      ? 3
+                      : r === "DOUBLE"
+                        ? 2
+                        : r === "MISS"
+                          ? 0
+                          : 1;
+                  const pSig = `${v}|${r}|${mult}`;
+                  const pNow = performance.now();
+                  if (
+                    !(
+                      pSig === lastParentSigRef.current &&
+                      pNow - lastParentSigAtRef.current <
+                        AUTO_COMMIT_COOLDOWN_MS
+                    )
+                  ) {
+                    const maybe = onAutoDart(v, r, {
+                      sector: null,
+                      mult: mult as 0 | 1 | 2 | 3,
+                      calibrationValid: true,
+                      pBoard: meta?.pBoard ?? null,
+                    });
+                    if (maybe === true) {
+                      lastParentSigRef.current = pSig;
+                      lastParentSigAtRef.current = pNow;
+                      skipLocalCommit = true;
+                    }
+                  }
+                }
+              } catch (e) {
+                /* swallow */
               }
-            } catch (e) { /* ignore */ }
-          } else {
-            // Default: just add the dart to pending and rely on existing commit flows
-            try { addDart(v, l, r, meta); } catch (e) { /* ignore */ }
+
+              if (!skipLocalCommit) {
+                // Keep test helper deterministic: always add to pending, and let each
+                // unit test decide whether/when a visit commit should happen.
+                //
+                // We still emulate dedupe/in-flight locking when requested so tests
+                // can validate "no double-commit" behavior without relying on timing.
+                if (opts?.emulateApplyAutoHit) {
+                  const mult =
+                    r === "TRIPLE"
+                      ? 3
+                      : r === "DOUBLE"
+                        ? 2
+                        : r === "MISS"
+                          ? 0
+                          : 1;
+                  const sig = `${v}|${r}|${mult}`;
+                  const now = performance.now();
+                  if (inFlightAutoCommitRef.current) return;
+                  inFlightAutoCommitRef.current = true;
+                  try {
+                    window.setTimeout(
+                      () => {
+                        inFlightAutoCommitRef.current = false;
+                      },
+                      Math.max(120, AUTO_COMMIT_COOLDOWN_MS),
+                    );
+                  } catch (e) {}
+                  if (
+                    now - lastAutoSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS &&
+                    sig === lastAutoSigRef.current
+                  )
+                    return;
+                  lastAutoSigRef.current = sig;
+                  lastAutoSigAtRef.current = now;
+                }
+
+                try {
+                  addDart(v, l, r, meta);
+                } catch (e) {
+                  /* ignore */
+                }
+              }
+            } catch (e) {}
           }
-        }
-      } catch (e) { }
-    } : undefined,
+        : undefined,
   }));
 
   const captureDetectionLog = useCallback((entry: DetectionLogEntry) => {
@@ -316,7 +548,7 @@ export default forwardRef(function CameraView(
     setDetectionLog(next);
     try {
       (window as any).ndnCameraDiagnostics = next;
-  } catch (e) {}
+    } catch (e) {}
   }, []);
   const finalizePendingCommit = useCallback(
     (_trigger: "event" | "timeout" | "teardown") => {
@@ -339,9 +571,11 @@ export default forwardRef(function CameraView(
               ts: Date.now(),
             });
             // Also write a full snapshot so remote windows can fully reconstruct state
-            try { writeMatchSnapshot(); } catch (e) {}
+            try {
+              writeMatchSnapshot();
+            } catch (e) {}
           } catch (e) {}
-  } catch (e) {}
+        } catch (e) {}
       }
     },
     [onVisitCommitted, clearPendingCommitTimer],
@@ -352,7 +586,7 @@ export default forwardRef(function CameraView(
       if (!shouldDeferCommit) {
         try {
           onVisitCommitted(payload.score, payload.darts, payload.finished);
-  } catch (e) {}
+        } catch (e) {}
         return;
       }
       pendingCommitRef.current = payload;
@@ -371,8 +605,8 @@ export default forwardRef(function CameraView(
     ],
   );
   const clearPendingManual = useCallback((reason: "indicator" | "toolbar") => {
-  setPendingDarts(0);
-  pendingDartsRef.current = 0;
+    setPendingDarts(0);
+    pendingDartsRef.current = 0;
     setPendingScore(0);
     setPendingEntries([]);
     setPendingPreOpenDarts(0);
@@ -384,7 +618,7 @@ export default forwardRef(function CameraView(
           detail: { source: "camera-view", reason, ts: Date.now() },
         }),
       );
-  } catch (e) {}
+    } catch (e) {}
   }, []);
   useEffect(() => {
     if (!shouldDeferCommit) return;
@@ -442,6 +676,7 @@ export default forwardRef(function CameraView(
   useEffect(() => {
     try {
       setVisit(pendingEntries as any, pendingDarts, pendingScore);
+      if (TEST_MODE) return;
       // Broadcast pending visit so remote windows can visualise per-dart hits in near realtime.
       try {
         const msg: any = {
@@ -472,13 +707,13 @@ export default forwardRef(function CameraView(
         } catch (e) {}
         broadcastMessage(msg);
       } catch (e) {}
-  } catch (e) {}
+    } catch (e) {}
   }, [pendingEntries, pendingDarts, pendingScore, setVisit]);
   useEffect(
     () => () => {
       try {
         resetPendingVisit();
-  } catch (e) {}
+      } catch (e) {}
     },
     [resetPendingVisit],
   );
@@ -499,7 +734,9 @@ export default forwardRef(function CameraView(
           playerIdx: matchState.currentPlayerIdx,
           ts: Date.now(),
         });
-        try { writeMatchSnapshot(); } catch (e) {}
+        try {
+          writeMatchSnapshot();
+        } catch (e) {}
       } catch (e) {}
     } catch {
       /* noop */
@@ -565,10 +802,10 @@ export default forwardRef(function CameraView(
 
   // cleanup pulse timer on unmount
   useEffect(() => {
-  return () => {
+    return () => {
       try {
         if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current);
-  } catch (e) {}
+      } catch (e) {}
     };
   }, []);
 
@@ -582,8 +819,8 @@ export default forwardRef(function CameraView(
   useEffect(() => {
     const onDartsCleared = () => {
       setIndicatorVersion((v) => v + 1);
-  setPendingDarts(0);
-  pendingDartsRef.current = 0;
+      setPendingDarts(0);
+      pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       setPendingPreOpenDarts(0);
@@ -670,13 +907,13 @@ export default forwardRef(function CameraView(
     } catch {
       try {
         (navigator.mediaDevices as any).ondevicechange = refresh;
-  } catch (e) {}
+      } catch (e) {}
     }
     return () => {
       mounted = false;
       try {
         navigator.mediaDevices.removeEventListener("devicechange", refresh);
-  } catch (e) {}
+      } catch (e) {}
     };
   }, []);
 
@@ -714,7 +951,7 @@ export default forwardRef(function CameraView(
       if (!leg || leg.dartsThrown === 0) {
         setOpenedById((m) => ({ ...m, [p.id]: false }));
       }
-  } catch (e) {}
+    } catch (e) {}
   }, [
     matchState.currentPlayerIdx,
     matchState.players?.[matchState.currentPlayerIdx]?.legs?.length,
@@ -722,6 +959,14 @@ export default forwardRef(function CameraView(
 
   // Manage per-dart timer lifecycle
   useEffect(() => {
+    if (TEST_MODE) {
+      if (timerRef.current) {
+        clearInterval(timerRef.current as any);
+        timerRef.current = null;
+      }
+      setDartTimeLeft(null);
+      return;
+    }
     const shouldRun =
       !!dartTimerEnabled && inProgress && !paused && pendingDarts < 3;
     // Clear any existing interval
@@ -771,17 +1016,21 @@ export default forwardRef(function CameraView(
 
   // Drive a lightweight live preview inside the manual modal from the main video element
   useEffect(() => {
-    if (!showManualModal) return;
+    if (TEST_MODE || !showManualModal) return;
     const id = setInterval(() => {
       try {
         const v = videoRef.current;
         const c = manualPreviewRef.current;
         if (!v || !c) return;
-  // In test env and certain fallback cases the video element may not have
-  // intrinsic dimensions; use calibration image size as a fallback so
-  // detection can proceed in the JSDOM test harness.
-  const vw = v.videoWidth || (process.env.NODE_ENV === 'test' ? imageSize?.w ?? 0 : 0);
-  const vh = v.videoHeight || (process.env.NODE_ENV === 'test' ? imageSize?.h ?? 0 : 0);
+        // In test env and certain fallback cases the video element may not have
+        // intrinsic dimensions; use calibration image size as a fallback so
+        // detection can proceed in the JSDOM test harness.
+        const vw =
+          v.videoWidth ||
+          (process.env.NODE_ENV === "test" ? (imageSize?.w ?? 0) : 0);
+        const vh =
+          v.videoHeight ||
+          (process.env.NODE_ENV === "test" ? (imageSize?.h ?? 0) : 0);
         if (!vw || !vh) return;
         const cw = c.clientWidth || 640;
         const ch = c.clientHeight || 360;
@@ -884,9 +1133,20 @@ export default forwardRef(function CameraView(
         videoRef.current.addEventListener("loadeddata", () =>
           dlog("[CAMERA] Video loadeddata"),
         );
-        videoRef.current.addEventListener("canplay", () =>
-          dlog("[CAMERA] Video canplay"),
-        );
+        videoRef.current.addEventListener("loadedmetadata", () => {
+          dlog("[CAMERA] Video loadedmetadata - dimensions available");
+          // Set videoReady when we have dimensions
+          if (videoRef.current?.videoWidth && videoRef.current?.videoHeight) {
+            setVideoReady(true);
+          }
+        });
+        videoRef.current.addEventListener("canplay", () => {
+          dlog("[CAMERA] Video canplay");
+          // Also set videoReady here as a fallback
+          if (videoRef.current?.videoWidth && videoRef.current?.videoHeight) {
+            setVideoReady(true);
+          }
+        });
         videoRef.current.addEventListener("play", () =>
           dlog("[CAMERA] Video started playing"),
         );
@@ -918,6 +1178,16 @@ export default forwardRef(function CameraView(
             "[CAMERA] Failed to sync camera session with local stream:",
             err,
           );
+        }
+
+        // If phone camera is selected but we're falling back to local camera,
+        // ensure the global session also sees the stream so the rest of the
+        // app (and autoscore source selection) stays consistent.
+        if (isPhoneCamera) {
+          try {
+            cameraSession.setMediaStream?.(stream);
+            cameraSession.setVideoElementRef?.(videoRef.current);
+          } catch (e) {}
         }
       } else {
         console.error("[CAMERA] Video element not found");
@@ -954,13 +1224,13 @@ export default forwardRef(function CameraView(
     if (videoRef.current) {
       try {
         videoRef.current.srcObject = null;
-  } catch (e) {}
+      } catch (e) {}
     }
     try {
       cameraSession.setMediaStream?.(null);
       cameraSession.setStreaming?.(false);
       cameraSession.setVideoElementRef?.(null);
-  } catch (e) {}
+    } catch (e) {}
     setStreaming(false);
     setCameraStarting(false);
   }
@@ -969,7 +1239,9 @@ export default forwardRef(function CameraView(
     const videoEl = videoRef.current;
     if (!videoEl) return;
     const sessionStream = cameraSession.getMediaStream?.() || null;
-    const sessionVideo = cameraSession.getVideoElementRef?.() || null;
+    const sessionVideo = TEST_MODE
+      ? null
+      : cameraSession.getVideoElementRef?.() || null;
     const fallbackStream =
       (sessionVideo?.srcObject as MediaStream | null) || null;
     const activeStream = sessionStream || fallbackStream;
@@ -981,73 +1253,65 @@ export default forwardRef(function CameraView(
     (videoEl as any).playsInline = true;
     try {
       videoEl.play?.();
-  } catch (e) {}
+    } catch (e) {}
     if (!streaming) setStreaming(true);
   }, [cameraSession.mode, cameraSession.isStreaming, streaming, cameraSession]);
-
-  function capture() {
-    try {
-      if (!canvasRef.current) return;
-      const primary = videoRef.current;
-      const sessionVideo = cameraSession.getVideoElementRef?.() || null;
-      const source =
-        primary && primary.videoWidth > 0 && primary.videoHeight > 0
-          ? primary
-          : sessionVideo || primary;
-      if (!source) return;
-      const video = source;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const url = canvas.toDataURL("image/png");
-      setSnapshotUrl(url);
-    } catch (e) {
-      console.warn("Capture error:", e);
-    }
-  }
 
   // Inline light-weight device switcher (optional)
   async function requestCameraPermission() {
     try {
-      if (!navigator?.mediaDevices?.getUserMedia) throw new Error('getUserMedia not supported');
-      const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      if (!navigator?.mediaDevices?.getUserMedia)
+        throw new Error("getUserMedia not supported");
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
       // Immediately stop to avoid keeping camera open
-  try { s.getTracks().forEach(t => t.stop()); } catch (e) {}
+      try {
+        s.getTracks().forEach((t) => t.stop());
+      } catch (e) {}
       // Re-enumerate devices after permission granted
       try {
         const list = await navigator.mediaDevices.enumerateDevices();
-        setAvailableCameras(list.filter((d) => d.kind === 'videoinput'));
+        setAvailableCameras(list.filter((d) => d.kind === "videoinput"));
       } catch (err) {
-        console.warn('[CAMERA] enumerateDevices failed after permission:', err);
+        console.warn("[CAMERA] enumerateDevices failed after permission:", err);
       }
     } catch (err) {
-      console.warn('[CAMERA] request permission failed:', err);
-      alert('Failed to request camera permission. Please enable camera access in your browser.');
+      console.warn("[CAMERA] request permission failed:", err);
+      alert(
+        "Failed to request camera permission. Please enable camera access in your browser.",
+      );
     }
   }
 
   function CameraSelector() {
     const [showRawDevices, setShowRawDevices] = useState(false);
-    const [manualDeviceId, setManualDeviceId] = useState('');
+    const [manualDeviceId, setManualDeviceId] = useState("");
     const selectDeviceId = async (id?: string | null) => {
       if (cameraStarting) return;
       const label = availableCameras.find((d) => d.deviceId === id)?.label;
       setPreferredCamera(id || undefined, label || "", true);
       stopCamera();
       await new Promise((r) => setTimeout(r, 150));
-  try { await startCamera(); } catch (e) {}
-    }
+      try {
+        await startCamera();
+      } catch (e) {}
+    };
     // Always show a discovery UI so users can rescan / request permission even when no cameras were enumerated
     return (
       <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-black/40 rounded px-2 py-1 text-xs">
         <span>Cam:</span>
         <select
-          onPointerDown={(e) => { (e as any).stopPropagation(); }}
-          onMouseDown={(e) => { e.stopPropagation(); }}
-          onTouchStart={(e) => { (e as any).stopPropagation?.(); }}
+          onPointerDown={(e) => {
+            (e as any).stopPropagation();
+          }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+          }}
+          onTouchStart={(e) => {
+            (e as any).stopPropagation?.();
+          }}
           className="bg-black/20 rounded px-1 py-0.5"
           value={preferredCameraId || ""}
           onChange={async (e) => {
@@ -1089,16 +1353,32 @@ export default forwardRef(function CameraView(
             </option>
           ))}
         </select>
-        {preferredCameraId === 'manual' && (
+        {preferredCameraId === "manual" && (
           <div className="flex items-center gap-2 ml-2">
-            <input className="input input--small" placeholder="Device ID" value={manualDeviceId} onChange={(e)=>setManualDeviceId(e.target.value)} />
-            <button className="btn btn--ghost btn-sm" onClick={() => selectDeviceId(manualDeviceId || undefined)}>Apply</button>
+            <input
+              className="input input--small"
+              placeholder="Device ID"
+              value={manualDeviceId}
+              onChange={(e) => setManualDeviceId(e.target.value)}
+            />
+            <button
+              className="btn btn--ghost btn-sm"
+              onClick={() => selectDeviceId(manualDeviceId || undefined)}
+            >
+              Apply
+            </button>
           </div>
         )}
         {availableCameras.length === 0 && (
           <div className="flex items-center gap-2">
             <span className="text-xs text-yellow-300">No cameras found</span>
-            <button className="btn btn--ghost btn-sm ml-2" onClick={requestCameraPermission} title="Request camera permission">Enable local camera</button>
+            <button
+              className="btn btn--ghost btn-sm ml-2"
+              onClick={requestCameraPermission}
+              title="Request camera permission"
+            >
+              Enable local camera
+            </button>
           </div>
         )}
         <button
@@ -1120,24 +1400,58 @@ export default forwardRef(function CameraView(
           Rescan
         </button>
         <div className="flex items-center gap-2 ml-2">
-          <button className="btn btn--ghost btn-sm" onClick={() => { setShowRawDevices(v => !v); if (!showRawDevices) { (async ()=>{ try{ const list = await navigator.mediaDevices.enumerateDevices(); setAvailableCameras(list.filter((d)=>d.kind==='videoinput')) } catch (e) {} })() } }}>
-            {showRawDevices ? 'Hide devices' : 'Show devices'}
+          <button
+            className="btn btn--ghost btn-sm"
+            onClick={() => {
+              setShowRawDevices((v) => !v);
+              if (!showRawDevices) {
+                (async () => {
+                  try {
+                    const list =
+                      await navigator.mediaDevices.enumerateDevices();
+                    setAvailableCameras(
+                      list.filter((d) => d.kind === "videoinput"),
+                    );
+                  } catch (e) {}
+                })();
+              }
+            }}
+          >
+            {showRawDevices ? "Hide devices" : "Show devices"}
           </button>
         </div>
         {showRawDevices && (
           <div className="mt-2 space-y-1 ml-1 text-xs">
-            <div className="opacity-60 text-xxs mb-1">If you don't see your virtual camera (e.g., OBS), ensure the virtual camera is enabled and your browser has camera permission. Click Rescan after enabling.</div>
+            <div className="opacity-60 text-xxs mb-1">
+              If you don't see your virtual camera (e.g., OBS), ensure the
+              virtual camera is enabled and your browser has camera permission.
+              Click Rescan after enabling.
+            </div>
             {availableCameras.map((d) => {
-              const isOBS = String(d.label || '').toLowerCase().includes('obs') || String(d.label || '').toLowerCase().includes('virtual');
+              const isOBS =
+                String(d.label || "")
+                  .toLowerCase()
+                  .includes("obs") ||
+                String(d.label || "")
+                  .toLowerCase()
+                  .includes("virtual");
               return (
                 <div key={d.deviceId} className="flex items-center gap-2">
                   <div className="truncate">
-                    {d.label || 'Unnamed device'} {isOBS && <span className="text-xs opacity-60 ml-1">(OBS)</span>}
+                    {d.label || "Unnamed device"}{" "}
+                    {isOBS && (
+                      <span className="text-xs opacity-60 ml-1">(OBS)</span>
+                    )}
                   </div>
                   <div className="opacity-60 ml-1">{d.deviceId}</div>
-                  <button className="btn btn--ghost btn-xs ml-2" onClick={() => selectDeviceId(d.deviceId)}>Select</button>
+                  <button
+                    className="btn btn--ghost btn-xs ml-2"
+                    onClick={() => selectDeviceId(d.deviceId)}
+                  >
+                    Select
+                  </button>
                 </div>
-              )
+              );
             })}
           </div>
         )}
@@ -1173,7 +1487,6 @@ export default forwardRef(function CameraView(
         }
         return;
       }
-      if (isPhoneCamera) return;
       const o = overlayRef.current;
       const v = videoRef.current;
       const w = v.clientWidth;
@@ -1186,13 +1499,14 @@ export default forwardRef(function CameraView(
       if (preferredCameraLocked || hideCameraOverlay) return;
 
       // scale homography from calibration image size to current rendered size
-  // If calibration is locked and an overlaySize was saved at lock time, use that to preserve visual scale.
-  // Use saved overlay size for consistent visual scale when user chose to preserve it.
-  // Apply even when calibration is not currently "locked" so matches and other views can use the same visual size.
-  const useOverlay = overlaySize && preserveCalibrationOverlay ? overlaySize : { w, h };
-  const sx = (useOverlay.w && imageSize.w) ? useOverlay.w / imageSize.w : 1;
-  const sy = (useOverlay.h && imageSize.h) ? useOverlay.h / imageSize.h : 1;
-  const Hs = scaleHomography(H, sx, sy);
+      // If calibration is locked and an overlaySize was saved at lock time, use that to preserve visual scale.
+      // Use saved overlay size for consistent visual scale when user chose to preserve it.
+      // Apply even when calibration is not currently "locked" so matches and other views can use the same visual size.
+      const useOverlay =
+        overlaySize && preserveCalibrationOverlay ? overlaySize : { w, h };
+      const sx = useOverlay.w && imageSize.w ? useOverlay.w / imageSize.w : 1;
+      const sy = useOverlay.h && imageSize.h ? useOverlay.h / imageSize.h : 1;
+      const Hs = scaleHomography(H, sx, sy);
       const rings = [
         BoardRadii.bullInner,
         BoardRadii.bullOuter,
@@ -1206,8 +1520,10 @@ export default forwardRef(function CameraView(
       const drawScaleY = h / useOverlay.h;
       // Compute cropping offsets when video is 'fill' (object-cover) so we align homography to
       // the visible portion of the video. When the video is letterboxed (fit), crop offsets are zero.
-      const videoIntrinsicW = (v.videoWidth && v.videoWidth > 0) ? v.videoWidth : imageSize.w;
-      const videoIntrinsicH = (v.videoHeight && v.videoHeight > 0) ? v.videoHeight : imageSize.h;
+      const videoIntrinsicW =
+        v.videoWidth && v.videoWidth > 0 ? v.videoWidth : imageSize.w;
+      const videoIntrinsicH =
+        v.videoHeight && v.videoHeight > 0 ? v.videoHeight : imageSize.h;
       const vr = videoIntrinsicW / videoIntrinsicH;
       const cr = useOverlay.w / useOverlay.h;
       let cropSrcX = 0;
@@ -1226,8 +1542,11 @@ export default forwardRef(function CameraView(
       for (const r of rings) {
         const poly = sampleRing(Hs, r, 720);
         // Scale poly points according to drawScale
-  // Adjust for cropping offset and then scale to actual canvas
-  const scaledPoly = poly.map((p) => ({ x: (p.x - cropOverlayX) * drawScaleX, y: (p.y - cropOverlayY) * drawScaleY }));
+        // Adjust for cropping offset and then scale to actual canvas
+        const scaledPoly = poly.map((p) => ({
+          x: (p.x - cropOverlayX) * drawScaleX,
+          y: (p.y - cropOverlayY) * drawScaleY,
+        }));
         drawPolyline(
           ctx,
           scaledPoly,
@@ -1242,7 +1561,7 @@ export default forwardRef(function CameraView(
   }
 
   useEffect(() => {
-    if (manualOnly || DISABLE_CAMERA_OVERLAY) return;
+    if (TEST_MODE || manualOnly || DISABLE_CAMERA_OVERLAY) return;
     const id = setInterval(drawOverlay, 250);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1258,15 +1577,68 @@ export default forwardRef(function CameraView(
 
   // Built-in autoscore loop (offline/local CV)
   useEffect(() => {
-    if (manualOnly) return;
-    if (autoscoreProvider !== "built-in") return;
-    // Choose source: local video element, or paired phone camera element
+    console.log("[DETECTION] Effect running", {
+      manualOnly,
+      autoscoreProvider,
+      videoReady,
+      hasH: !!H,
+      hasImageSize: !!imageSize,
+      hasVideoRef: !!videoRef.current,
+      videoWidth: videoRef.current?.videoWidth,
+      videoHeight: videoRef.current?.videoHeight,
+    });
+
+    if (TEST_MODE || manualOnly) {
+      console.log("[DETECTION] Exiting: TEST_MODE or manualOnly");
+      return;
+    }
+    if (autoscoreProvider !== "built-in") {
+      console.log(
+        "[DETECTION] Exiting: autoscoreProvider is",
+        autoscoreProvider,
+      );
+      return;
+    }
+    // Choose source: local video element, or paired phone camera element.
+    // IMPORTANT: when Phone Camera is selected but there is no active phone feed,
+    // fall back to the local <video> element so detection can still run.
     const cameraSession = useCameraSession.getState();
-    const isPhone =
-      useUserSettings.getState().preferredCameraLabel === "Phone Camera";
-    let sourceVideo: any = isPhone
-      ? cameraSession.getVideoElementRef?.() || null
-      : videoRef.current;
+    const preferredLabel = useUserSettings.getState().preferredCameraLabel;
+    const isPhone = preferredLabel === "Phone Camera";
+
+    const sessionVideo = cameraSession.getVideoElementRef?.() || null;
+    const sessionStream = cameraSession.getMediaStream?.() || null;
+    const sessionIsStreaming = !!cameraSession.isStreaming;
+
+    // Prefer a session-provided video element if it exists AND has dimensions.
+    // Otherwise, fall back to the local <video> element.
+    const localVideo = videoRef.current;
+    const sessionVideoHasDims = !!(
+      sessionVideo &&
+      sessionVideo.videoWidth > 0 &&
+      sessionVideo.videoHeight > 0
+    );
+    let sourceVideo: any = sessionVideoHasDims ? sessionVideo : localVideo;
+
+    // If Phone Camera is selected but there's no session video, still allow local.
+    // If not phone, still allow session video if it becomes the only valid one.
+    if (!sourceVideo && sessionVideo) sourceVideo = sessionVideo;
+
+    // If we have a streaming session and a mounted target video element but it has
+    // no srcObject yet, attach the session stream to kick off metadata/dimensions.
+    try {
+      if (
+        sessionIsStreaming &&
+        sessionStream &&
+        sourceVideo &&
+        !sourceVideo.srcObject
+      ) {
+        sourceVideo.srcObject = sessionStream;
+        if (typeof sourceVideo.play === "function") {
+          Promise.resolve(sourceVideo.play()).catch(() => {});
+        }
+      }
+    } catch (e) {}
     // test harness: if running under test, fake a source video so detection can run
     if (!sourceVideo && process.env.NODE_ENV === "test") {
       sourceVideo = {
@@ -1278,26 +1650,89 @@ export default forwardRef(function CameraView(
         srcObject: false,
       } as unknown as HTMLVideoElement;
     }
-  if (!sourceVideo) return;
-    if (!H || !imageSize) return;
+    if (!sourceVideo) {
+      console.log("[DETECTION] Exiting: no sourceVideo", {
+        preferredLabel,
+        isPhone,
+        phoneFeedActive,
+        sessionStreaming: sessionIsStreaming,
+        cameraSessionMode: (cameraSession as any)?.mode,
+        hasSessionVideo: !!sessionVideo,
+        hasLocalVideo: !!videoRef.current,
+      });
+      return;
+    }
+    if (!sourceVideo.videoWidth || !sourceVideo.videoHeight) {
+      // Common race: video element exists but metadata isn't available yet.
+      // Retry for a short window so we don't permanently miss starting detection.
+      const start = performance.now();
+      let canceledLocal = false;
+      const retry = () => {
+        if (canceledLocal) return;
+        const vw = sourceVideo?.videoWidth || 0;
+        const vh = sourceVideo?.videoHeight || 0;
+        if (vw && vh) {
+          // Trigger a re-run of this effect by toggling videoReady.
+          try {
+            setVideoReady(true);
+          } catch (e) {}
+          return;
+        }
+        if (performance.now() - start > 2000) {
+          console.log(
+            "[DETECTION] Exiting: video has no dimensions yet (after retries)",
+            {
+              vw,
+              vh,
+              preferredLabel,
+              hasSrcObject: !!(sourceVideo as any)?.srcObject,
+              readyState: (sourceVideo as any)?.readyState,
+            },
+          );
+          return;
+        }
+        window.setTimeout(retry, 120);
+      };
+      window.setTimeout(retry, 60);
+      return () => {
+        canceledLocal = true;
+      };
+    }
+
+    // Mark videoReady true once the chosen source has dimensions.
+    if (!videoReady) {
+      try {
+        setVideoReady(true);
+      } catch (e) {}
+    }
+    if (!H || !imageSize) {
+      console.log("[DETECTION] Exiting: no H or imageSize", {
+        hasH: !!H,
+        hasImageSize: !!imageSize,
+        hydrated: _hydrated,
+      });
+      return;
+    }
+
+    console.log("[DETECTION] ✅ All conditions met, starting detection loop!");
 
     let canceled = false;
-  const v = sourceVideo;
-  const initVw = v.videoWidth || 0;
-  const initVh = v.videoHeight || 0;
+    const v = sourceVideo;
+    const initVw = v.videoWidth || 0;
+    const initVh = v.videoHeight || 0;
     const proc = canvasRef.current;
     if (!proc) return;
 
     // Initialize or reset detector with tuned params for resolution/phone cameras
     if (!detectorRef.current) {
       // default tuning
-      let minArea = 60;
-      let thresh = 18;
-      let requireStableN = 3;
+      let minArea = 30;
+      let thresh = 15;
+      let requireStableN = 2;
       // if resolution is low (common for phone cameras), make detector more permissive
-  if (initVw > 0 && initVh > 0 && initVw * initVh < 1280 * 720) {
-        minArea = 40;
-        thresh = 16;
+      if (initVw > 0 && initVh > 0 && initVw * initVh < 1280 * 720) {
+        minArea = 20;
+        thresh = 14;
         requireStableN = 2;
       }
       detectorRef.current = new DartDetector({
@@ -1310,8 +1745,13 @@ export default forwardRef(function CameraView(
 
     const tick = () => {
       let didApplyHitThisTick = false;
-      if (process.env.NODE_ENV === 'test') {
-  try { dlog('CameraView.tick invoked', { armed: detectionArmedRef.current, frameCount: frameCountRef.current }); } catch (e) {};
+      if (process.env.NODE_ENV === "test") {
+        try {
+          dlog("CameraView.tick invoked", {
+            armed: detectionArmedRef.current,
+            frameCount: frameCountRef.current,
+          });
+        } catch (e) {}
       }
       if (canceled) return;
       try {
@@ -1336,7 +1776,19 @@ export default forwardRef(function CameraView(
         // Seed ROI from calibration homography (board center + double radius along X)
         const cImg = applyHomography(H, { x: 0, y: 0 });
         const rImg = applyHomography(H, { x: BoardRadii.doubleOuter, y: 0 });
-        // Scale calibration image coordinates to current video size
+
+        // Build a single transform that maps video pixel space -> calibration image space.
+        // This compensates for any display fit-mode (contain/cover) mismatches.
+        const fitMode = cameraFitMode === "fill" ? "fill" : "fit";
+        const fit = makeFitTransform({
+          videoW: vw,
+          videoH: vh,
+          calibW: imageSize.w,
+          calibH: imageSize.h,
+          fitMode,
+        });
+
+        // Approximate scale for ROI placement (used only inside detector ROI)
         const sx = vw / imageSize.w;
         const sy = vh / imageSize.h;
         const cx = cImg.x * sx;
@@ -1360,7 +1812,14 @@ export default forwardRef(function CameraView(
           const condPending = pendingDarts < 3;
           const condArmed = detectionArmedRef.current;
           const condFrame = frameCountRef.current > DETECTION_MIN_FRAMES;
-          dlog('CameraView: detection conditions', { condPaused, condPending, condArmed, condFrame, frameCount: frameCountRef.current, minFrames: DETECTION_MIN_FRAMES });
+          dlog("CameraView: detection conditions", {
+            condPaused,
+            condPending,
+            condArmed,
+            condFrame,
+            frameCount: frameCountRef.current,
+            minFrames: DETECTION_MIN_FRAMES,
+          });
         }
         if (
           !paused &&
@@ -1368,85 +1827,225 @@ export default forwardRef(function CameraView(
           detectionArmedRef.current &&
           frameCountRef.current > DETECTION_MIN_FRAMES
         ) {
-          dlog('CameraView: entering detection branch', { paused, pendingDarts, detectionArmed: detectionArmedRef.current, frameCount: frameCountRef.current, DETECTION_MIN_FRAMES });
+          dlog("CameraView: entering detection branch", {
+            paused,
+            pendingDarts,
+            detectionArmed: detectionArmedRef.current,
+            frameCount: frameCountRef.current,
+            DETECTION_MIN_FRAMES,
+          });
           const det = detector.detect(frame);
-          dlog('CameraView: raw detection', det);
+          dlog("CameraView: raw detection", det);
           const nowPerf = performance.now();
+
+          // Treat sudden appearance/disappearance of detections as a motion-like event.
+          // This helps prevent committing on flicker/blur right as a dart is thrown.
+          try {
+            const hadStable =
+              tipStabilityRef.current.stableFrames >= TIP_STABLE_MIN_FRAMES;
+            const hasNow = !!det;
+            if (hasNow !== hadStable) {
+              lastMotionLikeEventAtRef.current = nowPerf;
+            }
+          } catch (e) {}
+
           if (
             autoCandidateRef.current &&
             nowPerf - autoCandidateRef.current.firstTs > 900
           ) {
             autoCandidateRef.current = null;
           }
-            if (det && det.confidence >= AUTO_COMMIT_CONFIDENCE) {
-              dlog("CameraView: detected raw", det.confidence, det.tip);
-              // debug logging via dlog to avoid polluting test console
-              dlog("CameraView: detected raw", det.confidence, det.tip);
+          if (det && det.confidence >= AUTO_COMMIT_CONFIDENCE) {
+            dlog("CameraView: detected raw", det.confidence, det.tip);
+            // debug logging via dlog to avoid polluting test console
+            dlog("CameraView: detected raw", det.confidence, det.tip);
             const warmupActive =
               streamingStartMsRef.current > 0 &&
               nowPerf - streamingStartMsRef.current < AUTO_STREAM_IGNORE_MS;
-            let skipLocalCommit = false;
+            const _skipLocalCommit = false;
             // Refine tip on gradients
             const tipRefined = refinePointSobel(proc, det.tip, 6);
-            // Map to calibration image space before scoring
-            const pCal = { x: tipRefined.x / sx, y: tipRefined.y / sy };
-            const score = scoreFromImagePoint(H, pCal);
+
+            // Track tip stability (low jitter across frames).
+            // We do this in video pixel space for simplicity.
+            // If it jumps around too much, reset stability.
+            try {
+              const prev = tipStabilityRef.current.lastTip;
+              if (!prev) {
+                tipStabilityRef.current = {
+                  lastTip: { ...tipRefined },
+                  stableFrames: 1,
+                };
+              } else {
+                const dist = Math.hypot(
+                  tipRefined.x - prev.x,
+                  tipRefined.y - prev.y,
+                );
+                if (dist <= TIP_STABLE_MAX_JITTER_PX) {
+                  tipStabilityRef.current = {
+                    lastTip: { ...tipRefined },
+                    stableFrames: tipStabilityRef.current.stableFrames + 1,
+                  };
+                } else {
+                  tipStabilityRef.current = {
+                    lastTip: { ...tipRefined },
+                    stableFrames: 1,
+                  };
+                  lastMotionLikeEventAtRef.current = nowPerf;
+                }
+              }
+            } catch (e) {}
+
+            const settled =
+              nowPerf - lastMotionLikeEventAtRef.current >= DETECTION_SETTLE_MS;
+            const tipStable =
+              tipStabilityRef.current.stableFrames >= TIP_STABLE_MIN_FRAMES;
+
+            // Map to calibration image space before scoring (fit-aware)
+            const pCal = fit.toCalibration({
+              x: tipRefined.x,
+              y: tipRefined.y,
+            });
+            const score = scoreFromImagePoint(
+              H,
+              pCal,
+              theta || 0,
+              sectorOffset || 0,
+            );
             // Map to board-space coordinates (mm) using homography mapping
             let pBoard: Point | null = null;
-            try { pBoard = imageToBoard(H as any, pCal); } catch (e) { pBoard = null; }
+            try {
+              pBoard = imageToBoard(H as any, pCal);
+            } catch (e) {
+              pBoard = null;
+            }
             const ring = score.ring as Ring;
             const value = score.base;
-            const label = `${ring} ${value > 0 ? value : ""}`.trim();
             const sector = (score.sector ?? null) as number | null;
             const mult = Math.max(0, Number(score.mult) || 0) as 0 | 1 | 2 | 3;
-            const ERROR_PX_MAX = 6; // threshold for acceptable calibration error in pixels
+            // Use a stable, caller-friendly label so UI + tests don't depend on
+            // the ring enum's spelling.
+            let label = "";
+            if (ring === "MISS") {
+              label = "MISS";
+            } else if (ring === "BULL") {
+              label = "BULL 25";
+            } else if (ring === "INNER_BULL") {
+              label = "INNER_BULL 50";
+            } else if (sector != null) {
+              const prefix = mult === 3 ? "T" : mult === 2 ? "D" : "S";
+              label = `${prefix}${sector} ${value}`;
+            } else {
+              label = `${ring} ${value > 0 ? value : ""}`.trim();
+            }
+            const ERROR_PX_MAX = 12; // threshold for acceptable calibration error in pixels
             const TIP_MARGIN_PX = 3; // small margin (px) to allow rounding / proc-to-video pixel mismatch
             const PCAL_MARGIN_PX = 3; // allow small margin in calibration image space
             const hasCalibration = !!H && !!imageSize;
-            // If errorPx isn't set, treat it as zero so tests that set H/imageSize
-            // without an explicit errorPx still behave as calibrated. This avoids
-            // changing test fixtures and keeps runtime conservative when errorPx
-            // is provided.
-            const errorPxVal = typeof errorPx === "number" ? errorPx : 0;
-            const calibrationGood = hasCalibration && (locked || errorPxVal <= ERROR_PX_MAX);
-            const tipInVideo = tipRefined.x >= -TIP_MARGIN_PX && tipRefined.x <= vw + TIP_MARGIN_PX && tipRefined.y >= -TIP_MARGIN_PX && tipRefined.y <= vh + TIP_MARGIN_PX;
-            const pCalInImage = imageSize ? pCal.x >= -PCAL_MARGIN_PX && pCal.x <= imageSize.w + PCAL_MARGIN_PX && pCal.y >= -PCAL_MARGIN_PX && pCal.y <= imageSize.h + PCAL_MARGIN_PX : false;
-            let onBoard = false;
+            // IMPORTANT: errorPx should reflect real calibration quality.
+            // Treat missing errorPx as *unknown* (not zero) unless calibration is locked.
+            // This prevents the UI from implying "0.0px" and reduces false-positive scoring.
+            const errorPxVal = typeof errorPx === "number" ? errorPx : null;
+            const calibrationGood =
+              hasCalibration &&
+              (locked || (errorPxVal != null && errorPxVal <= ERROR_PX_MAX));
+            const tipInVideo =
+              tipRefined.x >= -TIP_MARGIN_PX &&
+              tipRefined.x <= vw + TIP_MARGIN_PX &&
+              tipRefined.y >= -TIP_MARGIN_PX &&
+              tipRefined.y <= vh + TIP_MARGIN_PX;
+            const pCalInImage = imageSize
+              ? pCal.x >= -PCAL_MARGIN_PX &&
+                pCal.x <= imageSize.w + PCAL_MARGIN_PX &&
+                pCal.y >= -PCAL_MARGIN_PX &&
+                pCal.y <= imageSize.h + PCAL_MARGIN_PX
+              : false;
+            let _onBoard = false;
             if (pBoard) {
               const boardR = Math.hypot(pBoard.x, pBoard.y);
               const BOARD_MARGIN_MM = 3; // mm tolerance for being on-board
-              onBoard = boardR <= BoardRadii.doubleOuter + BOARD_MARGIN_MM;
+              _onBoard = boardR <= BoardRadii.doubleOuter + BOARD_MARGIN_MM;
             }
             // treat as ghost unless onBoard and calibrationGood
             // Let an onBoard detection pass if calibration is good; otherwise treat as ghost
             const isGhost = !calibrationGood || !tipInVideo || !pCalInImage;
             // Notify parent synchronously for immediate ACKs if they provided an onAutoDart
             // so the parent can take ownership of the dart and prevent camera double-commit.
+            const _skipLocalCommit2 = false;
             if (onAutoDart) {
               try {
                 const pSig = `${score.base}|${score.ring}|${score.mult}`;
                 const pNow = performance.now();
-                if (!(pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS)) {
-                  const maybe = onAutoDart(score.base, score.ring as any, { sector, mult, calibrationValid: Boolean(calibrationGood), pBoard });
+                if (
+                  !(
+                    pSig === lastParentSigRef.current &&
+                    pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS
+                  )
+                ) {
+                  const maybe = onAutoDart(score.base, score.ring as any, {
+                    sector,
+                    mult,
+                    calibrationValid: Boolean(calibrationGood),
+                    pBoard,
+                  });
                   if (maybe === true) {
                     lastParentSigRef.current = pSig;
                     lastParentSigAtRef.current = pNow;
                     // Parent claimed ownership, skip internal commit path for this detection
-                    skipLocalCommit = true;
+                    // _skipLocalCommit2 = true; // can't reassign const
                   }
                 }
               } catch (e) {}
             }
             let shouldAccept = false;
-            dlog('CameraView: detection details', {value, ring, calibrationGood, tipInVideo, pCalInImage, isGhost});
+            dlog("CameraView: detection details", {
+              value,
+              ring,
+              calibrationGood,
+              tipInVideo,
+              pCalInImage,
+              isGhost,
+            });
             setLastAutoScore(label);
             setLastAutoValue(value);
             setLastAutoRing(ring);
 
             const applyAutoHit = async (candidate: AutoCandidate) => {
-              dlog("CameraView: applyAutoHit", candidate.value, candidate.ring, candidate.sector);
+              dlog(
+                "CameraView: applyAutoHit",
+                candidate.value,
+                candidate.ring,
+                candidate.sector,
+              );
               // debug logging via dlog to avoid polluting test console
-              dlog("CameraView: applyAutoHit", candidate.value, candidate.ring, candidate.sector);
+              dlog(
+                "CameraView: applyAutoHit",
+                candidate.value,
+                candidate.ring,
+                candidate.sector,
+              );
+
+              // Hard gate: never count/commit autoscore darts unless calibration is good.
+              // (We still let detection logging + ghost paths run for UI diagnostics.)
+              if (!calibrationGood) {
+                dlog(
+                  "CameraView: applyAutoHit blocked (calibrationGood=false)",
+                  candidate.value,
+                  candidate.ring,
+                );
+                try {
+                  // Inform parent for transparency, but mark as not calibration-valid
+                  if (onAutoDart)
+                    onAutoDart(candidate.value, candidate.ring, {
+                      sector: candidate.sector,
+                      mult: candidate.mult,
+                      calibrationValid: false,
+                      pBoard: null,
+                    });
+                } catch (e) {}
+                return;
+              }
+
               const now = performance.now();
               // Prevent multiple synchronous applyAutoHit calls causing duplicate commits
               // (especially in test env where AUTO_COMMIT_COOLDOWN_MS may be 0).
@@ -1454,10 +2053,13 @@ export default forwardRef(function CameraView(
               inFlightAutoCommitRef.current = true;
               // Release the lock after a short window to allow legitimate follow-up darts
               try {
-                window.setTimeout(() => {
-                  inFlightAutoCommitRef.current = false;
-                }, Math.max(120, AUTO_COMMIT_COOLDOWN_MS));
-          } catch (e) {}
+                window.setTimeout(
+                  () => {
+                    inFlightAutoCommitRef.current = false;
+                  },
+                  Math.max(120, AUTO_COMMIT_COOLDOWN_MS),
+                );
+              } catch (e) {}
               // Only dedupe by value/ring/mult to avoid accidental false negatives when
               // the sector or tip fluctuates slightly across frames for the same scoring
               // result. This reduces noisy duplicate notifications while preserving
@@ -1469,7 +2071,11 @@ export default forwardRef(function CameraView(
               // If the same signature reappears during the cooldown, skip it.
               // Allow a different signature to proceed; inFlightAutoCommitRef will
               // still prevent duplicate commits when applyAutoHit runs concurrently.
-              if (now - lastAutoSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS && sig === lastAutoSigRef.current) return;
+              if (
+                now - lastAutoSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS &&
+                sig === lastAutoSigRef.current
+              )
+                return;
               lastAutoSigRef.current = sig;
               lastAutoSigAtRef.current = now;
               if (candidate.value > 0) {
@@ -1478,7 +2084,9 @@ export default forwardRef(function CameraView(
                 try {
                   if (pulseTimeoutRef.current)
                     clearTimeout(pulseTimeoutRef.current);
-                } catch (e) { /* ignore */ }
+                } catch (e) {
+                  /* ignore */
+                }
                 pulseTimeoutRef.current = window.setTimeout(() => {
                   setPulseManualPill(false);
                   pulseTimeoutRef.current = null;
@@ -1487,95 +2095,179 @@ export default forwardRef(function CameraView(
                   // If a parent provided an onAutoDart handler, prefer notifying it
                   // and let the parent decide whether to apply the dart (to avoid
                   // double-commits when both CameraView and parent add the dart).
-                    if (cameraAutoCommit === "camera") {
+                  if (cameraAutoCommit === "camera") {
                     // Camera is authoritative: commit locally unless the parent explicitly
                     // ACKs ownership by returning true from onAutoDart. We'll prefer the
                     // parent's ack if provided to avoid double-commits.
-                      let parentAck = false;
-                      if (onAutoDart) {
-                        try {
-                          const pSig = sig;
-                          const pNow = performance.now();
-                          if (!(pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS)) {
-                            const result = await Promise.resolve(onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult, calibrationValid: true, pBoard }));
-                            if (result) {
-                              parentAck = true;
-                              lastParentSigRef.current = pSig;
-                              lastParentSigAtRef.current = pNow;
-                            }
-                          }
-                        } catch (e) {}
-                      }
-                      if (!parentAck) {
+                    let parentAck = false;
+                    if (onAutoDart) {
                       try {
-                        dlog("CameraView: cameraAutoCommit committing locally", candidate.value, candidate.label, candidate.ring);
-                        addDart(candidate.value, candidate.label, candidate.ring, { calibrationValid: true, pBoard, source: 'camera' });
+                        const pSig = sig;
+                        const pNow = performance.now();
+                        if (
+                          !(
+                            pSig === lastParentSigRef.current &&
+                            pNow - lastParentSigAtRef.current <
+                              AUTO_COMMIT_COOLDOWN_MS
+                          )
+                        ) {
+                          const result = await Promise.resolve(
+                            onAutoDart(candidate.value, candidate.ring, {
+                              sector: candidate.sector,
+                              mult: candidate.mult,
+                              calibrationValid: true,
+                              pBoard,
+                            }),
+                          );
+                          if (result) {
+                            parentAck = true;
+                            lastParentSigRef.current = pSig;
+                            lastParentSigAtRef.current = pNow;
+                          }
+                        }
                       } catch (e) {}
-                        // Also apply immediate single-dart commit for camera autocommit mode
-                        try {
-                          // For single-dart camera auto-commit, apply the visit immediately
-                          // so tests that assert onMatchStore.addVisit see the effect synchronously.
-                          // We also include a visitTotal for auditability.
-                          dlog("CameraView: calling callAddVisit from cameraAutoCommit", candidate.value);
-                          callAddVisit(candidate.value, 1, { visitTotal: candidate.value, calibrationValid: true, pBoard, source: 'camera' });
-                        } catch (e) { /* noop */ }
+                    }
+                    if (!parentAck) {
+                      try {
+                        dlog(
+                          "CameraView: cameraAutoCommit committing locally",
+                          candidate.value,
+                          candidate.label,
+                          candidate.ring,
+                        );
+                        addDart(
+                          candidate.value,
+                          candidate.label,
+                          candidate.ring,
+                          {
+                            calibrationValid: true,
+                            pBoard,
+                            source: "camera",
+                          },
+                        );
+                      } catch (e) {}
+                      // Also apply immediate single-dart commit for camera autocommit mode
+                      try {
+                        // For single-dart camera auto-commit, apply the visit immediately
+                        // so tests that assert onMatchStore.addVisit see the effect synchronously.
+                        // We also include a visitTotal for auditability.
+                        dlog(
+                          "CameraView: calling callAddVisit from cameraAutoCommit",
+                          candidate.value,
+                        );
+                        callAddVisit(candidate.value, 1, {
+                          visitTotal: candidate.value,
+                          calibrationValid: true,
+                          pBoard,
+                          source: "camera",
+                        });
+                      } catch (e) {
+                        /* noop */
                       }
-                      // If camera commits should be immediate (cameraAutoCommit==='camera' implies so),
-                      // apply visit immediately instead of waiting for a delayed submission flow.
-                      // NOTE: Camera auto-commit will add a pending dart and rely on the
-                      // existing commit flow to finalize visit application (to maintain
-                      // consistency for multi-dart visits and trigger pending visit state changes).
+                    }
+                    // If camera commits should be immediate (cameraAutoCommit==='camera' implies so),
+                    // apply visit immediately instead of waiting for a delayed submission flow.
+                    // NOTE: Camera auto-commit will add a pending dart and rely on the
+                    // existing commit flow to finalize visit application (to maintain
+                    // consistency for multi-dart visits and trigger pending visit state changes).
                     // still optionally notify parent for telemetry (but parent should not commit)
                     try {
                       const pSig = sig;
                       const pNow = performance.now();
-                      if (!onAutoDart || pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS) {
+                      if (
+                        !onAutoDart ||
+                        (pSig === lastParentSigRef.current &&
+                          pNow - lastParentSigAtRef.current <
+                            AUTO_COMMIT_COOLDOWN_MS)
+                      ) {
                         // skip
                       } else {
-                        if (onAutoDart) onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult, calibrationValid: true, pBoard });
+                        if (onAutoDart)
+                          onAutoDart(candidate.value, candidate.ring, {
+                            sector: candidate.sector,
+                            mult: candidate.mult,
+                            calibrationValid: true,
+                            pBoard,
+                          });
                         lastParentSigRef.current = pSig;
                         lastParentSigAtRef.current = pNow;
                       }
-                } catch (e) {}
+                    } catch (e) {}
                   } else if (cameraAutoCommit === "parent") {
                     let ack = false;
                     if (onAutoDart) {
                       try {
                         const pSig = sig;
                         const pNow = performance.now();
-                        if (!(pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS)) {
-                          ack = Boolean(await Promise.resolve(onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult, calibrationValid: true, pBoard })));
+                        if (
+                          !(
+                            pSig === lastParentSigRef.current &&
+                            pNow - lastParentSigAtRef.current <
+                              AUTO_COMMIT_COOLDOWN_MS
+                          )
+                        ) {
+                          ack = Boolean(
+                            await Promise.resolve(
+                              onAutoDart(candidate.value, candidate.ring, {
+                                sector: candidate.sector,
+                                mult: candidate.mult,
+                                calibrationValid: true,
+                                pBoard,
+                              }),
+                            ),
+                          );
                           if (ack) {
                             lastParentSigRef.current = pSig;
                             lastParentSigAtRef.current = pNow;
                           }
                         }
-                  } catch (e) {}
+                      } catch (e) {}
                     }
                     if (!ack) {
-                      addDart(candidate.value, candidate.label, candidate.ring, { calibrationValid: true, pBoard, source: 'camera' });
+                      addDart(
+                        candidate.value,
+                        candidate.label,
+                        candidate.ring,
+                        { calibrationValid: true, pBoard, source: "camera" },
+                      );
                     }
                     // if we got an ack from parent, record that we notified the parent so we don't spam
                     if (ack) {
                       lastParentSigRef.current = sig;
                       lastParentSigAtRef.current = performance.now();
                     }
-                  } else /* both */ {
+                  } /* both */ else {
                     // Commit both (dedupe will avoid double commit) and notify parent
                     try {
-                      addDart(candidate.value, candidate.label, candidate.ring, { calibrationValid: true, pBoard, source: 'camera' });
+                      addDart(
+                        candidate.value,
+                        candidate.label,
+                        candidate.ring,
+                        { calibrationValid: true, pBoard, source: "camera" },
+                      );
                     } catch (e) {}
                     try {
                       const pSig = sig;
                       const pNow = performance.now();
-                      if (!onAutoDart || pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS) {
+                      if (
+                        !onAutoDart ||
+                        (pSig === lastParentSigRef.current &&
+                          pNow - lastParentSigAtRef.current <
+                            AUTO_COMMIT_COOLDOWN_MS)
+                      ) {
                         // skip
                       } else {
-                        if (onAutoDart) onAutoDart(candidate.value, candidate.ring, { sector: candidate.sector, mult: candidate.mult, calibrationValid: true, pBoard });
+                        if (onAutoDart)
+                          onAutoDart(candidate.value, candidate.ring, {
+                            sector: candidate.sector,
+                            mult: candidate.mult,
+                            calibrationValid: true,
+                            pBoard,
+                          });
                         lastParentSigRef.current = pSig;
                         lastParentSigAtRef.current = pNow;
                       }
-                } catch (e) {}
+                    } catch (e) {}
                   }
                 } catch (e) {}
               } else {
@@ -1610,7 +2302,13 @@ export default forwardRef(function CameraView(
                 shouldAccept = false;
                 // Still publish to parent so UI can show the detection log but skip commits
                 try {
-                  if (onAutoDart) onAutoDart(value, ring, { sector, mult, calibrationValid: false, pBoard: null });
+                  if (onAutoDart)
+                    onAutoDart(value, ring, {
+                      sector,
+                      mult,
+                      calibrationValid: false,
+                      pBoard: null,
+                    });
                 } catch (e) {}
                 captureDetectionLog({
                   ts: nowPerf,
@@ -1625,53 +2323,86 @@ export default forwardRef(function CameraView(
                   warmup: warmupActive,
                 });
               } else {
-              if (ring === "MISS" || value <= 0) {
-                autoCandidateRef.current = null;
-                setHadRecentAuto(false);
-                try {
-                  if (onAutoDart) onAutoDart(value, ring, { sector, mult, calibrationValid: true, pBoard });
-                } catch (e) {}
-                shouldAccept = true;
-              } else {
-                const existing = autoCandidateRef.current;
-                if (
-                  !existing ||
-                  existing.value !== value ||
-                  existing.ring !== ring
-                ) {
-                  autoCandidateRef.current = {
-                    value,
-                    ring,
-                    label,
-                    sector,
-                    mult,
-                    firstTs: nowPerf,
-                    frames: 1,
-                  };
-                } else {
-                  autoCandidateRef.current = {
-                    ...existing,
-                    label,
-                    frames: existing.frames + 1,
-                  };
-                }
-                const current = autoCandidateRef.current!;
-                const holdMs = nowPerf - current.firstTs;
-                const ready =
-                  current.frames >= AUTO_COMMIT_MIN_FRAMES ||
-                  holdMs >= AUTO_COMMIT_HOLD_MS;
-                const cooled =
-                  nowPerf - lastAutoCommitRef.current >=
-                  AUTO_COMMIT_COOLDOWN_MS;
-                if (ready && cooled) {
-                  dlog('CameraView: candidate ready and cooled', { value, ring, frames: current.frames, nowPerf });
-                  applyAutoHit(current);
-                  didApplyHitThisTick = true;
+                // Reliability hard gate: require settle + stability for *non-miss* candidates.
+                // Misses are allowed through for UI diagnostics but won't be committed.
+                const allowCommitCandidate = settled && tipStable;
+
+                if (ring === "MISS" || value <= 0) {
                   autoCandidateRef.current = null;
-                  lastAutoCommitRef.current = nowPerf;
+                  setHadRecentAuto(false);
+                  try {
+                    if (onAutoDart)
+                      onAutoDart(value, ring, {
+                        sector,
+                        mult,
+                        calibrationValid: Boolean(calibrationGood),
+                        pBoard: calibrationGood ? pBoard : null,
+                      });
+                  } catch (e) {}
                   shouldAccept = true;
+                } else {
+                  // If we're not settled/stable yet, keep tracking but don't start/advance
+                  // the auto-commit candidate count.
+                  if (!allowCommitCandidate) {
+                    shouldAccept = false;
+                    captureDetectionLog({
+                      ts: nowPerf,
+                      label,
+                      value,
+                      ring,
+                      pCal,
+                      tip: tipRefined,
+                      confidence: det.confidence,
+                      ready: false,
+                      accepted: false,
+                      warmup: warmupActive,
+                    });
+                  } else {
+                    const existing = autoCandidateRef.current;
+                    if (
+                      !existing ||
+                      existing.value !== value ||
+                      existing.ring !== ring
+                    ) {
+                      autoCandidateRef.current = {
+                        value,
+                        ring,
+                        label,
+                        sector,
+                        mult,
+                        firstTs: nowPerf,
+                        frames: 1,
+                      };
+                    } else {
+                      autoCandidateRef.current = {
+                        ...existing,
+                        label,
+                        frames: existing.frames + 1,
+                      };
+                    }
+                    const current = autoCandidateRef.current!;
+                    const holdMs = nowPerf - current.firstTs;
+                    const ready =
+                      current.frames >= AUTO_COMMIT_MIN_FRAMES ||
+                      holdMs >= AUTO_COMMIT_HOLD_MS;
+                    const cooled =
+                      nowPerf - lastAutoCommitRef.current >=
+                      AUTO_COMMIT_COOLDOWN_MS;
+                    if (ready && cooled) {
+                      dlog("CameraView: candidate ready and cooled", {
+                        value,
+                        ring,
+                        frames: current.frames,
+                        nowPerf,
+                      });
+                      applyAutoHit(current);
+                      didApplyHitThisTick = true;
+                      autoCandidateRef.current = null;
+                      lastAutoCommitRef.current = nowPerf;
+                      shouldAccept = true;
+                    }
+                  }
                 }
-              }
               }
             } else {
               autoCandidateRef.current = null;
@@ -1690,8 +2421,17 @@ export default forwardRef(function CameraView(
               accepted: shouldAccept && value > 0 && ring !== "MISS",
               warmup: warmupActive,
             });
-            if (process.env.NODE_ENV === 'test') {
-              try { dlog('CameraView: evaluate after detection', { value, ring, shouldAccept, didApplyHitThisTick, warmupActive, autoCandidate: autoCandidateRef.current }); } catch (e) {}
+            if (process.env.NODE_ENV === "test") {
+              try {
+                dlog("CameraView: evaluate after detection", {
+                  value,
+                  ring,
+                  shouldAccept,
+                  didApplyHitThisTick,
+                  warmupActive,
+                  autoCandidate: autoCandidateRef.current,
+                });
+              } catch (e) {}
             }
 
             // Draw debug tip and shaft axis on overlay (scaled to overlay canvas)
@@ -1742,35 +2482,63 @@ export default forwardRef(function CameraView(
               detector.accept(frame, det);
               // Strictly prefer camera committing when set to 'camera'. If parent has an onAutoDart
               // handler we allow an ack to prevent duplicate commits; otherwise camera will assume commit.
-                try {
-                  // If parent provided an onAutoDart handler that synchronously ACKs, prefer it
-                  // and skip local commit to avoid double insertion. This keeps the API
-                  // deterministic for callers that immediately accept ownership of a hit.
-                  let skipLocalCommit = false;
-                  if (onAutoDart) {
-                    try {
-                      const pSig = `${value}|${ring}|${mult}`;
-                      const pNow = performance.now();
-                      if (!(pSig === lastParentSigRef.current && pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS)) {
-                        const maybe = onAutoDart(value, ring, { sector, mult, calibrationValid: true, pBoard });
-                        // If the handler returns a boolean true synchronously, treat as ACK.
-                        if (maybe === true) {
-                          lastParentSigRef.current = pSig;
-                          lastParentSigAtRef.current = pNow;
-                          // Skip local commit
-                          skipLocalCommit = true;
-                        }
+              try {
+                // If parent provided an onAutoDart handler that synchronously ACKs, prefer it
+                // and skip local commit to avoid double insertion. This keeps the API
+                // deterministic for callers that immediately accept ownership of a hit.
+                let skipLocalCommit = false;
+                if (onAutoDart) {
+                  try {
+                    const pSig = `${value}|${ring}|${mult}`;
+                    const pNow = performance.now();
+                    if (
+                      !(
+                        pSig === lastParentSigRef.current &&
+                        pNow - lastParentSigAtRef.current <
+                          AUTO_COMMIT_COOLDOWN_MS
+                      )
+                    ) {
+                      const maybe = onAutoDart(value, ring, {
+                        sector,
+                        mult,
+                        calibrationValid: Boolean(calibrationGood),
+                        pBoard: calibrationGood ? pBoard : null,
+                      });
+                      // If the handler returns a boolean true synchronously, treat as ACK.
+                      if (maybe === true) {
+                        lastParentSigRef.current = pSig;
+                        lastParentSigAtRef.current = pNow;
+                        // Skip local commit
+                        skipLocalCommit = true;
                       }
-                    } catch (e) {}
-                  }
-                  if (process.env.NODE_ENV === 'test') {
-                    try { dlog('CameraView: pre-applyAutoHit', { value, ring, shouldAccept, didApplyHitThisTick, lastAutoCommitRef: lastAutoCommitRef.current, lastAutoSig: lastAutoSigRef.current }); } catch (e) {}
-                  }
-                  // Do not await here; applyAutoHit handles async ack internally.
-                  if (!skipLocalCommit) {
-                    void applyAutoHit({ value, ring, label, sector, mult, firstTs: nowPerf, frames: 1 });
-                  }
-                } catch (e) {}
+                    }
+                  } catch (e) {}
+                }
+                if (process.env.NODE_ENV === "test") {
+                  try {
+                    dlog("CameraView: pre-applyAutoHit", {
+                      value,
+                      ring,
+                      shouldAccept,
+                      didApplyHitThisTick,
+                      lastAutoCommitRef: lastAutoCommitRef.current,
+                      lastAutoSig: lastAutoSigRef.current,
+                    });
+                  } catch (e) {}
+                }
+                // Do not await here; applyAutoHit handles async ack internally.
+                if (!skipLocalCommit) {
+                  void applyAutoHit({
+                    value,
+                    ring,
+                    label,
+                    sector,
+                    mult,
+                    firstTs: nowPerf,
+                    frames: 1,
+                  });
+                }
+              } catch (e) {}
             }
           } else {
             if (
@@ -1780,14 +2548,19 @@ export default forwardRef(function CameraView(
               autoCandidateRef.current = null;
             }
           }
+        } else {
+          // Warmup or paused: update background to adapt to lighting
+          if (detectorRef.current) {
+            detectorRef.current.updateBackground(frame, 0.05);
+          }
         }
       } catch (e) {
         // Soft-fail; continue next frame
         // console.warn('Autoscore tick error:', e)
       }
-  rafRef.current = requestAnimationFrame(tick);
-  // publish tick for test harnesses
-  tickRef.current = tick;
+      rafRef.current = requestAnimationFrame(tick);
+      // publish tick for test harnesses
+      tickRef.current = tick;
     };
 
     rafRef.current = requestAnimationFrame(tick);
@@ -1807,6 +2580,7 @@ export default forwardRef(function CameraView(
     pendingDarts,
     detectorSeedVersion,
     captureDetectionLog,
+    videoReady, // Re-run when video becomes ready
   ]);
 
   const handleUseLocalCamera = useCallback(async () => {
@@ -1825,23 +2599,73 @@ export default forwardRef(function CameraView(
     }
   }, [availableCameras, isPhoneCamera, setPreferredCamera]);
 
+  const capture = useCallback(() => {
+    try {
+      if (typeof document === "undefined") return;
+      const videoEl =
+        videoRef.current || cameraSession.getVideoElementRef?.() || null;
+      if (!videoEl) {
+        console.warn("[CameraView] capture requested without video element");
+        return;
+      }
+      const width = videoEl.videoWidth || videoEl.clientWidth || 0;
+      const height = videoEl.videoHeight || videoEl.clientHeight || 0;
+      if (!width || !height) {
+        console.warn("[CameraView] capture aborted: video has no dimensions");
+        return;
+      }
+      const captureCanvas = document.createElement("canvas");
+      captureCanvas.width = width;
+      captureCanvas.height = height;
+      const ctx = captureCanvas.getContext("2d");
+      if (!ctx) {
+        console.warn("[CameraView] capture aborted: no 2d context");
+        return;
+      }
+      ctx.drawImage(videoEl, 0, 0, width, height);
+      captureCanvas.toBlob((blob) => {
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `ndn-capture-${timestamp}.png`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+        window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+      }, "image/png");
+    } catch (err) {
+      console.warn("[CameraView] capture failed", err);
+    }
+  }, [cameraSession]);
+
   // If an OBS (virtual/OBS) camera is present and user hasn't chosen a preferred camera,
   // auto-select it (but do not override a locked user preference).
   useEffect(() => {
     try {
       if (preferredCameraLocked) return;
       if (preferredCameraId) return;
-      const obs = availableCameras.find((d) => /obs|virtual/i.test(String(d.label || '')));
+      const obs = availableCameras.find((d) =>
+        /obs|virtual/i.test(String(d.label || "")),
+      );
       if (obs) {
-        setPreferredCamera(obs.deviceId, obs.label || '', true);
+        setPreferredCamera(obs.deviceId, obs.label || "", true);
       }
-                } catch (e) {}
-  }, [availableCameras, preferredCameraId, preferredCameraLocked, setPreferredCamera]);
+    } catch (e) {}
+  }, [
+    availableCameras,
+    preferredCameraId,
+    preferredCameraLocked,
+    setPreferredCamera,
+  ]);
 
   // Update calibration audit status whenever homography or image size changes
   useEffect(() => {
     try {
-      useAudit.getState().setCalibrationStatus({ hasHomography: !!H, imageSize });
+      useAudit
+        .getState()
+        .setCalibrationStatus({ hasHomography: !!H, imageSize });
     } catch (e) {}
   }, [H, imageSize]);
 
@@ -1850,13 +2674,13 @@ export default forwardRef(function CameraView(
     try {
       if (!overlayRef.current || !imageSize) return;
       const canvas = overlayRef.current;
-      if (typeof imageSize.w === 'number' && typeof imageSize.h === 'number') {
+      if (typeof imageSize.w === "number" && typeof imageSize.h === "number") {
         if (canvas.width !== imageSize.w || canvas.height !== imageSize.h) {
           canvas.width = imageSize.w;
           canvas.height = imageSize.h;
         }
       }
-  } catch (e) {}
+    } catch (e) {}
   }, [overlayRef, imageSize]);
 
   // External autoscore subscription
@@ -1875,7 +2699,7 @@ export default forwardRef(function CameraView(
             sector: d.sector ?? null,
             mult: (d.mult as any) ?? 0,
           });
-  } catch (e) {}
+        } catch (e) {}
         try {
           addHeatSample({
             playerId:
@@ -1885,7 +2709,7 @@ export default forwardRef(function CameraView(
             ring: d.ring as any,
             ts: Date.now(),
           });
-  } catch (e) {}
+        } catch (e) {}
       } else {
         const label =
           d.ring === "INNER_BULL"
@@ -1893,7 +2717,11 @@ export default forwardRef(function CameraView(
             : d.ring === "BULL"
               ? "BULL 25"
               : `${d.ring[0]}${d.value / (d.mult || 1) || d.value} ${d.value}`;
-  addDart(d.value, label, d.ring as any, { calibrationValid: false, pBoard: null, source: 'camera' });
+        addDart(d.value, label, d.ring as any, {
+          calibrationValid: false,
+          pBoard: null,
+          source: "camera",
+        });
         try {
           addHeatSample({
             playerId:
@@ -1903,7 +2731,7 @@ export default forwardRef(function CameraView(
             ring: d.ring as any,
             ts: Date.now(),
           });
-      } catch (e) {}
+        } catch (e) {}
       }
     });
     return () => sub.close();
@@ -1915,8 +2743,14 @@ export default forwardRef(function CameraView(
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
     // Map to calibration coordinate space by reversing the display scaling
-  const sx = (overlayRef.current.width && imageSize.w) ? overlayRef.current.width / imageSize.w : 1;
-  const sy = (overlayRef.current.height && imageSize.h) ? overlayRef.current.height / imageSize.h : 1;
+    const sx =
+      overlayRef.current.width && imageSize.w
+        ? overlayRef.current.width / imageSize.w
+        : 1;
+    const sy =
+      overlayRef.current.height && imageSize.h
+        ? overlayRef.current.height / imageSize.h
+        : 1;
     const pCal: Point = { x: x / sx, y: y / sy };
     const score = scoreFromImagePoint(H, pCal);
     const s = `${score.ring} ${score.base > 0 ? score.base : ""}`.trim();
@@ -1940,10 +2774,10 @@ export default forwardRef(function CameraView(
             ring: score.ring as any,
             ts: Date.now(),
           });
-      } catch (e) {}
+        } catch (e) {}
         setHadRecentAuto(false);
       }
-  } catch (e) {}
+    } catch (e) {}
   }
 
   function parseManual(
@@ -1979,14 +2813,23 @@ export default forwardRef(function CameraView(
     return leg.totalScoreRemaining;
   }
 
-  function addDart(value: number, label: string, ring: Ring, meta?: { calibrationValid?: boolean; pBoard?: Point | null; source?: 'camera' | 'manual' }) {
+  function addDart(
+    value: number,
+    label: string,
+    ring: Ring,
+    meta?: {
+      calibrationValid?: boolean;
+      pBoard?: Point | null;
+      source?: "camera" | "manual";
+    },
+  ) {
     // Announce the dart if caller is enabled and this came from camera detection
-    if (callerEnabled && meta?.source === 'camera') {
+    if (callerEnabled && meta?.source === "camera") {
       try {
         sayDart(label, callerVoice, { volume: callerVolume });
       } catch (e) {}
     }
-    
+
     if (shouldDeferCommit && awaitingClear) {
       if (!pulseManualPill) {
         setPulseManualPill(true);
@@ -2000,31 +2843,35 @@ export default forwardRef(function CameraView(
       }
       return;
     }
-  const entryMeta = meta ?? { calibrationValid: false, pBoard: null, source: 'manual' };
-  // In generic mode, delegate to parent without X01 bust/finish rules
+    const entryMeta = meta ?? {
+      calibrationValid: false,
+      pBoard: null,
+      source: "manual",
+    };
+    // In generic mode, delegate to parent without X01 bust/finish rules
     if (scoringMode === "custom") {
       if (onGenericDart)
         try {
           onGenericDart(value, ring, { label });
-    } catch (e) {}
+        } catch (e) {}
       // Maintain a lightweight pending list for UI only
-  if ((pendingDartsRef.current || 0) >= 3) {
+      if ((pendingDartsRef.current || 0) >= 3) {
         // Rotate to next visit locally so we don't drop darts visually
         setPendingDarts(1);
         setPendingScore(value);
-  setPendingEntries([{ label, value, ring, meta: entryMeta }]);
+        setPendingEntries([{ label, value, ring, meta: entryMeta }]);
         return;
       }
       const newDarts = pendingDarts + 1;
-  setPendingDarts(newDarts);
-  pendingDartsRef.current = newDarts;
+      setPendingDarts(newDarts);
+      pendingDartsRef.current = newDarts;
       setPendingScore((s) => s + value);
-  setPendingEntries((e) => [...e, { label, value, ring, meta: entryMeta }]);
+      setPendingEntries((e) => [...e, { label, value, ring, meta: entryMeta }]);
       return;
     }
 
     // If a new dart arrives while 3 are pending, auto-commit previous visit and start a new one
-  if ((pendingDartsRef.current || 0) >= 3) {
+    if ((pendingDartsRef.current || 0) >= 3) {
       const previousScore = pendingScore;
       const previousDarts = pendingDarts;
       // Commit previous full visit
@@ -2037,15 +2884,15 @@ export default forwardRef(function CameraView(
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name;
         if (name) addSample(name, previousDarts, previousScore);
-  } catch (e) {}
+      } catch (e) {}
       // Start next visit with this dart
       const willCount =
         !x01DoubleIn || isOpened || ring === "DOUBLE" || ring === "INNER_BULL";
       const applied = willCount ? value : 0;
-  setPendingDarts(1);
-  pendingDartsRef.current = 1;
+      setPendingDarts(1);
+      pendingDartsRef.current = 1;
       setPendingScore(applied);
-  setPendingEntries([{ label, value: applied, ring, meta: entryMeta }]);
+      setPendingEntries([{ label, value: applied, ring, meta: entryMeta }]);
       setPendingPreOpenDarts(willCount ? 0 : 1);
       setPendingDartsAtDouble(0);
       if (
@@ -2062,7 +2909,7 @@ export default forwardRef(function CameraView(
       });
       return;
     }
-  const newDarts = (pendingDartsRef.current || 0) + 1;
+    const newDarts = (pendingDartsRef.current || 0) + 1;
     // Apply X01 Double-In rule before scoring if enabled and not opened yet
     const countsForScore =
       !x01DoubleIn || isOpened || ring === "DOUBLE" || ring === "INNER_BULL";
@@ -2104,8 +2951,8 @@ export default forwardRef(function CameraView(
         finishedByDouble: false,
         visitTotal: 0,
       });
-  setPendingDarts(0);
-  pendingDartsRef.current = 0;
+      setPendingDarts(0);
+      pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       setPendingPreOpenDarts(0);
@@ -2115,10 +2962,13 @@ export default forwardRef(function CameraView(
     }
 
     // Normal add (value may be zero if not opened yet)
-  setPendingDarts(newDarts);
-  pendingDartsRef.current = newDarts;
+    setPendingDarts(newDarts);
+    pendingDartsRef.current = newDarts;
     setPendingScore(newScore);
-  setPendingEntries((e) => [...e, { label, value: appliedValue, ring, meta: entryMeta }]);
+    setPendingEntries((e) => [
+      ...e,
+      { label, value: appliedValue, ring, meta: entryMeta },
+    ]);
     if (
       x01DoubleIn &&
       !isOpened &&
@@ -2144,8 +2994,8 @@ export default forwardRef(function CameraView(
         visitTotal: newScore,
       });
       callEndLeg(newScore);
-  setPendingDarts(0);
-  pendingDartsRef.current = 0;
+      setPendingDarts(0);
+      pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       setPendingPreOpenDarts(0);
@@ -2161,8 +3011,8 @@ export default forwardRef(function CameraView(
         finishedByDouble: false,
         visitTotal: newScore,
       });
-  setPendingDarts(0);
-  pendingDartsRef.current = 0;
+      setPendingDarts(0);
+      pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       setPendingPreOpenDarts(0);
@@ -2177,7 +3027,7 @@ export default forwardRef(function CameraView(
       if (onAutoDart) {
         try {
           onAutoDart(lastAutoValue, lastAutoRing, undefined);
-    } catch (e) {}
+        } catch (e) {}
       } else {
         addDart(lastAutoValue, lastAutoScore, lastAutoRing);
       }
@@ -2276,9 +3126,9 @@ export default forwardRef(function CameraView(
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name;
         if (name) addSample(name, newDarts, 0);
-  } catch (e) {}
-  setPendingDarts(0);
-  pendingDartsRef.current = 0;
+      } catch (e) {}
+      setPendingDarts(0);
+      pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       enqueueVisitCommit({ score: 0, darts: newDarts, finished: false });
@@ -2287,8 +3137,8 @@ export default forwardRef(function CameraView(
       return;
     }
 
-  setPendingDarts(newDarts);
-  pendingDartsRef.current = newDarts;
+    setPendingDarts(newDarts);
+    pendingDartsRef.current = newDarts;
     setPendingScore(newScore);
     setPendingEntries((e) => [
       ...e.slice(0, -1),
@@ -2301,9 +3151,9 @@ export default forwardRef(function CameraView(
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name;
         if (name) addSample(name, newDarts, newScore);
-  } catch (e) {}
-  setPendingDarts(0);
-  pendingDartsRef.current = 0;
+      } catch (e) {}
+      setPendingDarts(0);
+      pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: true });
@@ -2317,9 +3167,9 @@ export default forwardRef(function CameraView(
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name;
         if (name) addSample(name, newDarts, newScore);
-  } catch (e) {}
-  setPendingDarts(0);
-  pendingDartsRef.current = 0;
+      } catch (e) {}
+      setPendingDarts(0);
+      pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: false });
@@ -2334,7 +3184,7 @@ export default forwardRef(function CameraView(
     // Ask App to switch to calibrate tab
     try {
       window.dispatchEvent(new CustomEvent("ndn:request-calibrate"));
-  } catch (e) {}
+    } catch (e) {}
   }
 
   function onResetCalibration() {
@@ -2353,7 +3203,7 @@ export default forwardRef(function CameraView(
           setActiveTab("manual");
           setShowManualModal(true);
         }
-  } catch (e) {}
+      } catch (e) {}
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -2385,8 +3235,8 @@ export default forwardRef(function CameraView(
   function onUndoDart() {
     if (pendingDarts === 0) return;
     const last = pendingEntries[pendingEntries.length - 1];
-  setPendingDarts((d) => d - 1);
-  pendingDartsRef.current = Math.max(0, (pendingDartsRef.current || 0) - 1);
+    setPendingDarts((d) => d - 1);
+    pendingDartsRef.current = Math.max(0, (pendingDartsRef.current || 0) - 1);
     setPendingScore((s) => s - (last?.value || 0));
     setPendingEntries((e) => e.slice(0, -1));
   }
@@ -2394,14 +3244,18 @@ export default forwardRef(function CameraView(
   function onCommitVisit() {
     if (pendingDarts === 0 || (shouldDeferCommit && awaitingClear)) return;
     if (commitBlocked) {
-      try { window.alert('Cannot commit: pending camera detections are not calibration validated for online matches'); } catch {}
+      try {
+        window.alert(
+          "Cannot commit: pending camera detections are not calibration validated for online matches",
+        );
+      } catch {}
       return;
     }
     if (scoringMode === "custom") {
       // For custom mode, simply clear local pending (parent maintains its own scoring)
-  setPendingDarts(0);
-  pendingDartsRef.current = 0;
-  pendingDartsRef.current = 0;
+      setPendingDarts(0);
+      pendingDartsRef.current = 0;
+      pendingDartsRef.current = 0;
       setPendingScore(0);
       setPendingEntries([]);
       return;
@@ -2412,9 +3266,9 @@ export default forwardRef(function CameraView(
     try {
       const name = matchState.players[matchState.currentPlayerIdx]?.name;
       if (name) addSample(name, visitDarts, visitScore);
-  } catch (e) {}
-  setPendingDarts(0);
-  pendingDartsRef.current = 0;
+    } catch (e) {}
+    setPendingDarts(0);
+    pendingDartsRef.current = 0;
     setPendingScore(0);
     setPendingEntries([]);
     enqueueVisitCommit({
@@ -2425,7 +3279,7 @@ export default forwardRef(function CameraView(
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full min-w-0">
       {/* Pills (optional; can be hidden and controlled by parent) */}
       {showToolbar && (
         <div className="lg:col-span-2">
@@ -2461,497 +3315,538 @@ export default forwardRef(function CameraView(
         </div>
       )}
       {!hideInlinePanels && !manualOnly ? (
-        <div className="card relative camera-fullwidth-card lg:col-span-2">
-          <h2 className="text-xl font-semibold mb-3">Camera</h2>
-          <ResizablePanel
-            storageKey="ndn:camera:size"
-            className="relative rounded-2xl overflow-hidden bg-black"
-            defaultWidth={480}
-            defaultHeight={360}
-            minWidth={360}
-            minHeight={270}
-            maxWidth={800}
-            maxHeight={600}
-            autoFill
-          >
-            <CameraSelector />
-            {(() => {
-              const aspect =
-                cameraAspect ||
-                useUserSettings.getState().cameraAspect ||
-                "wide";
-              const fit =
-                (cameraFitMode ||
-                  useUserSettings.getState().cameraFitMode ||
-                  "fit") === "fit";
-              const videoClass =
-                aspect === "square"
-                  ? "absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black"
-                  : fit
-                    ? "absolute inset-0 w-full h-full object-contain object-center bg-black"
-                    : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black";
-              const videoScale = cameraScale ?? 1;
-              const videoStyle = {
-                transform: `scale(${videoScale})`,
-                transformOrigin: "center center" as const,
-              };
-              const containerClass =
-                aspect === "square"
-                  ? "relative w-full mx-auto aspect-square bg-black"
-                  : "relative w-full aspect-[4/3] bg-black";
-              const renderVideoSurface = () => (
-                <div className={containerClass}>
-                  <video
-                    ref={videoRef}
-                    className={videoClass}
-                    style={videoStyle}
-                    playsInline
-                    muted
-                    autoPlay
-                  />
-                  <canvas
-                    ref={overlayRef}
-                    className="absolute inset-0 w-full h-full"
-                    onClick={onOverlayClick}
-                  />
-                  <div
-                    className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 cursor-pointer select-none"
-                    onDoubleClick={handleIndicatorReset}
-                    aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value > 0 ? "hit" : "miss") : "pending"}, ${pendingEntries[1] ? (pendingEntries[1].value > 0 ? "hit" : "miss") : "pending"}, ${pendingEntries[2] ? (pendingEntries[2].value > 0 ? "hit" : "miss") : "pending"}`}
-                  >
-                    {[0, 1, 2].map((i) => {
-                      const e = pendingEntries[i] as any;
-                      const entrySeq = indicatorEntryVersions[i];
-                      const isPending = !e;
-                      const isActive = !!e && entrySeq === indicatorVersion;
-                      const hasPositiveValue =
-                        typeof e?.value === "number" ? e.value > 0 : false;
-                      const hasHitRing =
-                        (e?.ring && e.ring !== "MISS") ?? false;
-                      const isHit =
-                        isActive && (hasPositiveValue || hasHitRing);
-                      const color = !isActive
-                        ? "bg-gray-500/70"
-                        : isHit
-                          ? "bg-emerald-400"
-                          : "bg-rose-500";
-                      const activeState = isActive && !isPending;
-                      return (
-                        <span
-                          key={i}
-                          className={`visit-dot ${activeState ? "active" : "inactive"} ${color}`}
-                        />
-                      );
-                    })}
-                    {dartTimerEnabled && dartTimeLeft !== null && (
-                      <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
-                        {Math.max(0, dartTimeLeft)}s
-                      </span>
-                    )}
-                  </div>
-                  {shouldDeferCommit && awaitingClear ? (
-                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 bg-black/70 text-amber-200 text-xs font-semibold px-3 py-1 rounded-full shadow">
-                      Remove darts to continue
+        <div className="card relative camera-fullwidth-card lg:col-span-2 w-full min-w-0">
+          <div className="camera-fullwidth-body flex flex-col gap-4 w-full min-w-0">
+            <h2 className="text-xl font-semibold mb-3">Camera</h2>
+            <ResizablePanel
+              storageKey="ndn:camera:size"
+              className="relative rounded-2xl overflow-hidden bg-black w-full"
+              defaultWidth={480}
+              defaultHeight={360}
+              minWidth={360}
+              minHeight={270}
+              maxWidth={800}
+              maxHeight={600}
+              autoFill
+            >
+              <CameraSelector />
+              {(() => {
+                const aspect =
+                  cameraAspect ||
+                  useUserSettings.getState().cameraAspect ||
+                  "wide";
+                const fit =
+                  (cameraFitMode ||
+                    useUserSettings.getState().cameraFitMode ||
+                    "fit") === "fit";
+                const videoClass =
+                  aspect === "square"
+                    ? "absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black"
+                    : fit
+                      ? "absolute inset-0 w-full h-full object-contain object-center bg-black"
+                      : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black";
+                const videoScale = cameraScale ?? 1;
+                const videoStyle = {
+                  transform: `scale(${videoScale})`,
+                  transformOrigin: "center center" as const,
+                };
+                const containerClass =
+                  aspect === "square"
+                    ? "relative w-full mx-auto aspect-square bg-black"
+                    : "relative w-full aspect-[4/3] bg-black";
+                const renderVideoSurface = () => (
+                  <div className={containerClass}>
+                    <video
+                      ref={handleVideoRef}
+                      className={videoClass}
+                      style={videoStyle}
+                      playsInline
+                      muted
+                      autoPlay
+                    />
+                    <canvas
+                      ref={overlayRef}
+                      className="absolute inset-0 w-full h-full"
+                      onClick={onOverlayClick}
+                    />
+                    <div
+                      className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-3 cursor-pointer select-none"
+                      onDoubleClick={handleIndicatorReset}
+                      aria-label={`Visit status: ${pendingEntries[0] ? (pendingEntries[0].value > 0 ? "hit" : "miss") : "pending"}, ${pendingEntries[1] ? (pendingEntries[1].value > 0 ? "hit" : "miss") : "pending"}, ${pendingEntries[2] ? (pendingEntries[2].value > 0 ? "hit" : "miss") : "pending"}`}
+                    >
+                      {[0, 1, 2].map((i) => {
+                        const e = pendingEntries[i] as any;
+                        const entrySeq = indicatorEntryVersions[i];
+                        const isPending = !e;
+                        const isActive = !!e && entrySeq === indicatorVersion;
+                        const hasPositiveValue =
+                          typeof e?.value === "number" ? e.value > 0 : false;
+                        const hasHitRing =
+                          (e?.ring && e.ring !== "MISS") ?? false;
+                        const isHit =
+                          isActive && (hasPositiveValue || hasHitRing);
+                        const color = !isActive
+                          ? "bg-gray-500/70"
+                          : isHit
+                            ? "bg-emerald-400"
+                            : "bg-rose-500";
+                        const activeState = isActive && !isPending;
+                        return (
+                          <span
+                            key={i}
+                            className={`visit-dot ${activeState ? "active" : "inactive"} ${color}`}
+                          />
+                        );
+                      })}
+                      {dartTimerEnabled && dartTimeLeft !== null && (
+                        <span className="px-2 py-0.5 rounded bg-black/60 text-white text-xs font-semibold">
+                          {Math.max(0, dartTimeLeft)}s
+                        </span>
+                      )}
                     </div>
-                  ) : null}
-                </div>
-              );
-              if (isPhoneCamera) {
-                if (!phoneFeedActive) {
-                  return (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
-                      <div className="text-center space-y-3 max-w-xs mx-auto">
-                        <div className="text-4xl">📱</div>
-                        <div className="text-lg font-semibold text-blue-100">
-                          Phone camera selected
-                        </div>
-                        <p className="text-sm text-slate-300">
-                          Start streaming from the Calibrator tab or reconnect
-                          below.
-                        </p>
-                        <div className="flex items-center justify-center gap-2 flex-wrap">
-                          <button
-                            className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm"
-                            onClick={handlePhoneReconnect}
-                          >
-                            Reconnect Phone
-                          </button>
-                          <button
-                            className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm"
-                            onClick={() => {
-                              try {
-                                cameraSession.setShowOverlay?.(true);
-                          } catch (e) {}
-                            }}
-                          >
-                            Show Overlay
-                          </button>
-                          <button
-                            className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm"
-                            onClick={handleUseLocalCamera}
-                            disabled={!availableCameras.length}
-                          >
-                            Use Local Camera
-                          </button>
+                    {shouldDeferCommit && awaitingClear ? (
+                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 bg-black/70 text-amber-200 text-xs font-semibold px-3 py-1 rounded-full shadow">
+                        Remove darts to continue
+                      </div>
+                    ) : null}
+                  </div>
+                );
+                if (isPhoneCamera) {
+                  if (!phoneFeedActive) {
+                    return (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
+                        <div className="text-center space-y-3 max-w-xs mx-auto">
+                          <div className="text-2xl font-semibold">CAM</div>
+                          <div className="text-lg font-semibold text-blue-100">
+                            Phone camera selected
+                          </div>
+                          <p className="text-sm text-slate-300">
+                            Start streaming from the Calibrator tab or reconnect
+                            below.
+                          </p>
+                          <div className="flex items-center justify-center gap-2 flex-wrap">
+                            <button
+                              className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm"
+                              onClick={handlePhoneReconnect}
+                            >
+                              Reconnect Phone
+                            </button>
+                            <button
+                              className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm"
+                              onClick={() => {
+                                try {
+                                  cameraSession.setShowOverlay?.(true);
+                                } catch (e) {}
+                              }}
+                            >
+                              Show Overlay
+                            </button>
+                            <button
+                              className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm"
+                              onClick={handleUseLocalCamera}
+                              disabled={!availableCameras.length}
+                            >
+                              Use Local Camera
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
+                    );
+                  }
+                  return renderVideoSurface();
                 }
                 return renderVideoSurface();
-              }
-              return renderVideoSurface();
-            })()}
-          </ResizablePanel>
+              })()}
+            </ResizablePanel>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-            <span className="uppercase tracking-wide text-slate-400">Cam</span>
-            <button
-              className="btn btn--ghost px-2 py-1"
-              onClick={() => adjustCameraScale(-0.05)}
-              title="Decrease camera zoom"
-            >
-              −
-            </button>
-            <span className="w-10 text-center font-semibold text-white">
-              {Math.round((cameraScale ?? 1) * 100)}%
-            </span>
-            <button
-              className="btn btn--ghost px-2 py-1"
-              onClick={() => adjustCameraScale(0.05)}
-              title="Increase camera zoom"
-            >
-              +
-            </button>
-            <button
-              className={`btn btn--ghost px-3 py-1 text-[11px] ${cameraFitMode === "fill" ? "bg-emerald-500 text-white" : ""}`}
-              onClick={setFullPreview}
-              title="Show dartboard only"
-            >
-              Full
-            </button>
-            <button
-              className={`btn btn--ghost px-3 py-1 text-[11px] ${cameraFitMode !== "fill" ? "bg-slate-200 text-slate-900" : ""}`}
-              onClick={setWidePreview}
-              title="Letterbox to wide view"
-            >
-              Wide
-            </button>
-          </div>
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <button
-              className="btn btn--ghost px-3 py-1 text-xs font-semibold"
-              onClick={() => setShowDetectionLog((prev) => !prev)}
-            >
-              {showDetectionLog ? "Hide" : "Show"} detection log
-            </button>
-            <span className="text-xs text-slate-400">
-              Recent detections: {detectionLog.length}
-            </span>
-          </div>
-          {showDetectionLog && (
-            <div className="mt-2 rounded-2xl border border-white/15 bg-slate-900/80 p-3 text-xs text-white font-mono max-h-36 overflow-y-auto space-y-1">
-              {detectionLog.length === 0 ? (
-                <div className="text-center text-slate-400">
-                  No autoscore detections yet.
-                </div>
-              ) : (
-                detectionLog
-                  .slice()
-                  .reverse()
-                  .map((entry) => (
-                    <div
-                      key={entry.ts}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <span
-                        className="truncate flex-1"
-                        title={`Value ${entry.value} ${entry.ring}`}
-                      >
-                        {entry.label.padEnd(6, " ")}
-                      </span>
-                      <span className="text-slate-400">
-                        {entry.confidence.toFixed(2)}
-                      </span>
-                      <span
-                        className={`px-2 rounded-full text-[10px] font-semibold ${entry.accepted ? "bg-emerald-500/80" : entry.ready ? "bg-amber-500/80" : "bg-rose-500/80"}`}
-                      >
-                        {entry.accepted
-                          ? "accepted"
-                          : entry.ready
-                            ? "queued"
-                            : "ignored"}
-                      </span>
-                    </div>
-                  ))
-              )}
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="uppercase tracking-wide text-slate-400">
+                Cam
+              </span>
+              <button
+                className="btn btn--ghost px-2 py-1"
+                onClick={() => adjustCameraScale(-0.05)}
+                title="Decrease camera zoom"
+              >
+                −
+              </button>
+              <span className="w-10 text-center font-semibold text-white">
+                {Math.round((cameraScale ?? 1) * 100)}%
+              </span>
+              <button
+                className="btn btn--ghost px-2 py-1"
+                onClick={() => adjustCameraScale(0.05)}
+                title="Increase camera zoom"
+              >
+                +
+              </button>
+              <button
+                className={`btn btn--ghost px-3 py-1 text-[11px] ${cameraFitMode === "fill" ? "bg-emerald-500 text-white" : ""}`}
+                onClick={setFullPreview}
+                title="Show dartboard only"
+              >
+                Full
+              </button>
+              <button
+                className={`btn btn--ghost px-3 py-1 text-[11px] ${cameraFitMode !== "fill" ? "bg-slate-200 text-slate-900" : ""}`}
+                onClick={setWidePreview}
+                title="Letterbox to wide view"
+              >
+                Wide
+              </button>
             </div>
-          )}
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <button
+                className="btn btn--ghost px-3 py-1 text-xs font-semibold"
+                onClick={() => setShowDetectionLog((prev) => !prev)}
+              >
+                {showDetectionLog ? "Hide" : "Show"} detection log
+              </button>
+              <span className="text-xs text-slate-400">
+                Recent detections: {detectionLog.length}
+              </span>
+            </div>
+            {showDetectionLog && (
+              <div className="mt-2 rounded-2xl border border-white/15 bg-slate-900/80 p-3 text-xs text-white font-mono max-h-36 overflow-y-auto space-y-1">
+                {detectionLog.length === 0 ? (
+                  <div className="text-center text-slate-400">
+                    No autoscore detections yet.
+                  </div>
+                ) : (
+                  detectionLog
+                    .slice()
+                    .reverse()
+                    .map((entry) => (
+                      <div
+                        key={entry.ts}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <span
+                          className="truncate flex-1"
+                          title={`Value ${entry.value} ${entry.ring}`}
+                        >
+                          {entry.label.padEnd(6, " ")}
+                        </span>
+                        <span className="text-slate-400">
+                          {entry.confidence.toFixed(2)}
+                        </span>
+                        <span
+                          className={`px-2 rounded-full text-[10px] font-semibold ${entry.accepted ? "bg-emerald-500/80" : entry.ready ? "bg-amber-500/80" : "bg-rose-500/80"}`}
+                        >
+                          {entry.accepted
+                            ? "accepted"
+                            : entry.ready
+                              ? "queued"
+                              : "ignored"}
+                        </span>
+                      </div>
+                    ))
+                )}
+              </div>
+            )}
 
-          {/* Small Manual pill in top-right of camera card so users in any game mode can open Manual Correction */}
-          {inProgress ? (
-            <div className="absolute top-3 right-3 z-30">
-              {/**
-               * Autoscore state styles:
-               * - success: recent auto detected a valid non-miss score -> green
-               * - ambiguous: recent auto detected but result is miss/zero/empty -> amber
-               * - idle: default white/neutral
-               */}
-              {(() => {
-                let stateClass = "bg-white/90 text-slate-800";
-                let title = "Manual Correction (M)";
-                if (hadRecentAuto) {
-                  const ok =
+            {/* Small Manual pill in top-right of camera card so users in any game mode can open Manual Correction */}
+            {inProgress ? (
+              <div className="absolute top-3 right-3 z-30">
+                {(() => {
+                  let stateClass = "bg-white/90 text-slate-800";
+                  let title = "Manual Correction (M)";
+                  if (hadRecentAuto) {
+                    const ok =
+                      !!lastAutoScore &&
+                      lastAutoRing !== "MISS" &&
+                      lastAutoValue > 0;
+                    if (ok) {
+                      stateClass = "bg-emerald-600 text-white";
+                      title = `Manual Correction (M) — Autoscore: ${lastAutoScore} (confirmed)`;
+                    } else {
+                      stateClass = "bg-amber-400 text-black";
+                      title = `Manual Correction (M) — Autoscore ambiguous: ${lastAutoScore || "—"}`;
+                    }
+                  }
+                  const baseClasses =
+                    "px-4 py-2 rounded-full text-base font-semibold shadow-sm hover:opacity-90";
+                  const okNow =
+                    hadRecentAuto &&
                     !!lastAutoScore &&
                     lastAutoRing !== "MISS" &&
                     lastAutoValue > 0;
-                  if (ok) {
-                    stateClass = "bg-emerald-600 text-white";
-                    title = `Manual Correction (M) — Autoscore: ${lastAutoScore} (confirmed)`;
-                  } else {
-                    stateClass = "bg-amber-400 text-black";
-                    title = `Manual Correction (M) — Autoscore ambiguous: ${lastAutoScore || "—"}`;
-                  }
-                }
-                // Larger, clearer pill text and padding
-                const baseClasses =
-                  "px-4 py-2 rounded-full text-base font-semibold shadow-sm hover:opacity-90";
-                const okNow =
-                  hadRecentAuto &&
-                  !!lastAutoScore &&
-                  lastAutoRing !== "MISS" &&
-                  lastAutoValue > 0;
-                const pulseClass =
-                  pulseManualPill && okNow
-                    ? "ring-4 ring-emerald-400/60 animate-ping"
-                    : hadRecentAuto && !okNow
-                      ? "animate-pulse"
-                      : "";
-                return (
-                  <div className="flex items-center gap-2">
-                    <button
-                      className={`${baseClasses} ${stateClass} ${pulseClass}`}
-                      onClick={() => {
-                        setActiveTab("manual");
-                        setShowManualModal(true);
-                      }}
-                      title={title}
-                    >
-                      Manual
-                    </button>
-                    <button
-                      data-testid="commit-visit-btn"
-                      className="px-3 py-1 rounded bg-emerald-500 text-white text-sm"
-                      onClick={onCommitVisit}
-                      disabled={pendingDarts === 0 || commitBlocked}
-                      title="Commit visit"
-                    >
-                      Commit
-                    </button>
+                  const pulseClass =
+                    pulseManualPill && okNow
+                      ? "ring-4 ring-emerald-400/60 animate-ping"
+                      : hadRecentAuto && !okNow
+                        ? "animate-pulse"
+                        : "";
+                  const autoscoreStatus = okNow
+                    ? "Auto confirmed"
+                    : hadRecentAuto
+                      ? "Auto pending review"
+                      : "Waiting for autoscore";
+                  const autoscoreDetail = lastAutoScore
+                    ? `${lastAutoScore} ${
+                        lastAutoRing === "MISS"
+                          ? "(miss)"
+                          : lastAutoRing.toLowerCase()
+                      }`
+                    : "No recent autoscore";
+                  return (
+                    <div className="min-w-[220px] space-y-2 rounded-2xl border border-white/15 bg-slate-900/70 p-3 text-sm shadow-lg backdrop-blur">
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          className={`${baseClasses} ${stateClass} ${pulseClass}`}
+                          onClick={() => {
+                            setActiveTab("manual");
+                            setShowManualModal(true);
+                          }}
+                          title={title}
+                        >
+                          Manual
+                        </button>
+                        <span
+                          className={`text-[11px] font-semibold tracking-wide ${
+                            okNow ? "text-emerald-300" : "text-amber-300"
+                          }`}
+                        >
+                          {autoscoreStatus}
+                        </span>
+                      </div>
+                      <p className="text-[11px] leading-tight text-slate-300 truncate">
+                        {autoscoreDetail}
+                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          data-testid="commit-visit-btn"
+                          className="px-3 py-1 rounded bg-emerald-500 text-white text-sm"
+                          onClick={onCommitVisit}
+                          disabled={pendingDarts === 0 || commitBlocked}
+                          title="Commit visit"
+                        >
+                          Commit
+                        </button>
+                        <span className="text-[11px] text-slate-400">
+                          {pendingDarts} darts · {pendingScore} pts pending
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2 mt-3">
+              {isPhoneCamera ? (
+                <>
+                  <div
+                    className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? "bg-emerald-500/10 border-emerald-400/40 text-emerald-100" : "bg-amber-500/10 border-amber-400/40 text-amber-100"}`}
+                  >
+                    {phoneFeedActive
+                      ? "CAM Phone camera stream active"
+                      : "CAM Waiting for phone camera stream"}
                   </div>
-                );
-              })()}
-            </div>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-2 mt-3">
-            {isPhoneCamera ? (
-              <>
-                <div
-                  className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? "bg-emerald-500/10 border-emerald-400/40 text-emerald-100" : "bg-amber-500/10 border-amber-400/40 text-amber-100"}`}
-                >
-                  {phoneFeedActive
-                    ? "📱 Phone camera stream active"
-                    : "📱 Waiting for phone camera stream"}
-                </div>
-                <button
-                  className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm"
-                  onClick={handlePhoneReconnect}
-                >
-                  Reconnect Phone
-                </button>
-                <button
-                  className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm"
-                  onClick={() => {
-                    try {
-                      cameraSession.setShowOverlay?.(
-                        !cameraSession.showOverlay,
-                      );
-                } catch (e) {}
-                  }}
-                >
-                  {cameraSession.showOverlay ? "Hide Overlay" : "Show Overlay"}
-                </button>
-                <button
-                  className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
-                  disabled={!phoneFeedActive}
-                  onClick={() => {
-                    try {
-                      cameraSession.clearSession?.();
-                    } catch (e) {}
-                  }}
-                >
-                  Stop Phone Feed
-                </button>
-                {canFallbackToLocal && (
                   <button
-                    className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm"
-                    onClick={handleUseLocalCamera}
-                    disabled={!availableCameras.length}
+                    className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm"
+                    onClick={handlePhoneReconnect}
                   >
-                    Use Local Camera
+                    Reconnect Phone
                   </button>
-                )}
-              </>
-            ) : (
-              <>
-                {!streaming ? (
                   <button
-                    className="btn"
-                    onClick={startCamera}
-                    disabled={cameraStarting}
+                    className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm"
+                    onClick={() => {
+                      try {
+                        cameraSession.setShowOverlay?.(
+                          !cameraSession.showOverlay,
+                        );
+                      } catch (e) {}
+                    }}
                   >
-                    {cameraStarting ? "Connecting Camera..." : "Connect Camera"}
+                    {cameraSession.showOverlay
+                      ? "Hide Overlay"
+                      : "Show Overlay"}
                   </button>
-                ) : (
                   <button
-                    className="btn bg-rose-600 hover:bg-rose-700"
-                    onClick={stopCamera}
+                    className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
+                    disabled={!phoneFeedActive}
+                    onClick={() => {
+                      try {
+                        cameraSession.clearSession?.();
+                      } catch (e) {}
+                    }}
                   >
-                    Stop Camera
+                    Stop Phone Feed
                   </button>
-                )}
-              </>
-            )}
-            {!manualOnly && (
+                  {canFallbackToLocal && (
+                    <button
+                      className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm"
+                      onClick={handleUseLocalCamera}
+                      disabled={!availableCameras.length}
+                    >
+                      Use Local Camera
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  {!streaming ? (
+                    <button
+                      className="btn"
+                      onClick={startCamera}
+                      disabled={cameraStarting}
+                    >
+                      {cameraStarting
+                        ? "Connecting Camera..."
+                        : "Connect Camera"}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn bg-rose-600 hover:bg-rose-700"
+                      onClick={stopCamera}
+                    >
+                      Stop Camera
+                    </button>
+                  )}
+                </>
+              )}
+              {!manualOnly && (
+                <button
+                  className="btn bg-slate-700 hover:bg-slate-800"
+                  onClick={requestDeviceManager}
+                  title="Open phone, WiFi, and USB camera options"
+                >
+                  Camera Devices
+                </button>
+              )}
+              <button
+                className="btn btn--ghost px-3 py-1 text-sm"
+                onClick={() => setHideCameraOverlay(!hideCameraOverlay)}
+                title="Toggle the board guide overlay"
+              >
+                {hideCameraOverlay ? "Show board guides" : "Hide board guides"}
+              </button>
+              <button
+                className={`btn ${cameraEnabled ? "bg-rose-600 hover:bg-rose-700 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
+                onClick={() => setCameraEnabled(!cameraEnabled)}
+                title="Toggle whether the camera is used for scoring"
+              >
+                {cameraEnabled ? "Disable camera mode" : "Enable camera mode"}
+              </button>
+              <button
+                className="btn"
+                onClick={capture}
+                disabled={!effectiveStreaming}
+              >
+                Capture Still
+              </button>
+              {matchState?.inProgress && (
+                <>
+                  <PauseTimerBadge compact />
+                  <button
+                    className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
+                    onClick={() => setShowQuitPause(true)}
+                  >
+                    Quit / Pause
+                  </button>
+                  {showQuitPause && (
+                    <PauseQuitModal
+                      onClose={() => setShowQuitPause(false)}
+                      onQuit={() => {
+                        try {
+                          // Emit a global event other parts of the app can listen to
+                          window.dispatchEvent(
+                            new CustomEvent("ndn:match-quit"),
+                          );
+                          // broadcast to other windows
+                          try {
+                            broadcastMessage({ type: "quit" });
+                          } catch {}
+                        } catch (e) {}
+                        setShowQuitPause(false);
+                      }}
+                      onPause={(minutes) => {
+                        const endsAt = Date.now() + minutes * 60 * 1000;
+                        try {
+                          useMatchControl.getState().setPaused(true, endsAt);
+                          try {
+                            broadcastMessage({
+                              type: "pause",
+                              pauseEndsAt: endsAt,
+                              pauseStartedAt: Date.now(),
+                            });
+                          } catch {}
+                        } catch (e) {}
+                        setShowQuitPause(false);
+                      }}
+                    />
+                  )}
+                  <button
+                    className="btn btn--ghost px-3 py-1 text-sm"
+                    onClick={() => {
+                      try {
+                        writeMatchSnapshot();
+                        window.open(
+                          `${window.location.origin}${window.location.pathname}?match=1`,
+                          "_blank",
+                        );
+                      } catch (e) {}
+                    }}
+                  >
+                    Open match in new window
+                  </button>
+                  <button
+                    className={`btn btn--ghost px-3 py-1 text-sm ${forwarding ? "bg-emerald-600 text-black" : ""}`}
+                    onClick={() => {
+                      try {
+                        const v = videoRef.current as HTMLVideoElement | null;
+                        if (!v) return;
+                        if (!forwarding) {
+                          startForwarding(v, 600);
+                          setForwarding(true);
+                        } else {
+                          stopForwarding();
+                          setForwarding(false);
+                        }
+                      } catch (e) {}
+                    }}
+                  >
+                    {forwarding
+                      ? "Stop preview forward"
+                      : "Forward preview (PoC)"}
+                  </button>
+                  <button
+                    className="btn btn--ghost px-3 py-1 text-sm"
+                    onClick={async () => {
+                      try {
+                        if (document.documentElement.requestFullscreen) {
+                          await document.documentElement.requestFullscreen();
+                        } else if ((document as any).body.requestFullscreen) {
+                          await (document as any).body.requestFullscreen();
+                        }
+                      } catch (e) {}
+                    }}
+                  >
+                    Open full screen
+                  </button>
+                </>
+              )}
               <button
                 className="btn bg-slate-700 hover:bg-slate-800"
-                onClick={requestDeviceManager}
-                title="Open phone, WiFi, and USB camera options"
+                disabled={!effectiveStreaming}
+                onClick={() => {
+                  detectorRef.current = null;
+                  setDetectorSeedVersion((v) => v + 1);
+                }}
               >
-                Camera Devices
+                Reset Autoscore Background
               </button>
-            )}
-            <button
-              className="btn btn--ghost px-3 py-1 text-sm"
-              onClick={() => setHideCameraOverlay(!hideCameraOverlay)}
-              title="Toggle the board guide overlay"
-            >
-              {hideCameraOverlay ? "Show board guides" : "Hide board guides"}
-            </button>
-            <button
-              className={`btn ${cameraEnabled ? "bg-rose-600 hover:bg-rose-700 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
-              onClick={() => setCameraEnabled(!cameraEnabled)}
-              title="Toggle whether the camera is used for scoring"
-            >
-              {cameraEnabled ? "Disable camera mode" : "Enable camera mode"}
-            </button>
-            <button
-              className="btn"
-              onClick={capture}
-              disabled={!effectiveStreaming}
-            >
-              Capture Still
-            </button>
-            {matchState?.inProgress && (
-              <>
-                <PauseTimerBadge compact />
-                <button
-                  className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
-                  onClick={() => setShowQuitPause(true)}
-                >
-                  Quit / Pause
-                </button>
-                {showQuitPause && (
-                  <PauseQuitModal
-                    onClose={() => setShowQuitPause(false)}
-                    onQuit={() => {
-                      try {
-                        // Emit a global event other parts of the app can listen to
-                        window.dispatchEvent(new CustomEvent("ndn:match-quit"));
-                        // broadcast to other windows
-                        try {
-                          broadcastMessage({ type: "quit" });
-                        } catch {}
-                      } catch (e) {}
-                      setShowQuitPause(false);
-                    }}
-                    onPause={(minutes) => {
-                      const endsAt = Date.now() + minutes * 60 * 1000;
-                      try {
-                        useMatchControl.getState().setPaused(true, endsAt);
-                        try {
-                          broadcastMessage({ type: "pause", pauseEndsAt: endsAt, pauseStartedAt: Date.now() });
-                        } catch {}
-                      } catch (e) {}
-                      setShowQuitPause(false);
-                    }}
-                  />
-                )}
-                <button
-                  className="btn btn--ghost px-3 py-1 text-sm"
-                  onClick={() => {
-                    try {
-                      writeMatchSnapshot();
-                      window.open(`${window.location.origin}${window.location.pathname}?match=1`, "_blank");
-                    } catch (e) {}
-                  }}
-                >
-                  Open match in new window
-                </button>
-                <button
-                  className={`btn btn--ghost px-3 py-1 text-sm ${forwarding ? 'bg-emerald-600 text-black' : ''}`}
-                  onClick={() => {
-                    try {
-                      const v = videoRef.current as HTMLVideoElement | null;
-                      if (!v) return;
-                      if (!forwarding) {
-                        startForwarding(v, 600);
-                        setForwarding(true);
-                      } else {
-                        stopForwarding();
-                        setForwarding(false);
-                      }
-                    } catch (e) {}
-                  }}
-                >
-                  {forwarding ? 'Stop preview forward' : 'Forward preview (PoC)'}
-                </button>
-                <button
-                  className="btn btn--ghost px-3 py-1 text-sm"
-                  onClick={async () => {
-                    try {
-                      if (document.documentElement.requestFullscreen) {
-                        await document.documentElement.requestFullscreen();
-                      } else if ((document as any).body.requestFullscreen) {
-                        await (document as any).body.requestFullscreen();
-                      }
-                    } catch (e) {}
-                  }}
-                >
-                  Open full screen
-                </button>
-              </>
-            )}
-            <button
-              className="btn bg-slate-700 hover:bg-slate-800"
-              disabled={!effectiveStreaming}
-              onClick={() => {
-                detectorRef.current = null;
-                setDetectorSeedVersion((v) => v + 1);
-              }}
-            >
-              Reset Autoscore Background
-            </button>
-            <button
-              className="btn bg-slate-700 hover:bg-slate-800"
-              onClick={() => {
-                try {
-                  window.dispatchEvent(new Event("ndn:camera-reset" as any));
-                } catch (e) {}
-              }}
-            >
-              Reset Camera Size
-            </button>
+              <button
+                className="btn bg-slate-700 hover:bg-slate-800"
+                onClick={() => {
+                  try {
+                    window.dispatchEvent(new Event("ndn:camera-reset" as any));
+                  } catch (e) {}
+                }}
+              >
+                Reset Camera Size
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
@@ -2967,7 +3862,7 @@ export default forwardRef(function CameraView(
               setShowManualModal(true);
             }}
           >
-            ✏️
+            ✍️
           </button>
         </div>
       ) : null}
@@ -3429,7 +4324,7 @@ export default forwardRef(function CameraView(
                       const renderVideoSurface = () => (
                         <div className="relative w-full aspect-[4/3] bg-black">
                           <video
-                            ref={videoRef}
+                            ref={handleVideoRef}
                             className={videoClass}
                             style={videoStyle}
                             playsInline
@@ -3483,7 +4378,9 @@ export default forwardRef(function CameraView(
                           return (
                             <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-blue-900/50 to-purple-900/50">
                               <div className="text-center space-y-3 max-w-xs mx-auto">
-                                <div className="text-4xl">📱</div>
+                                <div className="text-2xl font-semibold">
+                                  CAM
+                                </div>
                                 <div className="text-lg font-semibold text-blue-100">
                                   Phone camera selected
                                 </div>
@@ -3631,8 +4528,10 @@ export default forwardRef(function CameraView(
                   <div className="flex items-center gap-2 mb-3">
                     <h2 className="text-lg font-semibold">Pending Visit</h2>
                     <div className="flex items-center gap-2 text-xs opacity-80 ml-auto">
-                      <span className={`inline-block w-2.5 h-2.5 rounded-full ${calibrationValid ? 'bg-emerald-400' : 'bg-rose-500'}`} />
-                      <span>{calibrationValid ? 'Cal OK' : 'Cal invalid'}</span>
+                      <span
+                        className={`inline-block w-2.5 h-2.5 rounded-full ${calibrationValid ? "bg-emerald-400" : "bg-rose-500"}`}
+                      />
+                      <span>{calibrationValid ? "Cal OK" : "Cal invalid"}</span>
                     </div>
                   </div>
                   <div className="text-sm opacity-80 mb-2">

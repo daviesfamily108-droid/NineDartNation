@@ -1,6 +1,6 @@
-import { useMatch } from "../store/match";
+﻿import { useMatch } from "../store/match";
 import { formatAvg } from "../utils/stats";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BarChart from "./BarChart";
 import {
   getGameModeStats,
@@ -9,15 +9,23 @@ import {
   getAllTimeAvg,
   getAllTimeFirstNineAvg,
   getAllTime,
+  getDailyAdjustedAvg,
+  getRollingAvg,
+  getStatSeries,
 } from "../store/profileStats";
 import { allGames } from "../utils/games";
 import TabPills from "./ui/TabPills";
 
 export default function StatsPanel({ user }: { user?: any }) {
-  const { players, inProgress, startingScore, newMatch } = useMatch();
+  const {
+    players,
+    inProgress,
+    startingScore: _startingScore,
+    newMatch: _newMatch,
+  } = useMatch();
   const [family, setFamily] = useState<"x01" | "other">("x01");
-  const [playersText, setPlayersText] = useState("Player 1, Player 2");
-  const [start, setStart] = useState(501);
+  const [_playersText, _setPlayersText] = useState("Player 1, Player 2");
+  const [_start, _setStart] = useState(501);
   const [selectedGameMode, setSelectedGameMode] = useState<string>("");
   // Opponent compare: select a friend to render on the second card
   const [friends, setFriends] = useState<
@@ -30,12 +38,19 @@ export default function StatsPanel({ user }: { user?: any }) {
     Array<{ email: string; username?: string }>
   >([]);
   const [searching, setSearching] = useState<boolean>(false);
+  const searchTimerRef = useRef<number | null>(null);
   const me = String(user?.email || "").toLowerCase();
+  const timeframeOptions = ["Daily", "Monthly", "All-Time"] as const;
+  type TimeframeOption = (typeof timeframeOptions)[number];
+  const [selectedTimeframe, setSelectedTimeframe] =
+    useState<TimeframeOption>("Daily");
   useEffect(() => {
+    if (!showPicker || !me) {
+      return;
+    }
     let cancelled = false;
     async function load() {
       try {
-        if (!me) return;
         const res = await fetch(
           `/api/friends/list?email=${encodeURIComponent(me)}`,
         );
@@ -47,13 +62,12 @@ export default function StatsPanel({ user }: { user?: any }) {
       } catch {}
     }
     load();
-    // Refresh occasionally in case friends change while open
-    const id = setInterval(load, 20000);
+    const id = window.setInterval(load, 20000);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [me]);
+  }, [me, showPicker]);
 
   // Rehydrate previously selected opponent from localStorage (per-user key)
   useEffect(() => {
@@ -73,25 +87,47 @@ export default function StatsPanel({ user }: { user?: any }) {
     } catch {}
   }, [opponent, me]);
 
-  async function runSearch(term: string) {
-    setQ(term);
-    if (!term.trim()) {
-      setResults([]);
-      return;
-    }
-    setSearching(true);
-    try {
-      const res = await fetch(
-        `/api/friends/search?q=${encodeURIComponent(term)}`,
-      );
-      const j = await res.json().catch(() => ({ results: [] }));
-      setResults(
-        (j.results || []) as Array<{ email: string; username?: string }>,
-      );
-    } finally {
-      setSearching(false);
-    }
-  }
+  const runSearch = useCallback(
+    (term: string) => {
+      setQ(term);
+      if (!term.trim()) {
+        setResults([]);
+        return;
+      }
+      if (!showPicker) {
+        return;
+      }
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+      searchTimerRef.current = window.setTimeout(async () => {
+        setSearching(true);
+        try {
+          const res = await fetch(
+            `/api/friends/search?q=${encodeURIComponent(term)}`,
+          );
+          const j = await res.json().catch(() => ({ results: [] }));
+          setResults(
+            (j.results || []) as Array<{
+              email: string;
+              username?: string;
+            }>,
+          );
+        } finally {
+          setSearching(false);
+        }
+      }, 350);
+    },
+    [showPicker],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+    };
+  }, []);
 
   // Build a score-frequency distribution for the selected family.
   // For now, we only have X01 in the match store; "other" is a placeholder that would read other game stats when added.
@@ -131,6 +167,91 @@ export default function StatsPanel({ user }: { user?: any }) {
     });
   }, [family]);
 
+  const distSummary = useMemo(() => {
+    if (!dist.length) return null;
+    let total = 0;
+    let most = dist[0];
+    let least = dist[0];
+    for (const entry of dist) {
+      total += entry.value;
+      if (entry.value > most.value) most = entry;
+      if (entry.value < least.value) least = entry;
+    }
+    return { total, most, least };
+  }, [dist]);
+
+  const statSeries = useMemo(() => {
+    if (!me) return [];
+    return getStatSeries(me);
+  }, [me]);
+
+  const rollingAvg = useMemo(() => (me ? getRollingAvg(me) : 0), [me]);
+
+  const timeframeAverage = useMemo(() => {
+    if (!me) return 0;
+    switch (selectedTimeframe) {
+      case "Daily":
+        return getDailyAdjustedAvg(me);
+      case "Monthly":
+        return getMonthlyAvg3(me);
+      default:
+        return getAllTimeAvg(me);
+    }
+  }, [me, selectedTimeframe]);
+
+  const sparklineData = useMemo(() => {
+    if (!statSeries.length) return [];
+    const now = Date.now();
+    const DAY = 1000 * 60 * 60 * 24;
+    const THIRTY_DAYS = DAY * 30;
+    const windowMs =
+      selectedTimeframe === "Daily"
+        ? DAY
+        : selectedTimeframe === "Monthly"
+          ? THIRTY_DAYS
+          : Number.POSITIVE_INFINITY;
+    const filtered = statSeries
+      .filter(
+        (entry) =>
+          windowMs === Number.POSITIVE_INFINITY || now - entry.t <= windowMs,
+      )
+      .map((entry) => ({
+        t: entry.t,
+        value: entry.darts ? (entry.scored / entry.darts) * 3 : 0,
+      }))
+      .sort((a, b) => a.t - b.t);
+    if (!filtered.length) return [];
+    const maxPoints = 32;
+    const step = Math.max(1, Math.floor(filtered.length / maxPoints));
+    return filtered.filter(
+      (_, idx) => idx % step === 0 || idx === filtered.length - 1,
+    );
+  }, [statSeries, selectedTimeframe]);
+
+  const sparklinePath = useMemo(() => {
+    if (!sparklineData.length) return "";
+    const width = 220;
+    const height = 40;
+    const values = sparklineData.map((point) => point.value);
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
+    const range = maxVal - minVal || 1;
+    const count = sparklineData.length;
+    return sparklineData
+      .map((point, idx) => {
+        const x = count === 1 ? width / 2 : (idx / (count - 1)) * width;
+        const normalized = (point.value - minVal) / range;
+        const y = height - normalized * height;
+        return `${x},${y}`;
+      })
+      .join(" ");
+  }, [sparklineData]);
+
+  const sparklineGradientId = useMemo(
+    () => `ndn-stats-sparkline-${Math.random().toString(36).slice(2)}`,
+    [],
+  );
+
   // Trigger re-render when any game-mode stat updates elsewhere
   useEffect(() => {
     const onUpdate = () => setFamily((f) => f); // noop to refresh memo
@@ -148,13 +269,13 @@ export default function StatsPanel({ user }: { user?: any }) {
     >
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-2xl font-extrabold text-white">Match Stats</h2>
-          <span className="text-xs opacity-70">View</span>
+          <h2 className="text-2xl font-extrabold text-white">Match Stats 🎯</h2>
+          <span className="text-xs opacity-70">View 🎯</span>
         </div>
         <TabPills
           tabs={[
-            { key: "x01", label: "X01" },
-            { key: "other", label: "Other Modes" },
+            { key: "x01", label: "X01 🎯" },
+            { key: "other", label: "Other Modes 🎯" },
           ]}
           active={family}
           onChange={(k) => setFamily(k as "x01" | "other")}
@@ -186,7 +307,7 @@ export default function StatsPanel({ user }: { user?: any }) {
                     onClick={() => setShowPicker((s) => !s)}
                     title="Search user to compare"
                   >
-                    Select Friend
+                    Select Friend 🎯
                   </button>
                   {friends.slice(0, 6).map((f) => {
                     const lbl = f.username || f.email;
@@ -227,7 +348,7 @@ export default function StatsPanel({ user }: { user?: any }) {
                     onClick={() => runSearch(q)}
                     disabled={searching}
                   >
-                    Search
+                    Search 🎯
                   </button>
                 </div>
                 <ul className="max-h-40 overflow-auto space-y-1">
@@ -489,9 +610,108 @@ export default function StatsPanel({ user }: { user?: any }) {
 
       {/* Score distribution for X01 family OR Game Stats for Other Modes */}
       {family !== "other" ? (
-        <div className="mt-6">
+        <div className="mt-6 space-y-4">
           <div className="mb-2 text-sm opacity-80">
             Score Distribution ({family.toUpperCase()}): Visits by scored points
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-widest text-slate-300">
+            {timeframeOptions.map((option) => (
+              <button
+                key={option}
+                className={`px-3 py-1 rounded-full border transition-all duration-200 ${
+                  selectedTimeframe === option
+                    ? "bg-white/20 border-white/40 text-white"
+                    : "bg-white/5 border-white/10 text-slate-200"
+                }`}
+                onClick={() => setSelectedTimeframe(option)}
+              >
+                {option}
+              </button>
+            ))}
+            <span className="text-xs opacity-50">sparkline window</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs text-slate-300">
+            <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+              <div className="text-[10px] uppercase opacity-70">Average</div>
+              <div className="text-lg font-semibold text-white">
+                {formatAvg(timeframeAverage)}
+              </div>
+              <div className="text-[10px] opacity-50">{selectedTimeframe}</div>
+            </div>
+            <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+              <div className="text-[10px] uppercase opacity-70">
+                Rolling 24h
+              </div>
+              <div className="text-lg font-semibold text-white">
+                {formatAvg(rollingAvg)}
+              </div>
+              <div className="text-[10px] opacity-50">live trend</div>
+            </div>
+            <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+              <div className="text-[10px] uppercase opacity-70">Visits</div>
+              <div className="text-lg font-semibold text-white">
+                {distSummary ? distSummary.total : 0}
+              </div>
+              <div className="text-[10px] opacity-50">Match legs</div>
+            </div>
+            <div className="rounded-lg bg-white/5 border border-white/10 p-3">
+              <div className="text-[10px] uppercase opacity-70">Range</div>
+              <div className="text-[10px] text-slate-200">
+                {distSummary
+                  ? `${distSummary.most.label} → ${distSummary.least.label}`
+                  : "—"}
+              </div>
+              <div className="text-[10px] opacity-50">Most → Least</div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+            {sparklinePath ? (
+              <svg
+                viewBox="0 0 220 40"
+                className="w-full h-12"
+                role="presentation"
+              >
+                <defs>
+                  <linearGradient
+                    id={sparklineGradientId}
+                    x1="0"
+                    y1="0"
+                    x2="1"
+                    y2="0"
+                  >
+                    <stop offset="0%" stopColor="#a855f7" stopOpacity="0.35" />
+                    <stop offset="100%" stopColor="#ec4899" stopOpacity="0.9" />
+                  </linearGradient>
+                </defs>
+                <polyline
+                  fill="none"
+                  stroke={`url(#${sparklineGradientId})`}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  points={sparklinePath}
+                />
+              </svg>
+            ) : (
+              <div className="text-xs text-slate-400">
+                No historical trend data yet. Finish more legs to seed the
+                sparkline.
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap justify-between text-[11px] text-slate-300/80">
+            <span>
+              Most frequent:{" "}
+              {distSummary
+                ? `${distSummary.most.label} (${distSummary.most.value})`
+                : "—"}
+            </span>
+            <span>
+              Least frequent:{" "}
+              {distSummary
+                ? `${distSummary.least.label} (${distSummary.least.value})`
+                : "—"}
+            </span>
           </div>
           <div
             className="rounded-xl border border-indigo-500/20 p-3 min-h-[220px] transform transition-shadow duration-200 hover:shadow-lg overflow-y-auto"
@@ -562,7 +782,7 @@ export default function StatsPanel({ user }: { user?: any }) {
                       : "bg-gradient-to-r from-slate-700 to-slate-600 text-white hover:from-slate-600 hover:to-slate-500"
                   }`}
                 >
-                  {d.label}
+                  {d.label} 🎯
                 </button>
               ))}
             </div>

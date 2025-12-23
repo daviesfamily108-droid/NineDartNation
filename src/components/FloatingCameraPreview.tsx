@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+﻿import { useRef, useEffect, useState } from "react";
 import { useUserSettings } from "../store/userSettings";
 import { X } from "lucide-react";
 

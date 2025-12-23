@@ -1,4 +1,4 @@
-// Simple profanity filter: replaces detected profane words with asterisks of the same length.
+﻿// Simple profanity filter: replaces detected profane words with asterisks of the same length.
 // Note: This is a lightweight heuristic and not exhaustive.
 
 const patterns: RegExp[] = [

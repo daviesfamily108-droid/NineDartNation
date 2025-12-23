@@ -1,6 +1,12 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import React from "react";
-import { render, screen, act, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  act,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import { vi } from "vitest";
 // Mock WSProvider to avoid real network connections during unit tests
 const mockSend = vi.fn();
@@ -46,7 +52,7 @@ describe("OnlinePlay create modal", () => {
     // Click the Create Match + button
     const createButton = await screen.findByText("Create Match +");
     fireEvent.click(createButton);
-    await waitFor(() => screen.getByRole('heading', { name: /Create Match/i }));
+    await waitFor(() => screen.getByRole("heading", { name: /Create Match/i }));
     // The modal card should show the header
     expect(
       await screen.findByRole("heading", { name: /Create Match/i }),
@@ -65,20 +71,28 @@ describe("OnlinePlay create modal", () => {
     // Open modal
     const createButton = await screen.findByText("Create Match +");
     fireEvent.click(createButton);
-    await waitFor(() => screen.getByRole('heading', { name: /Create Match/i }));
+    await waitFor(() => screen.getByRole("heading", { name: /Create Match/i }));
     // Switch to First To, set legs to 2
-    const firstTo = await screen.findByText(/First To/i);
-    fireEvent.click(firstTo);
-    await waitFor(() => screen.getByRole('spinbutton', { name: /First To/i }));
-  const legsInputFirst = await screen.findByRole('spinbutton', { name: /First To/i });
-    fireEvent.change(legsInputFirst, { target: { value: '2' } });
-    await waitFor(() => expect((legsInputFirst as HTMLInputElement).value).toBe('2'));
-    expect((legsInputFirst as HTMLInputElement).value).toBe('2');
+    const firstToRadio = await screen.findByRole("radio", {
+      name: /First To/i,
+    });
+    fireEvent.click(firstToRadio);
+    await waitFor(() => screen.getByRole("spinbutton", { name: /First To/i }));
+    const legsInputFirst = await screen.findByRole("spinbutton", {
+      name: /First To/i,
+    });
+    fireEvent.change(legsInputFirst, { target: { value: "2" } });
+    await waitFor(() =>
+      expect((legsInputFirst as HTMLInputElement).value).toBe("2"),
+    );
+    expect((legsInputFirst as HTMLInputElement).value).toBe("2");
     // Now click Best Of and assert legs becomes odd (2 -> 3)
-    const bestOf = await screen.findByText(/Best Of/i);
-    fireEvent.click(bestOf);
-    await waitFor(() => screen.getByRole('spinbutton', { name: /Best Of/i }));
-  const legsInputBest = await screen.findByRole('spinbutton', { name: /Best Of/i });
-    expect((legsInputBest as HTMLInputElement).value).toBe('3');
+    const bestOfRadio = await screen.findByRole("radio", { name: /Best Of/i });
+    fireEvent.click(bestOfRadio);
+    await waitFor(() => screen.getByRole("spinbutton", { name: /Best Of/i }));
+    const legsInputBest = await screen.findByRole("spinbutton", {
+      name: /Best Of/i,
+    });
+    expect((legsInputBest as HTMLInputElement).value).toBe("3");
   });
 });

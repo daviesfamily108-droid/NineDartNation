@@ -1,0 +1,1058 @@
+import React, { useCallback, useEffect, useRef, useState, Suspense } from "react";
+import { MobileTabBar, Sidebar, TabKey } from "./components/Sidebar";
+const Home = React.lazy(() => import("./components/Home"));
+import ScrollFade from "./components/ScrollFade";
+import Calibrator from "./components/Calibrator";
+const OfflinePlay = React.lazy(() => import("./components/OfflinePlay"));
+const Friends = React.lazy(() => import("./components/Friends"));
+import Toaster from "./components/Toaster";
+import AdminDashboard from "./components/AdminDashboard";
+import SettingsPanel from "./components/SettingsPanel";
+import Auth from "./components/Auth";
+import { ThemeProvider } from "./components/ThemeContext";
+import {
+  Bell,
+  CalendarDays,
+  Handshake,
+  MessageCircle,
+  Trophy,
+  Users,
+} from "lucide-react";
+import { useWS } from "./components/WSProvider";
+import StatusDot from "./components/ui/StatusDot";
+import { getRollingAvg, getAllTimeAvg } from "./store/profileStats";
+import { useUserSettings } from "./store/userSettings";
+import { useCalibration } from "./store/calibration";
+import { apiFetch } from "./utils/api";
+import "./styles/premium.css";
+import "./styles/themes.css";
+const OnlinePlay = React.lazy(() => import("./components/OnlinePlay.clean"));
+const StatsPanel = React.lazy(() => import("./components/StatsPanel"));
+const Tournaments = React.lazy(() => import("./components/Tournaments"));
+const AdminAccess = React.lazy(() => import("./components/AdminAccess"));
+// AdminAccess already imported above
+import Drawer from "./components/ui/Drawer";
+const OpsDashboard = React.lazy(() => import("./components/OpsDashboard"));
+import HelpAssistant from "./components/HelpAssistant";
+import GlobalCameraLogger from "./components/GlobalCameraLogger";
+import GlobalPhoneVideoSink from "./components/GlobalPhoneVideoSink";
+import CameraStatusBadge from "./components/CameraStatusBadge";
+import InstallPicker from "./components/InstallPicker";
+import AddToHomeButton from "./components/AddToHomeButton";
+import Footer from "./components/Footer";
+import AutoPauseManager from "./components/AutoPauseManager";
+import MatchPage from "./components/MatchPage";
+
+export default function App() {
+  const appRef = useRef<HTMLDivElement | null>(null);
+  const [avatar, setAvatar] = useState<string>("");
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const ws = (() => {
+    try {
+      return useWS();
+    } catch {
+      return null;
+    }
+  })();
+  const [tab, setTab] = useState<TabKey>("score");
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [navOpen, setNavOpen] = useState<boolean>(false);
+  const [user, setUser] = useState<any>(null);
+  // Use this helper to set user without losing previously fetched subscription data
+  // This avoids toggles/flicker in the UI during partial user refreshes
+  function setUserWithMerge(next: any) {
+    if (!next) {
+      setUser(next);
+      return;
+    }
+    setUser((prev: any) => {
+      const merged = { ...prev, ...next };
+      if (prev?.subscription && !next?.subscription) merged.subscription = prev.subscription;
+      if (next?.subscription) merged.subscription = next.subscription;
+      // Keep fullAccess aligned with subscription unless explicitly provided
+      merged.fullAccess = !!(merged.subscription?.fullAccess || next?.fullAccess || merged.fullAccess);
+      return merged;
+    });
+  }
+  const MINIMAL_UI =
+    ((import.meta as any).env?.VITE_MINIMAL_AFTER_LOGIN || "").toString() ===
+    "1";
+  const [minimalUI, setMinimalUI] = useState<boolean>(false);
+  const [allTimeAvg, setAllTimeAvg] = useState<number>(0);
+  const { avgMode } = useUserSettings();
+  const { H: calibH, locked: calibLocked, errorPx } = useCalibration();
+
+  // Restore user from token on mount (run once only)
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token) return;
+    
+    // Validate token with server
+    const API_URL = (import.meta as any).env?.VITE_API_URL || "";
+    fetch(`${API_URL}/api/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.user) {
+          setUserWithMerge(data.user);
+          try {
+            const cached = localStorage.getItem(`ndn:subscription:${data.user.email}`);
+            if (cached) setUserWithMerge({ ...data.user, subscription: JSON.parse(cached) });
+          } catch (e) {}
+          fetchSubscription(data.user);
+        } else {
+          // Token invalid, remove it
+          localStorage.removeItem("authToken");
+        }
+      })
+      .catch(() => {
+        // Network error, keep token for offline retry
+      });
+  }, []);
+  
+  // Handle minimal UI delay when user is present
+  useEffect(() => {
+    if (user && MINIMAL_UI) {
+      setMinimalUI(true);
+      const timer = setTimeout(() => setMinimalUI(false), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [MINIMAL_UI, user]);
+
+  // If URL contains ?match=1 render a minimal match-only page (allows opening dedicated match windows)
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("match") === "1") {
+      return (
+        <ThemeProvider>
+          <AutoPauseManager />
+          <MatchPage />
+        </ThemeProvider>
+      );
+    }
+  } catch {}
+
+  // Refresh all-time avg when user changes or stats update
+  useEffect(() => {
+    if (!user?.username) return;
+    const refresh = () =>
+      setAllTimeAvg(
+        avgMode === "24h"
+          ? getRollingAvg(user.username)
+          : getAllTimeAvg(user.username),
+      );
+    refresh();
+    const onUpdate = () => refresh();
+    window.addEventListener("ndn:stats-updated", onUpdate as any);
+    return () =>
+      window.removeEventListener("ndn:stats-updated", onUpdate as any);
+  }, [user?.username, avgMode]);
+
+  // Load avatar from localStorage when user changes
+  useEffect(() => {
+    if (!user?.username) {
+      setAvatar("");
+      return;
+    }
+    const storedAvatar = localStorage.getItem(
+      `ndn:bio:profilePhoto:${user.username}`,
+    );
+    setAvatar(storedAvatar || "");
+  }, [user?.username]);
+
+  // Listen for avatar updates from SettingsPanel
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (
+        e.key?.startsWith("ndn:bio:profilePhoto:") &&
+        user?.username &&
+        e.key.endsWith(user.username)
+      ) {
+        setAvatar(e.newValue || "");
+      }
+    };
+    const handleAvatarUpdate = (e: any) => {
+      // Check if this update is for the current user
+      if (e.detail?.username === user?.username) {
+        setAvatar(e.detail?.avatar || "");
+      }
+      // Also check localStorage as backup for any avatar update
+      if (user?.username) {
+        const storedAvatar = localStorage.getItem(
+          `ndn:bio:profilePhoto:${user.username}`,
+        );
+        setAvatar(storedAvatar || "");
+      }
+    };
+    // Also check localStorage when window becomes visible (user switches tabs)
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user?.username) {
+        const storedAvatar = localStorage.getItem(
+          `ndn:bio:profilePhoto:${user.username}`,
+        );
+        setAvatar(storedAvatar || "");
+      }
+    };
+
+    // Check localStorage every 2 seconds as a fallback
+    const checkAvatarInterval = setInterval(() => {
+      if (user?.username) {
+        const storedAvatar = localStorage.getItem(
+          `ndn:bio:profilePhoto:${user.username}`,
+        );
+        if (storedAvatar && storedAvatar !== avatar) {
+          setAvatar(storedAvatar);
+        }
+      }
+    }, 2000);
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener(
+      "ndn:avatar-updated" as any,
+      handleAvatarUpdate as any,
+    );
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener(
+        "ndn:avatar-updated" as any,
+        handleAvatarUpdate as any,
+      );
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(checkAvatarInterval);
+    };
+  }, [user?.username, avatar]);
+
+  // Handle payment success for username change
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const paid = urlParams.get("paid");
+    const usernameChange = urlParams.get("username-change");
+    if (
+      paid === "1" ||
+      paid === "username-change" ||
+      usernameChange === "free"
+    ) {
+      const pendingUsername = localStorage.getItem("pendingUsernameChange");
+      if (pendingUsername && user?.email) {
+        // Call the change username API
+        const API_URL = (import.meta as any).env?.VITE_API_URL || "";
+        fetch(`${API_URL}/api/change-username`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: user.email,
+            newUsername: pendingUsername,
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.ok) {
+              alert("Username changed successfully!");
+              localStorage.removeItem("pendingUsernameChange");
+              // Update user data and token
+              if (data.token) {
+                localStorage.setItem("authToken", data.token);
+              }
+              if (data.user) {
+                setUserWithMerge(data.user);
+              }
+              // Clean up URL
+              window.history.replaceState(
+                {},
+                document.title,
+                window.location.pathname,
+              );
+            } else {
+              alert(
+                "Failed to change username: " + (data.error || "Unknown error"),
+              );
+            }
+          })
+          .catch(() => {
+            alert("Network error while changing username");
+          });
+      }
+    }
+  }, [user?.email]);
+
+  // Keep full-screen state in sync when the user enters/exits full screen mode.
+  useEffect(() => {
+    const onFullscreenChange = () =>
+      setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    // initialize
+    setIsFullscreen(!!document.fullscreenElement);
+    return () =>
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, []);
+
+  // Handle payment success for premium subscription
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const subscription = urlParams.get("subscription");
+    if (subscription === "success" && user?.email) {
+      // Refresh user data to get updated subscription status
+      const API_URL = (import.meta as any).env?.VITE_API_URL || "";
+      fetch(`${API_URL}/api/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.user) {
+            setUserWithMerge(data.user);
+            alert("Premium subscription activated successfully!");
+            // Clean up URL
+            window.history.replaceState(
+              {},
+              document.title,
+              window.location.pathname,
+            );
+          }
+        })
+        .catch(() => {
+          alert(
+            "Subscription activated, but failed to refresh user data. Please refresh the page.",
+          );
+        });
+    }
+  }, [user?.email]);
+
+  // Detect mobile/tablet layout via comprehensive device detection
+  useEffect(() => {
+    const update = () => {
+      const width = window.innerWidth;
+
+      // Comprehensive mobile/tablet detection
+      const mqMobile = window.matchMedia("(max-width: 768px)").matches;
+      const mqTablet = window.matchMedia(
+        "(max-width: 1024px) and (min-width: 769px)",
+      ).matches;
+      const uaMobile =
+        /Mobi|Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini|Windows Phone/i.test(
+          navigator.userAgent || "",
+        );
+      const uaTablet =
+        /iPad|Android(?=.*\bMobile\b)|Tablet|PlayBook|Silk/i.test(
+          navigator.userAgent || "",
+        );
+      const touchScreen =
+        "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  const verySmallScreen = width < 769;
+
+      // Determine device type
+      const isTablet =
+        (mqTablet && touchScreen) ||
+        uaTablet ||
+        (width >= 769 && width <= 1024 && touchScreen);
+      const isMobile =
+        mqMobile || uaMobile || verySmallScreen || (width < 769 && touchScreen);
+      const isMobileDevice = isMobile || isTablet;
+
+      setIsMobile(isMobileDevice);
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+
+    const mqMobile = window.matchMedia("(max-width: 768px)");
+    const mqTablet = window.matchMedia(
+      "(max-width: 1024px) and (min-width: 769px)",
+    );
+
+    try {
+      mqMobile.addEventListener("change", update);
+      mqTablet.addEventListener("change", update);
+  } catch (e) {}
+
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+      try {
+        mqMobile.removeEventListener("change", update);
+        mqTablet.removeEventListener("change", update);
+  } catch (e) {}
+    };
+  }, []);
+
+  // Global logout handler: return to sign-in screen and clear minimal local user context
+  useEffect(() => {
+    const onLogout = () => {
+      try {
+        // Clear any lightweight local flags (keep stats unless explicitly reset)
+        localStorage.removeItem("ndn:avatar");
+        if (user?.email) localStorage.removeItem(`ndn:subscription:${user.email}`);
+  } catch (e) {}
+      setUser(null);
+      setTab("score");
+    };
+    window.addEventListener("ndn:logout" as any, onLogout as any);
+    return () =>
+      window.removeEventListener("ndn:logout" as any, onLogout as any);
+  }, []);
+
+  // Apply username changes from Settings globally and propagate via WS presence
+  useEffect(() => {
+    const onName = (e: any) => {
+      try {
+        const next = String(e?.detail?.username || "").trim();
+        if (!next) return;
+        setUser((prev: any) => {
+          const u = prev ? { ...prev, username: next } : prev;
+          return u;
+        });
+        // Recompute name color on next effect pass based on new username/avatar
+        // Send presence update so friends/lobby reflect the new name
+        try {
+          const email = (user?.email || "").toLowerCase();
+          if (ws && next && email)
+            ws.send({ type: "presence", username: next, email });
+  } catch (e) {}
+  } catch (e) {}
+    };
+    window.addEventListener("ndn:username-changed" as any, onName as any);
+    return () =>
+      window.removeEventListener("ndn:username-changed" as any, onName as any);
+  }, [ws, user?.email]);
+
+  // Handle tab changes from Home component quick access pills
+  useEffect(() => {
+    const onTabChange = (e: any) => {
+      try {
+        const tab = String(e?.detail?.tab || "").trim();
+        if (
+          tab &&
+          [
+            "score",
+            "offline",
+            "online",
+            "stats",
+            "settings",
+            "admin",
+            "tournaments",
+            "friends",
+          ].includes(tab)
+        ) {
+          setTab(tab as TabKey);
+        }
+  } catch (e) {}
+    };
+    window.addEventListener("ndn:change-tab" as any, onTabChange as any);
+    return () =>
+      window.removeEventListener("ndn:change-tab" as any, onTabChange as any);
+  }, []);
+
+  async function fetchSubscription(u: any) {
+    try {
+      const q = u?.email ? `?email=${encodeURIComponent(u.email)}` : "";
+      const res = await fetch("/api/subscription" + q);
+      if (!res.ok) return;
+      const data = await res.json();
+      // Keep the full user object but attach the subscription so other components
+      // can make decisions based on more detailed subscription metadata (expiresAt, source, status).
+      setUserWithMerge({ ...u, fullAccess: !!data?.fullAccess, subscription: data });
+      try {
+        if (u?.email) localStorage.setItem(`ndn:subscription:${u.email}`, JSON.stringify(data));
+      } catch {}
+  } catch (e) {}
+  }
+
+  // Header notification state: show an alert if subscription is expiring in <= 3 days, or expired
+  const [showSubscriptionsBell, setShowSubscriptionsBell] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [siteNotifications, setSiteNotifications] = useState<any[]>([]);
+  const [friendRequestCount, setFriendRequestCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+
+  const refreshNotifications = useCallback(async () => {
+    if (!user?.email) return [] as any[];
+    try {
+      const token = localStorage.getItem("authToken");
+      const headers: any = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(
+        `/api/notifications?email=${encodeURIComponent(user.email)}`,
+        { headers },
+      );
+      if (!res.ok) return [];
+      return (await res.json()) || [];
+    } catch (err) {
+      return [];
+    }
+  }, [user?.email]);
+
+  const refreshFriendCounts = useCallback(async () => {
+    if (!user?.email) {
+      setFriendRequestCount(0);
+      setUnreadMessageCount(0);
+      return;
+    }
+    try {
+      const [requestsRes, messagesRes] = await Promise.all([
+        apiFetch(`/api/friends/requests?email=${encodeURIComponent(user.email)}`),
+        apiFetch(`/api/friends/messages?email=${encodeURIComponent(user.email)}`),
+      ]);
+      const requests = requestsRes.ok
+        ? await requestsRes.json()
+        : { requests: [] };
+      const messages = messagesRes.ok
+        ? await messagesRes.json()
+        : { messages: [] };
+      setFriendRequestCount(requests.requests?.length || 0);
+      setUnreadMessageCount(
+        (messages.messages || []).filter((m: any) => !m.read).length,
+      );
+    } catch (err) {
+      console.error("Failed to refresh friend notifications:", err);
+    }
+  }, [user?.email]);
+
+  useEffect(() => {
+    if (!user?.subscription) {
+      setShowSubscriptionsBell(false);
+      return;
+    }
+    const sub = user.subscription as any;
+    const now = Date.now();
+    let expiresAt: number | null = null;
+    if (sub?.expiresAt) {
+      expiresAt = typeof sub.expiresAt === 'string' ? Date.parse(sub.expiresAt) : Number(sub.expiresAt);
+    }
+    // Consider this expiring soon when it's within 3 days (259200000 ms)
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+    if (expiresAt && expiresAt > now && expiresAt - now <= THREE_DAYS_MS) {
+      setShowSubscriptionsBell(true);
+      return;
+    }
+    // If the subscription is expired and fullAccess is false, prompt to buy
+    if (expiresAt && expiresAt <= now && !user?.fullAccess) {
+      setShowSubscriptionsBell(true);
+      return;
+    }
+    // For stripe subscriptions, a 'status' === 'active' means no bell, else show if status !== 'active'
+    if (sub?.source === 'stripe' && sub?.status && sub.status !== 'active') {
+      setShowSubscriptionsBell(true);
+      return;
+    }
+    setShowSubscriptionsBell(false);
+  }, [user?.subscription, user?.fullAccess]);
+
+  // Fetch site notifications & keep them fresh
+  useEffect(() => {
+    if (!user?.email) {
+      setSiteNotifications([]);
+      return;
+    }
+    let mounted = true;
+    const poll = async () => {
+      const data = await refreshNotifications();
+      if (!mounted) return;
+      setSiteNotifications(data || []);
+    };
+    poll();
+    const int = setInterval(poll, 30000);
+    return () => {
+      mounted = false;
+      clearInterval(int);
+    };
+  }, [refreshNotifications, user?.email]);
+
+  useEffect(() => {
+    if (!user?.email) return;
+    refreshFriendCounts();
+    const interval = setInterval(refreshFriendCounts, 30000);
+    return () => clearInterval(interval);
+  }, [refreshFriendCounts, user?.email]);
+
+  // If subscription is expiring soon or expired, write a persistent notification server-side
+  useEffect(() => {
+    if (!user?.subscription || !user?.email) return;
+    const sub = user.subscription as any;
+    const now = Date.now();
+    let expiresAt: number | null = null;
+    if (sub?.expiresAt) expiresAt = typeof sub.expiresAt === 'string' ? Date.parse(sub.expiresAt) : Number(sub.expiresAt);
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+    async function addSubscriptionNotification(type: string, message: string) {
+      try {
+        const token = localStorage.getItem('authToken');
+        const headers: any = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        await fetch('/api/notifications', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ email: user.email, message, type }),
+        });
+  } catch (e) {}
+    }
+    if (expiresAt && expiresAt > now && expiresAt - now <= THREE_DAYS_MS) {
+      addSubscriptionNotification('sub_expiring', `Your premium subscription expires in ${Math.ceil((expiresAt - now) / (24*60*60*1000))} day(s)`);
+      return;
+    }
+    if (expiresAt && expiresAt <= now && !user?.fullAccess) {
+      addSubscriptionNotification('sub_expired', 'Your premium subscription has ended');
+      return;
+    }
+  }, [user?.email, user?.subscription, user?.fullAccess]);
+
+  if (!user) {
+    return (
+      <Auth
+        onAuth={(u: any) => {
+          try {
+            const cached = localStorage.getItem(`ndn:subscription:${u.email}`);
+            if (cached) setUserWithMerge({ ...u, subscription: JSON.parse(cached) });
+            else setUserWithMerge(u);
+          } catch {
+            setUserWithMerge(u);
+          }
+          fetchSubscription(u);
+        }}
+      />
+    );
+  }
+  const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.username || "NDN")}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`;
+  const notificationText = (n: any) => `${n.type || ""} ${n.message || ""}`.trim();
+  const tournamentNotifs = siteNotifications.filter((n) =>
+    /(tournament|bracket)/i.test(notificationText(n)),
+  ).length;
+  const checkinNotifs = siteNotifications.filter((n) =>
+    /(check[-_\s]?in)/i.test(notificationText(n)),
+  ).length;
+  const matchInviteNotifs = siteNotifications.filter((n) =>
+    /(match|invite)/i.test(notificationText(n)),
+  ).length;
+  const unreadSiteCount = siteNotifications.filter((n) => !n.read).length;
+  const totalBadgeCount = Math.min(
+    99,
+    unreadSiteCount + friendRequestCount + unreadMessageCount,
+  );
+  const notificationPanelItems = [
+    {
+      key: "tournaments",
+      label: "Tournament Closures",
+      description: "Bracket updates, payouts, and notices.",
+      count: tournamentNotifs,
+      icon: Trophy,
+    },
+    {
+      key: "checkins",
+      label: "Check-ins",
+      description: "Venue reminders and start-of-round checks.",
+      count: checkinNotifs,
+      icon: CalendarDays,
+    },
+    {
+      key: "match-invites",
+      label: "Match Invites",
+      description: "Pending matches ready to accept.",
+      count: matchInviteNotifs,
+      icon: Handshake,
+    },
+    {
+      key: "friend-requests",
+      label: "Friend Requests",
+      description: "Accept or decline new connections.",
+      count: friendRequestCount,
+      icon: Users,
+    },
+    {
+      key: "messages",
+      label: "Messages",
+      description: "Unread chats and replies.",
+      count: unreadMessageCount,
+      icon: MessageCircle,
+    },
+  ];
+  return (
+    <ThemeProvider>
+      <div
+        ref={appRef}
+        className={`${user?.fullAccess ? "premium-body" : ""} h-screen overflow-hidden pt-1 pb-0 px-1 xs:pt-2 xs:pb-0 xs:px-2 sm:pt-3 sm:pb-0 sm:px-3 md:pt-4 md:pb-0 md:px-4`}
+      >
+        <Toaster />
+        <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-2 xs:gap-3 sm:gap-4 h-full overflow-hidden">
+          {/* Desktop sidebar; hidden on mobile/tablet */}
+          {!isMobile && (
+            <div className="relative hidden lg:block" style={{ width: 240 }}>
+              <Sidebar
+                active={tab}
+                onChange={(k: TabKey) => {
+                  setTab(k);
+                }}
+                user={user}
+              />
+            </div>
+          )}
+          {/* Wrap header + scroller in a column so header stays static and only content scrolls below it */}
+          <div className="flex flex-col h-full overflow-hidden">
+            <div className="pt-1 xs:pt-2">
+              <header
+                id="ndn-header"
+                className={`header glass flex-col xs:flex-col sm:flex-row gap-2 xs:gap-2 sm:gap-3`}
+              >
+                {/* Left: Brand */}
+                <div className="flex items-center gap-2 order-1">
+                  <h1>
+                    <button
+                      type="button"
+                      className="text-lg xs:text-xl sm:text-xl md:text-2xl font-bold text-brand-700 whitespace-nowrap cursor-pointer select-none"
+                      onClick={() => {
+                        setTab("score");
+                      }}
+                      title={"Go Home"}
+                    >
+                      NINE-DART-NATION 🎯
+                    </button>
+                  </h1>
+                </div>
+                {/* Middle: Welcome band (full width on mobile) */}
+                <div className="order-3 xs:order-3 sm:order-2 w-full sm:w-auto flex-1 flex flex-col items-center justify-center text-center sm:text-left !text-black">
+                  <span
+                    className="text-sm xs:text-base sm:text-base md:text-lg font-semibold flex items-center gap-2 max-w-full truncate !text-black"
+                    style={{ color: "#000000", WebkitTextFillColor: "#000000" }}
+                  >
+                    <span className="hidden xs:inline !text-black">
+                      Welcome
+                    </span>
+                    <img
+                      src={avatar || fallbackAvatar}
+                      alt="avatar"
+                      className="w-5 h-5 xs:w-6 xs:h-6 sm:w-6 sm:h-6 md:w-7 md:h-7 rounded-full ring-2 ring-white/20"
+                    />
+                    <span
+                      className="truncate !text-black"
+                      style={{
+                        color: "#000000",
+                        WebkitTextFillColor: "#000000",
+                      }}
+                    >
+                      {user.username} 👤
+                    </span>
+                  </span>
+                  <span
+                    className="hidden xs:inline text-xs xs:text-xs sm:text-xs md:text-sm !text-black"
+                    style={{ color: "#000000", WebkitTextFillColor: "#000000" }}
+                  >
+                    All-time 3-dart avg:{" "}
+                    <span
+                      className="font-semibold !text-black"
+                      style={{
+                        color: "#000000",
+                        WebkitTextFillColor: "#000000",
+                      }}
+                    >
+                      {allTimeAvg.toFixed(2)}
+                    </span>
+                  </span>
+                  {isMobile && (
+                    <button
+                      className="btn px-3 py-1 xs:px-3 xs:py-1 sm:px-3 sm:py-1 mt-1 text-sm xs:text-sm"
+                      aria-label="Open navigation"
+                      onClick={() => setNavOpen(true)}
+                    >
+                      ☰ Menu 📱
+                    </button>
+                  )}
+                </div>
+                {/* Calibration Status - visible across all tabs */}
+                {calibLocked && calibH && (
+                  <button
+                    onClick={() => setTab("calibrate")}
+                    className="order-4 sm:order-4 md:order-3 px-3 py-1 text-xs sm:text-sm rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 border border-emerald-400/50 transition-colors"
+                    title="Click to adjust calibration"
+                  >
+                    ✓ Calibration Active ✅{" "}
+                    {errorPx != null && `• ${errorPx.toFixed(1)}px`}
+                  </button>
+                )}
+                {/* Right: Status + Actions */}
+                <div className="order-2 md:order-3 ml-0 md:ml-auto flex items-center gap-2 flex-wrap">
+                  <button
+                    className="px-3 py-1 text-sm rounded-full bg-white/5 hover:bg-white/10 border border-white/10"
+                    onClick={() => {
+                      const el = appRef.current;
+                      if (!el) return;
+                      if (!document.fullscreenElement)
+                        el.requestFullscreen().catch(() => {});
+                      else document.exitFullscreen().catch(() => {});
+                    }}
+                    title={
+                      isFullscreen ? "Exit Full Screen" : "Enter Full Screen"
+                    }
+                  >
+                    {isFullscreen ? "Exit Full Screen" : "Full Screen"}
+                  </button>
+                  {tab === "online" && (
+                    <button
+                      className="text-[10px] md:text-xs px-3 py-1 rounded-full bg-indigo-500/25 text-indigo-100 border border-indigo-400/40 hover:bg-indigo-500/40"
+                      title="Open a simulated online match"
+                      onClick={() => {
+                        setTimeout(() => {
+                          try {
+                            window.dispatchEvent(
+                              new CustomEvent("ndn:online-match-demo", {
+                                detail: { game: "X01", start: 501 },
+                              }),
+                            );
+                          } catch (e) {}
+                        }, 40);
+                      }}
+                    >
+                      ONLINE DEMO
+                    </button>
+                  )}
+                  {/* Camera status badge */}
+                  <CameraStatusBadge />
+                  
+                  {ws ? (
+                    <span className="ml-0 md:ml-2">
+                      <StatusDot status={ws.status} />
+                    </span>
+                  ) : null}
+                  {/* Subscription expiration / warning bell - move after WS status */}
+                  {/* (Notifications are positioned after StatusDot to appear to the right of the connected badge) */}
+                  {(siteNotifications.length > 0 || showSubscriptionsBell) && (
+                    <>
+                      <div className="relative ml-2 flex items-center space-x-2">
+                      <button
+                        className="px-2 py-1 text-sm rounded-full bg-white/5 hover:bg-white/10 border border-white/10 flex items-center gap-2"
+                        onClick={() => setNotificationsOpen((s) => !s)}
+                        aria-label="View notifications"
+                        title="Notifications"
+                      >
+                        <Bell className="w-5 h-5 text-amber-400" />
+                        {/* Unread count */}
+                        {siteNotifications.filter(n => !n.read).length > 0 && (
+                          <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-rose-500 rounded-full">{siteNotifications.filter(n => !n.read).length > 9 ? '9+' : siteNotifications.filter(n => !n.read).length}</span>
+                        )}
+                      </button>
+                      {notificationsOpen && (
+                        <div className="absolute right-0 mt-2 w-80 card p-3 z-50">
+                          <div className="font-semibold mb-2">Notifications</div>
+                          <div className="space-y-2">
+                            {siteNotifications.length === 0 && (
+                              <div className="text-sm opacity-70">No notifications</div>
+                            )}
+                            {siteNotifications.map((n) => (
+                              <div key={n.id} className={`p-2 rounded ${n.type?.startsWith('sub') ? 'bg-amber-900/10' : 'bg-black/10'}`}>
+                                <div className="text-sm mb-1">{n.message}</div>
+                                <div className="text-xs opacity-60 flex items-center justify-between">
+                                  <span>{new Date(n.createdAt).toLocaleString()}</span>
+                                  <div className="flex gap-2 items-center">
+                                    {!n.read && (
+                                      <button
+                                        className="text-xs px-2 py-0.5 rounded bg-emerald-600 text-black"
+                                          onClick={async () => {
+                                          try {
+                                            const btnToken = localStorage.getItem('authToken');
+                                            const headers: any = { 'Content-Type': 'application/json' };
+                                            if (btnToken) headers.Authorization = `Bearer ${btnToken}`;
+                                            await fetch(`/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`, { method: 'PATCH', headers, body: JSON.stringify({ read: true }) });
+                                            const btnRefetchToken = localStorage.getItem('authToken');
+                                            const refetchHeaders: any = {};
+                                            if (btnRefetchToken) refetchHeaders.Authorization = `Bearer ${btnRefetchToken}`;
+                                            const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`, { headers: refetchHeaders });
+                                            if (res.ok) setSiteNotifications(await res.json());
+                                          } catch (e) {}
+                                        }}
+                                      >
+                                        Mark read
+                                      </button>
+                                    )}
+                                    <button
+                                      className="text-xs px-2 py-0.5 rounded bg-rose-600 text-white"
+                                      onClick={async () => {
+                                        try {
+                                            const btnDeleteToken = localStorage.getItem('authToken');
+                                            const headers: any = {};
+                                            if (btnDeleteToken) headers.Authorization = `Bearer ${btnDeleteToken}`;
+                                            await fetch(`/api/notifications/${encodeURIComponent(n.id)}?email=${encodeURIComponent(user.email)}`, { method: 'DELETE', headers });
+                                          const token = localStorage.getItem('authToken');
+                                          const refetchHeaders: any = {};
+                                          if (token) refetchHeaders.Authorization = `Bearer ${token}`;
+                                          const res = await fetch(`/api/notifications?email=${encodeURIComponent(user.email)}`, { headers: refetchHeaders });
+                                          if (res.ok) setSiteNotifications(await res.json());
+                                        } catch (e) {}
+                                      }}
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      </div>
+                      {/* Add an install picker next to the notifications to allow users to install or download a native build */}
+                      <div className="hidden sm:flex items-center ml-2 space-x-2">
+                        <AddToHomeButton />
+                        <InstallPicker />
+                      </div>
+                    </>
+                  )}
+                  {/* Protocol pill removed per request: keep green connected badge only */}
+                </div>
+              </header>
+            </div>
+            {/* Mobile drawer navigation */}
+            {isMobile && (
+              <MobileNav
+                open={navOpen}
+                onClose={() => setNavOpen(false)}
+                active={tab}
+                onChange={(k: TabKey) => {
+                  setTab(k);
+                  setNavOpen(false);
+                }}
+                user={user}
+              />
+            )}
+            <main
+              id="ndn-main-scroll"
+              className="space-y-4 flex-1 overflow-y-auto pr-1 flex flex-col"
+            >
+              {tab === "settings" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading settings…</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <SettingsPanel user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "score" && (
+                <Suspense fallback={<div className="p-4">Loading home…</div>}>
+                  <ScrollFade className="flex-1 min-h-0">
+                    <Home user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "online" && (
+                <Suspense fallback={<div className="p-4">Loading online…</div>}>
+                  <ScrollFade className="flex-1 min-h-0">
+                    <OnlinePlay user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "offline" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading offline…</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <OfflinePlay user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {/* Always keep Calibrator mounted to preserve phone camera stream, but hide when not active */}
+              <div className={tab === "calibrate" ? "" : "hidden"}>
+                <ScrollFade>
+                  <Calibrator />
+                </ScrollFade>
+              </div>
+              {tab === "friends" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading friends…</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <Friends user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "stats" && (
+                <Suspense fallback={<div className="p-4">Loading stats…</div>}>
+                  <ScrollFade className="flex-1 min-h-0">
+                    <StatsPanel user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "tournaments" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading tournaments…</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <Tournaments user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "admin" && (
+                <Suspense fallback={<div className="p-4">Loading admin…</div>}>
+                  <ScrollFade className="flex-1 min-h-0">
+                    <div className="flex-1 min-h-0 space-y-6">
+                      <AdminDashboard user={user} />
+                      <OpsDashboard user={user} />
+                    </div>
+                  </ScrollFade>
+                </Suspense>
+              )}
+              {tab === "fullaccess" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading admin access…</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <AdminAccess user={user} />
+                  </ScrollFade>
+                </Suspense>
+              )}
+            </main>
+          </div>
+        </div>
+        {isMobile && (
+          <MobileTabBar
+            active={tab}
+            onChange={(next: TabKey) => setTab(next)}
+            user={user}
+          />
+        )}
+      </div>
+
+      {/* Floating Help Assistant - Always visible */}
+      <HelpAssistant />
+      {/* App footer with legal notice */}
+      <Footer />
+      {/* Debug banner removed - not shown to users in production builds */}
+      {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
+      {!minimalUI && <GlobalCameraLogger />}
+      {/* Global phone camera overlay - visibility controlled by store */}
+      {/* Keep a hidden global video element alive across navigation */}
+      {!minimalUI && <GlobalPhoneVideoSink />}
+    </ThemeProvider>
+  );
+}
+
+// Lightweight mobile drawer that reuses the same Sidebar
+function MobileNav({
+  open,
+  onClose,
+  active,
+  onChange,
+  user,
+}: {
+  open: boolean;
+  onClose: () => void;
+  active: TabKey;
+  onChange: (k: TabKey) => void;
+  user: any;
+}) {
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      width={320}
+      side="left"
+      title="Navigate"
+    >
+      <div className="mt-2">
+        <Sidebar
+          active={active}
+          onChange={onChange}
+          user={user}
+          className="flex relative static max-h-[80vh] w-full"
+        />
+      </div>
+    </Drawer>
+  );
+}
