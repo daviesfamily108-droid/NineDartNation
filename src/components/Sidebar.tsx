@@ -379,8 +379,12 @@ export function MobileTabBar({
   const isAdmin = useIsAdmin(user?.email);
   const userForTabs = resolveUserForTabs(user);
   const tabs = buildTabList(userForTabs, isAdmin);
+
+  // Helper to clean labels for mobile (remove emojis)
+  const cleanLabel = (l: string) => l.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/gu, '').trim();
+
   return (
-    <nav className="ndn-mobile-tabbar glass" aria-label="Mobile navigation">
+    <nav className="ndn-mobile-tabbar" aria-label="Mobile navigation">
       {tabs.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
@@ -390,7 +394,7 @@ export function MobileTabBar({
           onClick={() => onChange(key)}
         >
           <Icon className="w-5 h-5" />
-          <span className="mobile-tab-label">{label}</span>
+          <span className="mobile-tab-label">{cleanLabel(label)}</span>
         </button>
       ))}
     </nav>
