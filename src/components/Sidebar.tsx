@@ -201,79 +201,97 @@ export function Sidebar({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [showDiscord]);
+
+  // Group tabs for professional layout
+  const playTabs = tabs.filter(t => ['score', 'online', 'offline', 'tournaments'].includes(t.key));
+  const socialTabs = tabs.filter(t => ['friends'].includes(t.key));
+  const systemTabs = tabs.filter(t => ['stats', 'calibrate', 'settings', 'admin', 'fullaccess'].includes(t.key));
+
+  const renderTab = (t: TabDefinition) => {
+    const { key, label, icon: Icon } = t;
+    const isActive = active === key;
+    
+    // Calculate total notifications for this tab
+    let badgeCount = 0;
+    if (key === 'friends') badgeCount = notifications.friendRequests;
+    if (key === 'score') badgeCount = notifications.messages + notifications.tournaments;
+
+    return (
+      <button
+        key={key}
+        className={`tab whitespace-nowrap flex items-center justify-between gap-3 ${isActive ? "tab--active" : "tab--inactive"} ${key === "fullaccess" ? "tab--premium" : ""}`}
+        onClick={() => onChange(key as TabKey)}
+        title={label}
+      >
+        <div className="flex items-center gap-3">
+          <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+          <span className={`font-semibold text-[0.95rem] ${isActive ? 'text-white' : 'text-slate-300'}`}>
+            {label.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/gu, '').trim()} {/* Clean label */}
+          </span>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {key === "online" && !user?.fullAccess && freeLeft <= 0 && (
+            <Lock className="w-3 h-3 text-rose-500" />
+          )}
+          
+          {badgeCount > 0 && (
+            <span className="notification-badge animate-pulse">
+              {badgeCount > 9 ? "9+" : badgeCount}
+            </span>
+          )}
+        </div>
+      </button>
+    );
+  };
+
   return (
     <aside
-      className={`${user?.fullAccess ? "premium-sidebar" : ""} sidebar glass ${className ? "" : "w-60"} p-2 sm:p-4 rounded-2xl ${className ?? "hidden sm:flex"} flex-col gap-2 overflow-y-auto overflow-x-hidden ${className ? "" : "fixed top-2 bottom-2 sm:top-4 sm:bottom-4"}`}
+      className={`${user?.fullAccess ? "premium-sidebar" : ""} sidebar glass ${className ? "" : "w-64"} p-4 rounded-2xl ${className ?? "hidden sm:flex"} flex-col gap-6 overflow-y-auto overflow-x-hidden ${className ? "" : "fixed top-4 bottom-4 left-4"}`}
     >
-      {tabs.map(({ key, label, icon: Icon }) => {
-        if (key === "admin" && !isAdmin) return null;
-        return (
-          <button
-            key={key}
-            className={`tab whitespace-nowrap flex items-center justify-start gap-3 ${active === key ? "tab--active" : "tab--inactive"} ${key === "fullaccess" ? "" : ""}`}
-            onClick={() => onChange(key as TabKey)}
-            title={label}
-            style={{
-              fontWeight: 700,
-              fontSize: "1.1rem",
-              color: active === key ? "#fff" : "#E5E7EB",
-              letterSpacing: "0.02em",
-            }}
-          >
-            <Icon className="w-6 h-6" />
-            <span className="flex items-center gap-2">
-              {label}
-              {key === "online" && !user?.fullAccess && freeLeft <= 0 && (
-                <span
-                  title="Weekly free games used"
-                  className="inline-flex items-center gap-1 text-[0.65rem] px-2 py-0.5 rounded-full bg-rose-600 text-white"
-                >
-                  <Lock className="w-3 h-3" />
-                  Locked
-                </span>
-              )}
-              {/* Notification badges */}
-              {key === "friends" && notifications.friendRequests > 0 && (
-                <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-orange-500 rounded-full">
-                  {notifications.friendRequests > 9
-                    ? "9+"
-                    : notifications.friendRequests}
-                </span>
-              )}
-              {key === "score" &&
-                (notifications.messages > 0 ||
-                  notifications.tournaments > 0) && (
-                  <span className="inline-flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-orange-500 rounded-full">
-                    {notifications.messages + notifications.tournaments > 9
-                      ? "9+"
-                      : notifications.messages + notifications.tournaments}
-                  </span>
-                )}
-            </span>
-            {/* Only the tab label should show PREMIUM; remove extra badge */}
-          </button>
-        );
-      })}
-      {/* Discord tab at the end */}
-      <button
-        className="tab tab--compact whitespace-nowrap flex items-center justify-start gap-3 bg-[#5865F2] text-white mt-2"
-        onClick={() => setShowDiscord(true)}
-        title="BullseyeDartsLeague"
-        style={{ fontWeight: 700, fontSize: "1.1rem", letterSpacing: "0.02em" }}
-      >
-        <MessageCircle className="w-6 h-6" />
-        <span className="truncate">BullseyeDartsLeague 🎯</span>
-      </button>
-      {/* NineDartNation Discord tab */}
-      <button
-        className="tab tab--compact whitespace-nowrap flex items-center justify-start gap-3 bg-[#5865F2] text-white mt-1"
-        onClick={() => setShowNDNDiscord(true)}
-        title="NineDartNation"
-        style={{ fontWeight: 700, fontSize: "1.1rem", letterSpacing: "0.02em" }}
-      >
-        <MessageCircle className="w-6 h-6" />
-        <span className="truncate">NineDartNation 🎯</span>
-      </button>
+      {/* Logo / Brand Area */}
+      <div className="px-2 mb-2">
+        <h1 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 tracking-tight">
+          NINE DART<br/>NATION
+        </h1>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">Play</h3>
+        {playTabs.map(renderTab)}
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">Social</h3>
+        {socialTabs.map(renderTab)}
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">System</h3>
+        {systemTabs.map(renderTab)}
+      </div>
+
+      <div className="mt-auto pt-4 border-t border-white/5 flex flex-col gap-2">
+        {/* Discord tab at the end */}
+        <button
+          className="tab tab--compact whitespace-nowrap flex items-center justify-start gap-3 bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] transition-colors"
+          onClick={() => setShowDiscord(true)}
+          title="BullseyeDartsLeague"
+        >
+          <MessageCircle className="w-5 h-5" />
+          <span className="truncate text-sm font-semibold">Bullseye League</span>
+        </button>
+        {/* NineDartNation Discord tab */}
+        <button
+          className="tab tab--compact whitespace-nowrap flex items-center justify-start gap-3 bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] transition-colors"
+          onClick={() => setShowNDNDiscord(true)}
+          title="NineDartNation"
+        >
+          <MessageCircle className="w-5 h-5" />
+          <span className="truncate text-sm font-semibold">NDN Community</span>
+        </button>
+      </div>
+
       {/* Discord about dialog via portal */}
       {showDiscord &&
         createPortal(
