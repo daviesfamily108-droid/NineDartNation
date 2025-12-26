@@ -23,6 +23,7 @@ import {
   Bell,
   CalendarDays,
   Handshake,
+  Menu,
   MessageCircle,
   Trophy,
   Users,
@@ -873,9 +874,9 @@ export default function App() {
         <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-4 sm:gap-6 h-full overflow-hidden">
           {/* Desktop sidebar; hidden on mobile/tablet */}
           {!isMobile && (
-            <div className="relative hidden lg:block w-80">
+            <div className="relative hidden lg:block w-72">
               <Sidebar
-                className="w-full h-full flex"
+                className="w-full h-full"
                 active={tab}
                 onChange={(k) => {
                   setTab(k);
@@ -895,6 +896,16 @@ export default function App() {
                 }`}
                 style={{ willChange: "transform" }}
               >
+                {isMobile && (
+                  <button
+                    className="p-2 -ml-2 mr-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all"
+                    onClick={() => setNavOpen(true)}
+                    aria-label="Open Menu"
+                  >
+                    <Menu className="w-6 h-6" />
+                  </button>
+                )}
+
                 {/* Left: Brand + Greeting */}
                 <div className="flex flex-col justify-center gap-1 shrink-0 min-w-[220px]">
                   {user?.username && (
@@ -1459,16 +1470,16 @@ function MobileNav({
     <Drawer
       open={open}
       onClose={onClose}
-      width={320}
+      width={300}
       side="left"
       title="Navigate"
     >
-      <div className="mt-2">
+      <div className="mt-0 h-full">
         <Sidebar
           active={active}
           onChange={onChange}
           user={user}
-          className="flex relative static max-h-[80vh] w-full"
+          className="flex relative static w-full h-full shadow-none bg-transparent p-0"
         />
       </div>
     </Drawer>
