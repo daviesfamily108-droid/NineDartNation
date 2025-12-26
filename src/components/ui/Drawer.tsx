@@ -20,6 +20,35 @@ export default function Drawer({
   children,
   side = "right",
 }: DrawerProps) {
+  // Swipe to close logic
+  const touchStart = React.useRef<number | null>(null);
+  const touchCurrent = React.useRef<number | null>(null);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    touchStart.current = e.targetTouches[0].clientX;
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    touchCurrent.current = e.targetTouches[0].clientX;
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart.current || !touchCurrent.current) return;
+    const diff = touchStart.current - touchCurrent.current;
+    
+    // If side is left, swipe left (positive diff) closes it
+    // If side is right, swipe right (negative diff) closes it
+    const threshold = 50; // px
+    if (side === "left" && diff > threshold) {
+      onClose();
+    } else if (side === "right" && diff < -threshold) {
+      onClose();
+    }
+    
+    touchStart.current = null;
+    touchCurrent.current = null;
+  };
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -51,6 +80,9 @@ export default function Drawer({
         style={{ width: typeof width === "number" ? `${width}px` : width }}
         role="dialog"
         aria-modal="true"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
       >
         <FocusLock returnFocus={true}>
           {/* Header */}

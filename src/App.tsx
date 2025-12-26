@@ -1159,11 +1159,9 @@ export default function App() {
           </div>
         </div>
         {isMobile && (
-          <MobileTabBar
-            active={tab}
-            onChange={(next) => setTab(next)}
-            user={user}
-          />
+          <div className="hidden">
+            {/* MobileTabBar removed in favor of drawer navigation */}
+          </div>
         )}
       </div>
 
