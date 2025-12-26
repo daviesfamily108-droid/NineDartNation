@@ -873,8 +873,9 @@ export default function App() {
         <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-4 sm:gap-6 h-full overflow-hidden">
           {/* Desktop sidebar; hidden on mobile/tablet */}
           {!isMobile && (
-            <div className="relative hidden lg:block" style={{ width: 280 }}>
+            <div className="relative hidden lg:block w-80">
               <Sidebar
+                className="w-full h-full flex"
                 active={tab}
                 onChange={(k) => {
                   setTab(k);
