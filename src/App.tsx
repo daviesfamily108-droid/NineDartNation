@@ -870,10 +870,10 @@ export default function App() {
         className={`${user?.fullAccess ? "premium-body" : ""} h-screen overflow-hidden pt-1 pb-0 px-1 xs:pt-2 xs:pb-0 xs:px-2 sm:pt-3 sm:pb-0 sm:px-3 md:pt-4 md:pb-0 md:px-4`}
       >
         <Toaster />
-        <div className="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-2 xs:gap-3 sm:gap-4 h-full overflow-hidden">
+        <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-4 sm:gap-6 h-full overflow-hidden">
           {/* Desktop sidebar; hidden on mobile/tablet */}
           {!isMobile && (
-            <div className="relative hidden lg:block" style={{ width: 240 }}>
+            <div className="relative hidden lg:block" style={{ width: 280 }}>
               <Sidebar
                 active={tab}
                 onChange={(k) => {

@@ -225,8 +225,8 @@ export function Sidebar({
       >
         <div className="flex items-center gap-3">
           <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-          <span className={`font-semibold text-[0.95rem] ${isActive ? 'text-white' : 'text-slate-300'}`}>
-            {label.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/gu, '').trim()} {/* Clean label */}
+          <span className={`font-semibold text-[1rem] ${isActive ? 'text-white' : 'text-slate-300'}`}>
+            {label}
           </span>
         </div>
         
@@ -247,26 +247,26 @@ export function Sidebar({
 
   return (
     <aside
-      className={`${user?.fullAccess ? "premium-sidebar" : ""} sidebar glass ${className ? "" : "w-64"} p-4 rounded-2xl ${className ?? "hidden sm:flex"} flex-col gap-6 overflow-y-auto overflow-x-hidden ${className ? "" : "fixed top-4 bottom-4 left-4"}`}
+      className={`${user?.fullAccess ? "premium-sidebar" : ""} sidebar glass ${className ? "" : "w-72"} p-5 rounded-2xl ${className ?? "hidden sm:flex"} flex-col gap-8 overflow-y-auto overflow-x-hidden ${className ? "" : "fixed top-4 bottom-4 left-4"}`}
     >
       {/* Logo / Brand Area */}
       <div className="px-2 mb-2">
-        <h1 className="text-xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 tracking-tight">
+        <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 tracking-tight">
           NINE DART<br/>NATION
         </h1>
       </div>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">Play</h3>
         {playTabs.map(renderTab)}
       </div>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">Social</h3>
         {socialTabs.map(renderTab)}
       </div>
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-2">
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">System</h3>
         {systemTabs.map(renderTab)}
       </div>
