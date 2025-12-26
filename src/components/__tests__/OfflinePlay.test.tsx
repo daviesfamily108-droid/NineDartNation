@@ -1,6 +1,6 @@
 ﻿// @vitest-environment jsdom
 import React from "react";
-import { render, screen, act, waitFor } from "@testing-library/react";
+import { render, screen, act, waitFor, fireEvent } from "@testing-library/react";
 import OfflinePlay from "../OfflinePlay";
 // Mock CameraView to avoid async camera effects in OfflinePlay tests
 vi.mock("../CameraView", () => ({
@@ -47,16 +47,23 @@ describe("OfflinePlay", () => {
   test("shows live 3-Dart Avg label in offline UI", async () => {
     const user = { email: "a@example.com", username: "Alice" };
     render(<OfflinePlay user={user} />);
-    await waitFor(() => screen.getByText(/Start Match/i));
+    // Trigger match start through the UI so OfflinePlay updates any internal view state
+    const startBtn = await screen.findByRole("button", { name: /Start Match/i });
     act(() => {
-      useMatch.getState().newMatch(["Alice", "AI"], 301);
+      fireEvent.click(startBtn);
     });
-    // The offline UI should show at least one live avg label
-    const labels = await screen.findAllByText(/3-Dart Avg/i);
-    expect(labels.length).toBeGreaterThan(0);
-    // Key sections should be visible (loose checks to avoid structure variance)
-    // 'Current Shooter' can be rendered variably; ensure the important labels are present
-    expect(labels.length).toBeGreaterThan(0);
+    // If the UI didn't actually start the match (e.g., gated by setup inputs), fall back to store.
+    act(() => {
+      if (!useMatch.getState().inProgress) {
+        useMatch.getState().newMatch(["Alice", "AI"], 301);
+      }
+    });
+
+    await waitFor(() => expect(useMatch.getState().inProgress).toBe(true));
+
+    // The offline in-game UI should show the live avg tile + current shooter
+    expect(await screen.findByTestId("offline-live-avg")).toBeTruthy();
+    expect(await screen.findByTestId("offline-current-shooter")).toBeTruthy();
   });
 
   test("committing a full visit updates live 3-dart average", async () => {

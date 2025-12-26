@@ -52,3 +52,54 @@ describe("three-dart average calculations", () => {
     );
   });
 });
+
+describe("visit per-dart entries", () => {
+  beforeEach(() => {
+    useMatch.setState({
+      roomId: "",
+      players: [],
+      currentPlayerIdx: 0,
+      startingScore: 501,
+      inProgress: false,
+    });
+  });
+
+  it("stores dart1/dart2/dart3 entries including MISS=0", () => {
+    useMatch.getState().newMatch(["Alice"], 501);
+    useMatch.getState().addVisit(60, 3, {
+      entries: [
+        { label: "T20 60", value: 60, ring: "TRIPLE" },
+        { label: "MISS 0", value: 0, ring: "MISS" },
+        { label: "S1 1", value: 1, ring: "SINGLE" },
+      ],
+      visitTotal: 60,
+    });
+
+    const p = useMatch.getState().players[0];
+    const leg = p.legs[p.legs.length - 1];
+    const v = leg.visits[0] as any;
+    expect(Array.isArray(v.entries)).toBe(true);
+    expect(v.entries).toHaveLength(3);
+    expect(v.entries[1]).toMatchObject({ label: "MISS 0", value: 0, ring: "MISS" });
+  });
+
+  it("stores per-dart entries even when score is 0 (double-in pre-open)", () => {
+    useMatch.getState().newMatch(["Bob"], 501);
+    useMatch.getState().addVisit(0, 3, {
+      preOpenDarts: 3,
+      entries: [
+        { label: "S20 0", value: 0, ring: "SINGLE" },
+        { label: "S5 0", value: 0, ring: "SINGLE" },
+        { label: "MISS 0", value: 0, ring: "MISS" },
+      ],
+      visitTotal: 0,
+    });
+    const p = useMatch.getState().players[0];
+    const leg = p.legs[p.legs.length - 1];
+    const v = leg.visits[0] as any;
+    expect(v.score).toBe(0);
+    expect(v.darts).toBe(3);
+    expect(v.preOpenDarts).toBe(3);
+    expect(v.entries).toHaveLength(3);
+  });
+});

@@ -4,7 +4,7 @@
 // Multi-camera support: Phone camera, OBS Virtual Cam, USB cameras, etc
 // Auto-Calibration: Snap a picture and auto-detect board features
 
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useCalibration } from "../store/calibration";
 import {
   computeHomographyDLT,
@@ -495,6 +495,7 @@ export default function Calibrator() {
   const lastPointerTypeRef = useRef<CanvasPointerEvent["pointerType"] | null>(
     null,
   );
+  const autoPlacementFrozenRef = useRef(false);
 
   useEffect(() => {
     // Ensure target screen positions reset on mount so stale refs don't linger
@@ -735,6 +736,7 @@ export default function Calibrator() {
   // Handle camera selection change
   const handleCameraChange = async (cameraId: string) => {
     setSelectedCameraId(cameraId);
+    resetAutoPlacementFreeze();
     await startCamera(cameraId);
     setShowCameraSelector(false);
   };
@@ -746,6 +748,7 @@ export default function Calibrator() {
     if (!coords) return;
     lastPointerTypeRef.current = e.pointerType;
     if (tryBeginTargetDrag(coords.canvasX, coords.canvasY, e.pointerType)) {
+      freezeAutoPlacement();
       if (dragStateRef.current) {
         dragStateRef.current.pointerId = e.pointerId;
       }
@@ -793,6 +796,7 @@ export default function Calibrator() {
       return;
     }
     if (!canvasRef.current || calibrationPoints.length >= 5 || locked) return;
+    freezeAutoPlacement();
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -888,8 +892,8 @@ export default function Calibrator() {
           confidence: derivedConfidence.percentage,
           imageSize: { w: canvas.width, h: canvas.height },
           overlaySize: {
-            w: videoRef.current?.videoWidth || canvas.width,
-            h: videoRef.current?.videoHeight || canvas.height,
+            w: videoRef.current?.clientWidth || videoRef.current?.videoWidth || canvas.width,
+            h: videoRef.current?.clientHeight || videoRef.current?.videoHeight || canvas.height,
           },
         }); // Not locked yet
 
@@ -928,6 +932,16 @@ export default function Calibrator() {
     setSectorOffset(0);
     setShowAngleAdjust(false);
     resetTargetOverrides();
+    resetAutoPlacementFreeze();
+  };
+
+  const currentOverlaySize = () => {
+    const v = videoRef.current;
+    const c = canvasRef.current;
+    return {
+      w: v?.clientWidth || v?.videoWidth || c?.width || 0,
+      h: v?.clientHeight || v?.videoHeight || c?.height || 0,
+    };
   };
 
   const handleLock = () => {
@@ -946,19 +960,13 @@ export default function Calibrator() {
           w: canvasRef.current?.width || 0,
           h: canvasRef.current?.height || 0,
         },
-        overlaySize: {
-          w: videoRef.current?.videoWidth || canvasRef.current?.width || 0,
-          h: videoRef.current?.videoHeight || canvasRef.current?.height || 0,
-        },
+        overlaySize: currentOverlaySize(),
       });
       const imageSizeSnapshot = {
         w: canvasRef.current?.width || 0,
         h: canvasRef.current?.height || 0,
       };
-      const overlaySizeSnapshot = {
-        w: videoRef.current?.videoWidth || canvasRef.current?.width || 0,
-        h: videoRef.current?.videoHeight || canvasRef.current?.height || 0,
-      };
+      const overlaySizeSnapshot = currentOverlaySize();
       saveCalibrationToHistory(
         H as Homography,
         errorPx,
@@ -982,6 +990,7 @@ export default function Calibrator() {
     setSectorOffset(0);
     setShowAngleAdjust(false);
     resetTargetOverrides();
+    resetAutoPlacementFreeze();
   };
 
   const handleAngleSaved = () => {
@@ -994,10 +1003,7 @@ export default function Calibrator() {
           w: canvasRef.current?.width || 0,
           h: canvasRef.current?.height || 0,
         },
-        overlaySize: {
-          w: videoRef.current?.videoWidth || canvasRef.current?.width || 0,
-          h: videoRef.current?.videoHeight || canvasRef.current?.height || 0,
-        },
+        overlaySize: currentOverlaySize(),
       });
       setShowAngleAdjust(false);
     }
@@ -1232,6 +1238,16 @@ export default function Calibrator() {
     targetScreenPositionsRef.current = new Array(5).fill(null);
   };
 
+  const freezeAutoPlacement = () => {
+    if (!autoPlacementFrozenRef.current) {
+      autoPlacementFrozenRef.current = true;
+    }
+  };
+
+  const resetAutoPlacementFreeze = () => {
+    autoPlacementFrozenRef.current = false;
+  };
+
   const getDragHitRadius = (
     pointerType?: CanvasPointerEvent["pointerType"] | null,
   ) => {
@@ -1360,8 +1376,9 @@ export default function Calibrator() {
     timestamp: number;
   } | null>(null);
   const detectionCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
 
-  const drawCanvas = (ref: React.RefObject<HTMLCanvasElement>) => {
+  const drawCanvas = useCallback((ref: React.RefObject<HTMLCanvasElement>) => {
     try {
       const canvas = ref.current;
       if (!canvas) return;
@@ -1419,7 +1436,13 @@ export default function Calibrator() {
 
           // Periodically run board detection on the full video frame (not cropped)
           const now = performance.now();
+          const allowDetection =
+            (typeof document === "undefined" ||
+              document.visibilityState !== "hidden") &&
+            !autoPlacementFrozenRef.current &&
+            !dragStateRef.current;
           const needsDetection =
+            allowDetection &&
             calibrationPoints.length < 5 &&
             video.videoWidth > 0 &&
             video.videoHeight > 0 &&
@@ -1648,18 +1671,31 @@ export default function Calibrator() {
       // console.debug("drawCanvas skipped due to unsupported canvas API", err);
       return;
     }
-  };
+  }, [
+    calibrationPoints,
+    canonicalTargets,
+    confidence,
+    errorPx,
+    isComplete,
+    zoom,
+    H,
+  ]);
 
   // Redraw when points change - continuous animation loop
   useEffect(() => {
-    const animationLoop = () => {
+    const render = () => {
       drawCanvas(canvasRef);
-      requestAnimationFrame(animationLoop);
+      animationFrameRef.current = requestAnimationFrame(render);
     };
 
-    const frameId = requestAnimationFrame(animationLoop);
-    return () => cancelAnimationFrame(frameId);
-  }, [calibrationPoints, zoom]);
+    animationFrameRef.current = requestAnimationFrame(render);
+    return () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, [drawCanvas]);
 
   return (
     <div

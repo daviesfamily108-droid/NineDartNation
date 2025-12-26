@@ -21,8 +21,8 @@ export default function CalibrationPopup({
   const canStartMatch = remainingPlayers.length === 0;
 
   return (
-    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/90 p-4">
-      <div className="bg-slate-800 border border-slate-600 rounded-2xl p-6 max-w-2xl w-full">
+    <div className="fixed inset-0 z-60 overflow-y-auto bg-black/90 backdrop-blur-sm py-8 px-4">
+      <div className="bg-slate-800 border border-slate-600 rounded-2xl p-6 max-w-2xl w-full mx-auto shadow-2xl">
         <h3 className="text-xl font-bold mb-4 text-center">
           Calibration Check 🎯
         </h3>

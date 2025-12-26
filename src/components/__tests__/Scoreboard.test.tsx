@@ -123,32 +123,16 @@ describe("Scoreboard", () => {
       inProgress: true,
     });
     render(<Scoreboard matchActions={matchActions} />);
-    // Input 41 within the Score Input card and click Add Visit
-    const headings2 = await screen.findAllByText("Score Input");
-    let card2: Element | null = null;
-    for (const h of headings2) {
-      const c = h.closest(".card");
-      if (
-        c &&
-        within(c as HTMLElement).queryByRole("button", { name: "Add Visit" })
-      ) {
-        card2 = c;
-        break;
-      }
-    }
-    if (!card2)
-      throw new Error("Could not find Score Input card with Add Visit button");
-    const input = within(card2 as HTMLElement).getByPlaceholderText(
+    // Input 41 and click Add Visit (avoid coupling to card DOM structure)
+    const input = (await screen.findByPlaceholderText(
       "Score",
-    ) as HTMLInputElement;
+    )) as HTMLInputElement;
     await act(async () => {
       fireEvent.change(input, { target: { value: "41" } });
     });
     // Ensure the input was updated
     expect((input as HTMLInputElement).value).toBe("41");
-    const addBtn = within(card2 as HTMLElement).getByRole("button", {
-      name: "Add Visit",
-    });
+  const addBtn = await screen.findByRole("button", { name: /add visit/i });
     fireEvent.click(addBtn);
     await waitFor(() =>
       expect(matchActions.addVisit).toHaveBeenCalledWith(41, 3),
@@ -199,8 +183,12 @@ describe("Scoreboard", () => {
       useMatch.getState().addVisit(60, 3);
     });
     // After one visit (3 darts) the live avg should be updated to 60 (in Alice's card)
+    const liveAvgTile = aliceWithin
+      .getByText("3-Dart Avg (Live)")
+      .closest(".metric-tile") as HTMLElement;
+    expect(liveAvgTile).toBeTruthy();
     expect(
-      aliceWithin.getByText(
+      within(liveAvgTile).getByText(
         formatAvg(useMatch.getState().players[0].currentThreeDartAvg ?? 0),
       ),
     ).toBeTruthy();
@@ -211,7 +199,7 @@ describe("Scoreboard", () => {
       useMatch.getState().addVisit(60, 3);
     });
     const expected = useMatch.getState().players[0].currentThreeDartAvg ?? 0;
-    expect(aliceWithin.getByText(formatAvg(expected))).toBeTruthy();
+    expect(within(liveAvgTile).getByText(formatAvg(expected))).toBeTruthy();
   });
 
   test("allows manual editing of current three-dart average", async () => {

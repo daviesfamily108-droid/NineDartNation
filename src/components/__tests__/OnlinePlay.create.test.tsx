@@ -50,7 +50,7 @@ describe("OnlinePlay create modal", () => {
     render(<OnlinePlay user={user} />);
     await waitFor(() => screen.getByText(/Create Match \+/i));
     // Click the Create Match + button
-    const createButton = await screen.findByText("Create Match +");
+  const createButton = await screen.findByText(/Create Match \+/i);
     fireEvent.click(createButton);
     await waitFor(() => screen.getByRole("heading", { name: /Create Match/i }));
     // The modal card should show the header
@@ -69,7 +69,7 @@ describe("OnlinePlay create modal", () => {
     render(<OnlinePlay user={user} />);
     await waitFor(() => screen.getByText(/Create Match \+/i));
     // Open modal
-    const createButton = await screen.findByText("Create Match +");
+  const createButton = await screen.findByText(/Create Match \+/i);
     fireEvent.click(createButton);
     await waitFor(() => screen.getByRole("heading", { name: /Create Match/i }));
     // Switch to First To, set legs to 2

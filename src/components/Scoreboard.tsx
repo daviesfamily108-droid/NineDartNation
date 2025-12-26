@@ -24,6 +24,21 @@ export default function Scoreboard({
   } = useMatch();
   const pendingEntries = usePendingVisit((s) => s.entries);
 
+  // Prefer authoritative per-dart entries from the most recent committed visit
+  // (already stored in match state) when available. Fallback to the pendingVisit
+  // store for the in-progress turn.
+  const getLastCommittedEntriesForPlayer = (playerIdx: number) => {
+    try {
+      const p = players[playerIdx];
+      const leg = p?.legs?.[p.legs.length - 1];
+      const lastVisit = leg?.visits?.[leg.visits.length - 1] as any;
+      const entries = lastVisit?.entries;
+      return Array.isArray(entries) ? (entries as any[]) : null;
+    } catch {
+      return null;
+    }
+  };
+
   function handleEndGame() {
     try {
       const summary = {
@@ -168,23 +183,30 @@ export default function Scoreboard({
                         >
                           {[0, 1, 2].map((i) => {
                             // Only active/current player's pendingEntries matter; other players get translucent placeholders
+                            const committed = getLastCommittedEntriesForPlayer(idx);
                             const e =
                               idx === currentPlayerIdx
-                                ? (pendingEntries[i] as any)
-                                : null;
-                            const isPending = !e;
+                                ? ((pendingEntries[i] as any) ?? null)
+                                : ((committed?.[i] as any) ?? null);
+                            // IMPORTANT:
+                            // A MISS is a real dart and should still render as a recorded entry.
+                            // Previously, we treated value===0 as "not a hit" and rendered it as pending,
+                            // which made it look like dart 3 never arrived ("zero mapping").
+                            const isPending = e == null;
                             const isHit =
-                              !!e &&
-                              (typeof e.value === "number"
-                                ? e.value > 0
-                                : true);
+                              e != null &&
+                              (typeof e.ring === "string"
+                                ? e.ring !== "MISS"
+                                : typeof e.value === "number"
+                                  ? e.value > 0
+                                  : true);
                             const color = isPending
                               ? "bg-gray-400/60"
                               : isHit
                                 ? "bg-emerald-400"
                                 : "bg-rose-500";
                             const active =
-                              idx === currentPlayerIdx && !isPending && isHit;
+                              idx === currentPlayerIdx && !isPending;
                             const classes = `visit-dot ${active ? "active" : "inactive"} ${color}`;
                             return <span key={i} className={classes} />;
                           })}

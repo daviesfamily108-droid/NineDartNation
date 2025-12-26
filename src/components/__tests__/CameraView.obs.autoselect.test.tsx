@@ -59,6 +59,8 @@ vi.mock("../../store/userSettings", () => {
   const setPreferredCamera = vi.fn(spySet);
   const state: any = {
     autoscoreProvider: "built-in",
+    confirmUncertainDarts: true,
+    autoScoreConfidenceThreshold: 0.85,
     preferredCameraLabel: "",
     preferredCameraId: undefined,
     setPreferredCamera,
@@ -107,7 +109,7 @@ describe("CameraView auto-select OBS virtual camera", () => {
   // The auto-select effect requires a fully-reactive mocked store —
   // this unit test validates that devices are enumerated and the OBS label is present.
   // A full integration test should assert the actual setPreferredCamera invocation.
-  it.skip("should pick an OBS/virtual device when available and no preferredCameraId set", async () => {
+  it("should pick an OBS/virtual device when available and no preferredCameraId set", async () => {
     const devices: any = [
       { deviceId: "cam1", kind: "videoinput", label: "Built-in Webcam" },
       { deviceId: "obs1", kind: "videoinput", label: "OBS Virtual Camera" },
@@ -128,15 +130,16 @@ describe("CameraView auto-select OBS virtual camera", () => {
       const { render } = await vi.importActual<any>("@testing-library/react");
       render(<CameraView />);
     });
-    // Wait for the enumerateDevices async call to settle and effect to run
-    await waitFor(
-      () => {
-        const select =
-          document.querySelector<HTMLSelectElement>("div.card select");
-        if (!select) throw new Error("select not found");
-        expect(select.value).toBe("obs1");
-      },
-      { timeout: 1000 },
-    );
+
+    // Wait for the mocked setter to be called with the OBS device
+    await waitFor(async () => {
+      const { useUserSettings } = await import("../../store/userSettings");
+      const spy = useUserSettings.getState().setPreferredCamera as any;
+      expect(typeof spy).toBe("function");
+      expect(spy.mock?.calls?.length || 0).toBeGreaterThan(0);
+      const calls = spy.mock?.calls || [];
+      const hit = calls.some((c: any[]) => c[0] === "obs1");
+      expect(hit).toBe(true);
+    }, { timeout: 1000 });
   });
 });

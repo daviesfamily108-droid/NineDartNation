@@ -89,6 +89,8 @@ vi.mock("../../store/userSettings", () => {
     cameraAspect: "wide",
     cameraFitMode: "fit",
     autoCommitMode: "wait-for-clear",
+  confirmUncertainDarts: true,
+  autoScoreConfidenceThreshold: 0.85,
     cameraEnabled: true,
     hideCameraOverlay: false,
     preserveCalibrationOverlay: true,
@@ -102,6 +104,12 @@ vi.mock("../../store/userSettings", () => {
     setCameraAspect: (_mode: "wide" | "square") => {},
     setCameraFitMode: (_mode: "fit" | "fill") => {},
     setCameraEnabled: (_val: boolean) => {},
+    setConfirmUncertainDarts: (v: boolean) => {
+      state.confirmUncertainDarts = !!v;
+    },
+    setAutoScoreConfidenceThreshold: (n: number) => {
+      state.autoScoreConfidenceThreshold = n;
+    },
     setCallerEnabled: (enabled: boolean) => {
       state.callerEnabled = enabled;
     },

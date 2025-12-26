@@ -1,7 +1,18 @@
 ﻿import { create } from "zustand";
 import type { Ring } from "../utils/scoring";
 
-export type PendingEntry = { label: string; value: number; ring: Ring };
+export type PendingEntry = {
+  label: string;
+  value: number;
+  ring: Ring;
+  // Optional metadata (e.g., source/camera calibration) used by CameraView.
+  // Kept optional so existing usages remain compatible.
+  meta?: {
+    calibrationValid?: boolean;
+    pBoard?: { x: number; y: number } | null;
+    source?: "camera" | "manual";
+  };
+};
 
 type PendingVisitState = {
   darts: number;

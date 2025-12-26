@@ -11,6 +11,12 @@
   VITE_WS_URL = "wss://ninedartnation-1.onrender.com"
   # Force redeploy trigger v4 - calibration guide fix
 
+# SPA Redirect Rule (Must be before catch-all headers)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
 # Security and caching headers
 [[headers]]
   for = "/*"

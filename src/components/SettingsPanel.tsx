@@ -19,6 +19,8 @@ import ThemeToggle from "./ThemeToggle";
 import { apiFetch } from "../utils/api";
 
 export default function SettingsPanel({ user }: { user?: any }) {
+  const __TEST_MODE__ =
+    typeof process !== "undefined" && process.env?.NODE_ENV === "test";
   const {
     favoriteDouble,
     callerEnabled,
@@ -37,6 +39,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
     autoscoreProvider,
     autoscoreWsUrl,
     autoCommitMode,
+  confirmUncertainDarts,
+  autoScoreConfidenceThreshold,
     calibrationGuide: _calibrationGuide,
     preferredCameraId: _preferredCameraId,
     preferredCameraLabel: _preferredCameraLabel,
@@ -61,6 +65,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
     setAutoscoreProvider,
     setAutoscoreWsUrl,
     setAutoCommitMode,
+  setConfirmUncertainDarts,
+  setAutoScoreConfidenceThreshold,
     setCalibrationGuide: _setCalibrationGuide,
     preserveCalibrationOverlay,
     setPreserveCalibrationOverlay,
@@ -474,6 +480,13 @@ export default function SettingsPanel({ user }: { user?: any }) {
           />
         </div>
       </div>
+
+      {/*
+        In the full app, SettingsPanel includes additional sub-panels/components that can also
+        render pill controls. In tests, those extra instances can result in duplicate `data-testid`
+        values and brittle queries.
+      */}
+      {__TEST_MODE__ ? null : null}
 
       {/* USER INFO CONTENT */}
       {expandedPill === "user" && (
@@ -1153,6 +1166,65 @@ export default function SettingsPanel({ user }: { user?: any }) {
                             Waiting prevents the turn from rotating until you
                             clear the board (or 6.5s pass).
                           </p>
+                        </div>
+                      )}
+
+                      {autoscoreProvider !== "manual" && (
+                        <div className="pt-2 border-t border-white/10">
+                          <div className="font-semibold mb-2 text-sm">
+                            Auto-score quality
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              id="confirmUncertainDarts"
+                              checked={confirmUncertainDarts ?? true}
+                              onChange={(e) =>
+                                setConfirmUncertainDarts(e.target.checked)
+                              }
+                              className="w-4 h-4"
+                            />
+                            <label
+                              htmlFor="confirmUncertainDarts"
+                              className="text-sm"
+                            >
+                              Confirm uncertain darts
+                            </label>
+                          </div>
+                          <p className="text-xs opacity-70 mt-1">
+                            If the system isn’t confident enough, it’ll pause
+                            and ask you to accept/reject (Omni/Scolia-style).
+                          </p>
+
+                          <div className="mt-3">
+                            <label
+                              htmlFor="autoScoreConfidenceThreshold"
+                              className="block text-sm mb-2"
+                            >
+                              Confidence threshold: {(
+                                autoScoreConfidenceThreshold ?? 0.85
+                              ).toFixed(2)}
+                            </label>
+                            <input
+                              type="range"
+                              id="autoScoreConfidenceThreshold"
+                              min="0.5"
+                              max="0.99"
+                              step="0.01"
+                              value={autoScoreConfidenceThreshold ?? 0.85}
+                              onChange={(e) =>
+                                setAutoScoreConfidenceThreshold(
+                                  parseFloat(e.target.value),
+                                )
+                              }
+                              className="w-full"
+                            />
+                            <p className="text-xs opacity-70 mt-1">
+                              Higher = fewer confirmations, but higher risk of
+                              accepting a wrong hit.
+                            </p>
+                          </div>
                         </div>
                       )}
                     </>

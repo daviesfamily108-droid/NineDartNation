@@ -12,32 +12,56 @@ export type ParsedDart = {
   ring: Ring;
   sector?: number | null;
   mult?: 0 | 1 | 2 | 3;
+  // Optional provider confidence. Prefer 0..1 when available.
+  // If a provider sends 0..100, we normalize it to 0..1.
+  confidence?: number;
 };
 
 // Try to parse a variety of vendor payload shapes
 export function parseExternalDart(data: any): ParsedDart | null {
   try {
     if (!data || typeof data !== "object") return null;
+    const rawConf = (data as any).confidence;
+    const conf =
+      typeof rawConf === "number" && Number.isFinite(rawConf)
+        ? rawConf > 1
+          ? Math.max(0, Math.min(1, rawConf / 100))
+          : Math.max(0, Math.min(1, rawConf))
+        : undefined;
     // 1) { type:'dart', value: <0-60>, ring: 'SINGLE'|'DOUBLE'|... }
     if (
       (data.type === "dart" || data.kind === "dart" || data.event === "dart") &&
       typeof data.value === "number"
     ) {
       const ring = normalizeRing(data.ring);
-      return finalizeFromValue(data.value, ring);
+      const base = finalizeFromValue(data.value, ring);
+      return base ? { ...base, confidence: conf } : null;
     }
     // 2) { value, ring }
     if (typeof data.value === "number" && data.ring) {
       const ring = normalizeRing(data.ring);
-      return finalizeFromValue(data.value, ring);
+      const base = finalizeFromValue(data.value, ring);
+      return base ? { ...base, confidence: conf } : null;
     }
     // 3) { score: 'T20'|'D16'|'S5'|'25'|'50' }
     if (typeof data.score === "string") {
       const s = data.score.trim().toUpperCase();
       if (s === "50" || s === "DBULL" || s === "INNER_BULL")
-        return { value: 50, ring: "INNER_BULL", sector: null, mult: 0 };
+        return {
+          value: 50,
+          ring: "INNER_BULL",
+          sector: null,
+          mult: 0,
+          confidence: conf,
+        };
       if (s === "25" || s === "BULL" || s === "OBULL")
-        return { value: 25, ring: "BULL", sector: null, mult: 0 };
+        return {
+          value: 25,
+          ring: "BULL",
+          sector: null,
+          mult: 0,
+          confidence: conf,
+        };
       const m = s.match(/^(S|D|T)(\d{1,2})$/);
       if (m) {
         const mult = m[1] === "S" ? 1 : m[1] === "D" ? 2 : 3;
@@ -48,6 +72,7 @@ export function parseExternalDart(data: any): ParsedDart | null {
             ring: mult === 1 ? "SINGLE" : mult === 2 ? "DOUBLE" : "TRIPLE",
             sector: sec,
             mult: mult as 1 | 2 | 3,
+            confidence: conf,
           };
       }
     }
@@ -60,6 +85,7 @@ export function parseExternalDart(data: any): ParsedDart | null {
         ring: mul === 1 ? "SINGLE" : mul === 2 ? "DOUBLE" : "TRIPLE",
         sector: sec,
         mult: mul as 1 | 2 | 3,
+        confidence: conf,
       };
     }
     // 5) { bull: 'outer'|'inner'|true }
@@ -71,6 +97,7 @@ export function parseExternalDart(data: any): ParsedDart | null {
         ring: inner ? "INNER_BULL" : "BULL",
         sector: null,
         mult: 0,
+        confidence: conf,
       };
     }
   } catch {}

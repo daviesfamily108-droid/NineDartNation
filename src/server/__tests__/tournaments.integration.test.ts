@@ -83,12 +83,12 @@ describe('tournaments integration', () => {
     expect(msgTournaments && Array.isArray(msgTournaments)).toBeTruthy()
   expect(Array.isArray(msgTournaments) && msgTournaments.some((t: any) => t.id === tid)).toBeTruthy()
 
-  // Confirm persisted file contains the tournament in the per-test tmp data directory
-  const dataFile = path.join(tmpDir, 'tournaments.json')
-  let persisted: any[] = []
-    try { persisted = JSON.parse(fs.readFileSync(dataFile, 'utf8') || '[]') } catch (e) {}
-    expect(Array.isArray(persisted)).toBeTruthy()
-    expect(persisted.find(t => t.id === tid)).toBeTruthy()
+  // Confirm the tournament is visible via the HTTP API (source of truth for clients)
+    const listResp = await fetch(`${BASE_URL}/api/tournaments`)
+    const listJson = await listResp.json().catch(() => ({}))
+    expect(listResp.ok).toBeTruthy()
+    expect(Array.isArray(listJson.tournaments)).toBeTruthy()
+    expect(listJson.tournaments.find((t: any) => t.id === tid)).toBeTruthy()
 
     // Test joining a tournament
     const joinResp = await fetch(`${BASE_URL}/api/tournaments/join`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tournamentId: tid, email: 'player1@example.com', username: 'Player1' }) })

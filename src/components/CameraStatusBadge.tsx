@@ -11,6 +11,7 @@ export default function CameraStatusBadge() {
   const camera = useCameraSession();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
+  const lastDrawRef = useRef<number>(0);
 
   const videoEl = camera.getVideoElementRef();
   const sessionStream = camera.getMediaStream?.();
@@ -23,12 +24,16 @@ export default function CameraStatusBadge() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    let running = true;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const render = () => {
-      if (!running) return;
+    let running = true;
+    // Throttle the badge to a low FPS. Drawing a video thumbnail at 60fps can
+    // unnecessarily compete with the main CameraView/Calibrator loops.
+    const TARGET_FPS = 10;
+    const MIN_MS = 1000 / TARGET_FPS;
+
+    const drawOnce = () => {
       try {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         if (streaming && videoEl && videoEl.readyState >= 2) {
@@ -44,19 +49,16 @@ export default function CameraStatusBadge() {
             sw = vw,
             sh = vh;
           if (vr > cr) {
-            // video is wider than canvas; crop sides
             const targetW = vh * cr;
             sx = (vw - targetW) / 2;
             sw = targetW;
           } else if (vr < cr) {
-            // video is taller; crop top/bottom
             const targetH = vw / cr;
             sy = (vh - targetH) / 2;
             sh = targetH;
           }
           ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, cw, ch);
         } else {
-          // Placeholder background when not streaming
           ctx.fillStyle = "rgba(148, 163, 184, 0.25)";
           ctx.fillRect(0, 0, canvas.width, canvas.height);
           ctx.fillStyle = "rgba(226,232,240,0.8)";
@@ -65,11 +67,26 @@ export default function CameraStatusBadge() {
           ctx.textBaseline = "middle";
           ctx.fillText(statusLabel, canvas.width / 2, canvas.height / 2);
         }
-      } catch (e) {}
-      rafRef.current = requestAnimationFrame(render);
+      } catch {}
     };
 
-    rafRef.current = requestAnimationFrame(render);
+    const loop = (ts: number) => {
+      if (!running || !streaming) return;
+      if (ts - lastDrawRef.current >= MIN_MS) {
+        lastDrawRef.current = ts;
+        drawOnce();
+      }
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    // Always draw a single frame immediately (shows placeholder if needed)
+    drawOnce();
+
+    // Only animate when streaming
+    if (streaming) {
+      rafRef.current = requestAnimationFrame(loop);
+    }
+
     return () => {
       running = false;
       if (rafRef.current) cancelAnimationFrame(rafRef.current);

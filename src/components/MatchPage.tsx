@@ -8,9 +8,13 @@ import { readMatchSnapshot } from "../utils/matchSync";
 import { subscribeMatchSync } from "../utils/broadcast";
 import { usePendingVisit } from "../store/pendingVisit";
 import PauseTimerBadge from "./ui/PauseTimerBadge";
+import { useUserSettings } from "../store/userSettings";
+import MatchControls from "./MatchControls";
+import { parseManualDart } from "../game/types";
 
 export default function MatchPage() {
   const match = useMatch();
+  const hideInGameSidebar = useUserSettings((s) => s.hideInGameSidebar ?? true);
   const _setMatchState = useMatch().importState;
   const _setControl = useMatchControl((s) => s.setPaused);
   const _control = useMatchControl();
@@ -22,15 +26,42 @@ export default function MatchPage() {
     darts: s.darts,
     total: s.total,
   }));
+  const pendingEntries = usePendingVisit((s) => s.entries);
   const [remoteFrame, setRemoteFrame] = useState<string | null>(null);
+  const lastOfflineStart = useUserSettings((s) => s.lastOffline?.x01Start || 501);
+  const [playerVisitDarts, setPlayerVisitDarts] = useState(0);
+  const [playerDartPoints, setPlayerDartPoints] = useState<number>(0);
+  const [visitTotalInput, setVisitTotalInput] = useState<string>("");
+  const [manualBox, setManualBox] = useState("");
+  const [multiEntry, setMultiEntry] = useState("");
+  const [manualEntries, setManualEntries] = useState<number[]>([]);
 
   useEffect(() => {
+    // Ensure calibration overlay is preserved in the match window so the camera view matches calibration
+    try {
+      useUserSettings.getState().setPreserveCalibrationOverlay(true);
+    } catch {}
+
+    // Ensure camera is enabled for the pop-out so the feed can start immediately
+    try {
+      useUserSettings.getState().setCameraEnabled(true);
+    } catch {}
+
     // Try to import snapshot that opener wrote
     try {
       const snapshot = readMatchSnapshot();
       if (snapshot?.match) {
         try {
           useMatch.getState().importState(snapshot.match);
+        } catch {}
+      }
+      // If no snapshot match data, make sure starting score reflects last selected
+      else {
+        try {
+          useMatch.getState().importState({
+            ...useMatch.getState(),
+            startingScore: lastOfflineStart,
+          } as any);
         } catch {}
       }
       if (snapshot?.control) {
@@ -179,6 +210,110 @@ export default function MatchPage() {
     };
   }, []);
 
+  const commitVisit = (score: number, darts: number, meta?: any) => {
+    const p = match.players?.[match.currentPlayerIdx];
+    const leg = p?.legs?.[p.legs.length - 1];
+    const prevRemaining = leg ? leg.totalScoreRemaining : match.startingScore;
+    const numericScore = typeof score === "number" ? score : 0;
+    let newRemaining = prevRemaining - numericScore;
+    if (!Number.isFinite(newRemaining) || newRemaining < 0) newRemaining = 0;
+
+    match.addVisit(numericScore, darts, meta ?? { visitTotal: numericScore });
+    if (newRemaining === 0) {
+      match.endLeg(numericScore);
+    } else {
+      match.nextPlayer();
+    }
+  };
+
+  const resetManualState = () => {
+    setManualEntries([]);
+  setPlayerVisitDarts(0);
+    setPlayerDartPoints(0);
+    setVisitTotalInput("");
+    setManualBox("");
+  };
+
+  const addManualEntry = (value: number) => {
+    const dart = Math.max(0, Math.min(60, Math.round(value)));
+    const nextEntries = [...manualEntries, dart].slice(0, 3);
+    const darts = nextEntries.length;
+    const sum = nextEntries.reduce((acc, v) => acc + v, 0);
+    setManualEntries(nextEntries);
+    setPlayerVisitDarts(darts);
+    if (darts >= 3) {
+      commitVisit(sum, darts, { visitTotal: sum });
+      resetManualState();
+    }
+  };
+
+  const replaceLast = () => {
+    if (manualEntries.length === 0) return;
+    const next = manualEntries.slice(0, -1);
+    const sum = next.reduce((acc, v) => acc + v, 0);
+    setManualEntries(next);
+    setPlayerVisitDarts(next.length);
+  };
+
+  const addDartNumeric = () => {
+    addManualEntry(Number(playerDartPoints) || 0);
+  };
+
+  const handleVisitTotalChange = (val: string) => {
+    setVisitTotalInput(val);
+  };
+
+  const addVisitTotal = () => {
+    const total = Math.max(0, Math.round(Number(visitTotalInput) || 0));
+    if (!Number.isFinite(total)) return;
+    commitVisit(total, 3, { visitTotal: total });
+    resetManualState();
+  };
+
+  const addManual = () => {
+    const parsed = parseManualDart(manualBox);
+    if (parsed == null) return;
+    addManualEntry(parsed);
+    setManualBox("");
+  };
+
+  const replaceLastManual = () => {
+    if (manualEntries.length === 0) return;
+    const parsed = parseManualDart(manualBox);
+    if (parsed == null) return;
+    const next = [...manualEntries];
+    next[next.length - 1] = parsed;
+    const sum = next.reduce((acc, v) => acc + v, 0);
+    setManualEntries(next);
+    setPlayerVisitDarts(next.length);
+    setManualBox("");
+  };
+
+  const addMultiEntry = () => {
+    const lines = multiEntry
+      .split(/\n|,/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (!lines.length) return;
+    let currentEntries = [...manualEntries];
+    for (const line of lines) {
+      const parsed = parseManualDart(line);
+      if (parsed == null) continue;
+      currentEntries.push(parsed);
+      if (currentEntries.length >= 3) {
+        const visitSum = currentEntries.slice(0, 3).reduce((a, b) => a + b, 0);
+        commitVisit(visitSum, currentEntries.length, { visitTotal: visitSum });
+        currentEntries = [];
+      }
+    }
+    setManualEntries(currentEntries);
+    setPlayerVisitDarts(currentEntries.length);
+  };
+
+  const clearMultiEntry = () => {
+    setMultiEntry("");
+  };
+
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       <div className="p-3 max-w-6xl mx-auto">
@@ -218,14 +353,197 @@ export default function MatchPage() {
           }
         />
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
-          <div className="md:col-span-2">
-            <div className="card p-2">
-              <CameraView hideInlinePanels={true} />
+        <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4 mt-3 items-start">
+          <div className="min-w-0 space-y-4">
+            <div className="card p-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-medium opacity-80">
+                <span className="text-xs uppercase tracking-wide text-white/60">
+                  Match Controls
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  className="btn px-4 py-2 text-sm"
+                  onClick={() => {
+                    try {
+                      window.dispatchEvent(
+                        new CustomEvent("ndn:open-autoscore" as any),
+                      );
+                    } catch (e) {}
+                  }}
+                >
+                  Auto Detect
+                </button>
+                <button className="btn px-4 py-2 text-sm">Manual Correction</button>
+              </div>
+            </div>
+
+            <div className="card p-3">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <h3 className="text-base font-semibold">Score Entry</h3>
+                <span className="text-xs text-slate-300">
+                  Enter visits or dart-by-dart edits
+                </span>
+              </div>
+              {/* Compact autoscore + manual scoring controls */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                <div className="space-y-3">
+                  <MatchControls
+                    inProgress={match.inProgress}
+                    startingScore={match.startingScore}
+                    pendingEntries={pendingEntries}
+                    onAddVisit={(score, darts) =>
+                      commitVisit(score, darts, { visitTotal: score })
+                    }
+                    onUndo={() => match.undoVisit()}
+                    onNextPlayer={() => match.nextPlayer()}
+                    onEndLeg={(score) => match.endLeg(score ?? 0)}
+                    onEndGame={() => match.endGame()}
+                    quickButtons={[180, 140, 100, 60]}
+                  />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="p-3 rounded-2xl bg-slate-900/60 border border-white/10 text-slate-100 shadow-sm">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <h4 className="text-sm font-semibold uppercase tracking-wide text-indigo-200">
+                        Manual Scoring
+                      </h4>
+                      <span className="text-[11px] text-white/60">
+                        Override a visit or enter dart-by-dart
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="text-[11px] uppercase tracking-wide text-white/60">
+                          Single Dart
+                        </label>
+                        <input
+                          className="input w-20 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
+                          type="number"
+                          min={0}
+                          max={60}
+                          value={playerDartPoints}
+                          onChange={(e) =>
+                            setPlayerDartPoints(Number(e.target.value || 0))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter")
+                              e.shiftKey ? replaceLast() : addDartNumeric();
+                          }}
+                          placeholder="60"
+                        />
+                        <button
+                          className="btn px-3 py-1 text-sm"
+                          onClick={addDartNumeric}
+                        >
+                          Add Dart
+                        </button>
+                        <button
+                          className="btn btn--ghost px-3 py-1 text-sm"
+                          onClick={replaceLast}
+                        >
+                          Replace Last
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="text-[11px] uppercase tracking-wide text-white/60">
+                          Three Dart Edit
+                        </label>
+                        <input
+                          className="input w-24 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
+                          type="number"
+                          min={0}
+                          max={match.startingScore}
+                          value={visitTotalInput}
+                          onChange={(e) => handleVisitTotalChange(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") addVisitTotal();
+                          }}
+                          placeholder="100"
+                        />
+                        <button
+                          className="btn px-3 py-1 text-sm"
+                          onClick={addVisitTotal}
+                        >
+                          Commit Visit
+                        </button>
+                        <button
+                          className="btn btn--ghost px-3 py-1 text-sm"
+                          onClick={() =>
+                            manualEntries.length ? replaceLast() : match.undoVisit()
+                          }
+                        >
+                          Undo Visit
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="text-[11px] uppercase tracking-wide text-white/60">
+                          Manual
+                        </label>
+                        <input
+                          className="input w-28 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
+                          value={manualBox}
+                          onChange={(e) => setManualBox(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter")
+                              e.shiftKey ? replaceLastManual() : addManual();
+                          }}
+                          placeholder="T20"
+                        />
+                        <button
+                          className="btn px-3 py-1 text-sm"
+                          onClick={addManual}
+                        >
+                          Apply
+                        </button>
+                        <button
+                          className="btn btn--ghost px-3 py-1 text-sm"
+                          onClick={replaceLastManual}
+                          disabled={playerVisitDarts === 0}
+                        >
+                          Replace Last
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[11px] uppercase tracking-wide text-white/60">
+                          Multi-entry (one per line)
+                        </label>
+                        <textarea
+                          className="w-full rounded-xl bg-slate-950/70 border border-white/10 text-sm text-slate-100 placeholder-white/40 p-3 focus:outline-none focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-500/30"
+                          rows={4}
+                          value={multiEntry}
+                          onChange={(e) => setMultiEntry(e.target.value)}
+                          placeholder={"T20\nD16\n5"}
+                        />
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            className="btn px-3 py-1 text-sm"
+                            onClick={addMultiEntry}
+                          >
+                            Add All Scores
+                          </button>
+                          <button
+                            className="btn btn--ghost px-3 py-1 text-sm"
+                            onClick={clearMultiEntry}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div>
-            <div className="card p-2">
+
+          <div className="min-w-0 space-y-4">
+            <div className="card p-3">
               <GameScoreboard
                 gameMode={((match as any)?.game || "X01") as any}
                 players={(match.players || []).map((p: any, idx: number) => ({
@@ -233,15 +551,24 @@ export default function MatchPage() {
                   isCurrentTurn: idx === (match.currentPlayerIdx || 0),
                   legsWon: p.legsWon || 0,
                   score:
-                    p.legs?.[p.legs.length - 1]?.totalScoreRemaining ||
-                    undefined,
+                    p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
+                    match.startingScore ?? lastOfflineStart,
                   lastScore:
                     p.legs && p.legs.length
-                      ? p.legs[p.legs.length - 1].visits.slice(-1)[0]?.score ||
-                        0
+                      ? p.legs[p.legs.length - 1].visits.slice(-1)[0]?.score || 0
                       : 0,
                 }))}
               />
+            </div>
+
+            <div className="card p-2">
+              <div className="text-sm font-semibold mb-2 flex items-center justify-between">
+                <span>Camera</span>
+                <span className="text-xs text-slate-300">Compact view</span>
+              </div>
+              <div className="relative h-56 rounded-xl overflow-hidden bg-black">
+                  <CameraView hideInlinePanels={true} forceAutoStart={true} />
+              </div>
             </div>
           </div>
         </div>

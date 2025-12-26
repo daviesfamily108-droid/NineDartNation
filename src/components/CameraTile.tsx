@@ -28,6 +28,8 @@ import { getPreferredWsUrl } from "../utils/ws";
 type CameraTileProps = {
   label?: string;
   autoStart?: boolean;
+  /** Force the tile to kick off streaming even if global camera toggle is off (useful for pre-match preview). */
+  forceAutoStart?: boolean;
   scale?: number;
   className?: string;
   aspect?: "inherit" | "wide" | "square" | "portrait" | "classic" | "free";
@@ -65,6 +67,7 @@ type CameraTileProps = {
 export default function CameraTile({
   label,
   autoStart,
+  forceAutoStart = false,
   scale: scaleOverrideProp,
   className,
   aspect = "inherit",
@@ -79,13 +82,27 @@ export default function CameraTile({
   const [pairCode, setPairCode] = useState<string | null>(null);
   const [pc, setPc] = useState<RTCPeerConnection | null>(null);
   const lastRegisteredModeRef = useRef<CameraStreamMode | null>(null);
+
+  // Always register the current <video> element with the global camera session.
+  // This is especially important for the pre-game overlay where we want the
+  // already-running calibrated stream to appear immediately.
+  useEffect(() => {
+    try {
+      // consumer-only: do NOT set cameraSession video ref
+    } catch {}
+    return () => {
+      try {
+        // consumer-only: do NOT clear cameraSession video ref
+      } catch {}
+    };
+  }, [cameraSession]);
   const registerStream = useCallback(
     (stream: MediaStream | null, modeOverride: CameraStreamMode = "local") => {
       try {
         if (stream) {
           cameraSession.setMediaStream(stream);
           if (videoRef.current) {
-            cameraSession.setVideoElementRef(videoRef.current);
+            // consumer-only: do NOT set cameraSession video ref
           }
           cameraSession.setMode(modeOverride);
           cameraSession.setStreaming(true);
@@ -107,6 +124,37 @@ export default function CameraTile({
     },
     [cameraSession],
   );
+
+  const attachExistingStream = useCallback(async () => {
+    try {
+      const existingStream = cameraSession.getMediaStream();
+      if (!existingStream) {
+        console.log("[CameraTile] attachExistingStream: No existing stream found");
+        return false;
+      }
+      if (!videoRef.current) {
+        console.log("[CameraTile] attachExistingStream: No video ref");
+        return false;
+      }
+      if (videoRef.current.srcObject !== existingStream) {
+        console.log("[CameraTile] Attaching existing stream to video element", existingStream.id);
+        videoRef.current.srcObject = existingStream;
+      }
+      videoRef.current.muted = true;
+      (videoRef.current as any).playsInline = true;
+      try {
+        await videoRef.current.play();
+        console.log("[CameraTile] Video playing");
+      } catch (e) {
+        console.warn("[CameraTile] Play failed:", e);
+      }
+      setStreaming(true);
+      return true;
+    } catch (err) {
+      console.warn("[CameraTile] Failed to reuse global camera stream", err);
+      return false;
+    }
+  }, [cameraSession]);
 
   // Initialize mode: prioritize phone camera if preferred, otherwise use localStorage
   const preferredCameraLabel = useUserSettings((s) => s.preferredCameraLabel);
@@ -149,7 +197,9 @@ export default function CameraTile({
   const setPreferredCamera = useUserSettings((s) => s.setPreferredCamera);
   const preferredCameraId = useUserSettings((s) => s.preferredCameraId);
 
-  if (autoscoreProvider === "manual") {
+  // If manual mode is active, we usually show the fallback.
+  // BUT if forceAutoStart is true (e.g. pre-game preview), we should show the camera anyway.
+  if (autoscoreProvider === "manual" && !forceAutoStart) {
     const fallbackBase = fill
       ? "rounded-2xl overflow-hidden bg-black w-full flex flex-col"
       : "rounded-2xl overflow-hidden bg-black w-full mx-auto";
@@ -220,6 +270,11 @@ export default function CameraTile({
     localStorage.setItem("ndn:camera:mode", mode);
   }, [mode]);
 
+  useEffect(() => {
+    if (!cameraSession.isStreaming) return;
+    attachExistingStream();
+  }, [cameraSession.isStreaming, attachExistingStream]);
+
   const [manualModeSetAt, setManualModeSetAt] = useState<number | null>(null);
 
   // start/stop are implemented later (deduplicated); keep single definition below.
@@ -273,20 +328,43 @@ export default function CameraTile({
           await v.play();
         } catch {}
         setStreaming(true);
+        // Once attached and playing, no need to keep polling.
+        return true;
       } catch {}
+      return false;
     };
     // Try immediately and poll briefly to catch late-arriving stream
-    apply();
-    const t = setInterval(apply, 800);
-    return () => clearInterval(t);
+    let cleared = false;
+    let t: any = null;
+    const maybeClear = (ok?: boolean) => {
+      if (!!ok && t && !cleared) {
+        cleared = true;
+        try {
+          clearInterval(t);
+        } catch {}
+      }
+    };
+    Promise.resolve(apply()).then(maybeClear).catch(() => {});
+    t = setInterval(() => {
+      Promise.resolve(apply()).then(maybeClear).catch(() => {});
+    }, 800);
+    return () => {
+      try {
+        if (t) clearInterval(t);
+      } catch {}
+    };
   }, [preferredCameraLabel, mode, cameraSession, cameraSession.isStreaming]);
 
   const start = useCallback(async () => {
-    dlog("[CameraTile] start() invoked with mode=", mode);
+    console.log("[CameraTile] start() invoked with mode=", mode);
+    if (await attachExistingStream()) {
+      console.log("[CameraTile] Reused calibrated global stream");
+      return;
+    }
     if (mode === "wifi") {
       return startWifiConnection();
     }
-    dlog("[CameraTile] Attempting to attach global stream for phone mode...");
+    console.log("[CameraTile] Attempting to attach global stream for phone mode...");
 
     // If phone camera is selected and paired, don't try to start local camera
     if (preferredCameraLabel === "Phone Camera" || mode === "phone") {
@@ -308,37 +386,19 @@ export default function CameraTile({
       }
     }
 
+    // NOTE: CameraTile is preview/UI only.
+    // Local capture is owned by CameraView and stored in the global cameraSession.
+    // Starting a second getUserMedia stream here can cause devices (especially
+    // virtual cameras) to flicker/white-screen as tracks are rapidly opened/closed.
+    // So: just attempt to reuse whatever the global session has.
     try {
-      // Prefer saved camera if available
-      const { preferredCameraId, setPreferredCamera: _setPreferredCamera } =
-        useUserSettings.getState();
-      const constraints: MediaStreamConstraints = preferredCameraId
-        ? { video: { deviceId: { exact: preferredCameraId } }, audio: false }
-        : { video: true, audio: false };
-      let stream: MediaStream;
-      try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (err: any) {
-        const name = (err && (err.name || err.code)) || "";
-        if (
-          preferredCameraId &&
-          (name === "OverconstrainedError" || name === "NotFoundError")
-        ) {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: false,
-          });
-        } else {
-          throw err;
-        }
-      }
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
+      const s = cameraSession.getMediaStream?.();
+      if (s && videoRef.current) {
+        videoRef.current.srcObject = s;
         await videoRef.current.play();
         setStreaming(true);
-        registerStream(stream, "local");
+        return;
       }
-      // Camera started successfully - no automatic preference updates
     } catch {}
   }, [
     mode,
@@ -347,30 +407,74 @@ export default function CameraTile({
     registerStream,
     startPhonePairing,
     startWifiConnection,
+    attachExistingStream,
   ]);
+
+  // Failsafe: whenever the tile is mounted (e.g., pre-game overlay), ensure we
+  // attach any already-running global stream to this video element. If none is
+  // present and forceAutoStart is set, kick off start(). This helps the
+  // bull-up/prestart preview reliably show the live feed.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) {
+      console.log("[CameraTile] Failsafe: No video ref");
+      return;
+    }
+    const s = cameraSession.getMediaStream?.();
+    if (s) {
+      try {
+        if (v.srcObject !== s) {
+          console.log("[CameraTile] Failsafe: Attaching stream", s.id);
+          v.srcObject = s;
+        }
+        v.muted = true;
+        (v as any).playsInline = true;
+        Promise.resolve(v.play()).then(() => console.log("[CameraTile] Failsafe: Playing")).catch((e) => console.warn("[CameraTile] Failsafe play error", e));
+        setStreaming(true);
+        return;
+      } catch {}
+    } else {
+      console.log("[CameraTile] Failsafe: No stream in session");
+    }
+    if (forceAutoStart || autoStart) {
+      console.log("[CameraTile] Failsafe: Triggering start()");
+      start().catch(() => {});
+    }
+  }, [cameraSession, forceAutoStart, autoStart, start, cameraSession.isStreaming]);
   const stop = useCallback(() => {
+    // Detach preview only. Do NOT stop tracks here, as the global cameraSession
+    // stream may be shared by CameraView and other UI surfaces.
     if (videoRef.current && videoRef.current.srcObject) {
-      const tracks = (videoRef.current.srcObject as MediaStream).getTracks();
-      tracks.forEach((t) => t.stop());
-      videoRef.current.srcObject = null;
+      try {
+        videoRef.current.srcObject = null;
+      } catch {}
       setStreaming(false);
-      registerStream(null);
+      // Only clear the tile's registration if it was the owner; we don't own
+      // the global stream in this component.
+      try {
+        registerStream(null);
+      } catch {}
     }
   }, [registerStream]);
 
   // Auto-start/stop the tile when requested.
   useEffect(() => {
-    if (
-      !cameraEnabledSetting ||
-      (autoscoreProvider &&
+    // Allow pre-match/bull-up overlays to force a preview even when the user has
+    // camera toggled off or autoscore provider is non-built-in.
+    if (!forceAutoStart) {
+      if (!cameraEnabledSetting) return;
+      if (
+        autoscoreProvider &&
         autoscoreProvider !== "built-in" &&
-        autoscoreProvider !== "external-ws")
-    )
-      return;
+        autoscoreProvider !== "external-ws"
+      )
+        return;
+    }
 
-    if (autoStart === undefined) return;
+    // If autoStart is undefined, we don't do anything unless forceAutoStart is true
+    if (autoStart === undefined && !forceAutoStart) return;
 
-    if (autoStart) {
+    if (autoStart || forceAutoStart) {
       let cancelled = false;
       const desiredLabel = preferredCameraLabel || "default";
       const timer = window.setTimeout(() => {
@@ -391,6 +495,7 @@ export default function CameraTile({
     stop();
   }, [
     autoStart,
+    forceAutoStart,
     streaming,
     cameraEnabledSetting,
     autoscoreProvider,
@@ -896,6 +1001,9 @@ function CameraFrame(props: any) {
                 ref={videoRef}
                 className={baseVideoClass}
                 {...commonVideoProps}
+                autoPlay
+                playsInline
+                muted
               />
             </div>
           </div>
@@ -906,6 +1014,9 @@ function CameraFrame(props: any) {
           ref={videoRef}
           className={baseVideoClass}
           {...commonVideoProps}
+          autoPlay
+          playsInline
+          muted
         />
       );
     }
@@ -916,6 +1027,9 @@ function CameraFrame(props: any) {
             ref={videoRef}
             className={baseVideoClass}
             {...commonVideoProps}
+            autoPlay
+            playsInline
+            muted
           />
         </div>
       );
@@ -926,6 +1040,9 @@ function CameraFrame(props: any) {
           ref={videoRef}
           className={baseVideoClass}
           {...commonVideoProps}
+          autoPlay
+          playsInline
+          muted
         />
       </div>
     );

@@ -34,7 +34,7 @@ describe("MatchControls component", () => {
     await act(async () => {
       fireEvent.change(input, { target: { value: "60" } });
     });
-    const addButton = screen.getByText("Add Visit");
+    const addButton = screen.getByText(/Add Visit/i);
     fireEvent.click(addButton);
     await waitFor(() => expect(onAddVisit).toHaveBeenCalledWith(60, 3));
     // Quick button
@@ -48,7 +48,7 @@ describe("MatchControls component", () => {
     await waitFor(() => expect(onUndo).toHaveBeenCalled());
 
     // Next Player
-    const next = screen.getByText("Next Player");
+    const next = screen.getByText(/Next Player/i);
     fireEvent.click(next);
     await waitFor(() => expect(onNextPlayer).toHaveBeenCalled());
 
@@ -58,8 +58,27 @@ describe("MatchControls component", () => {
     await waitFor(() => expect(onEndLeg).toHaveBeenCalled());
 
     // End Game
-    const endGame = screen.getByText("End Game");
+    const endGame = screen.getByText(/End Game/i);
     fireEvent.click(endGame);
     await waitFor(() => expect(onEndGame).toHaveBeenCalled());
+  });
+
+  test("pressing Enter on score input commits the visit and resets", async () => {
+    const onAddVisit = vi.fn();
+
+    render(
+      <MatchControls inProgress={true} startingScore={501} onAddVisit={onAddVisit} />,
+    );
+
+    const input = screen.getByRole("spinbutton") as HTMLInputElement;
+
+    await act(async () => {
+      fireEvent.change(input, { target: { value: "45" } });
+    });
+
+    fireEvent.keyDown(input, { key: "Enter", code: "Enter", charCode: 13 });
+
+    await waitFor(() => expect(onAddVisit).toHaveBeenCalledWith(45, 3));
+    expect(input.value).toBe("0");
   });
 });

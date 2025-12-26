@@ -41,6 +41,16 @@ export default function MatchControls({
           type="number"
           value={score}
           onChange={(e) => setScore(parseInt(e.target.value || "0"))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onAddVisit(
+                Math.max(0, Number.isFinite(score) ? score : 0),
+                darts,
+              );
+              setScore(0);
+            }
+          }}
           placeholder="Score"
         />
         {showDartsSelect && (

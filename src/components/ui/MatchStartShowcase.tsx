@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, useRef, useLayoutEffect } from "react";
+﻿import { useEffect, useMemo, useState, useRef, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   getAllTimeAvg,
@@ -10,8 +10,12 @@ import {
 } from "../../store/profileStats";
 import type { Player } from "../../store/match";
 import { useCalibration } from "../../store/calibration";
+import { useCameraSession } from "../../store/cameraSession";
+import { useUserSettings } from "../../store/userSettings";
 
-function StatBlock({
+import { memo } from "react";
+
+const StatBlock = memo(function StatBlock({
   label,
   value,
   className = "",
@@ -35,9 +39,9 @@ function StatBlock({
       </div>
     </div>
   );
-}
+});
 
-function PlayerCalibrationPreview({
+const PlayerCalibrationPreview = memo(function PlayerCalibrationPreview({
   player,
   user,
   playerCalibrations,
@@ -136,9 +140,15 @@ function PlayerCalibrationPreview({
       </span>
     </div>
   );
-}
+});
 
-function RecentForm({ player, limit = 3 }: { player: Player; limit?: number }) {
+const RecentForm = memo(function RecentForm({
+  player,
+  limit = 3,
+}: {
+  player: Player;
+  limit?: number;
+}) {
   // Compute recent visit scores from player's legs, flatten last visits
   const visits: { score: number; darts: number }[] = [];
   try {
@@ -169,12 +179,12 @@ function RecentForm({ player, limit = 3 }: { player: Player; limit?: number }) {
       ))}
     </div>
   );
-}
+});
 
 import FocusLock from "react-focus-lock";
 import CalibrationPopup from "./CalibrationPopup";
 import CameraTile from "../CameraTile";
-function ProgressRing({
+const ProgressRing = memo(function ProgressRing({
   secondsLeft,
   totalSeconds,
   size = 60,
@@ -238,11 +248,11 @@ function ProgressRing({
         dominantBaseline="middle"
         textAnchor="middle"
       >
-        {secondsLeft > 0 ? secondsLeft : "GO! 🚀"}
+        {secondsLeft > 0 ? secondsLeft : "GO"}
       </text>
     </svg>
   );
-}
+});
 export default function MatchStartShowcase({
   open = true,
   players,
@@ -266,6 +276,23 @@ export default function MatchStartShowcase({
   const [seconds, setSeconds] = useState(initialSeconds || 15);
   // Overlay visibility is controlled by parent; the component should be controlled using `open` and `onRequestClose`.
   const visible = !!open;
+  const cameraSession = useCameraSession();
+  const setCameraEnabled = useUserSettings.getState().setCameraEnabled;
+  // Subscribe only to the specific fields we need. Avoid returning a new object
+  // from the selector on every store update, which can cause extra re-renders.
+  const hasHomography = useCalibration((s) => !!s.H);
+  const calibrationLocked = useCalibration((s) => !!s.locked);
+  const calibrationConfidence = useCalibration((s) => s.confidence);
+  const localCalibration = useMemo(
+    () => ({
+      hasHomography,
+      locked: calibrationLocked,
+      confidence: calibrationConfidence,
+    }),
+    [hasHomography, calibrationLocked, calibrationConfidence],
+  );
+  const calibratedCameraLinked =
+    cameraSession.isStreaming && localCalibration.hasHomography;
   const [showCalibration, setShowCalibration] = useState(false);
   const [calibrationSkipped, setCalibrationSkipped] = useState<{
     [playerId: string]: boolean;
@@ -311,6 +338,16 @@ export default function MatchStartShowcase({
 
   useEffect(() => {
     if (!visible) return;
+    // Ensure the calibrated camera is enabled and streamed into the pre-match preview.
+    try {
+      setCameraEnabled(true);
+    } catch {}
+    try {
+      if (cameraSession.getMediaStream() && !cameraSession.isStreaming) {
+        cameraSession.setStreaming(true);
+      }
+      cameraSession.setShowOverlay?.(true);
+    } catch {}
     // useEffect(visible) entered
     // Ensure initial focus is on the Start Now button for convenience
     try {
@@ -329,8 +366,16 @@ export default function MatchStartShowcase({
     try {
       if (appRoot) appRoot.setAttribute("aria-hidden", "true");
     } catch {}
+    // Countdown interval:
+    // - create only when needed
+    // - stop at 0 to avoid going negative (which causes useless re-renders)
     const t = allPlayersSkipped
-      ? setInterval(() => setSeconds((s) => s - 1), 1000)
+      ? setInterval(() =>
+          setSeconds((s) => {
+            if (s <= 0) return 0;
+            return s - 1;
+          }),
+        1000)
       : null;
     const onKey = (e: KeyboardEvent) => {
       if (!mountedRef.current) return;
@@ -361,7 +406,7 @@ export default function MatchStartShowcase({
       if (t) clearInterval(t);
       document.removeEventListener("keydown", onKey);
     };
-  }, [visible, onDone, allPlayersSkipped]);
+  }, [visible, disableEscClose, onRequestClose, allPlayersSkipped]);
 
   useEffect(() => {
     if (!visible) return;
@@ -513,29 +558,54 @@ export default function MatchStartShowcase({
     };
   }, []);
 
-  if (!visible) return null;
-
-  // Render the extracted CalibrationPopup component, passing required handlers
-
-  const getScaleFor = (s: number) => {
+  // These hooks must run even when the overlay is not visible to avoid hook-order
+  // mismatches if `open` toggles quickly during tests.
+  const getScaleFor = useCallback((s: number) => {
     if (s <= 0) return 1.8;
     if (s === 1) return 1.6;
     if (s === 2) return 1.4;
     if (s === 3) return 1.2;
     return 1;
-  };
+  }, []);
+
+  const calibrationConfidencePercent = useMemo(() => {
+    const confidence = localCalibration.confidence as
+      | number
+      | null
+      | { percentage?: number };
+    if (typeof confidence === "number") return confidence;
+    if (
+      confidence &&
+      typeof confidence === "object" &&
+      typeof confidence.percentage === "number"
+    ) {
+      return confidence.percentage;
+    }
+    return null;
+  }, [localCalibration.confidence]);
+
+  const calibrationStatusText = calibratedCameraLinked
+    ? `Calibrated camera linked${typeof calibrationConfidencePercent === "number" ? ` • ${calibrationConfidencePercent.toFixed(0)}% confidence` : ""}`
+    : "Calibrate to link this camera feed";
+
+  if (!visible) return null;
+
+  // Render the extracted CalibrationPopup component, passing required handlers
+
+  // calibrationStatusText defined above
 
   const overlay = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 backdrop-blur-sm">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="match-start-heading"
-        tabIndex={-1}
-        className="w-full max-w-4xl"
-      >
-        <FocusLock returnFocus={true}>
-          <div ref={hostRef} className="relative">
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/90 backdrop-blur-sm">
+      <div className="min-h-full flex items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="match-start-heading"
+          tabIndex={-1}
+          className="w-full max-w-4xl"
+        >
+          <FocusLock returnFocus={true}>
+            <div ref={hostRef} className="relative">
             {/* Decorative background glow */}
             <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 rounded-[3rem] blur-3xl -z-10 opacity-50 animate-pulse" />
 
@@ -605,6 +675,7 @@ export default function MatchStartShowcase({
                     <button
                       ref={closeRef}
                       className="px-3 py-1.5 rounded-lg bg-white/5 text-white/70 font-semibold hover:bg-white/10 hover:text-white transition-colors text-xs"
+                      aria-label="Close match start showcase"
                       onClick={() => {
                         try {
                           onRequestClose?.();
@@ -643,7 +714,10 @@ export default function MatchStartShowcase({
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="text-2xl font-black text-white tracking-tighter truncate">
-                          {st.name} 👤
+                          {st.name}
+                        </div>
+                        <div className="text-[10px] font-black tracking-tight text-white/60">
+                          {st.one80s}
                         </div>
                         <div className="flex items-center gap-2">
                           {user && user.username === st.name && (
@@ -720,13 +794,19 @@ export default function MatchStartShowcase({
                     {/* Pre-match live camera preview (uses the global camera session) */}
                     {idx === 0 && (
                       <div className="w-full mt-2">
-                        <div className="rounded-lg overflow-hidden border border-white/10 bg-black/30">
+                        <div className="rounded-lg overflow-hidden border border-white/10 bg-black/30 relative">
+                          <div
+                            className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[0.6rem] font-bold tracking-wide uppercase shadow-lg ${calibratedCameraLinked ? "bg-emerald-500/90 text-emerald-50" : "bg-rose-500/80 text-white"}`}
+                          >
+                            {calibrationStatusText}
+                          </div>
                           {/* Show the full board (no crop) */}
-                          <div className="w-full h-[200px] sm:h-[250px] md:h-[320px] flex flex-col">
+                          <div className="w-full h-[240px] sm:h-[300px] md:h-[360px] flex flex-col">
                             <CameraTile
                               autoStart
+                              forceAutoStart
                               fill
-                              aspect="wide"
+                              aspect="free"
                               tileFitModeOverride="fit"
                               scale={1}
                             />
@@ -754,6 +834,7 @@ export default function MatchStartShowcase({
         </FocusLock>
       </div>
     </div>
+  </div>
   );
   return createPortal(
     <>

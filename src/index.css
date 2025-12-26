@@ -192,7 +192,23 @@ select[class*="bg-white"][class*="text-white"], select.bg-white.text-white, .bg-
 
 html, body {
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* Desktop: show a stable scrollbar on the far right */
+@media (hover: hover) and (pointer: fine) {
+  html, body {
+    overflow-y: scroll;
+    scrollbar-gutter: stable both-edges;
+  }
+}
+
+/* Touch devices keep natural finger scrolling without forcing a gutter */
+@media (hover: none) and (pointer: coarse) {
+  html, body {
+    overflow-y: auto;
+  }
 }
 
 body {

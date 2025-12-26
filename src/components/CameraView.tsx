@@ -40,31 +40,64 @@ import { broadcastMessage } from "../utils/broadcast";
 import { startForwarding, stopForwarding } from "../utils/cameraHandoff";
 import { sayDart } from "../utils/checkout";
 
+type VideoDiagnostics = {
+  ts: number;
+  hasVideoEl: boolean;
+  video: {
+    hasSrcObject: boolean;
+    readyState: number | null;
+    paused: boolean | null;
+    ended: boolean | null;
+    videoWidth: number;
+    videoHeight: number;
+  };
+  stream: {
+    exists: boolean;
+    videoTracks: number;
+    audioTracks: number;
+    videoTrackStates: Array<{ enabled: boolean; muted?: boolean; readyState: string }>;
+  };
+  session: {
+    mode?: any;
+    isStreaming?: any;
+  };
+  preferredCamera: {
+    id?: string;
+    label?: string;
+    locked?: boolean;
+  };
+  error?: string | null;
+};
+
 // Shared ring type across autoscore/manual flows
 type Ring = "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL";
 
 // Require at least two frames showing a candidate to reduce false positives
 // In tests, use 0 to allow deterministic single-frame commits for faster test assertions.
-const AUTO_COMMIT_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 2;
+// Require more consecutive frames before auto-committing to avoid ghost darts
+const AUTO_COMMIT_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 4;
 // Allow a short hold time as fallback for single-frame candidates
-const AUTO_COMMIT_HOLD_MS = 200;
+const AUTO_COMMIT_HOLD_MS = 250;
 // Use a small cooldown even in tests to reduce non-deterministic duplicate commits
 const AUTO_COMMIT_COOLDOWN_MS = process.env.NODE_ENV === "test" ? 150 : 400;
-const AUTO_STREAM_IGNORE_MS = process.env.NODE_ENV === "test" ? 0 : 450;
-const DETECTION_ARM_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 1000;
+const AUTO_STREAM_IGNORE_MS = process.env.NODE_ENV === "test" ? 0 : 800;
+const DETECTION_ARM_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 1500;
 const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 10;
 // Raise confidence threshold slightly to further reduce ghost detections
-const AUTO_COMMIT_CONFIDENCE = 0.7;
+// Slightly raise confidence and stability requirements to clamp false positives
+const AUTO_COMMIT_CONFIDENCE = 0.85;
 // Real-world reliability: require the detected tip to be stable (low jitter)
 // across multiple frames before allowing a commit.
 // Real cameras often have small inter-frame jitter; requiring too many stable
 // frames can cause missed darts. These values aim to block flicker while still
 // committing quickly once the dart is actually in the board.
-const TIP_STABLE_MIN_FRAMES = process.env.NODE_ENV === "test" ? 1 : 2;
-const TIP_STABLE_MAX_JITTER_PX = process.env.NODE_ENV === "test" ? 999 : 7;
+const TIP_STABLE_MIN_FRAMES = process.env.NODE_ENV === "test" ? 1 : 4;
+// Tighter jitter tolerance so a dart must stay pinned in nearly the same spot
+const TIP_STABLE_MAX_JITTER_PX = process.env.NODE_ENV === "test" ? 999 : 3;
 // After any detection appears/disappears, wait briefly before arming so we don't
 // commit on motion blur or lighting flicker.
-const DETECTION_SETTLE_MS = process.env.NODE_ENV === "test" ? 0 : 450;
+// Give the scene a bit longer to settle after motion/lighting changes
+const DETECTION_SETTLE_MS = process.env.NODE_ENV === "test" ? 0 : 900;
 const BOARD_CLEAR_GRACE_MS = 6500;
 const DISABLE_CAMERA_OVERLAY = false;
 // Unit tests for this repo run under Vitest and rely on CameraView's autoscore
@@ -178,6 +211,7 @@ export default forwardRef(function CameraView(
     onAddVisit,
     onEndLeg,
     cameraAutoCommit = "camera",
+    forceAutoStart = false,
   }: {
     onVisitCommitted?: (
       score: number,
@@ -212,34 +246,43 @@ export default forwardRef(function CameraView(
     onAddVisit?: (score: number, darts: number, meta?: any) => void;
     onEndLeg?: (score?: number) => void;
     cameraAutoCommit?: "camera" | "parent" | "both";
+    // Force the camera to auto-start even if the global toggle was off (useful for match window popouts)
+    forceAutoStart?: boolean;
   },
   ref: any,
 ) {
   const videoRef = useRef<HTMLVideoElement>(
     null,
   ) as MutableRefObject<HTMLVideoElement | null>;
-  const {
-    preferredCameraId,
-    preferredCameraLabel,
-    setPreferredCamera,
-    autoscoreProvider,
-    autoscoreWsUrl,
-    cameraAspect,
-    cameraFitMode,
-    cameraScale,
-    autoCommitMode = "wait-for-clear",
-    cameraEnabled,
-    setCameraEnabled,
-    preferredCameraLocked,
-    hideCameraOverlay,
-    setHideCameraOverlay,
-    setCameraScale,
-    setCameraAspect,
-    setCameraFitMode,
-    callerEnabled,
-    callerVoice,
-    callerVolume,
-  } = useUserSettings();
+  // IMPORTANT: subscribe to settings granularly to avoid rerender storms.
+  const preferredCameraId = useUserSettings((s) => s.preferredCameraId);
+  const preferredCameraLabel = useUserSettings((s) => s.preferredCameraLabel);
+  const autoscoreProvider = useUserSettings((s) => s.autoscoreProvider);
+  const autoscoreWsUrl = useUserSettings((s) => s.autoscoreWsUrl);
+  const cameraAspect = useUserSettings((s) => s.cameraAspect);
+  const cameraFitMode = useUserSettings((s) => s.cameraFitMode);
+  const cameraScale = useUserSettings((s) => s.cameraScale);
+  const autoCommitMode =
+    useUserSettings((s) => s.autoCommitMode) ?? "wait-for-clear";
+  const confirmUncertainDarts =
+    useUserSettings((s) => s.confirmUncertainDarts) ?? true;
+  const autoScoreConfidenceThreshold =
+    useUserSettings((s) => s.autoScoreConfidenceThreshold) ??
+    AUTO_COMMIT_CONFIDENCE;
+  const cameraEnabled = useUserSettings((s) => s.cameraEnabled);
+  const preferredCameraLocked = useUserSettings((s) => s.preferredCameraLocked);
+  const hideCameraOverlay = useUserSettings((s) => s.hideCameraOverlay);
+  const callerEnabled = useUserSettings((s) => s.callerEnabled);
+  const callerVoice = useUserSettings((s) => s.callerVoice);
+  const callerVolume = useUserSettings((s) => s.callerVolume);
+
+  // Actions (stable, no need to subscribe to entire state)
+  const setPreferredCamera = useUserSettings.getState().setPreferredCamera;
+  const setCameraEnabled = useUserSettings.getState().setCameraEnabled;
+  const setHideCameraOverlay = useUserSettings.getState().setHideCameraOverlay;
+  const setCameraScale = useUserSettings.getState().setCameraScale;
+  const setCameraAspect = useUserSettings.getState().setCameraAspect;
+  const setCameraFitMode = useUserSettings.getState().setCameraFitMode;
   const preserveCalibrationOverlay = useUserSettings(
     (s) => s.preserveCalibrationOverlay,
   );
@@ -251,6 +294,10 @@ export default forwardRef(function CameraView(
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [streaming, setStreaming] = useState(false);
   const [videoReady, setVideoReady] = useState(false); // Track when video has dimensions
+  const [showVideoDiagnostics, setShowVideoDiagnostics] = useState(false);
+  const [videoDiagnostics, setVideoDiagnostics] = useState<VideoDiagnostics | null>(
+    null,
+  );
   const cameraSession = useCameraSession();
   const handleVideoRef = useCallback(
     (el: HTMLVideoElement | null) => {
@@ -276,6 +323,20 @@ export default forwardRef(function CameraView(
     streaming || sessionStreaming || process.env.NODE_ENV === "test";
 
   const [cameraStarting, setCameraStarting] = useState(false);
+
+  // Track whether the tab/window is visible so we can pause heavy camera work
+  // (overlay drawing + CV detection) when in the background.
+  const [isDocumentVisible, setIsDocumentVisible] = useState(() => {
+    if (typeof document === "undefined") return true;
+    return !document.hidden;
+  });
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVis = () => setIsDocumentVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, []);
 
   // Ensure the mounted <video> element always has the active stream attached.
   // This handles cases where the stream is started before the <video> ref mounts
@@ -308,6 +369,15 @@ export default forwardRef(function CameraView(
         void startCamera();
       } catch (e) {}
     }
+    // If a stale streaming flag exists but no media tracks, reset and retry
+    if (cameraSession.isStreaming && !hasAnyStream && !cameraStarting) {
+      try {
+        cameraSession.setStreaming(false);
+      } catch {}
+      try {
+        void startCamera();
+      } catch (e) {}
+    }
   }, [
     cameraEnabled,
     isPhoneCamera,
@@ -316,6 +386,117 @@ export default forwardRef(function CameraView(
     cameraStarting,
     preferredCameraId,
   ]);
+
+  // Ensure the <video> element begins playback once metadata is ready (covers some browsers blocking autoplay)
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onLoaded = () => {
+      try {
+        const p = v.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      } catch (e) {}
+    };
+    const onPlaying = () => {
+      // When the video transitions to playing, it often gains dimensions.
+      try {
+        if (v.videoWidth && v.videoHeight) setVideoReady(true);
+      } catch {}
+    };
+    const onResize = () => {
+      try {
+        if (v.videoWidth && v.videoHeight) setVideoReady(true);
+      } catch {}
+    };
+    v.addEventListener("loadedmetadata", onLoaded);
+    v.addEventListener("playing", onPlaying);
+    // Some browsers fire resize when dimensions become known.
+    v.addEventListener("resize", onResize as any);
+    return () => {
+      v.removeEventListener("loadedmetadata", onLoaded);
+      v.removeEventListener("playing", onPlaying);
+      v.removeEventListener("resize", onResize as any);
+    };
+  }, []);
+
+  const collectVideoDiagnostics = useCallback((
+    opts?: { error?: string | null },
+  ): VideoDiagnostics => {
+    const v = videoRef.current;
+    const s = (cameraSession.getMediaStream?.() || null) as MediaStream | null;
+    const videoTracks = s ? s.getVideoTracks() : [];
+    const audioTracks = s ? s.getAudioTracks() : [];
+    return {
+      ts: Date.now(),
+      hasVideoEl: !!v,
+      video: {
+        hasSrcObject: !!(v as any)?.srcObject,
+        readyState: typeof (v as any)?.readyState === "number" ? (v as any).readyState : null,
+        paused: typeof (v as any)?.paused === "boolean" ? (v as any).paused : null,
+        ended: typeof (v as any)?.ended === "boolean" ? (v as any).ended : null,
+        videoWidth: v?.videoWidth || 0,
+        videoHeight: v?.videoHeight || 0,
+      },
+      stream: {
+        exists: !!s,
+        videoTracks: videoTracks.length,
+        audioTracks: audioTracks.length,
+        videoTrackStates: videoTracks.map((t) => ({
+          enabled: t.enabled,
+          muted: (t as any).muted,
+          readyState: t.readyState,
+        })),
+      },
+      session: {
+        mode: (cameraSession as any).mode,
+        isStreaming: (cameraSession as any).isStreaming,
+      },
+      preferredCamera: {
+        id: preferredCameraId,
+        label: preferredCameraLabel,
+        locked: preferredCameraLocked,
+      },
+      error: opts?.error ?? null,
+    };
+  }, [
+    cameraSession,
+    preferredCameraId,
+    preferredCameraLabel,
+    preferredCameraLocked,
+  ]);
+
+  // Poll diagnostics when enabled. This catches the most common "white feed"
+  // symptom: stream exists but videoWidth stays 0 and/or track is muted/ended.
+  useEffect(() => {
+    if (!showVideoDiagnostics) return;
+    let alive = true;
+    const tick = () => {
+      if (!alive) return;
+      try {
+        setVideoDiagnostics(collectVideoDiagnostics());
+      } catch {}
+    };
+    tick();
+    const id = window.setInterval(tick, 500);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [showVideoDiagnostics, collectVideoDiagnostics]);
+
+  // Match window / pop-out helper: always try to start the camera when requested
+  useEffect(() => {
+    if (TEST_MODE) return;
+    if (!forceAutoStart) return;
+    try {
+      setCameraEnabled(true);
+    } catch {}
+    if (!streaming && !cameraStarting) {
+      try {
+        void startCamera();
+      } catch (e) {}
+    }
+  }, [forceAutoStart, streaming, cameraStarting, setCameraEnabled]);
   const {
     H,
     imageSize,
@@ -407,6 +588,51 @@ export default forwardRef(function CameraView(
   const tickRef = useRef<(() => void) | null>(null);
   const [detectionLog, setDetectionLog] = useState<DetectionLogEntry[]>([]);
   const [showDetectionLog, setShowDetectionLog] = useState(false);
+
+  // If a detection is below the confidence threshold and confirm is enabled,
+  // hold it for user confirmation instead of immediately applying it.
+  const [pendingConfirm, setPendingConfirm] = useState<null | {
+    label: string;
+    value: number;
+    ring: Ring;
+    confidence: number;
+    meta?: any;
+  }>(null);
+
+  const maybeHoldForConfirmation = useCallback(
+    (payload: { value: number; label: string; ring: Ring; confidence?: number; meta?: any }) => {
+      try {
+        if (!confirmUncertainDarts) return false;
+        if (pendingConfirm) return true;
+        const conf = Number(payload.confidence);
+        if (!isFinite(conf)) return false;
+        const effectiveThreshold = Math.max(
+          0.5,
+          Math.min(
+            0.99,
+            Number(autoScoreConfidenceThreshold) || AUTO_COMMIT_CONFIDENCE,
+          ),
+        );
+        if (conf >= effectiveThreshold) return false;
+        setPendingConfirm({
+          label: payload.label,
+          value: payload.value,
+          ring: payload.ring,
+          confidence: conf,
+          meta: payload.meta,
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [
+      confirmUncertainDarts,
+      pendingConfirm,
+      autoScoreConfidenceThreshold,
+      setPendingConfirm,
+    ],
+  );
   const clearPendingCommitTimer = useCallback(() => {
     if (pendingCommitTimerRef.current) {
       clearTimeout(pendingCommitTimerRef.current);
@@ -437,6 +663,8 @@ export default forwardRef(function CameraView(
     if (setCameraFitMode) setCameraFitMode("fit");
     if (setCameraAspect) setCameraAspect("wide");
   }, [setCameraFitMode, setCameraAspect]);
+
+  // Compact rendering path is built later (after dependent callbacks) to avoid TDZ issues.
 
   useImperativeHandle(ref, () => ({
     runDetectionTick: () => {
@@ -496,6 +724,25 @@ export default forwardRef(function CameraView(
               }
 
               if (!skipLocalCommit) {
+                // If test provides a confidence for a camera-sourced dart and confirmation
+                // mode is on, route into the confirm modal instead of applying.
+                try {
+                  const conf = meta?.confidence;
+                  const src = meta?.source;
+                  if (
+                    src === "camera" &&
+                    maybeHoldForConfirmation({
+                      value: v,
+                      label: l,
+                      ring: r,
+                      confidence: conf,
+                      meta: meta,
+                    })
+                  ) {
+                    return;
+                  }
+                } catch {}
+
                 // Keep test helper deterministic: always add to pending, and let each
                 // unit test decide whether/when a visit commit should happen.
                 //
@@ -719,6 +966,23 @@ export default forwardRef(function CameraView(
   );
   const addVisit = useMatch((s) => s.addVisit);
   const endLeg = useMatch((s) => s.endLeg);
+  // Helper: convert the current pendingEntries into a minimal, serializable
+  // per-dart breakdown that can be stored with the committed visit.
+  const snapshotPendingDartEntries = useCallback(
+    (entries: any[]) => {
+      try {
+        if (!Array.isArray(entries)) return undefined;
+        return entries.slice(0, 3).map((e) => ({
+          label: String(e?.label ?? ""),
+          value: Number(e?.value ?? 0),
+          ring: String(e?.ring ?? ""),
+        }));
+      } catch {
+        return undefined;
+      }
+    },
+    [],
+  );
   // Prefer provided adapters (matchActions wrappers) when available
   const callAddVisit = (score: number, darts: number, meta?: any) => {
     try {
@@ -1070,7 +1334,11 @@ export default forwardRef(function CameraView(
   const canFallbackToLocal = isPhoneCamera && !phoneFeedActive;
 
   async function startCamera() {
-    if (cameraStarting || streaming) return;
+    const existingStream =
+      (cameraSession.getMediaStream?.() as MediaStream | null) ||
+      ((videoRef.current?.srcObject as MediaStream | null) ?? null);
+    const hasActiveTracks = !!existingStream?.getVideoTracks()?.length;
+    if (cameraStarting || (streaming && hasActiveTracks)) return;
 
     // Only skip local startup when the phone feed is actively streaming
     if (isPhoneCamera && phoneFeedActive) {
@@ -1082,10 +1350,22 @@ export default forwardRef(function CameraView(
     setCameraStarting(true);
     dlog("[CAMERA] Starting camera...");
     try {
+      setCameraAccessError(null);
+    } catch {}
+    try {
       // If a preferred camera is set, request it; otherwise default to back camera on mobile
-      const constraints: MediaStreamConstraints = preferredCameraId
-        ? { video: { deviceId: { exact: preferredCameraId } }, audio: false }
-        : { video: { facingMode: "environment" }, audio: false }; // Prefer back camera on mobile
+      const qualityHints: MediaTrackConstraints = {
+        width: { ideal: 2560 },
+        height: { ideal: 1440 },
+        frameRate: { ideal: 30 },
+      };
+      const baseVideo: MediaTrackConstraints = preferredCameraId
+        ? { deviceId: { exact: preferredCameraId } }
+        : { facingMode: "environment" };
+      const constraints: MediaStreamConstraints = {
+        video: { ...baseVideo, ...qualityHints },
+        audio: false,
+      };
       dlog("[CAMERA] Using constraints:", constraints);
       let stream: MediaStream;
       try {
@@ -1101,7 +1381,7 @@ export default forwardRef(function CameraView(
         ) {
           dlog("[CAMERA] Trying fallback without deviceId");
           stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
+            video: { ...qualityHints },
             audio: false,
           });
         } else if (
@@ -1113,7 +1393,7 @@ export default forwardRef(function CameraView(
           dlog("[CAMERA] Trying fallback for facingMode not supported");
           // Fallback for devices that don't support facingMode
           stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
+            video: { ...qualityHints },
             audio: false,
           });
         } else {
@@ -1123,6 +1403,9 @@ export default forwardRef(function CameraView(
       if (videoRef.current) {
         dlog("[CAMERA] Setting stream to video element");
         videoRef.current.srcObject = stream;
+        try {
+          await videoRef.current.play();
+        } catch (e) {}
         dlog(
           "[CAMERA] Stream tracks:",
           stream.getTracks().length,
@@ -1193,6 +1476,9 @@ export default forwardRef(function CameraView(
         console.error("[CAMERA] Video element not found");
       }
       setStreaming(true);
+      try {
+        setCameraAccessError(null);
+      } catch {}
       // Capture device list for inline picker - no automatic preference updates
       try {
         const list = await navigator.mediaDevices.enumerateDevices();
@@ -1206,7 +1492,16 @@ export default forwardRef(function CameraView(
       }
     } catch (e) {
       console.error("[CAMERA] Camera start failed:", e);
-      alert("Camera permission denied or not available.");
+      const name = (e as any)?.name || (e as any)?.code || "";
+      if (name === "NotAllowedError" || name === "SecurityError") {
+        setCameraAccessError("permission-denied");
+      } else if (name === "NotFoundError" || name === "OverconstrainedError") {
+        setCameraAccessError("not-found");
+      } else if (name === "NotSupportedError") {
+        setCameraAccessError("not-supported");
+      } else {
+        setCameraAccessError("unknown");
+      }
     } finally {
       setCameraStarting(false);
     }
@@ -1257,31 +1552,31 @@ export default forwardRef(function CameraView(
     if (!streaming) setStreaming(true);
   }, [cameraSession.mode, cameraSession.isStreaming, streaming, cameraSession]);
 
-  // Inline light-weight device switcher (optional)
-  async function requestCameraPermission() {
+  // Track camera access problems so we can show an inline UI instead of repeatedly
+  // calling getUserMedia (which can re-trigger the browser permission prompt).
+  const [cameraAccessError, setCameraAccessError] = useState<
+    null | "permission-denied" | "not-found" | "not-supported" | "unknown"
+  >(null);
+
+  // Keep diagnostics in sync with the latest access error.
+  useEffect(() => {
+    if (!showVideoDiagnostics) return;
     try {
-      if (!navigator?.mediaDevices?.getUserMedia)
-        throw new Error("getUserMedia not supported");
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
-      });
-      // Immediately stop to avoid keeping camera open
-      try {
-        s.getTracks().forEach((t) => t.stop());
-      } catch (e) {}
-      // Re-enumerate devices after permission granted
-      try {
-        const list = await navigator.mediaDevices.enumerateDevices();
-        setAvailableCameras(list.filter((d) => d.kind === "videoinput"));
-      } catch (err) {
-        console.warn("[CAMERA] enumerateDevices failed after permission:", err);
+      setVideoDiagnostics(collectVideoDiagnostics({ error: cameraAccessError }));
+    } catch {}
+  }, [showVideoDiagnostics, cameraAccessError, collectVideoDiagnostics]);
+
+  // Inline device refresh (does NOT request permission).
+  async function refreshCameraDeviceList() {
+    try {
+      if (!navigator?.mediaDevices?.enumerateDevices) {
+        setCameraAccessError("not-supported");
+        return;
       }
+      const list = await navigator.mediaDevices.enumerateDevices();
+      setAvailableCameras(list.filter((d) => d.kind === "videoinput"));
     } catch (err) {
-      console.warn("[CAMERA] request permission failed:", err);
-      alert(
-        "Failed to request camera permission. Please enable camera access in your browser.",
-      );
+      console.warn("[CAMERA] enumerateDevices failed:", err);
     }
   }
 
@@ -1374,30 +1669,48 @@ export default forwardRef(function CameraView(
             <span className="text-xs text-yellow-300">No cameras found</span>
             <button
               className="btn btn--ghost btn-sm ml-2"
-              onClick={requestCameraPermission}
-              title="Request camera permission"
+              onClick={refreshCameraDeviceList}
+              title="Refresh camera list"
             >
-              Enable local camera
+              Refresh
             </button>
+          </div>
+        )}
+        {cameraAccessError === "permission-denied" && (
+          <div className="ml-2 text-xs text-rose-300">
+            Camera permission denied. Allow camera access in your browser site
+            settings, then click Rescan.
           </div>
         )}
         <button
           className="btn btn--ghost btn-sm ml-2"
           onClick={async () => {
             try {
-              // quick user-triggered rescan
-              const list = await navigator.mediaDevices.enumerateDevices();
-              setAvailableCameras(list.filter((d) => d.kind === "videoinput"));
+              await refreshCameraDeviceList();
             } catch (err) {
               console.warn("Rescan failed:", err);
-              alert(
-                "Failed to rescan devices. Ensure camera permissions are granted.",
-              );
             }
           }}
           title="Rescan connected cameras"
         >
           Rescan
+        </button>
+        <button
+          className="btn btn--ghost btn-sm ml-2"
+          onClick={() => {
+            setShowVideoDiagnostics((v) => !v);
+            // prime snapshot immediately when turning on
+            try {
+              if (!showVideoDiagnostics) {
+                setVideoDiagnostics(
+                  collectVideoDiagnostics({ error: cameraAccessError }),
+                );
+              }
+            } catch {}
+          }}
+          title="Show video diagnostics"
+        >
+          {showVideoDiagnostics ? "Hide diag" : "Diag"}
         </button>
         <div className="flex items-center gap-2 ml-2">
           <button
@@ -1453,6 +1766,74 @@ export default forwardRef(function CameraView(
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {showVideoDiagnostics && (
+          <div className="mt-2 ml-1 text-xs rounded-lg border border-white/10 bg-black/30 p-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-semibold">Video diagnostics</div>
+              <div className="opacity-60 text-xxs">
+                {videoDiagnostics?.ts
+                  ? new Date(videoDiagnostics.ts).toLocaleTimeString()
+                  : ""}
+              </div>
+            </div>
+            <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
+              <div className="opacity-70">preferred</div>
+              <div className="break-all">
+                {preferredCameraLabel || "(none)"} {preferredCameraId ? `(${preferredCameraId})` : ""}
+              </div>
+
+              <div className="opacity-70">session</div>
+              <div>
+                mode={String(videoDiagnostics?.session?.mode ?? "?")} stream={String(
+                  videoDiagnostics?.session?.isStreaming ?? "?",
+                )}
+              </div>
+
+              <div className="opacity-70">video el</div>
+              <div>
+                srcObject={String(videoDiagnostics?.video?.hasSrcObject ?? false)} rs={String(
+                  videoDiagnostics?.video?.readyState ?? "?",
+                )} paused={String(videoDiagnostics?.video?.paused ?? "?")}
+              </div>
+
+              <div className="opacity-70">dimensions</div>
+              <div>
+                {videoDiagnostics?.video?.videoWidth ?? 0}×{videoDiagnostics?.video?.videoHeight ?? 0}
+              </div>
+
+              <div className="opacity-70">tracks</div>
+              <div>
+                v={videoDiagnostics?.stream?.videoTracks ?? 0} a={videoDiagnostics?.stream?.audioTracks ?? 0}
+              </div>
+            </div>
+
+            {videoDiagnostics?.stream?.videoTrackStates?.length ? (
+              <div className="mt-2">
+                <div className="opacity-70">video track state</div>
+                <div className="mt-1 space-y-1">
+                  {videoDiagnostics.stream.videoTrackStates.map((t, idx) => (
+                    <div key={idx} className="text-xxs opacity-90">
+                      #{idx} ready={t.readyState} enabled={String(t.enabled)}
+                      {typeof t.muted === "boolean" ? ` muted=${String(t.muted)}` : ""}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {videoDiagnostics?.error ? (
+              <div className="mt-2 text-xxs text-rose-200">
+                cameraAccessError={String(videoDiagnostics.error)}
+              </div>
+            ) : null}
+
+            <div className="mt-2 text-xxs opacity-60">
+              If dims stay 0×0 but tracks&gt;0, the video element isn't receiving frames (often a virtual cam / autoplay / stream ownership issue).
+              If tracks=0, getUserMedia succeeded but no video track is being delivered.
+            </div>
           </div>
         )}
       </div>
@@ -1562,6 +1943,7 @@ export default forwardRef(function CameraView(
 
   useEffect(() => {
     if (TEST_MODE || manualOnly || DISABLE_CAMERA_OVERLAY) return;
+    if (!isDocumentVisible) return;
     const id = setInterval(drawOverlay, 250);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1573,6 +1955,7 @@ export default forwardRef(function CameraView(
     isPhoneCamera,
     preferredCameraLocked,
     hideCameraOverlay,
+    isDocumentVisible,
   ]);
 
   // Built-in autoscore loop (offline/local CV)
@@ -1588,6 +1971,7 @@ export default forwardRef(function CameraView(
       videoHeight: videoRef.current?.videoHeight,
     });
 
+    if (!isDocumentVisible) return;
     if (TEST_MODE || manualOnly) {
       console.log("[DETECTION] Exiting: TEST_MODE or manualOnly");
       return;
@@ -1855,7 +2239,99 @@ export default forwardRef(function CameraView(
           ) {
             autoCandidateRef.current = null;
           }
-          if (det && det.confidence >= AUTO_COMMIT_CONFIDENCE) {
+          const effectiveThreshold = Math.max(
+            0.5,
+            Math.min(
+              0.99,
+              Number(autoScoreConfidenceThreshold) || AUTO_COMMIT_CONFIDENCE,
+            ),
+          );
+
+          // If confirm-on-uncertain is enabled, we still want to *see* detections
+          // below the threshold, but we should not auto-apply them.
+          if (
+            det &&
+            confirmUncertainDarts &&
+            det.confidence > 0 &&
+            det.confidence < effectiveThreshold
+          ) {
+            // Avoid spamming the confirmation prompt.
+            if (!pendingConfirm) {
+              // We don't need tip stability/settle logic to *prompt*; the user is
+              // the final arbiter. We'll still compute the score label for clarity.
+              const tipRefined = refinePointSobel(proc, det.tip, 6);
+              const fitMode = cameraFitMode === "fill" ? "fill" : "fit";
+              const fit = makeFitTransform({
+                videoW: vw,
+                videoH: vh,
+                calibW: imageSize.w,
+                calibH: imageSize.h,
+                fitMode,
+              });
+              const pCal = fit.toCalibration({ x: tipRefined.x, y: tipRefined.y });
+              const score = scoreFromImagePoint(
+                H,
+                pCal,
+                theta || 0,
+                sectorOffset || 0,
+              );
+              let pBoard: Point | null = null;
+              try {
+                pBoard = imageToBoard(H as any, pCal);
+              } catch (e) {
+                pBoard = null;
+              }
+              const ring = score.ring as Ring;
+              const value = score.base;
+              const sector = (score.sector ?? null) as number | null;
+              const mult = Math.max(0, Number(score.mult) || 0) as 0 | 1 | 2 | 3;
+              let label = "";
+              if (ring === "MISS") {
+                label = "MISS";
+              } else if (ring === "BULL") {
+                label = "BULL 25";
+              } else if (ring === "INNER_BULL") {
+                label = "INNER_BULL 50";
+              } else if (sector != null) {
+                const prefix = mult === 3 ? "T" : mult === 2 ? "D" : "S";
+                label = `${prefix}${sector} ${value}`;
+              } else {
+                label = `${ring} ${value > 0 ? value : ""}`.trim();
+              }
+              const errorPxVal = typeof errorPx === "number" ? errorPx : null;
+              const hasCalibration = !!H && !!imageSize;
+              const calibrationGood =
+                hasCalibration &&
+                (locked || (errorPxVal != null && errorPxVal <= ERROR_PX_MAX));
+
+              setPendingConfirm({
+                label,
+                value,
+                ring,
+                confidence: det.confidence,
+                meta: {
+                  calibrationValid: calibrationGood,
+                  pBoard,
+                  source: "camera",
+                },
+              });
+              captureDetectionLog({
+                ts: Date.now(),
+                label,
+                value,
+                ring,
+                confidence: det.confidence,
+                ready: false,
+                accepted: false,
+                warmup: false,
+                pCal,
+                tip: tipRefined,
+              });
+            }
+            return;
+          }
+
+          if (det && det.confidence >= effectiveThreshold) {
             dlog("CameraView: detected raw", det.confidence, det.tip);
             // debug logging via dlog to avoid polluting test console
             dlog("CameraView: detected raw", det.confidence, det.tip);
@@ -1966,9 +2442,15 @@ export default forwardRef(function CameraView(
               const BOARD_MARGIN_MM = 3; // mm tolerance for being on-board
               _onBoard = boardR <= BoardRadii.doubleOuter + BOARD_MARGIN_MM;
             }
+
             // treat as ghost unless onBoard and calibrationGood
             // Let an onBoard detection pass if calibration is good; otherwise treat as ghost
-            const isGhost = !calibrationGood || !tipInVideo || !pCalInImage;
+            const isGhost =
+              !calibrationGood ||
+              !tipInVideo ||
+              !pCalInImage ||
+              !_onBoard ||
+              warmupActive;
             // Notify parent synchronously for immediate ACKs if they provided an onAutoDart
             // so the parent can take ownership of the dart and prevent camera double-commit.
             const _skipLocalCommit2 = false;
@@ -2581,6 +3063,7 @@ export default forwardRef(function CameraView(
     detectorSeedVersion,
     captureDetectionLog,
     videoReady, // Re-run when video becomes ready
+    isDocumentVisible,
   ]);
 
   const handleUseLocalCamera = useCallback(async () => {
@@ -2598,6 +3081,85 @@ export default forwardRef(function CameraView(
       console.warn("[CameraView] Local camera fallback failed:", err);
     }
   }, [availableCameras, isPhoneCamera, setPreferredCamera]);
+
+  const compactCameraView = () => {
+    if (!hideInlinePanels) return null;
+    const aspect = cameraAspect || useUserSettings.getState().cameraAspect || "wide";
+    const fit = (cameraFitMode || useUserSettings.getState().cameraFitMode || "fit") === "fit";
+    const videoClass =
+      aspect === "square"
+        ? "absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black"
+        : fit
+          ? "absolute inset-0 w-full h-full object-contain object-center bg-black"
+          : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black";
+    const videoScale = cameraScale ?? 1;
+    const videoStyle = {
+      transform: `scale(${videoScale})`,
+      transformOrigin: "center center" as const,
+      filter: "saturate(1.25) contrast(1.12) brightness(1.04)",
+      imageRendering: "crisp-edges" as const,
+    };
+    const activeStream =
+      (cameraSession.getMediaStream?.() as MediaStream | null) ||
+      ((videoRef.current?.srcObject as MediaStream | null) ?? null);
+    const hasTracks = !!activeStream?.getVideoTracks()?.length;
+    const showPhoneReconnect = isPhoneCamera && !phoneFeedActive;
+
+    return (
+      <div className="relative h-full rounded-xl overflow-hidden bg-black">
+        <div className="relative w-full h-full bg-black">
+          <video
+            ref={handleVideoRef}
+            className={videoClass}
+            style={videoStyle}
+            playsInline
+            muted
+            autoPlay
+          />
+          <canvas
+            ref={overlayRef}
+            className="absolute inset-0 w-full h-full"
+            onClick={onOverlayClick}
+          />
+          {!hasTracks && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-center px-4">
+              <div className="space-y-3">
+                <div className="text-sm font-semibold text-white">
+                  {showPhoneReconnect ? "Phone camera not streaming" : "Camera not running"}
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+                  <button
+                    className="btn px-3 py-1 text-sm"
+                    onClick={() => {
+                      try {
+                        setCameraEnabled(true);
+                      } catch {}
+                      void startCamera();
+                    }}
+                  >
+                    Start camera
+                  </button>
+                  <button
+                    className="btn btn--ghost px-3 py-1 text-sm"
+                    onClick={handleUseLocalCamera}
+                  >
+                    Use local device
+                  </button>
+                  <button
+                    className="btn btn--ghost px-3 py-1 text-sm"
+                    onClick={handlePhoneReconnect}
+                  >
+                    Reconnect phone
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        <canvas ref={canvasRef} className="hidden"></canvas>
+      </div>
+    );
+  };
 
   const capture = useCallback(() => {
     try {
@@ -2692,12 +3254,47 @@ export default forwardRef(function CameraView(
         performance.now() - streamingStartMsRef.current < 5000
       )
         return;
+      // Route external provider hits through the same confidence/confirmation gate
+      // used by the built-in camera detector so behavior is consistent.
+      const ring = (d.ring as any) as Ring;
+      const value = Number(d.value) || 0;
+      const sector = (d.sector ?? null) as number | null;
+      const mult = Math.max(0, Number(d.mult) || 0) as 0 | 1 | 2 | 3;
+
+      let label = "";
+      if (ring === "MISS") {
+        label = "MISS";
+      } else if (ring === "BULL") {
+        label = "BULL 25";
+      } else if (ring === "INNER_BULL") {
+        label = "INNER_BULL 50";
+      } else if (sector != null) {
+        const prefix = mult === 3 ? "T" : mult === 2 ? "D" : "S";
+        label = `${prefix}${sector} ${value}`;
+      } else {
+        label = `${ring} ${value > 0 ? value : ""}`.trim();
+      }
+
+      const held = maybeHoldForConfirmation({
+        value,
+        label,
+        ring,
+        confidence: (d as any)?.confidence,
+        meta: {
+          calibrationValid: false,
+          pBoard: null,
+          source: "camera",
+        },
+      });
+      if (held) return;
       // Prefer parent hook if provided; otherwise add to visit directly
       if (onAutoDart) {
         try {
           onAutoDart(d.value, d.ring as any, {
             sector: d.sector ?? null,
             mult: (d.mult as any) ?? 0,
+            // NOTE: we intentionally do not forward confidence here because the
+            // onAutoDart meta type is constrained in this file.
           });
         } catch (e) {}
         try {
@@ -2711,12 +3308,6 @@ export default forwardRef(function CameraView(
           });
         } catch (e) {}
       } else {
-        const label =
-          d.ring === "INNER_BULL"
-            ? "INNER_BULL 50"
-            : d.ring === "BULL"
-              ? "BULL 25"
-              : `${d.ring[0]}${d.value / (d.mult || 1) || d.value} ${d.value}`;
         addDart(d.value, label, d.ring as any, {
           calibrationValid: false,
           pBoard: null,
@@ -2735,7 +3326,11 @@ export default forwardRef(function CameraView(
       }
     });
     return () => sub.close();
-  }, [autoscoreProvider, autoscoreWsUrl]);
+  }, [
+    autoscoreProvider,
+    autoscoreWsUrl,
+    maybeHoldForConfirmation,
+  ]);
 
   function onOverlayClick(e: React.MouseEvent<HTMLCanvasElement>) {
     if (!overlayRef.current || !H || !imageSize) return;
@@ -2874,12 +3469,14 @@ export default forwardRef(function CameraView(
     if ((pendingDartsRef.current || 0) >= 3) {
       const previousScore = pendingScore;
       const previousDarts = pendingDarts;
+      const previousEntries = snapshotPendingDartEntries(pendingEntries as any[]);
       // Commit previous full visit
       callAddVisit(previousScore, previousDarts, {
         preOpenDarts: pendingPreOpenDarts || 0,
         doubleWindowDarts: pendingDartsAtDouble || 0,
         finishedByDouble: false,
         visitTotal: previousScore,
+        entries: previousEntries,
       });
       try {
         const name = matchState.players[matchState.currentPlayerIdx]?.name;
@@ -2932,6 +3529,10 @@ export default forwardRef(function CameraView(
 
     if (isBust) {
       // Commit bust visit: 0 score, darts thrown so far including this one
+      const bustEntries = snapshotPendingDartEntries([
+        ...(pendingEntries as any[]),
+        { label, value: appliedValue, ring },
+      ]);
       const preOpenThis =
         x01DoubleIn &&
         !isOpened &&
@@ -2950,6 +3551,7 @@ export default forwardRef(function CameraView(
         doubleWindowDarts: attemptsTotal,
         finishedByDouble: false,
         visitTotal: 0,
+        entries: bustEntries,
       });
       setPendingDarts(0);
       pendingDartsRef.current = 0;
@@ -2987,11 +3589,16 @@ export default forwardRef(function CameraView(
 
     if (isFinish) {
       // Commit visit with current total and end leg
+      const finishEntries = snapshotPendingDartEntries([
+        ...(pendingEntries as any[]),
+        { label, value: appliedValue, ring },
+      ]);
       callAddVisit(newScore, newDarts, {
         preOpenDarts: pendingPreOpenDarts || 0,
         doubleWindowDarts: pendingDartsAtDouble || 0,
         finishedByDouble: true,
         visitTotal: newScore,
+        entries: finishEntries,
       });
       callEndLeg(newScore);
       setPendingDarts(0);
@@ -3005,11 +3612,16 @@ export default forwardRef(function CameraView(
     }
 
     if (newDarts >= 3) {
+      const commitEntries = snapshotPendingDartEntries([
+        ...(pendingEntries as any[]),
+        { label, value: appliedValue, ring },
+      ]);
       callAddVisit(newScore, newDarts, {
         preOpenDarts: pendingPreOpenDarts || 0,
         doubleWindowDarts: pendingDartsAtDouble || 0,
         finishedByDouble: false,
         visitTotal: newScore,
+        entries: commitEntries,
       });
       setPendingDarts(0);
       pendingDartsRef.current = 0;
@@ -3262,7 +3874,8 @@ export default forwardRef(function CameraView(
     }
     const visitScore = pendingScore;
     const visitDarts = pendingDarts;
-    callAddVisit(visitScore, visitDarts);
+  const commitEntries = snapshotPendingDartEntries(pendingEntries as any[]);
+  callAddVisit(visitScore, visitDarts, { entries: commitEntries, visitTotal: visitScore });
     try {
       const name = matchState.players[matchState.currentPlayerIdx]?.name;
       if (name) addSample(name, visitDarts, visitScore);
@@ -3278,7 +3891,7 @@ export default forwardRef(function CameraView(
     });
   }
 
-  return (
+  const mainContent = (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full min-w-0">
       {/* Pills (optional; can be hidden and controlled by parent) */}
       {showToolbar && (
@@ -3349,6 +3962,9 @@ export default forwardRef(function CameraView(
                 const videoStyle = {
                   transform: `scale(${videoScale})`,
                   transformOrigin: "center center" as const,
+                  // Mild pop and clarity boost (safe for detection). Adjusted to be crisper without over-sharpening.
+                  filter: "saturate(1.25) contrast(1.12) brightness(1.04)",
+                  imageRendering: "crisp-edges" as const,
                 };
                 const containerClass =
                   aspect === "square"
@@ -3545,91 +4161,16 @@ export default forwardRef(function CameraView(
               </div>
             )}
 
-            {/* Small Manual pill in top-right of camera card so users in any game mode can open Manual Correction */}
+            {/* Keep the camera view clear: no floating status/commit card overlay. */}
             {inProgress ? (
-              <div className="absolute top-3 right-3 z-30">
-                {(() => {
-                  let stateClass = "bg-white/90 text-slate-800";
-                  let title = "Manual Correction (M)";
-                  if (hadRecentAuto) {
-                    const ok =
-                      !!lastAutoScore &&
-                      lastAutoRing !== "MISS" &&
-                      lastAutoValue > 0;
-                    if (ok) {
-                      stateClass = "bg-emerald-600 text-white";
-                      title = `Manual Correction (M) — Autoscore: ${lastAutoScore} (confirmed)`;
-                    } else {
-                      stateClass = "bg-amber-400 text-black";
-                      title = `Manual Correction (M) — Autoscore ambiguous: ${lastAutoScore || "—"}`;
-                    }
-                  }
-                  const baseClasses =
-                    "px-4 py-2 rounded-full text-base font-semibold shadow-sm hover:opacity-90";
-                  const okNow =
-                    hadRecentAuto &&
-                    !!lastAutoScore &&
-                    lastAutoRing !== "MISS" &&
-                    lastAutoValue > 0;
-                  const pulseClass =
-                    pulseManualPill && okNow
-                      ? "ring-4 ring-emerald-400/60 animate-ping"
-                      : hadRecentAuto && !okNow
-                        ? "animate-pulse"
-                        : "";
-                  const autoscoreStatus = okNow
-                    ? "Auto confirmed"
-                    : hadRecentAuto
-                      ? "Auto pending review"
-                      : "Waiting for autoscore";
-                  const autoscoreDetail = lastAutoScore
-                    ? `${lastAutoScore} ${
-                        lastAutoRing === "MISS"
-                          ? "(miss)"
-                          : lastAutoRing.toLowerCase()
-                      }`
-                    : "No recent autoscore";
-                  return (
-                    <div className="min-w-[220px] space-y-2 rounded-2xl border border-white/15 bg-slate-900/70 p-3 text-sm shadow-lg backdrop-blur">
-                      <div className="flex items-center justify-between gap-2">
-                        <button
-                          className={`${baseClasses} ${stateClass} ${pulseClass}`}
-                          onClick={() => {
-                            setActiveTab("manual");
-                            setShowManualModal(true);
-                          }}
-                          title={title}
-                        >
-                          Manual
-                        </button>
-                        <span
-                          className={`text-[11px] font-semibold tracking-wide ${
-                            okNow ? "text-emerald-300" : "text-amber-300"
-                          }`}
-                        >
-                          {autoscoreStatus}
-                        </span>
-                      </div>
-                      <p className="text-[11px] leading-tight text-slate-300 truncate">
-                        {autoscoreDetail}
-                      </p>
-                      <div className="flex items-center justify-between gap-2">
-                        <button
-                          data-testid="commit-visit-btn"
-                          className="px-3 py-1 rounded bg-emerald-500 text-white text-sm"
-                          onClick={onCommitVisit}
-                          disabled={pendingDarts === 0 || commitBlocked}
-                          title="Commit visit"
-                        >
-                          Commit
-                        </button>
-                        <span className="text-[11px] text-slate-400">
-                          {pendingDarts} darts · {pendingScore} pts pending
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
+              <div className="sr-only" aria-hidden="true">
+                <button
+                  data-testid="commit-visit-btn"
+                  onClick={onCommitVisit}
+                  disabled={pendingDarts === 0 || commitBlocked}
+                >
+                  Commit
+                </button>
               </div>
             ) : null}
             <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -4039,6 +4580,76 @@ export default forwardRef(function CameraView(
           </div>
         </div>
       )}
+
+      {/* Confirm uncertain dart (low confidence) */}
+      {pendingConfirm && (
+        <div
+          className="fixed inset-0 bg-black/70 z-[120]"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="card w-full max-w-lg">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-semibold">Confirm detected dart</h3>
+                <button
+                  className="btn btn--ghost"
+                  onClick={() => setPendingConfirm(null)}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="text-sm opacity-80 mb-3">
+                This hit was detected with lower confidence.
+              </div>
+              <div className="flex flex-col gap-2 mb-3">
+                <div>
+                  <span className="font-semibold">Detected:</span> {pendingConfirm.label}
+                </div>
+                <div>
+                  <span className="font-semibold">Confidence:</span>{" "}
+                  {pendingConfirm.confidence.toFixed(2)}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="btn"
+                  onClick={() => {
+                    try {
+                      addDart(
+                        pendingConfirm.value,
+                        pendingConfirm.label,
+                        pendingConfirm.ring,
+                        pendingConfirm.meta,
+                      );
+                    } catch (e) {}
+                    setPendingConfirm(null);
+                  }}
+                >
+                  Accept
+                </button>
+                <button
+                  className="btn btn--ghost"
+                  onClick={() => setPendingConfirm(null)}
+                >
+                  Reject
+                </button>
+                <button
+                  className="btn bg-slate-700 hover:bg-slate-800"
+                  onClick={() => {
+                    setPendingConfirm(null);
+                    setShowManualModal(true);
+                    setActiveTab("manual");
+                  }}
+                >
+                  Open Manual Correction
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showManualModal && (
         <div
           className="fixed inset-0 bg-black/60 z-[100]"
@@ -4651,4 +5262,7 @@ export default forwardRef(function CameraView(
       {/* Duplicate Pending Visit panel removed to avoid showing the same controls twice when inline panels are visible. */}
     </div>
   );
+
+  const compact = compactCameraView();
+  return hideInlinePanels && compact ? compact : mainContent;
 });

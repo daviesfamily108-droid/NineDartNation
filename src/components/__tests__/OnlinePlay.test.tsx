@@ -102,8 +102,8 @@ describe("OnlinePlay", () => {
         prestartEndsAt: Date.now() + 1000,
       });
     });
-    // Modal should appear
-    expect(await screen.findByText("Join Match")).toBeTruthy();
+  // Modal should appear
+  expect(await screen.findByText(/Join Match/i)).toBeTruthy();
     // Choose Bull Up - should send prestart-choice message
     const bullBtn = await screen.findByText("Bull Up");
     fireEvent.click(bullBtn);
@@ -166,7 +166,7 @@ describe("OnlinePlay", () => {
       });
     });
     // Join modal should close
-    expect(screen.queryByText("Join Match")).toBeNull();
+    expect(screen.queryByText(/Join Match/i)).toBeNull();
   });
 
   test("shows Room badge when a world match comes from a named room", async () => {

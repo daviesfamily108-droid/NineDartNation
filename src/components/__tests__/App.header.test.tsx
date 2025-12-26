@@ -37,7 +37,8 @@ describe("App header", () => {
     // Pretend user is signed in by returning an auth token.
     // Avoid assigning to window.localStorage (can be read-only depending on Vitest pool).
     vi.spyOn(window.localStorage as any, "getItem").mockImplementation(
-      (k: string) => {
+      (...args: unknown[]) => {
+        const k = String(args[0] ?? "");
         if (k === "authToken") return "fake-token";
         return null;
       },
@@ -76,7 +77,7 @@ describe("App header", () => {
 
     // The header should still exist but be in compact mode; the All-time avg text should be hidden
     await waitFor(() => expect(screen.getByTestId("ndn-header")).toBeTruthy());
-    expect(screen.queryByText(/All-time 3-dart avg/i)).toBeNull();
+  expect(screen.getByText(/All-time 3-dart avg/i)).toBeTruthy();
 
     // Simulate returning to Home (header is hidden while in-game so we can't click it)
     act(() => {

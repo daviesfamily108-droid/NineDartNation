@@ -9,6 +9,10 @@ export type ThrowVisit = {
   doubleWindowDarts?: number; // darts thrown while remaining <= 50 (double-out window) in this visit
   finishedByDouble?: boolean; // visit ended the leg with a double or inner bull
   visitTotal?: number; // convenience to detect 180s and summaries
+  // Optional per-dart breakdown (dart1..dart3 etc). This is useful for
+  // debugging/analytics and to avoid UI ambiguity where a MISS (0) could be
+  // mistaken as "no dart recorded".
+  entries?: { label: string; value: number; ring: string }[];
 };
 export type Leg = {
   visits: ThrowVisit[];
@@ -106,6 +110,8 @@ export type Actions = {
       doubleWindowDarts?: number;
       finishedByDouble?: boolean;
       visitTotal?: number;
+      // Optional per-dart breakdown for this visit.
+      entries?: { label: string; value: number; ring: string }[];
     },
   ) => void;
   undoVisit: () => void;
@@ -185,6 +191,13 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
         doubleWindowDarts: meta?.doubleWindowDarts,
         finishedByDouble: meta?.finishedByDouble,
         visitTotal: meta?.visitTotal ?? score,
+        entries: Array.isArray(meta?.entries)
+          ? meta!.entries.map((e) => ({
+              label: String((e as any).label ?? ""),
+              value: Number((e as any).value ?? 0),
+              ring: String((e as any).ring ?? ""),
+            }))
+          : undefined,
       });
       leg.dartsThrown += darts;
       leg.totalScoreRemaining = postRem;

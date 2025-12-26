@@ -29,6 +29,11 @@ type SettingsState = {
   autoscoreProvider?: "built-in" | "built-in-v2" | "external-ws" | "manual";
   autoscoreWsUrl?: string;
   autoCommitMode?: "wait-for-clear" | "immediate";
+  // Autoscore quality gating
+  // If enabled, detections below the threshold must be confirmed by the user.
+  confirmUncertainDarts?: boolean;
+  // 0..1 confidence threshold used by built-in autoscore.
+  autoScoreConfidenceThreshold?: number;
   // Allow immediate autocommit when playing online/tournaments
   allowAutocommitInOnline?: boolean;
   calibrationGuide: boolean;
@@ -48,6 +53,8 @@ type SettingsState = {
   ignorePreferredCameraSync: boolean;
   // UI variants
   offlineLayout?: "classic" | "modern";
+  // Match UI
+  hideInGameSidebar?: boolean;
   // Text size
   textSize: "small" | "medium" | "large";
   // Box size
@@ -85,11 +92,14 @@ type SettingsState = {
   setHideCameraOverlay: (v: boolean) => void;
   setIgnorePreferredCameraSync: (v: boolean) => void;
   setOfflineLayout: (mode: "classic" | "modern") => void;
+  setHideInGameSidebar: (v: boolean) => void;
   setAutoscoreProvider: (
     p: "built-in" | "built-in-v2" | "external-ws" | "manual",
   ) => void;
   setAutoscoreWsUrl: (u: string) => void;
   setAutoCommitMode: (mode: "wait-for-clear" | "immediate") => void;
+  setConfirmUncertainDarts: (v: boolean) => void;
+  setAutoScoreConfidenceThreshold: (n: number) => void;
   setAllowAutocommitInOnline: (v: boolean) => void;
   setTextSize: (size: "small" | "medium" | "large") => void;
   setBoxSize: (size: "small" | "medium" | "large") => void;
@@ -134,9 +144,12 @@ function load(): Pick<
   | "cameraEnabled"
   | "hideCameraOverlay"
   | "offlineLayout"
+  | "hideInGameSidebar"
   | "autoscoreProvider"
   | "autoscoreWsUrl"
   | "autoCommitMode"
+  | "confirmUncertainDarts"
+  | "autoScoreConfidenceThreshold"
   | "allowAutocommitInOnline"
   | "textSize"
   | "boxSize"
@@ -179,9 +192,12 @@ function load(): Pick<
         cameraEnabled: true,
         hideCameraOverlay: false,
         offlineLayout: "modern",
+  hideInGameSidebar: true,
         autoscoreProvider: "built-in",
         autoscoreWsUrl: "",
         autoCommitMode: "wait-for-clear",
+  confirmUncertainDarts: true,
+  autoScoreConfidenceThreshold: 0.85,
         allowAutocommitInOnline: false,
         textSize: "medium",
         boxSize: "medium",
@@ -247,6 +263,13 @@ function load(): Pick<
         typeof j.autoscoreWsUrl === "string" ? j.autoscoreWsUrl : "",
       autoCommitMode:
         j.autoCommitMode === "immediate" ? "immediate" : "wait-for-clear",
+      confirmUncertainDarts:
+        typeof j.confirmUncertainDarts === "boolean" ? j.confirmUncertainDarts : true,
+      autoScoreConfidenceThreshold:
+        typeof j.autoScoreConfidenceThreshold === "number" &&
+        isFinite(j.autoScoreConfidenceThreshold)
+          ? Math.max(0.5, Math.min(0.99, j.autoScoreConfidenceThreshold))
+          : 0.85,
       allowAutocommitInOnline: !!j.allowAutocommitInOnline,
       calibrationGuide:
         typeof j.calibrationGuide === "boolean" ? j.calibrationGuide : true,
@@ -275,6 +298,8 @@ function load(): Pick<
       hideCameraOverlay:
         typeof j.hideCameraOverlay === "boolean" ? j.hideCameraOverlay : false,
       offlineLayout: j.offlineLayout === "classic" ? "classic" : "modern",
+      hideInGameSidebar:
+        typeof j.hideInGameSidebar === "boolean" ? j.hideInGameSidebar : true,
       textSize:
         j.textSize === "small" || j.textSize === "large"
           ? j.textSize
@@ -315,12 +340,16 @@ function load(): Pick<
       preferredCameraLabel: undefined,
       preferredCameraLocked: false,
       preserveCalibrationOverlay: true,
+      preserveCalibrationOnCameraChange: true,
       cameraEnabled: true,
       hideCameraOverlay: false,
       offlineLayout: "modern",
+      hideInGameSidebar: true,
       autoscoreProvider: "built-in",
       autoscoreWsUrl: "",
       autoCommitMode: "wait-for-clear",
+      confirmUncertainDarts: true,
+      autoScoreConfidenceThreshold: 0.85,
       textSize: "medium",
       boxSize: "medium",
       matchType: "singles",
@@ -427,6 +456,19 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     save({ autoCommitMode: v });
     set({ autoCommitMode: v });
   },
+  setConfirmUncertainDarts: (v) => {
+    const next = !!v;
+    save({ confirmUncertainDarts: next });
+    set({ confirmUncertainDarts: next });
+  },
+  setAutoScoreConfidenceThreshold: (n) => {
+    const next =
+      typeof n === "number" && isFinite(n)
+        ? Math.max(0.5, Math.min(0.99, n))
+        : 0.85;
+    save({ autoScoreConfidenceThreshold: next });
+    set({ autoScoreConfidenceThreshold: next });
+  },
   setAllowAutocommitInOnline: (v) => {
     save({ allowAutocommitInOnline: v } as any);
     set({ allowAutocommitInOnline: v });
@@ -503,6 +545,10 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
   setOfflineLayout: (mode) => {
     save({ offlineLayout: mode });
     set({ offlineLayout: mode });
+  },
+  setHideInGameSidebar: (v) => {
+    save({ hideInGameSidebar: v });
+    set({ hideInGameSidebar: v });
   },
   setTextSize: (size) => {
     save({ textSize: size });

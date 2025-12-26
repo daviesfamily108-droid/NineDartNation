@@ -74,7 +74,7 @@ describe("Settings Panel pill open/close", () => {
         />
       </ThemeProvider>,
     );
-    const btn = r.getByTestId("pill-button-calibration");
+  const btn = r.getAllByTestId("pill-button-calibration")[0];
     expect(btn).toBeTruthy();
     fireEvent.click(btn);
     expect(r.getByTestId("pill-calibration-content")).toBeTruthy();
@@ -82,7 +82,7 @@ describe("Settings Panel pill open/close", () => {
     fireEvent.pointerDown(btn);
     fireEvent.mouseDown(btn);
     // The DOM may re-render the button on open, so re-query to get a current ref
-    fireEvent.click(r.getByTestId("pill-button-calibration"));
+    fireEvent.click(r.getAllByTestId("pill-button-calibration")[0]);
     await waitFor(() =>
       expect(r.queryByTestId("pill-calibration-content")).toBeNull(),
     );
@@ -97,12 +97,12 @@ describe("Settings Panel pill open/close", () => {
         />
       </ThemeProvider>,
     );
-    const btn = r.getByTestId("pill-button-settings");
+    const btn = r.getAllByTestId("pill-button-settings")[0];
     expect(btn).toBeTruthy();
     fireEvent.click(btn);
     expect(r.getByTestId("pill-settings-content")).toBeTruthy();
     // Re-query the button after opening (DOM may have been re-rendered)
-    const closeBtn = r.getByTestId("pill-button-settings");
+    const closeBtn = r.getAllByTestId("pill-button-settings")[0];
     fireEvent.pointerDown(closeBtn);
     fireEvent.mouseDown(closeBtn);
     fireEvent.click(closeBtn);

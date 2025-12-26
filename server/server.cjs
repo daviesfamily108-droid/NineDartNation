@@ -889,9 +889,10 @@ app.use((req, res, next) => {
 // Serve static assets (mobile camera page)
 app.use(express.static('./public'))
 // In production, also serve the built client app. Prefer root ../dist, fallback to ../app/dist, then server/dist.
-const rootDistPath = path.resolve(process.cwd(), '..', 'dist')
-const appDistPath = path.resolve(process.cwd(), '..', 'app', 'dist')
-const serverDistPath = path.resolve(process.cwd(), 'dist')
+// Use __dirname to be safe regardless of where the process was started
+const rootDistPath = path.resolve(__dirname, '..', 'dist')
+const appDistPath = path.resolve(__dirname, '..', 'app', 'dist')
+const serverDistPath = path.resolve(__dirname, 'dist')
 let staticBase = null
 if (fs.existsSync(rootDistPath)) {
   staticBase = rootDistPath
