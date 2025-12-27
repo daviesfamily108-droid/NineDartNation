@@ -131,6 +131,36 @@ export function Sidebar({
   user: any;
   className?: string;
 }) {
+  // Drag-to-scroll logic for PC/Mouse
+  const sidebarRef = React.useRef<HTMLElement>(null);
+  const isDown = React.useRef(false);
+  const startY = React.useRef(0);
+  const scrollTop = React.useRef(0);
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    isDown.current = true;
+    if (sidebarRef.current) {
+      startY.current = e.pageY - sidebarRef.current.offsetTop;
+      scrollTop.current = sidebarRef.current.scrollTop;
+      sidebarRef.current.style.cursor = "grabbing";
+    }
+  };
+  const onMouseLeave = () => {
+    isDown.current = false;
+    if (sidebarRef.current) sidebarRef.current.style.cursor = "grab";
+  };
+  const onMouseUp = () => {
+    isDown.current = false;
+    if (sidebarRef.current) sidebarRef.current.style.cursor = "grab";
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!isDown.current || !sidebarRef.current) return;
+    e.preventDefault();
+    const y = e.pageY - sidebarRef.current.offsetTop;
+    const walk = (y - startY.current) * 2; // scroll speed
+    sidebarRef.current.scrollTop = scrollTop.current - walk;
+  };
+
   // no-op debug retention removed
   // When the server has not yet returned a subscription, prefer a cached
   // localStorage subscription (if present) to avoid flicker in the UI.
@@ -247,6 +277,11 @@ export function Sidebar({
 
   return (
     <aside
+      ref={sidebarRef}
+      onMouseDown={onMouseDown}
+      onMouseLeave={onMouseLeave}
+      onMouseUp={onMouseUp}
+      onMouseMove={onMouseMove}
       className={`${user?.fullAccess ? "premium-sidebar" : ""} sidebar glass ${className ? "" : "w-72"} p-5 rounded-2xl ${className ?? "hidden sm:flex"} flex-col gap-8 overflow-y-auto overflow-x-hidden ${className ? "" : "fixed top-4 bottom-4 left-4"}`}
     >
       {/* Logo / Brand Area */}
@@ -396,83 +431,22 @@ export function MobileTabBar({
   active,
   onChange,
   user,
-  onOpenNav,
 }: {
   active: TabKey;
   onChange: (key: TabKey) => void;
   user: any;
-  onOpenNav?: () => void;
 }) {
   const isAdmin = useIsAdmin(user?.email);
   const userForTabs = resolveUserForTabs(user);
   const tabs = buildTabList(userForTabs, isAdmin);
-  const navRef = React.useRef<HTMLElement>(null);
 
   // Helper to clean labels for mobile (remove emojis)
   const cleanLabel = (l: string) => l.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/gu, '').trim();
 
-  useEffect(() => {
-    const el = navRef.current;
-    if (!el || !onOpenNav) return;
-
-    let startX = 0;
-    let startY = 0;
-    let tracking = false;
-    const MIN_DISTANCE = 40;
-
-    const handleStart = (x: number, y: number) => {
-      startX = x;
-      startY = y;
-      tracking = true;
-    };
-
-    const handleEnd = (x: number, y: number) => {
-      if (!tracking) return;
-      tracking = false;
-      const deltaY = y - startY;
-      // Dragged UP (negative deltaY)
-      if (deltaY < -MIN_DISTANCE) {
-        onOpenNav();
-      }
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      handleStart(e.touches[0].clientX, e.touches[0].clientY);
-    };
-    const onTouchEnd = (e: TouchEvent) => {
-      if (!tracking) return;
-      const touch = e.changedTouches[0];
-      if (!touch) return;
-      handleEnd(touch.clientX, touch.clientY);
-    };
-
-    const onMouseDown = (e: MouseEvent) => {
-      handleStart(e.clientX, e.clientY);
-    };
-    const onMouseUp = (e: MouseEvent) => {
-      if (tracking) handleEnd(e.clientX, e.clientY);
-    };
-
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchend", onTouchEnd);
-    el.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mouseup", onMouseUp);
-
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchend", onTouchEnd);
-      el.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [onOpenNav]);
-
   return (
     <nav 
-      ref={navRef}
       className="ndn-mobile-tabbar" 
       aria-label="Mobile navigation"
-      style={{ touchAction: "none" }}
     >
       {tabs.map(({ key, label, icon: Icon }) => (
         <button

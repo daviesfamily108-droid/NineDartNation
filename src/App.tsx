@@ -1110,7 +1110,6 @@ export default function App() {
             active={tab}
             onChange={setTab}
             user={user}
-            onOpenNav={() => setNavOpen(true)}
           />
         )}
       </div>
@@ -1409,7 +1408,7 @@ function MobileNav({
       open={open}
       onClose={onClose}
       width={300}
-      side="bottom"
+      side="left"
       title="Navigate"
     >
       <div className="mt-0 h-full">
