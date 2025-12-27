@@ -53,6 +53,7 @@ import Footer from "./components/Footer";
 import AutoPauseManager from "./components/AutoPauseManager";
 import MatchPage from "./components/MatchPage";
 import { useToast } from "./store/toast";
+import { NDN_OPEN_NOTIFICATIONS_EVENT } from "./utils/events";
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -725,6 +726,17 @@ export default function App() {
       document.removeEventListener("keydown", handleKey);
     };
   }, [notificationsOpen]);
+
+  // Allow other components (like Home pills) to open the notifications modal.
+  useEffect(() => {
+    const onOpen = () => setNotificationsOpen(true);
+    window.addEventListener(NDN_OPEN_NOTIFICATIONS_EVENT as any, onOpen as any);
+    return () =>
+      window.removeEventListener(
+        NDN_OPEN_NOTIFICATIONS_EVENT as any,
+        onOpen as any,
+      );
+  }, []);
 
   if (!user) {
     return (

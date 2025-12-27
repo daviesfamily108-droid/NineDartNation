@@ -6,6 +6,7 @@ import { useUserSettings } from "../store/userSettings";
 import ProfilePanel from "./ProfilePanel";
 import { sym } from "../ui/icons";
 import { getApiBaseUrl } from "../utils/api";
+import { dispatchOpenNotifications } from "../utils/events";
 
 function goTab(tab: string) {
   try {
@@ -25,10 +26,8 @@ export default function Home({ user }: { user?: any }) {
   const { lastOffline } = useUserSettings();
   const toast = useToast();
 
-  const openMobileMenu = () => {
-    try {
-      window.dispatchEvent(new CustomEvent("ndn:open-mobile-menu"));
-    } catch {}
+  const openNotifications = () => {
+    dispatchOpenNotifications();
   };
 
   // Listen for profile open events
@@ -70,10 +69,10 @@ export default function Home({ user }: { user?: any }) {
           <div className="home-brand-row flex w-full items-center justify-between gap-3 text-xs sm:text-sm uppercase tracking-[0.35em] text-white/80 font-semibold">
             <span className="home-brand-tag">Nine Dart Nation 🎯</span>
             <button
-              onClick={openMobileMenu}
-              className="home-menu-button btn px-5 py-2 text-[0.8rem] rounded-full bg-white text-slate-900 font-bold transition hover:scale-[1.02]"
+              onClick={openNotifications}
+              className="home-menu-button btn px-5 py-2 text-[0.8rem] rounded-full bg-amber-400 text-slate-900 font-bold transition hover:scale-[1.02]"
             >
-              Menu 🎯
+              Notifications 🔔
             </button>
           </div>
           <h2 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-400 to-blue-400 drop-shadow-xl leading-tight">
