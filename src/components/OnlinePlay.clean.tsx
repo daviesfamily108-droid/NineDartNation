@@ -424,32 +424,31 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           Online Lobby 🌐
         </h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
-          <div className="rounded-none border border-slate-800 bg-slate-950/40 p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
+          <div className="rounded-none border border-slate-850 bg-slate-950/60 p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Top row: Room, New Room, Create Match */}
-            <div className="mb-3 p-3 rounded-none bg-slate-900/40 border border-indigo-500/30 flex items-center justify-between gap-2 flex-wrap">
-              <div className="min-w-0">
-                <div className="text-sm opacity-80">Room</div>
-                <div className="px-3 py-1 bg-slate-900/70 rounded-none border border-slate-800">
+            <div className="mb-3 p-3 rounded-none bg-slate-950/70 border border-slate-850 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="text-sm text-white/70">Room</div>
+                <div className="px-3 py-1 bg-slate-900/80 rounded-none border border-slate-800 text-white/80">
                   Room ({currentRoom?.id})
                 </div>
-                <div style={{ width: 12 }} />
-                <button className="btn btn-ghost" onClick={newRoom}>
-                  New Room 🚪
+                <button className="btn btn-ghost btn-sm" onClick={newRoom}>
+                  New Room
                 </button>
               </div>
               <div className="shrink-0 flex items-center gap-2">
                 <button
-                  className="btn btn-primary flex items-center gap-2"
+                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm flex items-center gap-2"
                   onClick={() => setShowCreateModal(true)}
                   disabled={
                     (currentRoom?.matches?.length || 0) >= maxMatchesPerRoom
                   }
                 >
                   <Trophy className="w-4 h-4" />
-                  Create Match + ⚔️
+                  Create Match
                 </button>
                 {(currentRoom?.matches?.length || 0) >= maxMatchesPerRoom && (
-                  <div className="text-xs text-rose-400 mt-1">
+                  <div className="text-xs text-rose-400">
                     Room full — create a new room
                   </div>
                 )}
@@ -460,80 +459,67 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
             {/* Filters & Controls */}
             {!inProgress && (
-              <div className="mb-4 p-3 rounded-none bg-slate-900/60 border border-slate-800 flex flex-col gap-3 shadow-md">
+              <div className="mb-4 p-3 rounded-none bg-slate-950/70 border border-slate-850 flex flex-col gap-3 shadow-sm">
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex-1 min-w-[200px] relative">
+                  <div className="flex-1 min-w-[240px] relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                     <input
                       type="text"
                       placeholder="Search matches, players..."
-                      className="w-full pl-9 pr-3 py-2.5 rounded-none bg-black/50 border border-slate-800 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                      className="w-full pl-9 pr-3 py-2 rounded-none bg-slate-950 border border-slate-850 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/40 transition-all"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                   </div>
-                  <button
-                    className="btn bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-md shadow-indigo-500/15 flex items-center gap-2 px-4 py-2.5 rounded-none transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
-                    onClick={handleQuickJoin}
-                    disabled={combinedMatches.length === 0}
-                  >
-                    <Zap className="w-4 h-4 fill-current" />
-                    <span className="font-medium">Quick Join ⚡</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-white/50">
-                  <Filter className="w-4 h-4" />
-                  <span>Filters</span>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <select
-                      className="input input-compact cursor-pointer font-bold"
+                      className="input input-compact cursor-pointer font-semibold bg-slate-950 border border-slate-850 rounded-none"
                       value={filterGame}
                       onChange={(e) => setFilterGame(e.target.value as any)}
                     >
-                      <option value="all">All Games 🎯</option>
+                      <option value="all">All Games</option>
                       <option value="x01">X01</option>
                       <option value="cricket">Cricket</option>
                       <option value="bermuda">Bermuda</option>
                       <option value="gotcha">Gotcha</option>
                     </select>
-                  </div>
-
-                  <div className="flex items-center gap-2">
                     <select
-                      className="input input-compact cursor-pointer font-bold"
+                      className="input input-compact cursor-pointer font-semibold bg-slate-950 border border-slate-850 rounded-none"
                       value={filterMode}
                       onChange={(e) => setFilterMode(e.target.value as any)}
                     >
-                      <option value="all">All Modes 🏆</option>
+                      <option value="all">All Modes</option>
                       <option value="first_to">First To</option>
                       <option value="best_of">Best Of</option>
                     </select>
+                    <select
+                      className="input input-compact cursor-pointer font-semibold bg-slate-950 border border-slate-850 rounded-none"
+                      value={sortBy}
+                      onChange={(e) => setSortBy(e.target.value as any)}
+                    >
+                      <option value="newest">Newest First</option>
+                      <option value="oldest">Oldest First</option>
+                    </select>
                   </div>
-
-                  <div className="flex-1" />
                   <div className="flex items-center gap-2">
                     <button
-                      className={`px-3 py-2 rounded-none text-sm font-semibold transition-all ${focusMode ? "bg-red-600 text-white" : "bg-white/5 text-white/80 hover:bg-white/10"}`}
+                      className={`px-3 py-2 rounded-none text-sm font-semibold transition-all border border-slate-850 ${focusMode ? "bg-red-600 text-white border-red-500" : "bg-slate-950 text-white/80 hover:bg-slate-900"}`}
                       onClick={() => setFocusMode((s) => !s)}
                       aria-pressed={focusMode}
                       title="Toggle focus mode: hide small details and show focused view"
                     >
-                      {focusMode ? "Exit Focus 🔍" : "Focus Mode 🔍"}
+                      {focusMode ? "Exit Focus" : "Focus Mode"}
                     </button>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      className="input input-compact cursor-pointer font-bold"
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as any)}
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button
+                      className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm flex items-center gap-2 px-4 rounded-none"
+                      onClick={handleQuickJoin}
+                      disabled={combinedMatches.length === 0}
                     >
-                      <option value="newest">Newest First 🆕</option>
-                      <option value="oldest">Oldest First</option>
-                    </select>
+                      <Zap className="w-4 h-4 fill-current" />
+                      Quick Join
+                    </button>
                   </div>
                 </div>
               </div>
@@ -544,7 +530,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 <Users className="w-5 h-5 text-indigo-400" />
                 Active Matches �️
               </h3>
-              <div className="mb-3 p-1 rounded-none border border-slate-800 bg-slate-950/50">
+              <div className="mb-3 p-2 rounded-none border border-slate-850 bg-slate-950/80">
                 <div className="mb-4">
                   {(combinedMatches.length || 0) === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center opacity-60">
@@ -577,13 +563,13 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       )}
                       <div
                         ref={matchesRef}
-                        className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[28rem] overflow-auto p-2 ${focusMode ? "opacity-90" : ""}`}
+                        className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[28rem] overflow-auto p-1 ${focusMode ? "opacity-90" : ""}`}
                         data-testid="matches-grid"
                       >
                         {paginatedMatches.map((m: any) => (
                           <div
                             key={m.id}
-                            className="group relative p-4 rounded-none border border-slate-800 bg-slate-950/80 hover:bg-slate-950 hover:border-indigo-500/40 transition-colors duration-150 shadow-none hover:shadow-[0_6px_20px_-10px_rgba(79,70,229,0.35)] flex flex-col gap-4 h-24"
+                            className="group relative p-3 rounded-none border border-slate-850 bg-[#0c0f1a] hover:border-indigo-500/40 transition-colors duration-150 shadow-none hover:shadow-[0_6px_20px_-12px_rgba(79,70,229,0.35)] flex flex-col gap-3 min-h-[6.5rem]"
                             data-testid={`match-${m.id}`}
                           >
                             <div className="flex items-start justify-between">
@@ -615,15 +601,15 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                                 </div>
                               </div>
                               {m.roomName && (
-                                <div className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-none bg-slate-900/80 border border-slate-800 text-white/70">
+                                <div className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-none bg-slate-950 border border-slate-850 text-white/70">
                                   {m.roomName}
                                 </div>
                               )}
                             </div>
 
-                            <div className="flex flex-col gap-1 text-sm text-white/70 bg-slate-950 border border-slate-800 p-2 rounded-none">
+                            <div className="flex flex-col gap-1 text-sm text-white/70 bg-transparent border-t border-slate-850 pt-2">
                               <div className="flex items-center gap-2">
-                                <span className="px-1.5 py-0.5 rounded-none bg-white/10 text-xs font-medium">
+                                <span className="px-1.5 py-0.5 rounded-none bg-white/5 text-xs font-medium border border-slate-850">
                                   {m.modeType === "bestof"
                                     ? "Best Of"
                                     : "First To"}
@@ -670,10 +656,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
                               <div className="flex items-center justify-end">
                                 <button
-                                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-md shadow-indigo-500/10 px-4 rounded-none"
+                                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm px-4 rounded-none"
                                   onClick={() => requestJoin(m)}
                                 >
-                                  Join ⚔️
+                                  Join
                                 </button>
                               </div>
                             </div>
@@ -709,10 +695,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                             return (
                               <button
                                 key={p}
-                                className={`w-8 h-8 rounded-none text-xs font-bold transition-all ${
+                                className={`w-8 h-8 rounded-none text-xs font-bold transition-all border border-slate-850 ${
                                   currentPage === p
-                                    ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25"
-                                    : "bg-white/5 text-white/60 hover:bg-white/10"
+                                    ? "bg-indigo-600 text-white shadow-sm"
+                                    : "bg-slate-950 text-white/70 hover:bg-slate-900"
                                 }`}
                                 onClick={() => setCurrentPage(p)}
                               >
