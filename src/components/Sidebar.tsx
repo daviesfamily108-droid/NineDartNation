@@ -9,7 +9,7 @@
   Users,
 } from "lucide-react";
 import FocusLock from "react-focus-lock";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { getFreeRemaining } from "../utils/quota";
 import { useIsAdmin } from "../utils/admin";
@@ -268,28 +268,35 @@ export function Sidebar({
 
       <div className="flex flex-col gap-2">
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">System</h3>
-        {systemTabs.map(renderTab)}
-      </div>
-
-      <div className="mt-auto pt-4 border-t border-white/5 flex flex-col gap-2">
-        {/* Discord tab at the end */}
-        <button
-          className="tab tab--compact whitespace-nowrap flex items-center justify-start gap-3 bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] transition-colors"
-          onClick={() => setShowDiscord(true)}
-          title="BullseyeDartsLeague"
-        >
-          <MessageCircle className="w-5 h-5" />
-          <span className="truncate text-sm font-semibold">Bullseye League</span>
-        </button>
-        {/* NineDartNation Discord tab */}
-        <button
-          className="tab tab--compact whitespace-nowrap flex items-center justify-start gap-3 bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] transition-colors"
-          onClick={() => setShowNDNDiscord(true)}
-          title="NineDartNation"
-        >
-          <MessageCircle className="w-5 h-5" />
-          <span className="truncate text-sm font-semibold">NDN Community</span>
-        </button>
+        {systemTabs.map((t) => {
+          const rendered = renderTab(t);
+          if (t.key === "settings") {
+            return (
+              <React.Fragment key={t.key}>
+                {rendered}
+                {/* Discord tab directly under Settings */}
+                <button
+                  className="tab tab--compact whitespace-nowrap flex items-center justify-start gap-3 bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] transition-colors ml-4 border-l-2 border-[#5865F2]/30"
+                  onClick={() => setShowDiscord(true)}
+                  title="BullseyeDartsLeague"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span className="truncate text-sm font-semibold">Bullseye League</span>
+                </button>
+                {/* NineDartNation Discord tab */}
+                <button
+                  className="tab tab--compact whitespace-nowrap flex items-center justify-start gap-3 bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] transition-colors ml-4 border-l-2 border-[#5865F2]/30"
+                  onClick={() => setShowNDNDiscord(true)}
+                  title="NineDartNation"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span className="truncate text-sm font-semibold">NDN Community</span>
+                </button>
+              </React.Fragment>
+            );
+          }
+          return rendered;
+        })}
       </div>
 
       {/* Discord about dialog via portal */}
