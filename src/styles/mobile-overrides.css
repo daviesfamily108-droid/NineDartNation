@@ -108,8 +108,8 @@
     display: flex;
     justify-content: space-around;
     gap: 0;
-    padding: 8px 4px;
-    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    padding: 6px 2px;
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
     border-radius: 0;
     background: rgba(15, 23, 42, 0.98); /* Dark slate */
     backdrop-filter: blur(10px);
@@ -124,7 +124,7 @@
     flex-direction: column !important;
     justify-content: center !important;
     align-items: center !important;
-    padding: 4px !important;
+    padding: 3px 2px !important;
     min-width: 0 !important;
     height: auto !important;
     flex: 1 !important;
@@ -145,16 +145,16 @@
   }
 
   .mobile-tab-label {
-    font-size: 0.65rem;
+    font-size: 0.6rem;
     font-weight: 600;
-    margin-top: 4px;
-    letter-spacing: 0.01em;
+    margin-top: 2px;
+    letter-spacing: 0.005em;
   }
 
   .ndn-mobile-tabbar .tab svg {
-    width: 24px !important;
-    height: 24px !important;
-    stroke-width: 2px;
+    width: 20px !important;
+    height: 20px !important;
+    stroke-width: 1.8px;
   }
 
   footer { margin-bottom: 80px !important; }
