@@ -2310,6 +2310,10 @@ export default function OfflinePlay({ user }: { user: any }) {
       try {
         bumpGameMode(selectedMode, winner === "player");
       } catch {}
+      // Persist match stats (all-time / rolling averages)
+      try {
+        match.endGame();
+      } catch {}
       setShowMatchModal(false);
       setInMatch(false);
       // Reset leg-specific stats for next match but keep the summary list visible

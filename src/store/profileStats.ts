@@ -302,7 +302,11 @@ export function getMonthlyFirstNineAvg(name: string): number {
 
 // Update all players' all-time totals given a finished match roster
 import type { Player, Leg } from "./match";
-export function addMatchToAllTime(players: Player[]) {
+export function addMatchToAllTime(
+  players: Player[],
+  opts?: { recordSeries?: boolean },
+) {
+  const recordSeries = opts?.recordSeries !== false;
   for (const p of players) {
     // Sum over finished legs
     let darts = 0;
@@ -403,7 +407,8 @@ export function addMatchToAllTime(players: Player[]) {
       };
       setAllTime(p.name, next);
       // Also add a time-series sample for rolling averages
-      addSample(p.name, darts, scored, Date.now(), fnDarts, fnScored);
+      if (recordSeries)
+        addSample(p.name, darts, scored, Date.now(), fnDarts, fnScored);
     }
   }
 }

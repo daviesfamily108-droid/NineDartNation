@@ -2,7 +2,6 @@
 import { formatAvg } from "../utils/stats";
 // Icons not used directly in Scoreboard; MatchControls has its own icons
 import MatchControls from "./MatchControls";
-import { addMatchToAllTime } from "../store/profileStats";
 import { usePendingVisit } from "../store/pendingVisit";
 import type { UnifiedMatchActions } from "../logic/matchActions";
 import ResizableModal from "./ui/ResizableModal";
@@ -75,7 +74,7 @@ export default function Scoreboard({
         localStorage.setItem("ndn_last_match", JSON.stringify(summary));
       } catch {}
     } catch (err) {}
-    addMatchToAllTime(players);
+    // Stats persistence is now handled inside match.endGame (store-level)
     (matchActions?.endGame ?? endGame)();
   }
 

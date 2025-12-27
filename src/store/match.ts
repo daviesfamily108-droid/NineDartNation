@@ -1,6 +1,7 @@
 ﻿import { create } from "zustand";
 import { useAudit } from "./audit";
 import { broadcastMessage } from "../utils/broadcast";
+import { addMatchToAllTime } from "./profileStats";
 
 export type ThrowVisit = {
   darts: number;
@@ -331,6 +332,7 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
 
   endGame: () =>
     set((state) => {
+      if (!state.inProgress) return state; // avoid double-count
       // Only now compute best/worst 3-dart, best 9-dart, best checkout
       // Create new player objects with updated stats
       const newPlayers = state.players.map((p) => {
@@ -338,6 +340,11 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
         updatePlayerEndOfGameStats(updated);
         return updated;
       });
+      try {
+        // Persist all-time stats without adding another time-series entry;
+        // per-visit samples (from CameraView) already feed rolling averages.
+        addMatchToAllTime(newPlayers, { recordSeries: false });
+      } catch {}
       try {
         broadcastMessage({ type: "endGame", ts: Date.now() });
       } catch {}
