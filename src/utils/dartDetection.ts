@@ -9,12 +9,13 @@
  */
 
 import type { Point, Homography } from "./vision";
-import { imageToBoard, scoreAtBoardPoint } from "./vision";
+import { imageToBoard, scoreAtBoardPoint, isPointOnBoard, BoardRadii } from "./vision";
 
 export interface DartDetectionConfig {
-  minConfidence?: number; // 0-1, default 0.7
+  minConfidence?: number; // 0-1, default 0.7 (we'll override to 0.8 for stricter)
   maxDarts?: number; // max darts to detect, default 3
   tipRadiusPx?: number; // search radius for tip center, default 8
+  minArea?: number; // minimum blob area to consider
   hsv?: { hMin?: number; hMax?: number; sMin?: number; vMin?: number };
 }
 
@@ -57,14 +58,15 @@ export function detectDarts(
   const w = canvas.width;
   const h = canvas.height;
   const cfg: Required<DartDetectionConfig> = {
-    minConfidence: config.minConfidence ?? 0.7,
+    minConfidence: config.minConfidence ?? 0.8,
     maxDarts: config.maxDarts ?? 3,
     tipRadiusPx: config.tipRadiusPx ?? 8,
+    minArea: config.minArea ?? 60,
     hsv: {
       hMin: config.hsv?.hMin ?? 340,
       hMax: config.hsv?.hMax ?? 20,
-      sMin: config.hsv?.sMin ?? 0.4,
-      vMin: config.hsv?.vMin ?? 0.3,
+      sMin: config.hsv?.sMin ?? 0.5,
+      vMin: config.hsv?.vMin ?? 0.35,
     },
   };
 
@@ -128,8 +130,8 @@ export function detectDarts(
       if (redMask[idx] === 255 && visited[idx] === 0) {
         // Start flood fill
         const blob = floodFill(redMask, visited, x, y, w, h);
-        if (blob.size > 20) {
-          // Only keep blobs with >20 pixels (reasonable dart size)
+        if (blob.size >= cfg.minArea) {
+          // Only keep blobs with reasonable size
           blobs.push(blob);
         }
       }
@@ -183,6 +185,9 @@ export function scoreDarts(
     try {
       const boardPoint = imageToBoard(H, { x: dart.x, y: dart.y });
       if (!boardPoint) return dart;
+
+      // Reject off-board or far-out points (extra 2mm tolerance)
+      if (!isPointOnBoard(boardPoint)) return dart;
 
       const score = scoreAtBoardPoint(boardPoint);
       if (!score) return dart;
@@ -252,6 +257,9 @@ function blobToCircle(
   // Estimate radius as sqrt(area / π)
   const estimatedRadius = Math.sqrt(blob.size / Math.PI);
 
+   // Reject blobs that are clearly too small/large to be dart tips
+  if (estimatedRadius < 3 || estimatedRadius > 40) return null;
+
   // Refine center by finding densest pixel cluster
   const refinedCenter = refineCircleCenter(blob, w, h);
 
@@ -279,6 +287,9 @@ function blobToCircle(
 
   const confidence =
     0.5 * shapeConfidence + 0.3 * sizeConfidence + 0.2 * colorConfidence;
+
+  // Enforce a minimal shape confidence to avoid elongated/edge noise
+  if (shapeConfidence < 0.55) return null;
 
   return {
     x: refinedCenter.x,
