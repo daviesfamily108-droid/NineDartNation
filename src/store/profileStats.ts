@@ -307,7 +307,23 @@ export function addMatchToAllTime(
   opts?: { recordSeries?: boolean },
 ) {
   const recordSeries = opts?.recordSeries !== false;
-  for (const p of players) {
+  // Resolve the signed-in username (if present) to map generic aliases like "You"
+  // back to the user so header stats update correctly.
+  let canonicalUser: string | null = null;
+  try {
+    const stored = localStorage.getItem("ndn:currentUser");
+    if (stored) canonicalUser = stored;
+    else if (typeof (window as any)?.ndnCurrentUser === "string")
+      canonicalUser = (window as any).ndnCurrentUser;
+  } catch {}
+
+  for (const raw of players) {
+    // Normalize player name: map "You" (and blank) to canonical user when known
+    const p: Player = { ...raw };
+    if (canonicalUser) {
+      const n = (p.name || "").trim();
+      if (!n || n.toLowerCase() === "you") p.name = canonicalUser;
+    }
     // Sum over finished legs
     let darts = 0;
     let scored = 0;

@@ -193,6 +193,12 @@ export default function App() {
       setAvgDelta(0);
       return;
     }
+    try {
+      // Persist the active username so lower-level modules (e.g., stats/store) can
+      // resolve aliases like "You" back to the signed-in user when persisting stats.
+      localStorage.setItem("ndn:currentUser", user.username);
+      (window as any).ndnCurrentUser = user.username;
+    } catch {}
     const refresh = () => {
       const nextAvg =
         avgMode === "24h"
