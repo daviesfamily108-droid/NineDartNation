@@ -1171,9 +1171,11 @@ export default function App() {
           </div>
         </div>
         {isMobile && (
-          <div className="hidden">
-            {/* MobileTabBar removed in favor of drawer navigation */}
-          </div>
+          <MobileTabBar
+            active={tab}
+            onChange={setTab}
+            user={user}
+          />
         )}
       </div>
 
