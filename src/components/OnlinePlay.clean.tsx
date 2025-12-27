@@ -424,12 +424,12 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           Online Lobby 🌐
         </h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
-          <div className="rounded-md border border-slate-700 bg-black/10 p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
+          <div className="rounded-none border border-slate-800 bg-slate-950/40 p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Top row: Room, New Room, Create Match */}
-            <div className="mb-3 p-3 rounded-md bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-between gap-2 flex-wrap">
+            <div className="mb-3 p-3 rounded-none bg-slate-900/40 border border-indigo-500/30 flex items-center justify-between gap-2 flex-wrap">
               <div className="min-w-0">
                 <div className="text-sm opacity-80">Room</div>
-                <div className="px-3 py-1 bg-white/5 rounded border border-white/10">
+                <div className="px-3 py-1 bg-slate-900/70 rounded-none border border-slate-800">
                   Room ({currentRoom?.id})
                 </div>
                 <div style={{ width: 12 }} />
@@ -460,20 +460,20 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
             {/* Filters & Controls */}
             {!inProgress && (
-              <div className="mb-4 p-3 rounded-md bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-white/5 flex flex-col gap-3 shadow-lg">
+              <div className="mb-4 p-3 rounded-none bg-slate-900/60 border border-slate-800 flex flex-col gap-3 shadow-md">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex-1 min-w-[200px] relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                     <input
                       type="text"
                       placeholder="Search matches, players..."
-                      className="w-full pl-9 pr-3 py-2.5 rounded-lg bg-black/40 border border-white/10 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                      className="w-full pl-9 pr-3 py-2.5 rounded-none bg-black/50 border border-slate-800 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/50 transition-all"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                   </div>
                   <button
-                    className="btn bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-lg shadow-indigo-500/20 flex items-center gap-2 px-4 py-2.5 rounded-lg transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+                    className="btn bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-md shadow-indigo-500/15 flex items-center gap-2 px-4 py-2.5 rounded-none transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
                     onClick={handleQuickJoin}
                     disabled={combinedMatches.length === 0}
                   >
@@ -517,7 +517,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   <div className="flex-1" />
                   <div className="flex items-center gap-2">
                     <button
-                      className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all ${focusMode ? "bg-red-600 text-white" : "bg-white/5 text-white/80 hover:bg-white/10"}`}
+                      className={`px-3 py-2 rounded-none text-sm font-semibold transition-all ${focusMode ? "bg-red-600 text-white" : "bg-white/5 text-white/80 hover:bg-white/10"}`}
                       onClick={() => setFocusMode((s) => !s)}
                       aria-pressed={focusMode}
                       title="Toggle focus mode: hide small details and show focused view"
@@ -544,7 +544,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 <Users className="w-5 h-5 text-indigo-400" />
                 Active Matches �️
               </h3>
-              <div className="mb-3 p-1 rounded-md border border-slate-700/50 bg-black/10">
+              <div className="mb-3 p-1 rounded-none border border-slate-800 bg-slate-950/50">
                 <div className="mb-4">
                   {(combinedMatches.length || 0) === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center opacity-60">
@@ -565,7 +565,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                     <div className="relative">
                       {focusMode && (
                         <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
-                          <div className="pointer-events-auto bg-red-600/95 text-white px-6 py-3 rounded-lg shadow-lg text-lg font-bold transform transition-all duration-200 ease-out">
+                          <div className="pointer-events-auto bg-red-600/95 text-white px-6 py-3 rounded-none shadow-lg text-lg font-bold transform transition-all duration-200 ease-out">
                             <button
                               onClick={() => setFocusMode(false)}
                               className="w-full text-center"
@@ -577,13 +577,13 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       )}
                       <div
                         ref={matchesRef}
-                        className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[28rem] overflow-auto p-2 ${focusMode ? "opacity-90" : ""}`}
+                        className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[28rem] overflow-auto p-2 ${focusMode ? "opacity-90" : ""}`}
                         data-testid="matches-grid"
                       >
                         {paginatedMatches.map((m: any) => (
                           <div
                             key={m.id}
-                            className="group relative p-4 rounded-md border border-white/10 bg-slate-900/80 hover:bg-slate-900 transition-colors duration-150 shadow-sm hover:shadow-md flex flex-col gap-4 h-24"
+                            className="group relative p-4 rounded-none border border-slate-800 bg-slate-950/80 hover:bg-slate-950 hover:border-indigo-500/40 transition-colors duration-150 shadow-none hover:shadow-[0_6px_20px_-10px_rgba(79,70,229,0.35)] flex flex-col gap-4 h-24"
                             data-testid={`match-${m.id}`}
                           >
                             <div className="flex items-start justify-between">
@@ -615,15 +615,15 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                                 </div>
                               </div>
                               {m.roomName && (
-                                <div className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-sm bg-white/5 border border-white/10 text-white/60">
+                                <div className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-none bg-slate-900/80 border border-slate-800 text-white/70">
                                   {m.roomName}
                                 </div>
                               )}
                             </div>
 
-                            <div className="flex flex-col gap-1 text-sm text-white/70 bg-slate-900/60 border border-white/5 p-2 rounded-sm">
+                            <div className="flex flex-col gap-1 text-sm text-white/70 bg-slate-950 border border-slate-800 p-2 rounded-none">
                               <div className="flex items-center gap-2">
-                                <span className="px-1.5 py-0.5 rounded bg-white/10 text-xs font-medium">
+                                <span className="px-1.5 py-0.5 rounded-none bg-white/10 text-xs font-medium">
                                   {m.modeType === "bestof"
                                     ? "Best Of"
                                     : "First To"}
@@ -670,7 +670,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
                               <div className="flex items-center justify-end">
                                 <button
-                                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-md shadow-indigo-500/10 px-4 rounded-md"
+                                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-md shadow-indigo-500/10 px-4 rounded-none"
                                   onClick={() => requestJoin(m)}
                                 >
                                   Join ⚔️
@@ -709,7 +709,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                             return (
                               <button
                                 key={p}
-                                className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                                className={`w-8 h-8 rounded-none text-xs font-bold transition-all ${
                                   currentPage === p
                                     ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25"
                                     : "bg-white/5 text-white/60 hover:bg-white/10"
