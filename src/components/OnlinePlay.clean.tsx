@@ -138,7 +138,18 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
               m?.migration ||
               m?.seeded ||
               (typeof m?.createdBy === "string" &&
-                m.createdBy.toLowerCase().includes("test"))
+                m.createdBy.toLowerCase().includes("test")) ||
+              (typeof m?.creatorName === "string" &&
+                m.creatorName.toLowerCase().includes("test")) ||
+              (typeof m?.createdBy === "string" &&
+                /^(alice-|host-|demo|dummy|sample)/i.test(
+                  m.createdBy,
+                )) ||
+              (typeof m?.creatorName === "string" &&
+                /^(alice-|host-|demo|dummy|sample)/i.test(
+                  m.creatorName,
+                )) ||
+              !(m?.game && m?.modeType && m?.legs)
             ),
           )
           .slice(0, maxMatchesPerRoom),
