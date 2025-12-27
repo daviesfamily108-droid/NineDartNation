@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, type ReactNode } from "react";
 import FocusLock from "react-focus-lock";
+import { X } from "lucide-react";
 
 type DrawerProps = {
   open: boolean;
@@ -110,12 +111,16 @@ export default function Drawer({
       >
         <FocusLock returnFocus={true}>
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 sticky top-0 bg-slate-900 z-10">
-            <div className="text-lg font-semibold">
-              {title?.includes("🎯") ? title : `${title} 🎯`}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/80 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10">
+            <div className="text-base font-semibold text-white/90">
+              {title || "Menu"}
             </div>
-            <button className="btn px-3 py-1 text-sm" onClick={onClose}>
-              Close 🎯
+            <button
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm font-semibold text-white transition-colors"
+              onClick={onClose}
+            >
+              <span>Close</span>
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
           {/* Body */}

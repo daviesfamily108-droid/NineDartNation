@@ -1421,7 +1421,7 @@ function MobileNav({
       side="left"
       title="Navigate"
     >
-      <div className="mt-0 h-full">
+      <div className="mt-0 h-full overflow-y-auto px-3 pb-6">
         <Sidebar
           active={active}
           onChange={onChange}
