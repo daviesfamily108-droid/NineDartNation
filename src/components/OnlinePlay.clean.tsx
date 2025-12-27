@@ -125,10 +125,37 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const currentRoom = rooms[currentRoomIdx];
   const maxMatchesPerRoom = 9; // Limit to 9 matches per room
 
+  const normalizeMatch = React.useCallback((m: any) => {
+    if (!m) return m;
+    const modeType = m.modeType || m.mode || "";
+    const legs =
+      m.legs ??
+      m.value ??
+      m.bestOf ??
+      m.sets ??
+      m.games ??
+      1;
+    const createdBy =
+      m.createdBy || m.creatorName || m.creator || m.host || "";
+    const createdAt = m.createdAt || m.ts || Date.now();
+
+    return {
+      ...m,
+      modeType,
+      mode: modeType || m.mode,
+      legs,
+      value: typeof m.value === "number" ? m.value : legs,
+      createdBy,
+      creatorName: m.creatorName || createdBy,
+      createdAt,
+    };
+  }, []);
+
   const filterMatches = useMemo(
     () =>
       (list: any[] = []) =>
         (list || [])
+          .map(normalizeMatch)
           .filter((m) =>
             !(
               m?.isTest ||
@@ -153,7 +180,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             ),
           )
           .slice(0, maxMatchesPerRoom),
-    [maxMatchesPerRoom],
+    [maxMatchesPerRoom, normalizeMatch],
   );
 
   const worldLobby = useMemo(() => {
@@ -308,7 +335,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         }
         if (msg?.type === "match-prestart") {
           // Someone accepted the invite; show prestart and update join match if it matches
-          const m = msg.match || null;
+          const m = normalizeMatch(msg.match || null);
           if (m) m.prestartEndsAt = msg.prestartEndsAt;
           // Ensure we know the creator's username
           try {
