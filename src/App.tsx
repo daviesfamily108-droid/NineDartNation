@@ -228,9 +228,24 @@ export default function App() {
     };
     refresh();
     const onUpdate = () => refresh();
+    const onStorage = (e: StorageEvent) => {
+      const key = e.key || "";
+      if (!key) return;
+      // React to stats writes from other tabs/windows (e.g., match popouts)
+      const prefixes = [
+        `ndn_stats_${user.username}`,
+        `ndn_stats_ts_${user.username}`,
+        `ndn_stats_daily_${user.username}`,
+        `ndn:allTimeAvgSnapshot:${user.username}`,
+      ];
+      if (prefixes.some((p) => key.startsWith(p))) refresh();
+    };
     window.addEventListener("ndn:stats-updated", onUpdate as any);
-    return () =>
+    window.addEventListener("storage", onStorage);
+    return () => {
       window.removeEventListener("ndn:stats-updated", onUpdate as any);
+      window.removeEventListener("storage", onStorage);
+    };
   }, [user?.username, avgMode]);
 
   // Load avatar from localStorage when user changes
