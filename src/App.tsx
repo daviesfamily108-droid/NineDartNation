@@ -557,7 +557,6 @@ export default function App() {
   const [siteNotifications, setSiteNotifications] = useState<any[]>([]);
   const [friendRequestCount, setFriendRequestCount] = useState(0);
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
-  const notificationAnchorRef = useRef<HTMLDivElement | null>(null);
 
   const refreshNotifications = useCallback(async () => {
     if (!user?.email) return [] as any[];
@@ -929,7 +928,6 @@ export default function App() {
                 {/* Right: Status + Actions */}
                 <div
                   className="flex items-center gap-1.5 sm:gap-3 shrink-0"
-                  ref={notificationAnchorRef}
                 >
                   {/* Calibration Status (Desktop) */}
                   {!isMobile && calibLocked && calibH && (
