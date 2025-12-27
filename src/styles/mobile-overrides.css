@@ -35,6 +35,7 @@
 
   /* Hide large sidebar and surface as bottom nav when needed */
   .sidebar { display: none !important; }
+  .sidebar.mobile-sidebar-visible { display: flex !important; }
 
   /* Convert main layout to a single-column flow */
   .container, .app-shell, .main-content, .ndn-game-shell { padding: 0.5rem !important; }

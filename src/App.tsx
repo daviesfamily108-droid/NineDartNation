@@ -1481,7 +1481,7 @@ function MobileNav({
           active={active}
           onChange={onChange}
           user={user}
-          className="flex relative static w-full h-full shadow-none bg-transparent p-0"
+          className="flex relative static w-full h-full shadow-none bg-transparent p-0 mobile-sidebar-visible"
         />
       </div>
     </Drawer>
