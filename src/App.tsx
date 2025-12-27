@@ -459,85 +459,6 @@ export default function App() {
     };
   }, []);
 
-  // Enable swipe/drag gestures to toggle navigation drawer (from bottom)
-  useEffect(() => {
-    const target: HTMLElement | Document = appRef.current || document;
-    let startX = 0;
-    let startY = 0;
-    let tracking = false;
-
-    const MIN_DISTANCE = 50;
-    const BOTTOM_THRESHOLD = 120; // Area at bottom to start drag
-
-    const handleStart = (x: number, y: number) => {
-      // Only start tracking if near bottom
-      if (y < window.innerHeight - BOTTOM_THRESHOLD) return;
-      startX = x;
-      startY = y;
-      tracking = true;
-    };
-
-    const handleMove = (x: number, y: number) => {
-      if (!tracking) return;
-    };
-
-    const handleEnd = (x: number, y: number) => {
-      if (!tracking) return;
-      tracking = false;
-      const deltaY = y - startY;
-
-      // Dragged UP (negative deltaY)
-      if (deltaY < -MIN_DISTANCE) {
-        setNavOpen(true);
-      }
-    };
-
-    // Touch handlers
-    const onTouchStart = (e: any) => {
-      if (e.touches.length !== 1) return;
-      handleStart(e.touches[0].clientX, e.touches[0].clientY);
-    };
-    const onTouchMove = (e: any) => {
-      if (!tracking) return;
-      handleMove(e.touches[0].clientX, e.touches[0].clientY);
-    };
-    const onTouchEnd = (e: any) => {
-      if (!tracking) return;
-      const touch = e.changedTouches[0];
-      if (!touch) return;
-      handleEnd(touch.clientX, touch.clientY);
-    };
-
-    // Mouse handlers
-    const onMouseDown = (e: any) => {
-      handleStart(e.clientX, e.clientY);
-    };
-    const onMouseMove = (e: any) => {
-      if (tracking) handleMove(e.clientX, e.clientY);
-    };
-    const onMouseUp = (e: any) => {
-      if (tracking) handleEnd(e.clientX, e.clientY);
-    };
-
-    target.addEventListener("touchstart", onTouchStart, { passive: true });
-    target.addEventListener("touchmove", onTouchMove, { passive: true });
-    target.addEventListener("touchend", onTouchEnd);
-
-    target.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-
-    return () => {
-      target.removeEventListener("touchstart", onTouchStart);
-      target.removeEventListener("touchmove", onTouchMove);
-      target.removeEventListener("touchend", onTouchEnd);
-
-      target.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    };
-  }, [setNavOpen]);
-
   // Global logout handler: return to sign-in screen and clear minimal local user context
   useEffect(() => {
     const onLogout = () => {
@@ -1189,6 +1110,7 @@ export default function App() {
             active={tab}
             onChange={setTab}
             user={user}
+            onOpenNav={() => setNavOpen(true)}
           />
         )}
       </div>
