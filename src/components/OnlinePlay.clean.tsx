@@ -123,20 +123,39 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const itemsPerPage = 16;
 
   const currentRoom = rooms[currentRoomIdx];
-  const maxMatchesPerRoom = 16; // Updated to 16 as requested
-  const worldLobby = useMemo(() => {
-    if (serverMatches && serverMatches.length) return serverMatches as any[];
-    return rooms.flatMap((r) =>
-      r.matches.map((m) => ({ ...m, roomName: r.name })),
-    );
-  }, [rooms, serverMatches]);
+  const maxMatchesPerRoom = 9; // Limit to 9 matches per room
 
-  // Combined matches: current room first, then world lobby matches that are not in current room
+  const filterMatches = useMemo(
+    () =>
+      (list: any[] = []) =>
+        (list || [])
+          .filter((m) =>
+            !(
+              m?.isTest ||
+              m?.test ||
+              m?.migrated ||
+              m?.isMigration ||
+              m?.migration ||
+              m?.seeded ||
+              (typeof m?.createdBy === "string" &&
+                m.createdBy.toLowerCase().includes("test"))
+            ),
+          )
+          .slice(0, maxMatchesPerRoom),
+    [maxMatchesPerRoom],
+  );
+
+  const worldLobby = useMemo(() => {
+    if (serverMatches && serverMatches.length)
+      return filterMatches(serverMatches as any[]);
+    return filterMatches(
+      rooms.flatMap((r) => r.matches.map((m) => ({ ...m, roomName: r.name }))),
+    );
+  }, [rooms, serverMatches, filterMatches]);
+
+  // Combined matches: show only current room, filtered
   const combinedMatches = useMemo(() => {
-    const local = currentRoom?.matches || [];
-    const ids = new Set(local.map((m: any) => m.id));
-    const others = (worldLobby || []).filter((m: any) => !ids.has(m.id));
-    let all = [...local, ...others];
+    let all = filterMatches(currentRoom?.matches || []);
 
     // 1. Search
     if (searchQuery.trim()) {
@@ -171,8 +190,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       return sortBy === "newest" ? tB - tA : tA - tB;
     });
 
-    return all;
-  }, [currentRoom, worldLobby, searchQuery, filterGame, filterMode, sortBy]);
+    return all.slice(0, maxMatchesPerRoom);
+  }, [currentRoom, filterMatches, searchQuery, filterGame, filterMode, sortBy, maxMatchesPerRoom]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -239,6 +258,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   };
 
   const newRoom = () => {
+    setServerMatches([]);
     setRooms((prev) => {
       const id = prev.length + 1;
       const newRooms = [...prev, { id, name: `room-${id}`, matches: [] }];
@@ -267,7 +287,13 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           } catch {}
         }
         if (msg?.type === "matches") {
-          setServerMatches(msg.matches || []);
+          const filtered = filterMatches(msg.matches || []);
+          setServerMatches(filtered);
+          setRooms((prev) =>
+            prev.map((r, idx) =>
+              idx === currentRoomIdx ? { ...r, matches: filtered } : r,
+            ),
+          );
         }
         if (msg?.type === "match-prestart") {
           // Someone accepted the invite; show prestart and update join match if it matches
@@ -334,7 +360,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       } catch (err) {}
     });
     return unsub;
-  }, [wsGlobal, joinChoice]);
+  }, [wsGlobal, joinChoice, filterMatches, currentRoomIdx]);
 
   // Join timer
   useEffect(() => {
