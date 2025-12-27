@@ -424,9 +424,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           Online Lobby 🌐
         </h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
-          <div className="rounded-xl border border-slate-700 bg-black/10 p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
+          <div className="rounded-md border border-slate-700 bg-black/10 p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Top row: Room, New Room, Create Match */}
-            <div className="mb-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-between gap-2 flex-wrap">
+            <div className="mb-3 p-3 rounded-md bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-between gap-2 flex-wrap">
               <div className="min-w-0">
                 <div className="text-sm opacity-80">Room</div>
                 <div className="px-3 py-1 bg-white/5 rounded border border-white/10">
@@ -460,7 +460,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
             {/* Filters & Controls */}
             {!inProgress && (
-              <div className="mb-4 p-3 rounded-xl bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-white/5 flex flex-col gap-3 shadow-lg">
+              <div className="mb-4 p-3 rounded-md bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-white/5 flex flex-col gap-3 shadow-lg">
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex-1 min-w-[200px] relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
@@ -544,7 +544,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 <Users className="w-5 h-5 text-indigo-400" />
                 Active Matches �️
               </h3>
-              <div className="mb-3 p-1 rounded-xl border border-slate-700/50 bg-black/10">
+              <div className="mb-3 p-1 rounded-md border border-slate-700/50 bg-black/10">
                 <div className="mb-4">
                   {(combinedMatches.length || 0) === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center opacity-60">
@@ -583,7 +583,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                         {paginatedMatches.map((m: any) => (
                           <div
                             key={m.id}
-                            className="group relative p-5 rounded-xl border border-white/5 bg-gradient-to-br from-slate-800/80 to-slate-900/80 hover:from-slate-800 hover:to-slate-900 transform transition-transform duration-150 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/10 flex flex-col gap-4 h-24"
+                            className="group relative p-4 rounded-md border border-white/10 bg-slate-900/80 hover:bg-slate-900 transition-colors duration-150 shadow-sm hover:shadow-md flex flex-col gap-4 h-24"
                             data-testid={`match-${m.id}`}
                           >
                             <div className="flex items-start justify-between">
@@ -615,13 +615,13 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                                 </div>
                               </div>
                               {m.roomName && (
-                                <div className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded bg-white/5 border border-white/10 text-white/60">
+                                <div className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-sm bg-white/5 border border-white/10 text-white/60">
                                   {m.roomName}
                                 </div>
                               )}
                             </div>
 
-                            <div className="flex flex-col gap-1 text-sm text-white/70 bg-black/20 p-2 rounded-lg">
+                            <div className="flex flex-col gap-1 text-sm text-white/70 bg-slate-900/60 border border-white/5 p-2 rounded-sm">
                               <div className="flex items-center gap-2">
                                 <span className="px-1.5 py-0.5 rounded bg-white/10 text-xs font-medium">
                                   {m.modeType === "bestof"
@@ -670,7 +670,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
                               <div className="flex items-center justify-end">
                                 <button
-                                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-lg shadow-indigo-500/20 px-4"
+                                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-md shadow-indigo-500/10 px-4 rounded-md"
                                   onClick={() => requestJoin(m)}
                                 >
                                   Join ⚔️
