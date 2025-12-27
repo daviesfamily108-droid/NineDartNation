@@ -8,7 +8,7 @@ type DrawerProps = {
   title?: string;
   footer?: ReactNode;
   children: ReactNode;
-  side?: "left" | "right";
+  side?: "left" | "right" | "bottom";
 };
 
 export default function Drawer({
@@ -21,30 +21,41 @@ export default function Drawer({
   side = "right",
 }: DrawerProps) {
   // Swipe to close logic
-  const touchStart = React.useRef<number | null>(null);
-  const touchCurrent = React.useRef<number | null>(null);
+  const touchStart = React.useRef<{ x: number; y: number } | null>(null);
+  const touchCurrent = React.useRef<{ x: number; y: number } | null>(null);
 
   const onTouchStart = (e: React.TouchEvent) => {
-    touchStart.current = e.targetTouches[0].clientX;
+    touchStart.current = {
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY,
+    };
   };
 
   const onTouchMove = (e: React.TouchEvent) => {
-    touchCurrent.current = e.targetTouches[0].clientX;
+    touchCurrent.current = {
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY,
+    };
   };
 
   const onTouchEnd = () => {
     if (!touchStart.current || !touchCurrent.current) return;
-    const diff = touchStart.current - touchCurrent.current;
-    
-    // If side is left, swipe left (positive diff) closes it
-    // If side is right, swipe right (negative diff) closes it
+    const diffX = touchStart.current.x - touchCurrent.current.x;
+    const diffY = touchStart.current.y - touchCurrent.current.y;
+
+    // If side is left, swipe left (positive diffX) closes it
+    // If side is right, swipe right (negative diffX) closes it
+    // If side is bottom, swipe down (negative diffY) closes it
     const threshold = 50; // px
-    if (side === "left" && diff > threshold) {
+    
+    if (side === "left" && diffX > threshold) {
       onClose();
-    } else if (side === "right" && diff < -threshold) {
+    } else if (side === "right" && diffX < -threshold) {
+      onClose();
+    } else if (side === "bottom" && diffY < -threshold) {
       onClose();
     }
-    
+
     touchStart.current = null;
     touchCurrent.current = null;
   };
@@ -76,8 +87,21 @@ export default function Drawer({
       />
       {/* Panel */}
       <div
-        className={`absolute top-0 ${side === "right" ? "right-0 border-l" : "left-0 border-r"} h-full bg-slate-900 border-slate-700 shadow-2xl w-full sm:w-auto flex flex-col transition-transform duration-200 ${open ? "translate-x-0" : side === "right" ? "translate-x-full" : "-translate-x-full"}`}
-        style={{ width: typeof width === "number" ? `${width}px` : width }}
+        className={`absolute bg-slate-900 border-slate-700 shadow-2xl flex flex-col transition-transform duration-200
+          ${
+            side === "bottom"
+              ? `bottom-0 left-0 right-0 border-t rounded-t-2xl max-h-[85vh] w-full ${open ? "translate-y-0" : "translate-y-full"}`
+              : `top-0 h-full w-full sm:w-auto ${side === "right" ? "right-0 border-l" : "left-0 border-r"} ${open ? "translate-x-0" : side === "right" ? "translate-x-full" : "-translate-x-full"}`
+          }
+        `}
+        style={{
+          width:
+            side === "bottom"
+              ? "100%"
+              : typeof width === "number"
+                ? `${width}px`
+                : width,
+        }}
         role="dialog"
         aria-modal="true"
         onTouchStart={onTouchStart}

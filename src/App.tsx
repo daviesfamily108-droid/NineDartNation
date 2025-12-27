@@ -459,70 +459,84 @@ export default function App() {
     };
   }, []);
 
-  // Enable swipe gestures on mobile/tablet to toggle navigation drawer
+  // Enable swipe/drag gestures to toggle navigation drawer (from bottom)
   useEffect(() => {
-    if (!isMobile) return;
-
     const target: HTMLElement | Document = appRef.current || document;
     let startX = 0;
     let startY = 0;
     let tracking = false;
 
-    const MIN_DISTANCE = 60;
-    const MAX_VERTICAL_DRIFT = 70;
+    const MIN_DISTANCE = 50;
+    const BOTTOM_THRESHOLD = 120; // Area at bottom to start drag
 
-    const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1) return;
-      const touch = event.touches[0];
-      startX = touch.clientX;
-      startY = touch.clientY;
+    const handleStart = (x: number, y: number) => {
+      // Only start tracking if near bottom
+      if (y < window.innerHeight - BOTTOM_THRESHOLD) return;
+      startX = x;
+      startY = y;
       tracking = true;
     };
 
-    const handleTouchMove = (event: TouchEvent) => {
-      if (!tracking || event.touches.length !== 1) return;
-      const touch = event.touches[0];
-      const deltaY = touch.clientY - startY;
-      if (Math.abs(deltaY) > MAX_VERTICAL_DRIFT) {
-        tracking = false;
-      }
+    const handleMove = (x: number, y: number) => {
+      if (!tracking) return;
     };
 
-    const handleTouchEnd = (event: TouchEvent) => {
+    const handleEnd = (x: number, y: number) => {
       if (!tracking) return;
       tracking = false;
-      const touch = event.changedTouches[0];
-      if (!touch) return;
-      const deltaX = touch.clientX - startX;
-      const deltaY = touch.clientY - startY;
-      if (
-        Math.abs(deltaX) < MIN_DISTANCE ||
-        Math.abs(deltaX) < Math.abs(deltaY)
-      )
-        return;
-      if (deltaX > 0) {
+      const deltaY = y - startY;
+
+      // Dragged UP (negative deltaY)
+      if (deltaY < -MIN_DISTANCE) {
         setNavOpen(true);
-      } else {
-        setNavOpen(false);
       }
     };
 
-    const handleTouchCancel = () => {
-      tracking = false;
+    // Touch handlers
+    const onTouchStart = (e: any) => {
+      if (e.touches.length !== 1) return;
+      handleStart(e.touches[0].clientX, e.touches[0].clientY);
+    };
+    const onTouchMove = (e: any) => {
+      if (!tracking) return;
+      handleMove(e.touches[0].clientX, e.touches[0].clientY);
+    };
+    const onTouchEnd = (e: any) => {
+      if (!tracking) return;
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      handleEnd(touch.clientX, touch.clientY);
     };
 
-    target.addEventListener("touchstart", handleTouchStart, { passive: true });
-    target.addEventListener("touchmove", handleTouchMove, { passive: true });
-    target.addEventListener("touchend", handleTouchEnd);
-    target.addEventListener("touchcancel", handleTouchCancel);
+    // Mouse handlers
+    const onMouseDown = (e: any) => {
+      handleStart(e.clientX, e.clientY);
+    };
+    const onMouseMove = (e: any) => {
+      if (tracking) handleMove(e.clientX, e.clientY);
+    };
+    const onMouseUp = (e: any) => {
+      if (tracking) handleEnd(e.clientX, e.clientY);
+    };
+
+    target.addEventListener("touchstart", onTouchStart, { passive: true });
+    target.addEventListener("touchmove", onTouchMove, { passive: true });
+    target.addEventListener("touchend", onTouchEnd);
+
+    target.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
 
     return () => {
-      target.removeEventListener("touchstart", handleTouchStart);
-      target.removeEventListener("touchmove", handleTouchMove);
-      target.removeEventListener("touchend", handleTouchEnd);
-      target.removeEventListener("touchcancel", handleTouchCancel);
+      target.removeEventListener("touchstart", onTouchStart);
+      target.removeEventListener("touchmove", onTouchMove);
+      target.removeEventListener("touchend", onTouchEnd);
+
+      target.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
     };
-  }, [isMobile, setNavOpen]);
+  }, [setNavOpen]);
 
   // Global logout handler: return to sign-in screen and clear minimal local user context
   useEffect(() => {
@@ -1058,7 +1072,7 @@ export default function App() {
               </header>
             </div>
             {/* Mobile drawer navigation */}
-            {isMobile && (
+            {(isMobile || navOpen) && (
               <MobileNav
                 open={navOpen}
                 onClose={() => setNavOpen(false)}
@@ -1473,7 +1487,7 @@ function MobileNav({
       open={open}
       onClose={onClose}
       width={300}
-      side="left"
+      side="bottom"
       title="Navigate"
     >
       <div className="mt-0 h-full">
