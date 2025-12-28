@@ -1409,9 +1409,15 @@ export default forwardRef(function CameraView(
 
     // Only skip local startup when the phone feed is actively streaming
     if (isPhoneCamera && phoneFeedActive) {
-      dlog("[CAMERA] Phone camera stream active - leaving local camera idle");
-      setCameraStarting(false);
-      return;
+      const phoneTracks = existingStream?.getVideoTracks?.() || [];
+      const phoneActive = phoneTracks.some((t) => t.readyState === "live");
+      if (phoneActive) {
+        dlog("[CAMERA] Phone camera stream active - leaving local camera idle");
+        setCameraStarting(false);
+        return;
+      }
+      // If flagged active but no live tracks, fall back to local camera startup
+      dlog("[CAMERA] Phone feed flagged active but no live tracks; starting local camera");
     }
 
     setCameraStarting(true);
