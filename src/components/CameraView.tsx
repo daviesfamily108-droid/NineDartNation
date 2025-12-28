@@ -99,7 +99,9 @@ const TIP_STABLE_MAX_JITTER_PX = process.env.NODE_ENV === "test" ? 999 : 3;
 // Give the scene a bit longer to settle after motion/lighting changes
 const DETECTION_SETTLE_MS = process.env.NODE_ENV === "test" ? 0 : 900;
 const BOARD_CLEAR_GRACE_MS = 6500;
-const DISABLE_CAMERA_OVERLAY = false;
+// Disable all camera overlays (rings, debug bboxes/axis) while keeping scoring intact.
+// This hides the cyan debug boxes/rings shown around trebles/doubles and detections.
+const DISABLE_CAMERA_OVERLAY = true;
 // Unit tests for this repo run under Vitest and rely on CameraView's autoscore
 // effect running. We keep "TEST_MODE" disabled and use explicit NODE_ENV checks
 // for small test-only knobs.
@@ -2969,43 +2971,51 @@ export default forwardRef(function CameraView(
 
             // Draw debug tip and shaft axis on overlay (scaled to overlay canvas)
             try {
-              const drawOverlayHint = value > 0 && ring !== "MISS" && !isGhost;
-              if (drawOverlayHint) {
-                const o = overlayRef.current;
-                if (o) {
-                  const octx = o.getContext("2d");
-                  if (octx) {
-                    // Maintain overlay size and clear a small area
-                    const ox = (tipRefined.x / vw) * o.width;
-                    const oy = (tipRefined.y / vh) * o.height;
-                    octx.save();
-                    octx.beginPath();
-                    octx.strokeStyle = "#f59e0b";
-                    octx.lineWidth = 2;
-                    octx.arc(ox, oy, 6, 0, Math.PI * 2);
-                    octx.stroke();
-                    // axis line if available
-                    if ((det as any).axis) {
-                      const ax = (det as any).axis;
-                      const ax1 = (ax.x1 / vw) * o.width;
-                      const ay1 = (ax.y1 / vh) * o.height;
-                      const ax2 = (ax.x2 / vw) * o.width;
-                      const ay2 = (ax.y2 / vh) * o.height;
+              if (DISABLE_CAMERA_OVERLAY || hideCameraOverlay) {
+                // If overlays are disabled, keep canvas clean and skip drawing.
+                if (overlayRef.current) {
+                  const octx = overlayRef.current.getContext("2d");
+                  octx?.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height);
+                }
+              } else {
+                const drawOverlayHint = value > 0 && ring !== "MISS" && !isGhost;
+                if (drawOverlayHint) {
+                  const o = overlayRef.current;
+                  if (o) {
+                    const octx = o.getContext("2d");
+                    if (octx) {
+                      // Maintain overlay size and clear a small area
+                      const ox = (tipRefined.x / vw) * o.width;
+                      const oy = (tipRefined.y / vh) * o.height;
+                      octx.save();
                       octx.beginPath();
-                      octx.moveTo(ax1, ay1);
-                      octx.lineTo(ax2, ay2);
+                      octx.strokeStyle = "#f59e0b";
+                      octx.lineWidth = 2;
+                      octx.arc(ox, oy, 6, 0, Math.PI * 2);
                       octx.stroke();
+                      // axis line if available
+                      if ((det as any).axis) {
+                        const ax = (det as any).axis;
+                        const ax1 = (ax.x1 / vw) * o.width;
+                        const ay1 = (ax.y1 / vh) * o.height;
+                        const ax2 = (ax.x2 / vw) * o.width;
+                        const ay2 = (ax.y2 / vh) * o.height;
+                        octx.beginPath();
+                        octx.moveTo(ax1, ay1);
+                        octx.lineTo(ax2, ay2);
+                        octx.stroke();
+                      }
+                      // bbox
+                      if ((det as any).bbox) {
+                        const bx = ((det as any).bbox.x / vw) * o.width;
+                        const by = ((det as any).bbox.y / vh) * o.height;
+                        const bw = ((det as any).bbox.w / vw) * o.width;
+                        const bh = ((det as any).bbox.h / vh) * o.height;
+                        octx.strokeStyle = "#22d3ee";
+                        octx.strokeRect(bx, by, bw, bh);
+                      }
+                      octx.restore();
                     }
-                    // bbox
-                    if ((det as any).bbox) {
-                      const bx = ((det as any).bbox.x / vw) * o.width;
-                      const by = ((det as any).bbox.y / vh) * o.height;
-                      const bw = ((det as any).bbox.w / vw) * o.width;
-                      const bh = ((det as any).bbox.h / vh) * o.height;
-                      octx.strokeStyle = "#22d3ee";
-                      octx.strokeRect(bx, by, bw, bh);
-                    }
-                    octx.restore();
                   }
                 }
               }
