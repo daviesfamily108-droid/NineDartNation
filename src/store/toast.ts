@@ -5,13 +5,20 @@ type Toast = {
   message: string;
   type?: "info" | "success" | "error";
   timeout?: number;
+  actionLabel?: string;
+  onAction?: () => void;
 };
 
 type ToastState = {
   toasts: Toast[];
   push: (
     message: string,
-    opts?: { type?: "info" | "success" | "error"; timeout?: number },
+    opts?: {
+      type?: "info" | "success" | "error";
+      timeout?: number;
+      actionLabel?: string;
+      onAction?: () => void;
+    },
   ) => void;
   remove: (id: number) => void;
   clear: () => void;
@@ -29,6 +36,8 @@ export const useToastStore = create<ToastState>((set) => ({
         message,
         type: opts?.type || "info",
         timeout: opts?.timeout ?? 3000,
+        actionLabel: opts?.actionLabel,
+        onAction: opts?.onAction,
       };
       // auto-remove after timeout
       if (t.timeout && t.timeout > 0) {

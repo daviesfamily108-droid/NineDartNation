@@ -15,14 +15,14 @@ export default function GlobalPhoneVideoSink() {
   const lastReconnectAtRef = useRef<number>(0);
   const attemptRef = useRef<number>(0);
 
-  // Ensure the global ref is registered for others to use
-  // ONLY if we are in phone or wifi mode. For local mode, the active component (Calibrator/CameraTile)
-  // will register its own video element ref.
+  // Ensure there is ALWAYS a global video element registered.
+  // This makes `camera.getMediaStream()` resilient across navigation and popups,
+  // because a stream can be read back from `videoElementRefHolder.srcObject`.
   useEffect(() => {
-    if (vref.current && (camera.mode === "phone" || camera.mode === "wifi")) {
+    if (vref.current) {
       camera.setVideoElementRef(vref.current);
     }
-  }, [camera.mode]);
+  }, [camera]);
 
   // Apply the current stream and keep it playing
   useEffect(() => {

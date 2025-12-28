@@ -81,7 +81,18 @@ export const useCameraSession = create<CameraSessionState>()(
       setMediaStream: (stream) => {
         mediaStreamRefHolder = stream;
       },
-      getMediaStream: () => mediaStreamRefHolder,
+      getMediaStream: () => {
+        // Primary: explicit holder
+        if (mediaStreamRefHolder) return mediaStreamRefHolder;
+        // Fallback: if some other component registered a global video element ref
+        // (e.g., the hidden GlobalPhoneVideoSink), use its srcObject.
+        try {
+          const v = videoElementRefHolder;
+          const s = (v?.srcObject as MediaStream | null) || null;
+          if (s) return s;
+        } catch {}
+        return null;
+      },
 
       setPcRef: (pc) => {
         pcRefHolder = pc;

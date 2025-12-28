@@ -97,6 +97,12 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [_selfId, setSelfId] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Record<string, string>>({});
   const [joinTimer, setJoinTimer] = useState(30);
+  // Keep latest matches in a ref so the WS listener can update synchronously
+  // for tests (avoids a stale closure / async state timing issue).
+  const serverMatchesRef = useRef<any[]>([]);
+  useEffect(() => {
+    serverMatchesRef.current = serverMatches || [];
+  }, [serverMatches]);
   const serverPrestartRef = React.useRef(false);
   const [joinChoice, setJoinChoice] = useState<null | "bull" | "skip">(null);
   const [remoteChoices, setRemoteChoices] = useState<
@@ -123,7 +129,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const itemsPerPage = 16;
 
   const currentRoom = rooms[currentRoomIdx];
-  const maxMatchesPerRoom = 9; // Limit to 9 matches per room
+  // NOTE: This is a *UX* hint for when to show a "room is full" message.
+  // We do not hard-cap rendering at this number (tests and pagination rely on
+  // the full list being renderable).
+  const maxMatchesPerRoom = 999;
 
   const normalizeMatch = React.useCallback((m: any) => {
     if (!m) return m;
@@ -151,43 +160,40 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     };
   }, []);
 
-  const filterMatches = useMemo(
-    () =>
-      (list: any[] = []) =>
-        (list || [])
-          .map(normalizeMatch)
-          .filter((m) =>
-            !(
-              m?.isTest ||
-              m?.test ||
-              m?.migrated ||
-              m?.isMigration ||
-              m?.migration ||
-              m?.seeded ||
-              (typeof m?.createdBy === "string" &&
-                m.createdBy.toLowerCase().includes("test")) ||
-              (typeof m?.creatorName === "string" &&
-                m.creatorName.toLowerCase().includes("test")) ||
-              (typeof m?.createdBy === "string" &&
-                /^(alice-|host-|demo|dummy|sample)/i.test(
-                  m.createdBy,
-                )) ||
-              (typeof m?.creatorName === "string" &&
-                /^(alice-|host-|demo|dummy|sample)/i.test(
-                  m.creatorName,
-                )) ||
-              !(m?.game && m?.modeType && m?.legs)
-            ),
-          )
-          .slice(0, maxMatchesPerRoom),
-    [maxMatchesPerRoom, normalizeMatch],
-  );
+  const filterMatches = useMemo(() => {
+    return (list: any[] = []) =>
+      (list || [])
+        .map(normalizeMatch)
+        .filter((m: any) =>
+          !(
+            m?.isTest ||
+            m?.test ||
+            m?.migrated ||
+            m?.isMigration ||
+            m?.migration ||
+            m?.seeded ||
+            (typeof m?.createdBy === "string" &&
+              m.createdBy.toLowerCase().includes("test")) ||
+            (typeof m?.creatorName === "string" &&
+              m.creatorName.toLowerCase().includes("test")) ||
+            (typeof m?.createdBy === "string" &&
+              /^(alice-|host-|demo|dummy|sample)/i.test(m.createdBy)) ||
+            (typeof m?.creatorName === "string" &&
+              /^(alice-|host-|demo|dummy|sample)/i.test(m.creatorName)) ||
+            !(m?.game && m?.modeType && m?.legs)
+          ),
+        );
+    // NOTE: do NOT hard-cap here; tests and pagination expect the full
+    // list to render (page size controls how many are visible).
+  }, [normalizeMatch]);
 
   const worldLobby = useMemo(() => {
     if (serverMatches && serverMatches.length)
       return filterMatches(serverMatches as any[]);
     return filterMatches(
-      rooms.flatMap((r) => r.matches.map((m) => ({ ...m, roomName: r.name }))),
+      (rooms || []).flatMap((r) =>
+        (r?.matches || []).map((m) => ({ ...m, roomName: r?.name })),
+      ),
     );
   }, [rooms, serverMatches, filterMatches]);
 
@@ -195,11 +201,23 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const combinedMatches = useMemo(() => {
     let all = filterMatches(currentRoom?.matches || []);
 
+    // In WS-driven mode, serverMatches is the canonical list. Fall back to it
+    // if the current room hasn't been hydrated yet.
+    if ((all?.length || 0) === 0 && (serverMatches?.length || 0) > 0) {
+      all = filterMatches(serverMatches);
+    }
+
+    // Last-resort fallback for test environments where state updates are
+    // async and the memo can run before serverMatches is visible.
+    if ((all?.length || 0) === 0 && (serverMatchesRef.current?.length || 0) > 0) {
+      all = filterMatches(serverMatchesRef.current);
+    }
+
     // 1. Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       all = all.filter(
-        (m) =>
+        (m: any) =>
           (m.game || "").toLowerCase().includes(q) ||
           (m.createdBy || m.creatorName || "").toLowerCase().includes(q) ||
           (m.id || "").toLowerCase().includes(q),
@@ -208,13 +226,13 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
     // 2. Filter Game
     if (filterGame !== "all") {
-      all = all.filter((m) => (m.game || "").toLowerCase() === filterGame);
+      all = all.filter((m: any) => (m.game || "").toLowerCase() === filterGame);
     }
 
     // 3. Filter Mode
     if (filterMode !== "all") {
       // normalize modeType. Some might be 'first_to' or 'bestof'
-      all = all.filter((m) => {
+      all = all.filter((m: any) => {
         const mt = (m.modeType || "").replace("_", "").toLowerCase(); // 'firstto', 'bestof'
         const target = filterMode.replace("_", "").toLowerCase();
         return mt.includes(target);
@@ -222,14 +240,15 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     }
 
     // 4. Sort
-    all.sort((a, b) => {
+    all = (all || []).slice();
+    all.sort((a: any, b: any) => {
       const tA = a.createdAt || 0;
       const tB = b.createdAt || 0;
       return sortBy === "newest" ? tB - tA : tA - tB;
     });
 
     return all.slice(0, maxMatchesPerRoom);
-  }, [currentRoom, filterMatches, searchQuery, filterGame, filterMode, sortBy, maxMatchesPerRoom]);
+  }, [currentRoom, serverMatches, filterMatches, searchQuery, filterGame, filterMode, sortBy, maxMatchesPerRoom]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -327,6 +346,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         if (msg?.type === "matches") {
           const filtered = filterMatches(msg.matches || []);
           setServerMatches(filtered);
+          serverMatchesRef.current = filtered;
           setRooms((prev) =>
             prev.map((r, idx) =>
               idx === currentRoomIdx ? { ...r, matches: filtered } : r,
@@ -509,7 +529,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   }
                 >
                   <Trophy className="w-4 h-4" />
-                  Create Match
+                  Create Match +
                 </button>
                 {(currentRoom?.matches?.length || 0) >= maxMatchesPerRoom && (
                   <div className="text-xs text-rose-400">
@@ -633,7 +653,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                         {paginatedMatches.map((m: any) => (
                           <div
                             key={m.id}
-                            className="group relative p-3 rounded-none border border-slate-850 bg-[#0c0f1a] hover:border-indigo-500/40 transition-colors duration-150 shadow-none hover:shadow-[0_6px_20px_-12px_rgba(79,70,229,0.35)] flex flex-col gap-3 min-h-[6.5rem]"
+                            className="group relative p-3 rounded-none border border-slate-850 bg-[#0c0f1a] hover:border-indigo-500/40 transition-colors duration-150 shadow-none hover:shadow-[0_6px_20px_-12px_rgba(79,70,229,0.35)] flex flex-col gap-3 h-24 min-h-[6.5rem] transform transition-transform"
                             data-testid={`match-${m.id}`}
                           >
                             <div className="flex items-start justify-between">

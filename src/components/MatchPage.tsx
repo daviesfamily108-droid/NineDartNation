@@ -11,6 +11,7 @@ import PauseTimerBadge from "./ui/PauseTimerBadge";
 import { useUserSettings } from "../store/userSettings";
 import MatchControls from "./MatchControls";
 import { parseManualDart } from "../game/types";
+import MatchStartShowcase from "./ui/MatchStartShowcase";
 
 export default function MatchPage() {
   const match = useMatch();
@@ -44,6 +45,14 @@ export default function MatchPage() {
   const [manualBox, setManualBox] = useState("");
   const [multiEntry, setMultiEntry] = useState("");
   const [manualEntries, setManualEntries] = useState<number[]>([]);
+  const [showStartShowcase, setShowStartShowcase] = useState<boolean>(false);
+
+  // In the match pop-out window we want the same pre-game build-up overlay
+  // (and camera preview) that exists on the main pre-game screen.
+  useEffect(() => {
+    if (!match?.inProgress) setShowStartShowcase(true);
+    else setShowStartShowcase(false);
+  }, [match?.inProgress]);
 
   useEffect(() => {
     // Ensure calibration overlay is preserved in the match window so the camera view matches calibration
@@ -377,6 +386,15 @@ export default function MatchPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
+      {showStartShowcase && (
+        <MatchStartShowcase
+          open={showStartShowcase}
+          players={(match.players || []) as any}
+          onDone={() => setShowStartShowcase(false)}
+          onRequestClose={() => setShowStartShowcase(false)}
+          showCalibrationDefault={true}
+        />
+      )}
       <div className="p-3 max-w-6xl mx-auto">
         <GameHeaderBar
           left={
