@@ -634,6 +634,12 @@ export default function MatchPage() {
                         frame: meta?.frame ?? null,
                         ts: Date.now(),
                       });
+                      // Ensure the match fully ends so the header stats refresh and the
+                      // winning zoom overlay can render (it only shows once inProgress=false).
+                      // endGame is idempotent: it will no-op if already ended.
+                      try {
+                        match.endGame();
+                      } catch {}
                     }}
                   />
                   {winningShot?.frame && !match.inProgress && (
