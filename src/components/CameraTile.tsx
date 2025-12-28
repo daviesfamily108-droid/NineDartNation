@@ -136,6 +136,17 @@ export default function CameraTile({
         console.log("[CameraTile] attachExistingStream: No video ref");
         return false;
       }
+      const liveVideoTracks = (existingStream.getVideoTracks?.() || []).filter(
+        (t) => t.readyState === "live",
+      );
+      if (liveVideoTracks.length === 0) {
+        console.warn(
+          "[CameraTile] attachExistingStream: Stream has no live video tracks; ignoring",
+          existingStream.id,
+        );
+        setStreaming(false);
+        return false;
+      }
       if (videoRef.current.srcObject !== existingStream) {
         console.log("[CameraTile] Attaching existing stream to video element", existingStream.id);
         videoRef.current.srcObject = existingStream;
@@ -319,6 +330,17 @@ export default function CameraTile({
         const s = cameraSession.getMediaStream();
         const v = videoRef.current;
         if (!v || !s) return;
+        const liveTracks = (s.getVideoTracks?.() || []).filter(
+          (t) => t.readyState === "live",
+        );
+        if (liveTracks.length === 0) {
+          console.warn(
+            "[CameraTile] Phone attach: stream has no live tracks; skipping attach",
+            s.id,
+          );
+          setStreaming(false);
+          return;
+        }
         if (v.srcObject !== s) {
           v.srcObject = s;
         }
@@ -369,7 +391,10 @@ export default function CameraTile({
     // If phone camera is selected and paired, don't try to start local camera
     if (preferredCameraLabel === "Phone Camera" || mode === "phone") {
       const s = cameraSession.getMediaStream();
-      if (s && videoRef.current) {
+      const liveTracks = (s?.getVideoTracks?.() || []).filter(
+        (t) => t.readyState === "live",
+      );
+      if (s && liveTracks.length > 0 && videoRef.current) {
         try {
           videoRef.current.srcObject = s;
           await videoRef.current.play();
@@ -393,7 +418,10 @@ export default function CameraTile({
     // So: just attempt to reuse whatever the global session has.
     try {
       const s = cameraSession.getMediaStream?.();
-      if (s && videoRef.current) {
+      const liveTracks = (s?.getVideoTracks?.() || []).filter(
+        (t) => t.readyState === "live",
+      );
+      if (s && liveTracks.length > 0 && videoRef.current) {
         videoRef.current.srcObject = s;
         await videoRef.current.play();
         setStreaming(true);
@@ -421,7 +449,10 @@ export default function CameraTile({
       return;
     }
     const s = cameraSession.getMediaStream?.();
-    if (s) {
+    const liveTracks = (s?.getVideoTracks?.() || []).filter(
+      (t) => t.readyState === "live",
+    );
+    if (s && liveTracks.length > 0) {
       try {
         if (v.srcObject !== s) {
           console.log("[CameraTile] Failsafe: Attaching stream", s.id);
@@ -437,7 +468,13 @@ export default function CameraTile({
       console.log("[CameraTile] Failsafe: No stream in session");
     }
     if (forceAutoStart || autoStart) {
-      console.log("[CameraTile] Failsafe: Triggering start()");
+      console.log(
+        "[CameraTile] Failsafe: Triggering start() (no stream or dead tracks)",
+        {
+          hasStream: !!s,
+          liveTracks: liveTracks.length,
+        },
+      );
       start().catch(() => {});
     }
   }, [cameraSession, forceAutoStart, autoStart, start, cameraSession.isStreaming]);
