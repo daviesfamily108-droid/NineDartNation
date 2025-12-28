@@ -36,8 +36,23 @@ function Root() {
   return <App />;
 }
 
-// Register service worker to enable PWA install & offline capability when available
-if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+/**
+ * Service worker note
+ *
+ * A service worker can easily cause "Netlify isn't responding / new code not showing" symptoms
+ * if an old worker is still controlling the page and serving cached HTML/JS.
+ *
+ * For now we keep SW *opt-in only* (debug/pwa testing) and disable it by default.
+ *
+ * Opt-in options:
+ *  - add ?pwa=1 to the URL, or
+ *  - set localStorage.NDN_ENABLE_PWA = "1"
+ */
+const enablePwaSw =
+  new URLSearchParams(window.location.search).get("pwa") === "1" ||
+  (typeof localStorage !== "undefined" && localStorage.getItem("NDN_ENABLE_PWA") === "1");
+
+if (enablePwaSw && typeof navigator !== "undefined" && "serviceWorker" in navigator) {
   try {
     navigator.serviceWorker
       .register("/sw.js")
@@ -48,6 +63,16 @@ if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
         console.warn("[ServiceWorker] Registration failed", err);
       });
   } catch (e) {
+    // ignore
+  }
+} else if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+  // Safety: if a previous deployment had registered a SW, unregister it so updates always flow.
+  // This prevents stale SW caches from masking new UI behavior.
+  try {
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((r) => r.unregister());
+    });
+  } catch {
     // ignore
   }
 }
