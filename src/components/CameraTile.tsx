@@ -781,6 +781,13 @@ export default function CameraTile({
             if (inbound) {
               videoRef.current.srcObject = inbound;
               videoRef.current.play().catch(() => {});
+              // Promote the inbound phone stream to the global camera session so
+              // other surfaces (pre-game popup, overlays, status badges) can
+              // immediately reuse it.
+              try {
+                registerStream(inbound, "phone");
+                cameraSession.setVideoElementRef?.(videoRef.current);
+              } catch {}
               setStreaming(true);
             }
           }
