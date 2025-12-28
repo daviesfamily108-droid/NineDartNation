@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+﻿import React, { useCallback, useEffect, useState } from "react";
 import CameraView from "./CameraView";
 import GameHeaderBar from "./ui/GameHeaderBar";
 import GameScoreboard from "./scoreboards/GameScoreboard";
@@ -27,6 +27,15 @@ export default function MatchPage() {
     total: s.total,
   }));
   const pendingEntries = usePendingVisit((s) => s.entries);
+  const [winningShot, setWinningShot] = useState<
+    | {
+        label?: string;
+        ring?: string;
+        frame?: string | null;
+        ts?: number;
+      }
+    | null
+  >(null);
   const [remoteFrame, setRemoteFrame] = useState<string | null>(null);
   const lastOfflineStart = useUserSettings((s) => s.lastOffline?.x01Start || 501);
   const [playerVisitDarts, setPlayerVisitDarts] = useState(0);
@@ -270,6 +279,30 @@ export default function MatchPage() {
     resetManualState();
   };
 
+  // Derive a finishing label from match state (fallback when no camera meta is available)
+  const deriveWinningLabel = useCallback(() => {
+    try {
+      const legs: Array<{ ts: number; visit?: any; player?: any }> = [];
+      (match.players || []).forEach((p: any) => {
+        (p.legs || []).forEach((leg: any) => {
+          if (leg?.finished) {
+            const lastVisit = (leg.visits || []).slice(-1)[0];
+            legs.push({ ts: leg.endTime || Date.now(), visit: lastVisit, player: p });
+          }
+        });
+      });
+      if (!legs.length) return null;
+      const latest = legs.sort((a, b) => b.ts - a.ts)[0];
+      const entry = (latest.visit?.entries || []).slice(-1)[0];
+      if (entry?.label) return entry.label as string;
+      if (entry?.ring === "DOUBLE" && typeof entry?.value === "number")
+        return `Double ${entry.value / 2}`;
+      if (typeof latest.visit?.visitTotal === "number")
+        return `Checkout ${latest.visit.visitTotal}`;
+    } catch {}
+    return null;
+  }, [match.players]);
+
   const addManual = () => {
     const parsed = parseManualDart(manualBox);
     if (parsed == null) return;
@@ -314,11 +347,34 @@ export default function MatchPage() {
     setMultiEntry("");
   };
 
+  // When the match ends (or we return from close), keep the winning dart handy for header/zoom
+  useEffect(() => {
+    if (match.inProgress) {
+      // Clear any stale winning-shot info when a new match/leg starts
+      setWinningShot(null);
+      return;
+    }
+    // If we already have a winning shot, keep it; otherwise derive from match history
+    if (!winningShot?.label) {
+      const derived = deriveWinningLabel();
+      if (derived) setWinningShot((prev) => ({ ...prev, label: derived }));
+    }
+  }, [match.inProgress, deriveWinningLabel, winningShot?.label]);
+
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       <div className="p-3 max-w-6xl mx-auto">
         <GameHeaderBar
-          left={<span className="font-medium">Match</span>}
+          left={
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Match</span>
+              {winningShot?.label && (
+                <span className="text-xs bg-emerald-600/20 text-emerald-200 px-2 py-1 rounded-lg border border-emerald-500/30">
+                  Winning double: {winningShot.label}
+                </span>
+              )}
+            </div>
+          }
           right={
             <>
               <PauseTimerBadge />
@@ -567,7 +623,34 @@ export default function MatchPage() {
                 <span className="text-xs text-slate-300">Compact view</span>
               </div>
               <div className="relative h-56 rounded-xl overflow-hidden bg-black">
-                  <CameraView hideInlinePanels={true} forceAutoStart={true} />
+                  <CameraView
+                    hideInlinePanels={true}
+                    forceAutoStart={true}
+                    onVisitCommitted={(_score, _darts, finished, meta) => {
+                      if (!finished) return;
+                      setWinningShot({
+                        label: meta?.label || deriveWinningLabel() || undefined,
+                        ring: meta?.ring,
+                        frame: meta?.frame ?? null,
+                        ts: Date.now(),
+                      });
+                    }}
+                  />
+                  {winningShot?.frame && !match.inProgress && (
+                    <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
+                      <img
+                        src={winningShot.frame}
+                        alt="Winning double zoom"
+                        className="w-full h-full object-cover scale-125"
+                      />
+                      <div className="absolute bottom-2 left-2 right-2 text-xs text-white bg-black/60 rounded-md px-2 py-1 flex items-center justify-between gap-2">
+                        <span className="font-semibold">Winning dart zoom</span>
+                        {winningShot.label && (
+                          <span className="text-emerald-200">{winningShot.label}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
               </div>
             </div>
           </div>

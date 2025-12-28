@@ -217,6 +217,12 @@ export default forwardRef(function CameraView(
       score: number,
       darts: number,
       finished: boolean,
+      meta?: {
+        label?: string;
+        ring?: Ring;
+        entries?: { label: string; value: number; ring: string }[];
+        frame?: string | null;
+      },
     ) => void;
     showToolbar?: boolean;
     onAutoDart?: (
@@ -559,6 +565,12 @@ export default forwardRef(function CameraView(
     score: number;
     darts: number;
     finished: boolean;
+    meta?: {
+      label?: string;
+      ring?: Ring;
+      entries?: { label: string; value: number; ring: string }[];
+      frame?: string | null;
+    };
   } | null>(null);
   const pendingCommitTimerRef = useRef<number | null>(null);
   // For camera auto-commit, default to immediate commit since camera-initiated
@@ -797,6 +809,24 @@ export default forwardRef(function CameraView(
       (window as any).ndnCameraDiagnostics = next;
     } catch (e) {}
   }, []);
+  const captureFrame = useCallback((): string | null => {
+    try {
+      const v = videoRef.current as HTMLVideoElement | null;
+      if (!v || !v.videoWidth || !v.videoHeight) return null;
+      const w = 640;
+      const h = Math.round((v.videoHeight / v.videoWidth) * w) || 360;
+      const c = document.createElement("canvas");
+      c.width = w;
+      c.height = h;
+      const ctx = c.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(v, 0, 0, w, h);
+      return c.toDataURL("image/jpeg", 0.5);
+    } catch (e) {
+      return null;
+    }
+  }, []);
+
   const finalizePendingCommit = useCallback(
     (_trigger: "event" | "timeout" | "teardown") => {
       const pending = pendingCommitRef.current;
@@ -806,7 +836,12 @@ export default forwardRef(function CameraView(
       setAwaitingClear(false);
       if (onVisitCommitted) {
         try {
-          onVisitCommitted(pending.score, pending.darts, pending.finished);
+          onVisitCommitted(
+            pending.score,
+            pending.darts,
+            pending.finished,
+            pending.meta,
+          );
           try {
             // Notify other windows that a visit was committed
             broadcastMessage({
@@ -814,6 +849,7 @@ export default forwardRef(function CameraView(
               score: pending.score,
               darts: pending.darts,
               finished: pending.finished,
+              meta: pending.meta,
               playerIdx: matchState.currentPlayerIdx,
               ts: Date.now(),
             });
@@ -828,11 +864,26 @@ export default forwardRef(function CameraView(
     [onVisitCommitted, clearPendingCommitTimer],
   );
   const enqueueVisitCommit = useCallback(
-    (payload: { score: number; darts: number; finished: boolean }) => {
+    (payload: {
+      score: number;
+      darts: number;
+      finished: boolean;
+      meta?: {
+        label?: string;
+        ring?: Ring;
+        entries?: { label: string; value: number; ring: string }[];
+        frame?: string | null;
+      };
+    }) => {
       if (!onVisitCommitted) return;
       if (!shouldDeferCommit) {
         try {
-          onVisitCommitted(payload.score, payload.darts, payload.finished);
+          onVisitCommitted(
+            payload.score,
+            payload.darts,
+            payload.finished,
+            payload.meta,
+          );
         } catch (e) {}
         return;
       }
@@ -3593,6 +3644,7 @@ export default forwardRef(function CameraView(
         ...(pendingEntries as any[]),
         { label, value: appliedValue, ring },
       ]);
+      const frame = captureFrame();
       callAddVisit(newScore, newDarts, {
         preOpenDarts: pendingPreOpenDarts || 0,
         doubleWindowDarts: pendingDartsAtDouble || 0,
@@ -3607,7 +3659,17 @@ export default forwardRef(function CameraView(
       setPendingEntries([]);
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
-      enqueueVisitCommit({ score: newScore, darts: newDarts, finished: true });
+      enqueueVisitCommit({
+        score: newScore,
+        darts: newDarts,
+        finished: true,
+        meta: {
+          label,
+          ring,
+          entries: finishEntries,
+          frame,
+        },
+      });
       return;
     }
 
