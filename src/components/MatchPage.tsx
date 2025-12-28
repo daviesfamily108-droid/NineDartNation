@@ -45,14 +45,20 @@ export default function MatchPage() {
   const [manualBox, setManualBox] = useState("");
   const [multiEntry, setMultiEntry] = useState("");
   const [manualEntries, setManualEntries] = useState<number[]>([]);
-  const [showStartShowcase, setShowStartShowcase] = useState<boolean>(false);
+  const [showStartShowcase, setShowStartShowcase] = useState<boolean>(true);
+  const showcaseLockedOpenRef = React.useRef(true);
 
   // In the match pop-out window we want the same pre-game build-up overlay
   // (and camera preview) that exists on the main pre-game screen.
+  //
+  // IMPORTANT: match state may hydrate from a snapshot with `inProgress=true`
+  // immediately, even though this window still needs to show the build-up UI.
+  // So we default to showing it once per mount, and only allow it to close
+  // after the user explicitly hits Start/Close.
   useEffect(() => {
-    if (!match?.inProgress) setShowStartShowcase(true);
-    else setShowStartShowcase(false);
-  }, [match?.inProgress]);
+    if (!showcaseLockedOpenRef.current) return;
+    setShowStartShowcase(true);
+  }, []);
 
   useEffect(() => {
     // Ensure calibration overlay is preserved in the match window so the camera view matches calibration
@@ -390,8 +396,14 @@ export default function MatchPage() {
         <MatchStartShowcase
           open={showStartShowcase}
           players={(match.players || []) as any}
-          onDone={() => setShowStartShowcase(false)}
-          onRequestClose={() => setShowStartShowcase(false)}
+          onDone={() => {
+            showcaseLockedOpenRef.current = false;
+            setShowStartShowcase(false);
+          }}
+          onRequestClose={() => {
+            showcaseLockedOpenRef.current = false;
+            setShowStartShowcase(false);
+          }}
           showCalibrationDefault={true}
         />
       )}
