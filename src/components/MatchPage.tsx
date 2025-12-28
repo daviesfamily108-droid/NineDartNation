@@ -628,10 +628,11 @@ export default function MatchPage() {
                     forceAutoStart={true}
                     onVisitCommitted={(_score, _darts, finished, meta) => {
                       if (!finished) return;
+                      const frame = meta?.frame ?? remoteFrame ?? null;
                       setWinningShot({
                         label: meta?.label || deriveWinningLabel() || undefined,
                         ring: meta?.ring,
-                        frame: meta?.frame ?? null,
+                        frame,
                         ts: Date.now(),
                       });
                       // Ensure the match fully ends so the header stats refresh and the

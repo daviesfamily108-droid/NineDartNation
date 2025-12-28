@@ -1,4 +1,7 @@
-﻿export type AllTimeTotals = {
+﻿import { broadcastMessage } from "../utils/broadcast";
+import type { Player, Leg } from "./match";
+
+export type AllTimeTotals = {
   darts: number;
   scored: number;
   fnDarts?: number;
@@ -60,6 +63,10 @@ export function setAllTime(name: string, totals: AllTimeTotals) {
     window.dispatchEvent(
       new CustomEvent("ndn:stats-updated", { detail: { name, totals } }),
     );
+    // Notify other tabs/windows so headers and panels refresh immediately
+    try {
+      broadcastMessage({ type: "statsUpdated", name, totals });
+    } catch {}
   } catch {}
 }
 
@@ -301,7 +308,6 @@ export function getMonthlyFirstNineAvg(name: string): number {
 }
 
 // Update all players' all-time totals given a finished match roster
-import type { Player, Leg } from "./match";
 export function addMatchToAllTime(
   players: Player[],
   opts?: { recordSeries?: boolean },
