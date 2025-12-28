@@ -505,6 +505,20 @@ export default forwardRef(function CameraView(
       } catch (e) {}
     }
   }, [forceAutoStart, streaming, cameraStarting, setCameraEnabled]);
+
+  // Safety net: if the camera is enabled but not yet streaming, attempt to start it.
+  // This covers cases where UI shows "calibrated camera linked" but the feed stays black.
+  useEffect(() => {
+    if (TEST_MODE) return;
+    try {
+      setCameraEnabled(true);
+    } catch {}
+    if (!streaming && !cameraStarting) {
+      try {
+        void startCamera();
+      } catch {}
+    }
+  }, [streaming, cameraStarting, setCameraEnabled]);
   const {
     H,
     imageSize,
