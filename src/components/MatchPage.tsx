@@ -144,6 +144,20 @@ export default function MatchPage() {
           try {
             // Prefer to import a full snapshot written by the committing window
             const ok = tryImportSnapshot();
+            // Capture remote frame/finish metadata if provided (helps post-match zoom)
+            try {
+              if (msg.meta?.frame) setRemoteFrame(msg.meta.frame);
+              if (msg.finished && msg.meta) {
+                setWinningShot({
+                  label: msg.meta.label || deriveWinningLabel() || undefined,
+                  ring: msg.meta.ring,
+                  frame: msg.meta.frame ?? msg.frame ?? null,
+                  ts: Date.now(),
+                });
+                // Ensure local state marks game ended so overlays/header refresh
+                match.endGame();
+              }
+            } catch {}
             // Always clear any remote pending preview
             try {
               usePendingVisit.getState().reset();
