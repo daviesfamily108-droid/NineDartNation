@@ -82,89 +82,26 @@
   /* Hide decorative background animation on mobile for perf */
   .background-animated { display: none !important; }
 
-  /* Add breathing room at the bottom since we now float a tab bar */
+  /* Mobile scroll area: keep header clearance, but don't reserve space for a bottom tab bar */
   #ndn-main-scroll {
-    padding-bottom: 90px !important;
-    scroll-padding-bottom: 100px !important;
+    padding-bottom: 24px !important;
+    scroll-padding-bottom: 24px !important;
     padding-top: 92px !important; /* clear fixed header */
     scroll-padding-top: 96px !important;
-  }
-
-  .ndn-shell-body {
-    padding-bottom: 100px !important;
   }
 
   .card, .glass {
     width: 100% !important;
   }
 
-  /* Professional Bottom Navigation Bar */
-  .ndn-mobile-tabbar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 55;
-    display: flex;
-    justify-content: space-around;
-    gap: 0;
-    padding: 6px 2px;
-    padding-bottom: max(6px, env(safe-area-inset-bottom));
-    border-radius: 0;
-    background: rgba(15, 23, 42, 0.98); /* Dark slate */
-    backdrop-filter: blur(10px);
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
-    border-left: none;
-    border-right: none;
-    border-bottom: none;
-  }
-
-  .ndn-mobile-tabbar .tab {
-    flex-direction: column !important;
-    justify-content: center !important;
-    align-items: center !important;
-    padding: 3px 2px !important;
-    min-width: 0 !important;
-    height: auto !important;
-    flex: 1 !important;
-    background: transparent !important; /* Remove card bg from tabs */
-    border: none !important;
-    box-shadow: none !important;
-    color: #64748b !important; /* Muted slate for inactive */
-    border-radius: 8px !important;
-  }
-
-  .ndn-mobile-tabbar .tab--active {
-    color: #8b5cf6 !important; /* Violet accent for active */
-    background: rgba(139, 92, 246, 0.1) !important;
-  }
-
-  .ndn-mobile-tabbar .tab::after {
-    display: none !important;
-  }
-
-  .mobile-tab-label {
-    font-size: 0.6rem;
-    font-weight: 600;
-    margin-top: 2px;
-    letter-spacing: 0.005em;
-  }
-
-  .ndn-mobile-tabbar .tab svg {
-    width: 20px !important;
-    height: 20px !important;
-    stroke-width: 1.8px;
-  }
-
-  footer { margin-bottom: 80px !important; }
+  footer { margin-bottom: 16px !important; }
 
   /* Improve scoreboard readability: single-column items */
   .scoreboard, .stats-panel { display: block !important; width: 100% !important; }
   .scoreboard .row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
 
   /* Footer spacing to avoid UI overlap */
-  .ndn-shell-body { padding-bottom: 96px !important; }
+  .ndn-shell-body { padding-bottom: 24px !important; }
 
   /* Reduce visual noise in lists */
   .list-item { padding: 14px 12px !important; border-radius: 8px !important; background: #1e293b !important; margin-bottom: 8px !important; border: 1px solid rgba(255,255,255,0.05); }

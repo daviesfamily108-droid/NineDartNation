@@ -2415,6 +2415,13 @@ export default forwardRef(function CameraView(
             // Refine tip on gradients
             const tipRefined = refinePointSobel(proc, det.tip, 6);
 
+            // Declare these up-front so later nested branches can safely reference
+            // them (TypeScript doesn't allow using block-scoped vars before declaration).
+            let label = "";
+            let value = 0;
+            let ring: Ring = "MISS" as Ring;
+            let shouldAccept = false;
+
             // Track tip stability (low jitter across frames).
             // We do this in video pixel space for simplicity.
             // If it jumps around too much, reset stability.
@@ -2450,6 +2457,10 @@ export default forwardRef(function CameraView(
             const tipStable =
               tipStabilityRef.current.stableFrames >= TIP_STABLE_MIN_FRAMES;
 
+            // NOTE: settled/tipStable are enforced further down the pipeline
+            // (in the non-ghost accept/commit path) so we don't prematurely
+            // reference scoring variables that haven't been computed yet.
+
             // Map to calibration image space before scoring (fit-aware)
             const pCal = fit.toCalibration({
               x: tipRefined.x,
@@ -2468,13 +2479,12 @@ export default forwardRef(function CameraView(
             } catch (e) {
               pBoard = null;
             }
-            const ring = score.ring as Ring;
-            const value = score.base;
+            ring = score.ring as Ring;
+            value = score.base;
             const sector = (score.sector ?? null) as number | null;
             const mult = Math.max(0, Number(score.mult) || 0) as 0 | 1 | 2 | 3;
             // Use a stable, caller-friendly label so UI + tests don't depend on
             // the ring enum's spelling.
-            let label = "";
             if (ring === "MISS") {
               label = "MISS";
             } else if (ring === "BULL") {
@@ -2552,7 +2562,7 @@ export default forwardRef(function CameraView(
                 }
               } catch (e) {}
             }
-            let shouldAccept = false;
+              // (shouldAccept already initialized above)
             dlog("CameraView: detection details", {
               value,
               ring,

@@ -178,7 +178,7 @@ export function createAutoScoringPipeline(
     canvas.width = videoElement.videoWidth;
     canvas.height = videoElement.videoHeight;
 
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
     if (ctx) {
       ctx.drawImage(videoElement, 0, 0);
       const result = scorer.processFrame(canvas);

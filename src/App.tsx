@@ -438,60 +438,31 @@ export default function App() {
     }
   }, [user?.email]);
 
-  // Detect mobile/tablet layout via comprehensive device detection
+  // Universal responsive breakpoint: navigation mode is based on viewport width,
+  // not device type/UA. This ensures consistent UI across all devices.
   useEffect(() => {
-    const update = () => {
-      const width = window.innerWidth;
-
-      // Comprehensive mobile/tablet detection
-      const mqMobile = window.matchMedia("(max-width: 768px)").matches;
-      const mqTablet = window.matchMedia(
-        "(max-width: 1024px) and (min-width: 769px)",
-      ).matches;
-      const uaMobile =
-        /Mobi|Android|iPhone|iPad|iPod|Mobile|BlackBerry|IEMobile|Opera Mini|Windows Phone/i.test(
-          navigator.userAgent || "",
-        );
-      const uaTablet =
-        /iPad|Android(?=.*\bMobile\b)|Tablet|PlayBook|Silk/i.test(
-          navigator.userAgent || "",
-        );
-      const touchScreen =
-        "ontouchstart" in window || navigator.maxTouchPoints > 0;
-      const verySmallScreen = width < 769;
-
-      // Determine device type
-      const isTablet =
-        (mqTablet && touchScreen) ||
-        uaTablet ||
-        (width >= 769 && width <= 1024 && touchScreen);
-      const isMobile =
-        mqMobile || uaMobile || verySmallScreen || (width < 769 && touchScreen);
-      const isMobileDevice = isMobile || isTablet;
-
-      setIsMobile(isMobileDevice);
-    };
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(mq.matches);
     update();
-    window.addEventListener("resize", update);
-    window.addEventListener("orientationchange", update);
-
-    const mqMobile = window.matchMedia("(max-width: 768px)");
-    const mqTablet = window.matchMedia(
-      "(max-width: 1024px) and (min-width: 769px)",
-    );
 
     try {
-      mqMobile.addEventListener("change", update);
-      mqTablet.addEventListener("change", update);
-    } catch (e) {}
+      mq.addEventListener("change", update);
+    } catch {
+      // Safari/older browsers
+      mq.addListener(update);
+    }
+
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
 
     return () => {
       window.removeEventListener("resize", update);
       window.removeEventListener("orientationchange", update);
       try {
-        mqMobile.removeEventListener("change", update);
-        mqTablet.removeEventListener("change", update);
-      } catch (e) {}
+        mq.removeEventListener("change", update);
+      } catch {
+        mq.removeListener(update);
+      }
     };
   }, []);
 
@@ -879,7 +850,7 @@ export default function App() {
               >
                 {isMobile && (
                   <button
-                    className="p-2 -ml-2 mr-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all"
+                    className="p-2 -ml-2 mr-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all shrink-0 relative z-[60]"
                     onClick={() => setNavOpen(true)}
                     aria-label="Open Menu"
                   >
@@ -1168,13 +1139,7 @@ export default function App() {
             </main>
           </div>
         </div>
-        {isMobile && (
-          <MobileTabBar
-            active={tab}
-            onChange={setTab}
-            user={user}
-          />
-        )}
+        {/* Mobile bottom tabs removed: navigation is via burger menu + drawer */}
       </div>
 
       {/* Floating Help Assistant - Always visible */}
@@ -1478,12 +1443,12 @@ function MobileNav({
       side="left"
       title="Navigate"
     >
-      <div className="mt-0 h-full overflow-y-auto px-3 pb-6">
+      <div className="mt-0 h-full px-3 pb-6">
         <Sidebar
           active={active}
           onChange={onChange}
           user={user}
-          className="flex relative static w-full h-full shadow-none bg-transparent p-0 mobile-sidebar-visible"
+          className="flex relative static w-full shadow-none bg-transparent p-0 mobile-sidebar-visible overflow-visible"
         />
       </div>
     </Drawer>

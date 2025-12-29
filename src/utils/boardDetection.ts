@@ -69,7 +69,7 @@ function findDartboardRings(
   ringStrength?: number;
   detectedRings?: number[];
 } | null {
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) return null;
 
   const w = canvas.width;
@@ -82,7 +82,7 @@ function findDartboardRings(
   const mapH = Math.floor(h * scale);
 
   const workCanvas = new OffscreenCanvas(mapW, mapH);
-  const workCtx = workCanvas.getContext("2d");
+  const workCtx = workCanvas.getContext("2d", { willReadFrequently: true });
   if (!workCtx) return null;
 
   workCtx.drawImage(canvas, 0, 0, mapW, mapH);
