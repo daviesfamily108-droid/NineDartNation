@@ -1,5 +1,6 @@
 ﻿import React from "react";
 import type { Player } from "../../store/match";
+import { getCalibrationStatus } from "../../utils/gameCalibrationRequirements";
 
 export default function CalibrationPopup({
   players,
@@ -58,9 +59,19 @@ export default function CalibrationPopup({
                 <div>
                   <div className="font-medium">{player.name}</div>
                   <div className="text-xs text-slate-400">
-                    {playerCalibrations[player.name]
-                      ? "Calibrated ✅"
-                      : "Needs calibration"}
+                    {(() => {
+                      const c = playerCalibrations[player.name];
+                      const status = getCalibrationStatus({
+                        H: c?.H,
+                        imageSize: c?.imageSize,
+                        locked: c?.locked,
+                        errorPx: c?.errorPx,
+                      });
+                      if (status === "verified") return "Calibrated ✅";
+                      if (status === "unknown")
+                        return "Calibration quality unknown";
+                      return "Needs calibration";
+                    })()}
                   </div>
                 </div>
               </div>

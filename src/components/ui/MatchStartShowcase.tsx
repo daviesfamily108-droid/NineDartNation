@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState, useRef, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import { getCalibrationStatus } from "../../utils/gameCalibrationRequirements";
 import {
   getAllTimeAvg,
   getAllTimeFirstNineAvg,
@@ -283,6 +284,8 @@ export default function MatchStartShowcase({
   const hasHomography = useCalibration((s) => !!s.H);
   const calibrationLocked = useCalibration((s) => !!s.locked);
   const calibrationConfidence = useCalibration((s) => s.confidence);
+  const calibrationImageSize = useCalibration((s) => s.imageSize);
+  const calibrationErrorPx = useCalibration((s) => s.errorPx);
   const localCalibration = useMemo(
     () => ({
       hasHomography,
@@ -291,8 +294,19 @@ export default function MatchStartShowcase({
     }),
     [hasHomography, calibrationLocked, calibrationConfidence],
   );
+  const localCalibrationStatus = useMemo(
+    () =>
+      getCalibrationStatus({
+        H: hasHomography ? (useCalibration.getState() as any).H : null,
+        locked: calibrationLocked,
+        imageSize: calibrationImageSize as any,
+        errorPx: calibrationErrorPx as any,
+      }),
+    [hasHomography, calibrationLocked, calibrationImageSize, calibrationErrorPx],
+  );
+
   const calibratedCameraLinked =
-    cameraSession.isStreaming && localCalibration.hasHomography;
+    cameraSession.isStreaming && localCalibrationStatus === "verified";
   const [showCalibration, setShowCalibration] = useState(false);
   const [calibrationSkipped, setCalibrationSkipped] = useState<{
     [playerId: string]: boolean;
@@ -603,8 +617,12 @@ export default function MatchStartShowcase({
   }, [localCalibration.confidence]);
 
   const calibrationStatusText = calibratedCameraLinked
-    ? `Calibrated camera linked${typeof calibrationConfidencePercent === "number" ? ` • ${calibrationConfidencePercent.toFixed(0)}% confidence` : ""}`
-    : "Calibrate to link this camera feed";
+    ? typeof calibrationConfidencePercent === "number"
+      ? `Calibrated camera linked • ${calibrationConfidencePercent.toFixed(0)}% confidence`
+      : "Calibrated camera linked (quality unknown)"
+    : localCalibration.hasHomography
+      ? "Calibration quality unknown (finish calibrating to link)"
+      : "Calibrate to link this camera feed";
 
   if (!visible) return null;
 

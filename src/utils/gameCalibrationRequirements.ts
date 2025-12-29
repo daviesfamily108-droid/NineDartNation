@@ -266,7 +266,8 @@ export function isCalibrationSuitableForGame(
   gameMode: string,
   errorPx: number | null,
 ): boolean {
-  if (!errorPx) return false;
+  // Treat missing/unknown error as not suitable. IMPORTANT: don't treat 0 as missing.
+  if (errorPx == null || Number.isNaN(errorPx as any) || errorPx < 0) return false;
 
   const req = GAME_CALIBRATION_REQUIREMENTS[gameMode];
   if (!req) return true; // Unknown game, assume suitable
@@ -285,7 +286,8 @@ export function getCalibrationQualityText(
   quality: "perfect" | "excellent" | "good" | "fair" | "poor" | "none";
   text: string;
 } {
-  if (!errorPx) {
+  // IMPORTANT: don't treat 0 as missing.
+  if (errorPx == null || Number.isNaN(errorPx as any) || errorPx < 0) {
     return { quality: "none", text: "Not calibrated" };
   }
 
@@ -308,6 +310,41 @@ export function getCalibrationQualityText(
   } else {
     return { quality: "poor", text: `Poor (${Math.round(confidence)}%)` };
   }
+}
+
+export type CalibrationStatus = "verified" | "unknown" | "none";
+
+/**
+ * Shared, UI-friendly calibration gate.
+ *
+ * Contract:
+ * - verified: has a homography AND an imageSize AND (locked OR errorPx <= maxErrorPx)
+ * - unknown: has a homography but is missing quality metrics (imageSize/errorPx)
+ * - none: no homography
+ */
+export function getCalibrationStatus(params: {
+  H: any | null | undefined;
+  imageSize?: { w: number; h: number } | null;
+  locked?: boolean | null;
+  errorPx?: number | null;
+  maxErrorPx?: number;
+}): CalibrationStatus {
+  const { H, imageSize, locked, errorPx, maxErrorPx = 12 } = params;
+  if (!H) return "none";
+
+  const hasImageSize = !!(
+    imageSize &&
+    typeof imageSize.w === "number" &&
+    typeof imageSize.h === "number" &&
+    imageSize.w > 0 &&
+    imageSize.h > 0
+  );
+  const errorVal = typeof errorPx === "number" && !Number.isNaN(errorPx) ? errorPx : null;
+
+  if (hasImageSize && (locked || (errorVal != null && errorVal <= maxErrorPx))) {
+    return "verified";
+  }
+  return "unknown";
 }
 
 /**

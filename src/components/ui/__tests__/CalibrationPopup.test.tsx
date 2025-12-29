@@ -95,4 +95,43 @@ describe("CalibrationPopup", () => {
     fireEvent.click(screen.getByRole("button", { name: /Start Match/i }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
+
+  test("shows verified vs unknown vs needs calibration", async () => {
+    const players = [
+      { id: "1", name: "Alice", legsWon: 0, legs: [] },
+      { id: "2", name: "Bob", legsWon: 0, legs: [] },
+      { id: "3", name: "Cara", legsWon: 0, legs: [] },
+    ] as any;
+    render(
+      <CalibrationPopup
+        players={players}
+        playerCalibrations={{
+          Alice: {
+            H: [[1, 0, 0]],
+            imageSize: { w: 1920, h: 1080 },
+            errorPx: 5,
+          },
+          Bob: {
+            H: [[1, 0, 0]],
+          },
+        }}
+        calibrationSkipped={{}}
+        onSkip={vi.fn()}
+        onOpenCalibrator={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    // Alice should be verified
+    expect(screen.getByText("Alice")).toBeTruthy();
+    expect(screen.getByText("Calibrated ✅")).toBeTruthy();
+
+    // Bob has a calibration object but missing quality metrics
+    expect(screen.getByText("Bob")).toBeTruthy();
+    expect(screen.getByText(/Calibration quality unknown/i)).toBeTruthy();
+
+    // Cara has no calibration
+    expect(screen.getByText("Cara")).toBeTruthy();
+    expect(screen.getByText(/Needs calibration/i)).toBeTruthy();
+  });
 });

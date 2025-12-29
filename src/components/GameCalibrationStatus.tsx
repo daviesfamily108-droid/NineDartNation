@@ -78,27 +78,27 @@ export default function GameCalibrationStatus({
   }
 
   // If we have calibration but no errorPx, show a neutral "Calibrated" indicator.
-  // We still want the UI to allow the match to start and autoscore to run.
+  // IMPORTANT: This should NOT be treated as "verified" quality.
   if (hasCalibration && (errorPx == null || Number.isNaN(errorPx as any))) {
     if (compact) {
       return (
-        <div className="text-xs px-2 py-1 rounded inline-flex items-center gap-1 border bg-emerald-500/20 border-emerald-600/30 text-emerald-300">
-          <CheckCircle className="w-3 h-3" />
-          Calibrated ✅
+        <div className="text-xs px-2 py-1 rounded inline-flex items-center gap-1 border bg-amber-500/20 border-amber-600/30 text-amber-200">
+          <AlertCircle className="w-3 h-3" />
+          Quality unknown
         </div>
       );
     }
 
     return (
-      <div className="px-3 py-2 rounded border bg-emerald-500/20 border-emerald-600/30 space-y-1">
+      <div className="px-3 py-2 rounded border bg-amber-500/20 border-amber-600/30 space-y-1">
         <div className="flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <AlertCircle className="w-4 h-4 text-amber-300 flex-shrink-0" />
           <div className="flex-1">
             <div className="font-medium text-emerald-300">
               Calibration for {gameMode}
             </div>
             <div className="text-xs opacity-80">
-              Calibrated (quality pending) ⏳
+              Calibrated, but quality is unknown (re-check recommended)
             </div>
           </div>
         </div>
