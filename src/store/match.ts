@@ -184,14 +184,18 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
         legsArr = [...oldPlayer.legs.slice(0, -1), leg];
       }
       const preRem = leg.totalScoreRemaining;
-      const postRem = Math.max(0, preRem - score);
+      // IMPORTANT: `score` is the value passed by callers and historically was sometimes
+      // "the last dart's score" while `meta.visitTotal` is the total for the whole visit.
+      // For X01 remaining math we must subtract the *visit total* (points scored this visit).
+      const visitTotal = Number(meta?.visitTotal ?? score);
+      const postRem = Math.max(0, preRem - visitTotal);
       leg.visits.push({
         darts,
         score,
         preOpenDarts: meta?.preOpenDarts,
         doubleWindowDarts: meta?.doubleWindowDarts,
         finishedByDouble: meta?.finishedByDouble,
-        visitTotal: meta?.visitTotal ?? score,
+        visitTotal,
         entries: Array.isArray(meta?.entries)
           ? meta!.entries.map((e) => ({
               label: String((e as any).label ?? ""),
@@ -222,7 +226,8 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
           }
           avgPayload.threeDartAvg = avg;
         }
-        useAudit.getState().recordVisit("x01-match", darts, score, {
+        // Audit should record the visit's total points, not a single dart score.
+        useAudit.getState().recordVisit("x01-match", darts, visitTotal, {
           preOpenDarts: meta?.preOpenDarts ?? 0,
           preRemaining: preRem,
           postRemaining: postRem,
@@ -235,7 +240,7 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
         // notify other windows a visit occurred
         broadcastMessage({
           type: "visit",
-          score,
+          score: visitTotal,
           darts,
           playerIdx: state.currentPlayerIdx,
           ts: Date.now(),
@@ -257,11 +262,12 @@ export const useMatch = create<MatchState & Actions>((set, get) => ({
         return state;
       const newVisits = oldLeg.visits.slice(0, -1);
       const last = oldLeg.visits[oldLeg.visits.length - 1];
+      const lastVisitTotal = Number((last as any).visitTotal ?? last.score);
       const newLeg: Leg = {
         ...oldLeg,
         visits: newVisits,
         dartsThrown: oldLeg.dartsThrown - last.darts,
-        totalScoreRemaining: oldLeg.totalScoreRemaining + last.score,
+        totalScoreRemaining: oldLeg.totalScoreRemaining + lastVisitTotal,
       };
       const newLegs = [...oldPlayer.legs.slice(0, -1), newLeg];
       const newPlayer: Player = { ...oldPlayer, legs: newLegs };
