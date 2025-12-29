@@ -88,17 +88,22 @@ export default function CameraTile({
   // already-running calibrated stream to appear immediately.
   useEffect(() => {
     try {
-      if (videoRef.current) {
-        cameraSession.setVideoElementRef?.(videoRef.current);
+      const v = videoRef.current;
+      if (v) {
+        const current = cameraSession.getVideoElementRef?.();
+        // Avoid thrashing the global ref when multiple tiles mount.
+        // Only claim it if nobody has one yet or we're already the active ref.
+        if (!current || current === v) {
+          cameraSession.setVideoElementRef?.(v);
+        }
       }
     } catch {}
     return () => {
       try {
-        // Only clear if we're still the registered ref.
-        const current = cameraSession.getVideoElementRef?.();
-        if (current === videoRef.current) {
-          cameraSession.setVideoElementRef?.(null);
-        }
+        // IMPORTANT: don't clear the global ref automatically.
+        // Other UI surfaces (MatchStartShowcase overlay, CameraView) rely on it.
+        // Clearing here can cause the pre-game preview to go black if another tile
+        // hasn't re-registered yet.
       } catch {}
     };
   }, [cameraSession]);
@@ -492,11 +497,6 @@ export default function CameraTile({
         videoRef.current.srcObject = null;
       } catch {}
       setStreaming(false);
-      // Only clear the tile's registration if it was the owner; we don't own
-      // the global stream in this component.
-      try {
-        registerStream(null);
-      } catch {}
     }
   }, [registerStream]);
 
