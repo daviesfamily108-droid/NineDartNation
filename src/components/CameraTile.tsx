@@ -8,6 +8,7 @@ import {
   type CSSProperties,
 } from "react";
 import { dlog } from "../utils/logger";
+import { ensureVideoPlays } from "../utils/ensureVideoPlays";
 import { useUserSettings } from "../store/userSettings";
 import {
   useCameraSession,
@@ -147,31 +148,13 @@ export default function CameraTile({
         console.log("[CameraTile] attachExistingStream: No video ref");
         return false;
       }
-      const liveVideoTracks = (existingStream.getVideoTracks?.() || []).filter(
-        (t) => t.readyState === "live",
-      );
-      if (liveVideoTracks.length === 0) {
-        console.warn(
-          "[CameraTile] attachExistingStream: Stream has no live video tracks; ignoring",
-          existingStream.id,
-        );
-        setStreaming(false);
-        return false;
-      }
-      if (videoRef.current.srcObject !== existingStream) {
-        console.log("[CameraTile] Attaching existing stream to video element", existingStream.id);
-        videoRef.current.srcObject = existingStream;
-      }
-      videoRef.current.muted = true;
-      (videoRef.current as any).playsInline = true;
-      try {
-        await videoRef.current.play();
-        console.log("[CameraTile] Video playing");
-      } catch (e) {
-        console.warn("[CameraTile] Play failed:", e);
-      }
-      setStreaming(true);
-      return true;
+      const res = await ensureVideoPlays({
+        video: videoRef.current,
+        stream: existingStream,
+        onPlayError: (e) => console.warn("[CameraTile] Play failed:", e),
+      });
+      setStreaming(!!res.played);
+      return !!res.played;
     } catch (err) {
       console.warn("[CameraTile] Failed to reuse global camera stream", err);
       return false;
@@ -407,10 +390,9 @@ export default function CameraTile({
       );
       if (s && liveTracks.length > 0 && videoRef.current) {
         try {
-          videoRef.current.srcObject = s;
-          await videoRef.current.play();
-          setStreaming(true);
-          return;
+          const res = await ensureVideoPlays({ video: videoRef.current, stream: s });
+          setStreaming(!!res.played);
+          if (res.played) return;
         } catch {}
       }
       // If no global stream yet, for phone mode we should attempt pairing
@@ -433,10 +415,9 @@ export default function CameraTile({
         (t) => t.readyState === "live",
       );
       if (s && liveTracks.length > 0 && videoRef.current) {
-        videoRef.current.srcObject = s;
-        await videoRef.current.play();
-        setStreaming(true);
-        return;
+        const res = await ensureVideoPlays({ video: videoRef.current, stream: s });
+        setStreaming(!!res.played);
+        if (res.played) return;
       }
     } catch {}
   }, [
@@ -465,14 +446,20 @@ export default function CameraTile({
     );
     if (s && liveTracks.length > 0) {
       try {
-        if (v.srcObject !== s) {
-          console.log("[CameraTile] Failsafe: Attaching stream", s.id);
-          v.srcObject = s;
-        }
-        v.muted = true;
-        (v as any).playsInline = true;
-        Promise.resolve(v.play()).then(() => console.log("[CameraTile] Failsafe: Playing")).catch((e) => console.warn("[CameraTile] Failsafe play error", e));
-        setStreaming(true);
+        Promise.resolve(
+          ensureVideoPlays({
+            video: v,
+            stream: s,
+            onPlayError: (e) => console.warn("[CameraTile] Failsafe play error", e),
+          }),
+        )
+          .then((res) => {
+            if (res.played) {
+              console.log("[CameraTile] Failsafe: Playing");
+              setStreaming(true);
+            }
+          })
+          .catch(() => {});
         return;
       } catch {}
     } else {

@@ -13,6 +13,7 @@ import type { Player } from "../../store/match";
 import { useCalibration } from "../../store/calibration";
 import { useCameraSession } from "../../store/cameraSession";
 import { useUserSettings } from "../../store/userSettings";
+import { ensureVideoPlays } from "../../utils/ensureVideoPlays";
 
 import { memo } from "react";
 
@@ -321,11 +322,19 @@ export default function MatchStartShowcase({
     [playerName: string]: any;
   }>({});
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const startNowRef = useRef<HTMLButtonElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
   const prevActiveElement = useRef<HTMLElement | null>(null);
   // mountedRef ensures keyboard events that fire during render/mount don't prematurely close the overlay
   const mountedRef = useRef(false);
+
+  const DEV =
+    typeof import.meta !== "undefined" &&
+    !!(import.meta as any).env &&
+    ((import.meta as any).env.DEV || (import.meta as any).env.MODE === "development");
+  const [previewDiag, setPreviewDiag] = useState<any>(null);
+  const lastPlayErrorRef = useRef<string | null>(null);
 
   useEffect(() => {
     // mark mounted after first paint to ensure early key events don't trigger a close mid-render
@@ -356,28 +365,86 @@ export default function MatchStartShowcase({
     try {
       setCameraEnabled(true);
     } catch {}
+    // DEV: poll current stream + video element state so we can debug black previews.
+    // This is intentionally lightweight and only runs while the overlay is visible.
+    let diagTimer: number | null = null;
+    try {
+      const tickDiag = () => {
+        try {
+          const v = previewContainerRef.current?.querySelector?.(
+            "video",
+          ) as HTMLVideoElement | null;
+          const s2 = cameraSession.getMediaStream?.();
+          const vt = (s2?.getVideoTracks?.() || []) as any[];
+          const live = vt.filter((t) => t?.readyState === "live");
+          setPreviewDiag({
+            ts: Date.now(),
+            session: {
+              isStreaming: cameraSession.isStreaming,
+              mode: cameraSession.mode,
+              showOverlay: (cameraSession as any).showOverlay,
+            },
+            stream: {
+              exists: !!s2,
+              id: s2?.id,
+              videoTracks: vt.length,
+              liveTracks: live.length,
+              trackStates: vt.map((t) => ({
+                readyState: t?.readyState,
+                enabled: t?.enabled,
+                muted: t?.muted,
+              })),
+            },
+            video: {
+              hasEl: !!v,
+              hasSrcObject: !!(v as any)?.srcObject,
+              readyState: (v as any)?.readyState ?? null,
+              paused: (v as any)?.paused ?? null,
+              ended: (v as any)?.ended ?? null,
+              videoWidth: (v as any)?.videoWidth ?? 0,
+              videoHeight: (v as any)?.videoHeight ?? 0,
+            },
+            lastPlayError: lastPlayErrorRef.current,
+          });
+        } catch {}
+      };
+      if (DEV) {
+        tickDiag();
+        diagTimer = window.setInterval(tickDiag, 500) as any;
+      }
+    } catch {}
+
+    // Streaming + play nudges (best-effort).
     try {
       const s = cameraSession.getMediaStream?.();
       const liveTracks = (s?.getVideoTracks?.() || []).filter(
         (t) => t.readyState === "live",
       );
-
-      // If a stream already exists, mark streaming on so other UI surfaces attach immediately.
       if (s && liveTracks.length > 0 && !cameraSession.isStreaming) {
         cameraSession.setStreaming(true);
       }
 
-      // Hard-start nudge: if we DON'T have a live stream yet, try to kick the
-      // registered video element into playing. This covers timing cases where
-      // the tile mounts but autoplay needs a user gesture / play() call.
-      if (!s || liveTracks.length === 0) {
-        const v = cameraSession.getVideoElementRef?.();
-        if (v) {
-          v.muted = true;
-          (v as any).playsInline = true;
-          Promise.resolve(v.play()).catch(() => {});
-        }
+      // IMPORTANT: Always target the overlay preview tile's own <video> element.
+      const previewVideo = previewContainerRef.current?.querySelector?.(
+        "video",
+      ) as HTMLVideoElement | null;
+      if (previewVideo) {
+        Promise.resolve(
+          ensureVideoPlays({
+            video: previewVideo,
+            stream: s,
+            onPlayError: (e) => {
+              try {
+                lastPlayErrorRef.current =
+                  (e && (e as any).name) || (e as any)?.message || String(e);
+              } catch {}
+            },
+          }),
+        ).catch(() => {});
       }
+    } catch {}
+
+    try {
       cameraSession.setShowOverlay?.(true);
     } catch {}
     // useEffect(visible) entered
@@ -431,6 +498,9 @@ export default function MatchStartShowcase({
     return () => {
       // useEffect(visible) cleanup
       try {
+        if (diagTimer != null) window.clearInterval(diagTimer);
+      } catch {}
+      try {
         if (appRoot) {
           appRoot.removeAttribute("aria-hidden");
         }
@@ -438,7 +508,7 @@ export default function MatchStartShowcase({
       if (t) clearInterval(t);
       document.removeEventListener("keydown", onKey);
     };
-  }, [visible, disableEscClose, onRequestClose, allPlayersSkipped]);
+  }, [visible, disableEscClose, onRequestClose, allPlayersSkipped, DEV]);
 
   useEffect(() => {
     if (!visible) return;
@@ -830,7 +900,10 @@ export default function MatchStartShowcase({
                     {/* Pre-match live camera preview (uses the global camera session) */}
                     {idx === 0 && (
                       <div className="w-full mt-2">
-                        <div className="rounded-lg overflow-hidden border border-white/10 bg-black/30 relative">
+                        <div
+                          ref={previewContainerRef}
+                          className="rounded-lg overflow-hidden border border-white/10 bg-black/30 relative"
+                        >
                           <div
                             className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[0.6rem] font-bold tracking-wide uppercase shadow-lg ${calibratedCameraLinked ? "bg-emerald-500/90 text-emerald-50" : "bg-rose-500/80 text-white"}`}
                           >
@@ -847,6 +920,39 @@ export default function MatchStartShowcase({
                               scale={1}
                             />
                           </div>
+
+                          {DEV && previewDiag && (
+                            <div className="absolute bottom-2 left-2 right-2 rounded-lg bg-black/70 border border-white/10 p-2 text-[10px] leading-snug text-white/80">
+                              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                <span>
+                                  <span className="text-white/40">mode</span>: {String(previewDiag?.session?.mode)}
+                                </span>
+                                <span>
+                                  <span className="text-white/40">isStreaming</span>: {String(previewDiag?.session?.isStreaming)}
+                                </span>
+                                <span>
+                                  <span className="text-white/40">stream</span>: {previewDiag?.stream?.exists ? "yes" : "no"}
+                                </span>
+                                <span>
+                                  <span className="text-white/40">liveTracks</span>: {String(previewDiag?.stream?.liveTracks)}
+                                </span>
+                                <span>
+                                  <span className="text-white/40">video</span>: {previewDiag?.video?.videoWidth}×{previewDiag?.video?.videoHeight}
+                                </span>
+                                <span>
+                                  <span className="text-white/40">readyState</span>: {String(previewDiag?.video?.readyState)}
+                                </span>
+                                <span>
+                                  <span className="text-white/40">paused</span>: {String(previewDiag?.video?.paused)}
+                                </span>
+                              </div>
+                              {previewDiag?.lastPlayError ? (
+                                <div className="mt-1 text-rose-200">
+                                  play(): {String(previewDiag.lastPlayError)}
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
