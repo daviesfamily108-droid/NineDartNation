@@ -552,48 +552,98 @@ if (redisUrl) {
 async function startUpstashSubscriber(channel = 'ndn:tournaments') {
   if (!upstashRestUrl || !upstashToken) return
   const url = `${upstashRestUrl}/subscribe/${encodeURIComponent(channel)}`
-  // Reconnect loop
+  // Reconnect loop with backoff. Render + proxies can drop long-lived HTTP
+  // streams; we keep reconnecting, but we do it politely.
+  let attempt = 0
+  const baseDelayMs = 3000
+  const maxDelayMs = 30000
+
   while (true) {
+    // Exponential backoff with jitter
+    const delayMs = Math.min(maxDelayMs, baseDelayMs * Math.pow(2, Math.min(attempt, 4)))
+    const jitterMs = Math.floor(Math.random() * 500)
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, delayMs + jitterMs))
+    }
+
+    // Bound the stream lifetime so we don't get stuck in half-open states.
+    // Many hosting stacks/proxies will drop idle streams after ~60-120s.
+    const streamMaxMs = 60000
+    const controller = new AbortController()
+    const abortTimer = setTimeout(() => {
+      try { controller.abort(new Error('upstash-subscribe-timeout')) } catch {}
+    }, streamMaxMs)
+
     try {
       console.log('[UPSTASH] Starting REST subscribe to', url)
-      const res = await fetch(url, { method: 'GET', headers: { 'Authorization': `Bearer ${upstashToken}` } })
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${upstashToken}` },
+        signal: controller.signal,
+      })
+
       if (!res.ok) {
         console.warn('[UPSTASH] subscribe returned status', res.status)
-        await new Promise(r => setTimeout(r, 3000))
+        attempt = Math.min(attempt + 1, 8)
         continue
       }
+      if (!res.body || typeof res.body.getReader !== 'function') {
+        console.warn('[UPSTASH] subscribe response missing readable body')
+        attempt = Math.min(attempt + 1, 8)
+        continue
+      }
+
+      // We've successfully connected; reset backoff and start reading.
+      attempt = 0
+
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buf = ''
+
       while (true) {
-        const { done, value } = await reader.read();
+        const { done, value } = await reader.read()
         if (done) break
         buf += decoder.decode(value, { stream: true })
         let idx
         while ((idx = buf.indexOf('\n\n')) !== -1) {
           const chunk = buf.slice(0, idx).trim()
           buf = buf.slice(idx + 2)
-          const lines = chunk.split('\n').map(l => l.trim()).filter(Boolean)
+          const lines = chunk.split('\n').map((l) => l.trim()).filter(Boolean)
           for (const line of lines) {
             if (line.startsWith('data:')) {
-              const payloadStr = line.replace(/^data:\s*/,'')
+              const payloadStr = line.replace(/^data:\s*/, '')
               try {
                 const parsed = JSON.parse(payloadStr)
                 if (parsed && parsed.type === 'tournaments') {
                   try { console.log('[UPSTASH] Received tournaments via REST subscribe') } catch {}
                   if (typeof wss !== 'undefined' && wss && wss.clients) {
-                    for (const client of wss.clients) { if (client.readyState === 1) client.send(JSON.stringify({ type: 'tournaments', tournaments: parsed.tournaments })) }
+                    for (const client of wss.clients) {
+                      if (client.readyState === 1) {
+                        client.send(JSON.stringify({ type: 'tournaments', tournaments: parsed.tournaments }))
+                      }
+                    }
                   }
                 }
-              } catch (err) { /* ignore bad payload */ }
+              } catch (err) {
+                /* ignore bad payload */
+              }
             }
           }
         }
       }
     } catch (err) {
-      console.warn('[UPSTASH] subscribe error:', err && err.message)
+      const name = err && err.name
+      const msg = err && err.message
+      // Abort errors are expected due to our bounded stream lifetime.
+      if (name === 'AbortError' || msg === 'upstash-subscribe-timeout') {
+        console.log('[UPSTASH] subscribe reconnect (bounded stream)')
+      } else {
+        console.warn('[UPSTASH] subscribe error:', msg || err)
+      }
+      attempt = Math.min(attempt + 1, 8)
+    } finally {
+      try { clearTimeout(abortTimer) } catch {}
     }
-    await new Promise(r => setTimeout(r, 3000))
   }
 }
 
