@@ -9,7 +9,13 @@
  */
 
 import type { Point, Homography } from "./vision";
-import { imageToBoard, scoreAtBoardPoint, isPointOnBoard, BoardRadii } from "./vision";
+import {
+  imageToBoard,
+  scoreAtBoardPoint,
+  scoreAtBoardPointTheta,
+  isPointOnBoard,
+  BoardRadii,
+} from "./vision";
 
 export interface DartDetectionConfig {
   minConfidence?: number; // 0-1, default 0.7 (we'll override to 0.8 for stricter)
@@ -178,18 +184,24 @@ export function detectDarts(
  */
 export function scoreDarts(
   darts: DetectedDart[],
-  H: Homography,
+  // board->image homography
+  H_boardToImage: Homography,
   theta?: number,
 ): DetectedDart[] {
   return darts.map((dart) => {
     try {
-      const boardPoint = imageToBoard(H, { x: dart.x, y: dart.y });
+      const boardPoint = imageToBoard(H_boardToImage, { x: dart.x, y: dart.y });
       if (!boardPoint) return dart;
 
       // Reject off-board or far-out points (extra 2mm tolerance)
       if (!isPointOnBoard(boardPoint)) return dart;
 
-      const score = scoreAtBoardPoint(boardPoint);
+      const score =
+        typeof theta === "number"
+          ? // If theta is known, use orientation-correct sector mapping.
+            // (sectorOffset is applied elsewhere when available)
+            scoreAtBoardPointTheta(boardPoint, theta, 0)
+          : scoreAtBoardPoint(boardPoint);
       if (!score) return dart;
 
       return {

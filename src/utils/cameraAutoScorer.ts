@@ -67,6 +67,8 @@ export class CameraAutoScorer {
       return { darts: [], stableDarts: [], confidence: 0 };
     }
 
+    const now = Date.now();
+
     // 1. Detect red darts in image
     const detection = detectDarts(canvas, {
       minConfidence: this.config.minDartConfidence,
@@ -84,7 +86,8 @@ export class CameraAutoScorer {
     // 2. Apply homography and score
     const scored = scoreDarts(
       detection.darts,
-      this.calibration.homography,
+      // scoreDarts expects a board->image homography
+      this.calibration.homography as any,
       this.calibration.theta,
     );
 
@@ -102,6 +105,7 @@ export class CameraAutoScorer {
           ...dart,
           stable: false,
           framesSeen: 1,
+          timestamp: now,
         };
       } else {
         // Update existing
@@ -109,6 +113,7 @@ export class CameraAutoScorer {
         tracked.stable =
           tracked.framesSeen >= this.config.requireStableDetection;
         tracked.confidence = Math.max(tracked.confidence, dart.confidence);
+        tracked.timestamp = now;
       }
 
       this.detectionHistory.set(key, tracked);
@@ -116,9 +121,9 @@ export class CameraAutoScorer {
     }
 
     // 4. Clean up old detections
-    const cutoff = Date.now() - 1000; // 1 second window
+    const cutoff = now - 1000; // 1 second window
     for (const [key, dart] of this.detectionHistory.entries()) {
-      if ((dart as any).timestamp && (dart as any).timestamp < cutoff) {
+      if (dart.timestamp && dart.timestamp < cutoff) {
         this.detectionHistory.delete(key);
       }
     }
