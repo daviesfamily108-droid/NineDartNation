@@ -88,11 +88,17 @@ export default function CameraTile({
   // already-running calibrated stream to appear immediately.
   useEffect(() => {
     try {
-      // consumer-only: do NOT set cameraSession video ref
+      if (videoRef.current) {
+        cameraSession.setVideoElementRef?.(videoRef.current);
+      }
     } catch {}
     return () => {
       try {
-        // consumer-only: do NOT clear cameraSession video ref
+        // Only clear if we're still the registered ref.
+        const current = cameraSession.getVideoElementRef?.();
+        if (current === videoRef.current) {
+          cameraSession.setVideoElementRef?.(null);
+        }
       } catch {}
     };
   }, [cameraSession]);

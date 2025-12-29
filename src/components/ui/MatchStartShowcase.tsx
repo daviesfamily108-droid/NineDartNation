@@ -343,8 +343,26 @@ export default function MatchStartShowcase({
       setCameraEnabled(true);
     } catch {}
     try {
-      if (cameraSession.getMediaStream() && !cameraSession.isStreaming) {
+      const s = cameraSession.getMediaStream?.();
+      const liveTracks = (s?.getVideoTracks?.() || []).filter(
+        (t) => t.readyState === "live",
+      );
+
+      // If a stream already exists, mark streaming on so other UI surfaces attach immediately.
+      if (s && liveTracks.length > 0 && !cameraSession.isStreaming) {
         cameraSession.setStreaming(true);
+      }
+
+      // Hard-start nudge: if we DON'T have a live stream yet, try to kick the
+      // registered video element into playing. This covers timing cases where
+      // the tile mounts but autoplay needs a user gesture / play() call.
+      if (!s || liveTracks.length === 0) {
+        const v = cameraSession.getVideoElementRef?.();
+        if (v) {
+          v.muted = true;
+          (v as any).playsInline = true;
+          Promise.resolve(v.play()).catch(() => {});
+        }
       }
       cameraSession.setShowOverlay?.(true);
     } catch {}
