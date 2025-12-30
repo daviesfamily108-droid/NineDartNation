@@ -2723,30 +2723,10 @@ export default forwardRef(function CameraView(
                           },
                         );
                       } catch (e) {}
-                      // Also apply immediate single-dart commit for camera autocommit mode
-                      try {
-                        // For single-dart camera auto-commit, apply the visit immediately
-                        // so tests that assert onMatchStore.addVisit see the effect synchronously.
-                        // We also include a visitTotal for auditability.
-                        dlog(
-                          "CameraView: calling callAddVisit from cameraAutoCommit",
-                          candidate.value,
-                        );
-                        callAddVisit(candidate.value, 1, {
-                          visitTotal: candidate.value,
-                          calibrationValid: true,
-                          pBoard,
-                          source: "camera",
-                        });
-                      } catch (e) {
-                        /* noop */
-                      }
                     }
-                    // If camera commits should be immediate (cameraAutoCommit==='camera' implies so),
-                    // apply visit immediately instead of waiting for a delayed submission flow.
-                    // NOTE: Camera auto-commit will add a pending dart and rely on the
-                    // existing commit flow to finalize visit application (to maintain
-                    // consistency for multi-dart visits and trigger pending visit state changes).
+                    // Camera auto-commit MUST NOT force immediate visit commits.
+                    // We always route through the normal visit pipeline (pending darts +
+                    // wait-for-clear) unless the explicit immediate flags are enabled.
                     // still optionally notify parent for telemetry (but parent should not commit)
                     try {
                       const pSig = sig;
