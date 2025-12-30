@@ -1105,6 +1105,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                               e.target.value as
                                 | "manual"
                                 | "built-in"
+                                | "built-in-v2"
                                 | "external-ws",
                             )
                           }
@@ -1112,6 +1113,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         >
                           <option value="manual">Manual Scoring</option>
                           <option value="built-in">Built-in Vision</option>
+                          <option value="built-in-v2">Built-in Vision (v2)</option>
                           <option value="external-ws">
                             External (WebSocket)
                           </option>

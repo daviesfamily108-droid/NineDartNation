@@ -2049,7 +2049,10 @@ export default forwardRef(function CameraView(
       console.log("[DETECTION] Exiting: TEST_MODE or manualOnly");
       return;
     }
-    if (autoscoreProvider !== "built-in") {
+    // Built-in autoscore providers are handled locally (offline CV).
+    // built-in-v2 currently shares the same detector/commit loop but may evolve to
+    // different scoring/refinement logic.
+    if (autoscoreProvider !== "built-in" && autoscoreProvider !== "built-in-v2") {
       console.log(
         "[DETECTION] Exiting: autoscoreProvider is",
         autoscoreProvider,
