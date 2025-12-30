@@ -131,6 +131,7 @@ export function Sidebar({
   user: any;
   className?: string;
 }) {
+  const inMobileDrawer = (className || "").includes("mobile-sidebar-visible");
   // Drag-to-scroll logic for PC/Mouse
   const sidebarRef = React.useRef<HTMLElement>(null);
   const isDown = React.useRef(false);
@@ -282,7 +283,7 @@ export function Sidebar({
       onMouseLeave={onMouseLeave}
       onMouseUp={onMouseUp}
       onMouseMove={onMouseMove}
-      className={`${user?.fullAccess ? "premium-sidebar" : ""} sidebar glass ${className ? "" : "w-72"} p-5 rounded-2xl ${className ?? "hidden sm:flex"} flex-col gap-8 overflow-y-auto overflow-x-hidden ${className ? "" : "fixed top-4 bottom-4 left-4"}`}
+      className={`${user?.fullAccess ? "premium-sidebar" : ""} sidebar glass ${className ? "" : "w-72"} p-5 rounded-2xl ${className ?? "hidden sm:flex"} flex-col gap-8 ${inMobileDrawer ? "overflow-visible" : "overflow-y-auto overflow-x-hidden"} ${className ? "" : "fixed top-4 bottom-4 left-4"}`}
     >
       {/* Logo / Brand Area */}
       <div className="px-2 mb-2">
