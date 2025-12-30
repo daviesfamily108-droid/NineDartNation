@@ -7,6 +7,7 @@
   applyHomography,
   refinePointSobel,
   imageToBoard,
+  invertHomography,
 } from "../utils/vision";
 import {
   useCallback,
@@ -2478,13 +2479,16 @@ export default forwardRef(function CameraView(
             const score = scoreFromImagePoint(
               H,
               pCal,
-              theta || 0,
-              sectorOffset || 0,
+              theta ?? 0,
+              sectorOffset ?? 0,
             );
             // Map to board-space coordinates (mm) using homography mapping
             let pBoard: Point | null = null;
             try {
-              pBoard = imageToBoard(H as any, pCal);
+              // NOTE: calibration store keeps H as board->image. To map image->board
+              // we must invert first.
+              const H_imgToBoard = invertHomography(H as any);
+              pBoard = applyHomography(H_imgToBoard as any, pCal);
             } catch (e) {
               pBoard = null;
             }
