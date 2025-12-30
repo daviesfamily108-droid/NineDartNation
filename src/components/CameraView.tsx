@@ -277,6 +277,12 @@ export default forwardRef(function CameraView(
   const autoScoreConfidenceThreshold =
     useUserSettings((s) => s.autoScoreConfidenceThreshold) ??
     AUTO_COMMIT_CONFIDENCE;
+  const autoscoreDetectorMinArea =
+    useUserSettings((s) => s.autoscoreDetectorMinArea) ?? 30;
+  const autoscoreDetectorThresh =
+    useUserSettings((s) => s.autoscoreDetectorThresh) ?? 15;
+  const autoscoreDetectorRequireStableN =
+    useUserSettings((s) => s.autoscoreDetectorRequireStableN) ?? 2;
   const cameraEnabled = useUserSettings((s) => s.cameraEnabled);
   const preferredCameraLocked = useUserSettings((s) => s.preferredCameraLocked);
   const hideCameraOverlay = useUserSettings((s) => s.hideCameraOverlay);
@@ -2186,14 +2192,14 @@ export default forwardRef(function CameraView(
     // Initialize or reset detector with tuned params for resolution/phone cameras
     if (!detectorRef.current) {
       // default tuning
-      let minArea = 30;
-      let thresh = 15;
-      let requireStableN = 2;
+      let minArea = autoscoreDetectorMinArea;
+      let thresh = autoscoreDetectorThresh;
+      let requireStableN = autoscoreDetectorRequireStableN;
       // if resolution is low (common for phone cameras), make detector more permissive
       if (initVw > 0 && initVh > 0 && initVw * initVh < 1280 * 720) {
-        minArea = 20;
-        thresh = 14;
-        requireStableN = 2;
+        minArea = Math.min(minArea, 20);
+        thresh = Math.min(thresh, 14);
+        requireStableN = Math.min(requireStableN, 2);
       }
       detectorRef.current = new DartDetector({
         minArea,

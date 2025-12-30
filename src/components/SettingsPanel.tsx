@@ -39,8 +39,11 @@ export default function SettingsPanel({ user }: { user?: any }) {
     autoscoreProvider,
     autoscoreWsUrl,
     autoCommitMode,
-  confirmUncertainDarts,
-  autoScoreConfidenceThreshold,
+    confirmUncertainDarts,
+    autoScoreConfidenceThreshold,
+    autoscoreDetectorMinArea,
+    autoscoreDetectorThresh,
+    autoscoreDetectorRequireStableN,
     calibrationGuide: _calibrationGuide,
     preferredCameraId: _preferredCameraId,
     preferredCameraLabel: _preferredCameraLabel,
@@ -65,8 +68,11 @@ export default function SettingsPanel({ user }: { user?: any }) {
     setAutoscoreProvider,
     setAutoscoreWsUrl,
     setAutoCommitMode,
-  setConfirmUncertainDarts,
-  setAutoScoreConfidenceThreshold,
+    setConfirmUncertainDarts,
+    setAutoScoreConfidenceThreshold,
+    setAutoscoreDetectorMinArea,
+    setAutoscoreDetectorThresh,
+    setAutoscoreDetectorRequireStableN,
     setCalibrationGuide: _setCalibrationGuide,
     preserveCalibrationOverlay,
     setPreserveCalibrationOverlay,
@@ -1227,6 +1233,81 @@ export default function SettingsPanel({ user }: { user?: any }) {
                               accepting a wrong hit.
                             </p>
                           </div>
+
+                          <details className="mt-4">
+                            <summary className="text-sm cursor-pointer select-none opacity-90">
+                              Advanced detector tuning
+                            </summary>
+
+                            <div className="mt-3 space-y-3">
+                              <div>
+                                <label className="block text-sm mb-2">
+                                  Min blob area: {autoscoreDetectorMinArea ?? 30}
+                                </label>
+                                <input
+                                  type="range"
+                                  min="5"
+                                  max="200"
+                                  step="1"
+                                  value={autoscoreDetectorMinArea ?? 30}
+                                  onChange={(e) =>
+                                    setAutoscoreDetectorMinArea(
+                                      parseInt(e.target.value, 10),
+                                    )
+                                  }
+                                  className="w-full"
+                                />
+                                <p className="text-xs opacity-70 mt-1">
+                                  Lower = more sensitive (can increase false
+                                  positives).
+                                </p>
+                              </div>
+
+                              <div>
+                                <label className="block text-sm mb-2">
+                                  Foreground threshold: {autoscoreDetectorThresh ?? 15}
+                                </label>
+                                <input
+                                  type="range"
+                                  min="5"
+                                  max="40"
+                                  step="1"
+                                  value={autoscoreDetectorThresh ?? 15}
+                                  onChange={(e) =>
+                                    setAutoscoreDetectorThresh(
+                                      parseInt(e.target.value, 10),
+                                    )
+                                  }
+                                  className="w-full"
+                                />
+                                <p className="text-xs opacity-70 mt-1">
+                                  Lower = more motion counts as a dart.
+                                </p>
+                              </div>
+
+                              <div>
+                                <label className="block text-sm mb-2">
+                                  Stable frames required: {autoscoreDetectorRequireStableN ?? 2}
+                                </label>
+                                <input
+                                  type="range"
+                                  min="1"
+                                  max="6"
+                                  step="1"
+                                  value={autoscoreDetectorRequireStableN ?? 2}
+                                  onChange={(e) =>
+                                    setAutoscoreDetectorRequireStableN(
+                                      parseInt(e.target.value, 10),
+                                    )
+                                  }
+                                  className="w-full"
+                                />
+                                <p className="text-xs opacity-70 mt-1">
+                                  Higher = fewer false triggers, but slower.
+                                </p>
+                              </div>
+                            </div>
+                          </details>
                         </div>
                       )}
                     </>

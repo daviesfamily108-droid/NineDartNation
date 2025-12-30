@@ -34,6 +34,11 @@ type SettingsState = {
   confirmUncertainDarts?: boolean;
   // 0..1 confidence threshold used by built-in autoscore.
   autoScoreConfidenceThreshold?: number;
+  // Built-in detector tuning (advanced)
+  // These primarily affect the DartDetector blob segmentation and stability gating.
+  autoscoreDetectorMinArea?: number;
+  autoscoreDetectorThresh?: number;
+  autoscoreDetectorRequireStableN?: number;
   // Allow immediate autocommit when playing online/tournaments
   allowAutocommitInOnline?: boolean;
   calibrationGuide: boolean;
@@ -100,6 +105,9 @@ type SettingsState = {
   setAutoCommitMode: (mode: "wait-for-clear" | "immediate") => void;
   setConfirmUncertainDarts: (v: boolean) => void;
   setAutoScoreConfidenceThreshold: (n: number) => void;
+  setAutoscoreDetectorMinArea: (n: number) => void;
+  setAutoscoreDetectorThresh: (n: number) => void;
+  setAutoscoreDetectorRequireStableN: (n: number) => void;
   setAllowAutocommitInOnline: (v: boolean) => void;
   setTextSize: (size: "small" | "medium" | "large") => void;
   setBoxSize: (size: "small" | "medium" | "large") => void;
@@ -150,6 +158,9 @@ function load(): Pick<
   | "autoCommitMode"
   | "confirmUncertainDarts"
   | "autoScoreConfidenceThreshold"
+  | "autoscoreDetectorMinArea"
+  | "autoscoreDetectorThresh"
+  | "autoscoreDetectorRequireStableN"
   | "allowAutocommitInOnline"
   | "textSize"
   | "boxSize"
@@ -198,6 +209,9 @@ function load(): Pick<
         autoCommitMode: "wait-for-clear",
   confirmUncertainDarts: true,
   autoScoreConfidenceThreshold: 0.85,
+    autoscoreDetectorMinArea: 30,
+    autoscoreDetectorThresh: 15,
+    autoscoreDetectorRequireStableN: 2,
         allowAutocommitInOnline: false,
         textSize: "medium",
         boxSize: "medium",
@@ -270,6 +284,21 @@ function load(): Pick<
         isFinite(j.autoScoreConfidenceThreshold)
           ? Math.max(0.5, Math.min(0.99, j.autoScoreConfidenceThreshold))
           : 0.85,
+      autoscoreDetectorMinArea:
+        typeof j.autoscoreDetectorMinArea === "number" &&
+        isFinite(j.autoscoreDetectorMinArea)
+          ? Math.max(5, Math.min(500, Math.round(j.autoscoreDetectorMinArea)))
+          : 30,
+      autoscoreDetectorThresh:
+        typeof j.autoscoreDetectorThresh === "number" &&
+        isFinite(j.autoscoreDetectorThresh)
+          ? Math.max(5, Math.min(60, Math.round(j.autoscoreDetectorThresh)))
+          : 15,
+      autoscoreDetectorRequireStableN:
+        typeof j.autoscoreDetectorRequireStableN === "number" &&
+        isFinite(j.autoscoreDetectorRequireStableN)
+          ? Math.max(1, Math.min(10, Math.round(j.autoscoreDetectorRequireStableN)))
+          : 2,
       allowAutocommitInOnline: !!j.allowAutocommitInOnline,
       calibrationGuide:
         typeof j.calibrationGuide === "boolean" ? j.calibrationGuide : true,
@@ -468,6 +497,30 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
         : 0.85;
     save({ autoScoreConfidenceThreshold: next });
     set({ autoScoreConfidenceThreshold: next });
+  },
+  setAutoscoreDetectorMinArea: (n) => {
+    const next =
+      typeof n === "number" && isFinite(n)
+        ? Math.max(5, Math.min(500, Math.round(n)))
+        : 30;
+    save({ autoscoreDetectorMinArea: next } as any);
+    set({ autoscoreDetectorMinArea: next });
+  },
+  setAutoscoreDetectorThresh: (n) => {
+    const next =
+      typeof n === "number" && isFinite(n)
+        ? Math.max(5, Math.min(60, Math.round(n)))
+        : 15;
+    save({ autoscoreDetectorThresh: next } as any);
+    set({ autoscoreDetectorThresh: next });
+  },
+  setAutoscoreDetectorRequireStableN: (n) => {
+    const next =
+      typeof n === "number" && isFinite(n)
+        ? Math.max(1, Math.min(10, Math.round(n)))
+        : 2;
+    save({ autoscoreDetectorRequireStableN: next } as any);
+    set({ autoscoreDetectorRequireStableN: next });
   },
   setAllowAutocommitInOnline: (v) => {
     save({ allowAutocommitInOnline: v } as any);
