@@ -7,7 +7,6 @@
   applyHomography,
   refinePointSobel,
   imageToBoard,
-  invertHomography,
 } from "../utils/vision";
 import {
   useCallback,
@@ -23,6 +22,7 @@ import { useUserSettings } from "../store/userSettings";
 import { useCalibration } from "../store/calibration";
 import { useMatch } from "../store/match";
 import { scoreFromImagePoint } from "../utils/autoscore";
+import { getGlobalCalibrationConfidence } from "../utils/gameCalibrationRequirements";
 import { DartDetector } from "../utils/dartDetector";
 import { addSample } from "../store/profileStats";
 import { subscribeExternalWS } from "../utils/scoring";
@@ -538,13 +538,19 @@ export default forwardRef(function CameraView(
     errorPx,
   } = useCalibration();
   const ERROR_PX_MAX = 12;
+  const CALIBRATION_MIN_CONFIDENCE = 90; // stricter than game-mode minimum; goal is “perfect” autoscore
   // Calibration quality gate: if errorPx is missing, treat it as unknown (not zero).
   // Only allow scoring without errorPx if calibration is explicitly locked.
   const errorPxVal = typeof errorPx === "number" ? errorPx : null;
+  const calibrationConfidence = getGlobalCalibrationConfidence(errorPxVal);
   const calibrationValid =
     !!H &&
     !!imageSize &&
-    (locked || (errorPxVal != null && errorPxVal <= ERROR_PX_MAX));
+    (locked ||
+      (errorPxVal != null &&
+        errorPxVal <= ERROR_PX_MAX &&
+        calibrationConfidence != null &&
+        calibrationConfidence >= CALIBRATION_MIN_CONFIDENCE));
   useEffect(() => {
     if (preferredCameraLocked && !hideCameraOverlay) {
       setHideCameraOverlay(true);
@@ -596,14 +602,12 @@ export default forwardRef(function CameraView(
     };
   } | null>(null);
   const pendingCommitTimerRef = useRef<number | null>(null);
-  // For camera auto-commit, default to immediate commit since camera-initiated
-  // detections should be applied without a wait-for-clear flow. Tests rely on
-  // immediate behavior when cameraAutoCommit === 'camera'. If the parent opts into
-  // delaying commits (immediateAutoCommit=true overrides), respect that.
-  const shouldDeferCommit =
-    cameraAutoCommit !== "camera" &&
-    !immediateAutoCommit &&
-    autoCommitMode !== "immediate";
+  // Commit policy:
+  // - Default to wait-for-clear for reliability.
+  // - Only skip waiting when the user/parent explicitly opts into immediate commits.
+  // NOTE: cameraAutoCommit MUST NOT implicitly force immediate commits; that behavior
+  // causes premature/incorrect scoring in real play (especially online/tournaments).
+  const shouldDeferCommit = !immediateAutoCommit && autoCommitMode !== "immediate";
   const [indicatorVersion, setIndicatorVersion] = useState(0);
   const [indicatorEntryVersions, setIndicatorEntryVersions] = useState<
     number[]
@@ -2355,11 +2359,12 @@ export default forwardRef(function CameraView(
               const score = scoreFromImagePoint(
                 H,
                 pCal,
-                theta || 0,
-                sectorOffset || 0,
+                theta ?? 0,
+                sectorOffset ?? 0,
               );
               let pBoard: Point | null = null;
               try {
+                // H is board->image; imageToBoard inverts internally.
                 pBoard = imageToBoard(H as any, pCal);
               } catch (e) {
                 pBoard = null;
@@ -2383,9 +2388,7 @@ export default forwardRef(function CameraView(
               }
               const errorPxVal = typeof errorPx === "number" ? errorPx : null;
               const hasCalibration = !!H && !!imageSize;
-              const calibrationGood =
-                hasCalibration &&
-                (locked || (errorPxVal != null && errorPxVal <= ERROR_PX_MAX));
+              const calibrationGood = hasCalibration && calibrationValid;
 
               setPendingConfirm({
                 label,
@@ -2485,10 +2488,8 @@ export default forwardRef(function CameraView(
             // Map to board-space coordinates (mm) using homography mapping
             let pBoard: Point | null = null;
             try {
-              // NOTE: calibration store keeps H as board->image. To map image->board
-              // we must invert first.
-              const H_imgToBoard = invertHomography(H as any);
-              pBoard = applyHomography(H_imgToBoard as any, pCal);
+              // H is board->image; imageToBoard inverts internally.
+              pBoard = imageToBoard(H as any, pCal);
             } catch (e) {
               pBoard = null;
             }
@@ -2518,9 +2519,7 @@ export default forwardRef(function CameraView(
             // Treat missing errorPx as *unknown* (not zero) unless calibration is locked.
             // This prevents the UI from implying "0.0px" and reduces false-positive scoring.
             const errorPxVal = typeof errorPx === "number" ? errorPx : null;
-            const calibrationGood =
-              hasCalibration &&
-              (locked || (errorPxVal != null && errorPxVal <= ERROR_PX_MAX));
+            const calibrationGood = hasCalibration && calibrationValid;
             const tipInVideo =
               tipRefined.x >= -TIP_MARGIN_PX &&
               tipRefined.x <= vw + TIP_MARGIN_PX &&
