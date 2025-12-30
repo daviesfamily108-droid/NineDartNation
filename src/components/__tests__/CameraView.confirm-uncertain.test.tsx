@@ -1,5 +1,5 @@
 import React, { createRef } from "react";
-import { render, fireEvent, act } from "@testing-library/react";
+import { render, fireEvent, act, waitFor } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach } from "vitest";
 import CameraView, { type CameraViewHandle } from "../CameraView";
 
@@ -196,5 +196,64 @@ describe("CameraView confirm-on-uncertain", () => {
 
     // Modal closes
     expect(queryByText("Confirm detected dart")).toBeNull();
+  });
+
+  it("auto-adds a dart when confidence >= threshold (no confirm modal)", async () => {
+
+    // Ensure calibration is present so autoscore can commit.
+    try {
+      const calib = require("../../store/calibration").useCalibration;
+      calib.setState?.({
+        H: [1, 0, 160, 0, 1, 120, 0, 0, 1],
+        imageSize: { w: 320, h: 240 },
+        locked: true,
+        errorPx: 1,
+        _hydrated: true,
+      });
+    } catch {}
+
+    // Ensure confirm mode is on and threshold is set below our injected confidence.
+    try {
+      const us = require("../../store/userSettings").useUserSettings;
+      us.setState?.({
+        confirmUncertainDarts: true,
+        autoScoreConfidenceThreshold: 0.75,
+        autoCommitMode: "wait-for-clear",
+        autoscoreProvider: "built-in",
+      });
+    } catch {}
+
+    const onAutoDart = vi.fn();
+    const onVisitCommitted = vi.fn();
+
+    const CameraView = (await vi.importActual("../CameraView")).default as any;
+    const cameraRef = React.createRef<any>();
+    const out = render(
+      <CameraView
+        ref={cameraRef}
+        manualOnly={false}
+        onVisitCommitted={onVisitCommitted}
+        onAutoDart={onAutoDart}
+      />,
+    );
+
+    await waitFor(() => cameraRef.current?.__test_addDart, { timeout: 2000 });
+
+    // High confidence should bypass modal and commit.
+    await act(async () => {
+      cameraRef.current.__test_addDart(60, "T20", "TRIPLE", {
+        source: "camera",
+        confidence: 0.95,
+      }, { emulateApplyAutoHit: true });
+    });
+
+    // No confirm UI should appear.
+    expect(out.queryByText(/Confirm detected dart/i)).toBeNull();
+
+    // And the dart should be accepted immediately (no modal gating).
+    // Depending on runtime commit settings, this may go via onAutoDart and/or onVisitCommitted.
+    expect(onAutoDart).toHaveBeenCalled();
+
+    out.unmount();
   });
 });

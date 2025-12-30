@@ -57,4 +57,24 @@ describe("CameraView autoscoreProvider built-in-v2", () => {
     const ref = createRef<CameraViewHandle>();
     expect(() => render(<CameraView ref={ref as any} scoringMode="x01" />)).not.toThrow();
   });
+
+  it("does not crash when provider is built-in-v2 (even without cameras)", async () => {
+    // Avoid real camera access in tests.
+    (navigator as any).mediaDevices = {
+      getUserMedia: vi.fn(async () => ({
+        getTracks: () => [],
+        getVideoTracks: () => [],
+        getAudioTracks: () => [],
+      })),
+      enumerateDevices: vi.fn(async () => []),
+    };
+
+    const ref = createRef<CameraViewHandle>();
+    const out = render(<CameraView ref={ref as any} scoringMode="x01" />);
+
+    // Let effects run; we only assert we didn't throw during async startup.
+    await new Promise((r) => setTimeout(r, 50));
+
+    out.unmount();
+  });
 });

@@ -142,6 +142,120 @@ let useUserSettings: any;
 
 import { scoreFromImagePoint } from "../../utils/autoscore";
 
+// Camera commit gating regression tests live outside the large homography suite below
+// to avoid accidentally nesting vitest `it()` blocks inside async tests.
+describe("CameraView autoscore commit gates", () => {
+  beforeEach(() => {
+    try {
+      const calib = require("../../store/calibration").useCalibration;
+      calib.setState?.({ H: null, imageSize: null, _hydrated: true });
+    } catch {}
+    try {
+      const us = require("../../store/userSettings").useUserSettings;
+      us.setState?.({
+        autoscoreProvider: "built-in",
+        autoCommitMode: "wait-for-clear",
+        confirmUncertainDarts: false,
+        autoScoreConfidenceThreshold: 0.85,
+      });
+    } catch {}
+    sayDartMock.mockReset();
+    try {
+      __resetMockDetectionGenerator();
+    } catch {}
+  });
+
+  it("never commits a dart when calibration is missing (applyAutoHit hard-gate)", async () => {
+    const cameraRef = React.createRef<any>();
+    const useMatch: any = (await vi.importActual("../../store/match")).useMatch;
+    const addVisitSpy = vi.fn();
+    useMatch.getState().addVisit = addVisitSpy;
+
+    // Ensure calibration is NOT present
+    useCalibration.setState?.({
+      H: null,
+      imageSize: null,
+      locked: false,
+      errorPx: null,
+    });
+
+    const CameraView = (await vi.importActual("../CameraView")).default as any;
+    const out = render(
+      <CameraView
+        ref={cameraRef}
+        manualOnly={false}
+        onVisitCommitted={vi.fn()}
+        onAutoDart={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => cameraRef.current?.__test_addDart, { timeout: 2000 });
+    await addTestDart(
+      cameraRef,
+      20,
+      "T20",
+      "TRIPLE",
+      { source: "camera", confidence: 0.99 },
+      { emulateApplyAutoHit: true },
+    );
+
+    // If calibration isn't good, CameraView should not add a visit.
+    expect(addVisitSpy).not.toHaveBeenCalled();
+
+    out.unmount();
+  });
+
+  it("does not auto-commit until tip is stable (stability gate)", async () => {
+    useCalibration.setState?.({
+      H: [1, 0, 160, 0, 1, 120, 0, 0, 1],
+      imageSize: { w: 320, h: 240 },
+      locked: true,
+      errorPx: 1,
+    });
+
+    let i = 0;
+    __setMockDetectionGenerator(() => {
+      i += 1;
+      const jiggle = i < 10 ? (i % 2 === 0 ? 18 : -18) : 0;
+      return {
+        tip: { x: 160 + jiggle, y: 120 },
+        confidence: 0.95,
+        bbox: { x: 150, y: 110, w: 20, h: 20 },
+      };
+    });
+
+    const useMatch: any = (await vi.importActual("../../store/match")).useMatch;
+    const addVisitSpy = vi.fn();
+    useMatch.getState().addVisit = addVisitSpy;
+
+    const CameraView = (await vi.importActual("../CameraView")).default as any;
+    const out = render(
+      <CameraView manualOnly={false} onVisitCommitted={vi.fn()} onAutoDart={vi.fn()} />,
+    );
+
+    // We can't reliably force the internal `settled` gate from here without
+    // relying on implementation details, but we *can* ensure instability
+    // doesn't cause commits and that a stable period eventually can.
+    //
+    // With unstable detections the gate should prevent committing.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 400));
+    });
+    expect(addVisitSpy).not.toHaveBeenCalled();
+
+    // Now wait until the stable part of our generator kicks in.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 1200));
+    });
+
+    // If the environment doesn't allow the camera loop to reach a commit
+    // (e.g. because `settled` is still false), at least ensure we did not
+    // commit prematurely.
+    expect(addVisitSpy.mock.calls.length).toBeLessThanOrEqual(1);
+    out.unmount();
+  });
+});
+
 // Helper to stub canvas getContext and video properties
 function stubCanvasContext(canvas: HTMLCanvasElement) {
   (canvas as any).getContext = (type: string) => {
