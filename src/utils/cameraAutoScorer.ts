@@ -30,6 +30,8 @@ export interface ScoredDart extends DetectedDart {
 }
 
 export class CameraAutoScorer {
+  // Debug logging is intentionally disabled by default to avoid per-frame spam.
+  private static readonly DEBUG = false;
   private config: Required<AutoScoringConfig>;
   private detectionHistory: Map<string, ScoredDart> = new Map();
   private calibration: BoardDetectionResult | null = null;
@@ -50,9 +52,11 @@ export class CameraAutoScorer {
    */
   setCalibration(result: BoardDetectionResult) {
     this.calibration = result;
-    console.log(
-      `[CameraAutoScorer] Calibration set: confidence=${result.confidence}%, error=${result.errorPx}px`,
-    );
+    if (CameraAutoScorer.DEBUG) {
+      console.log(
+        `[CameraAutoScorer] Calibration set: confidence=${result.confidence}%, error=${result.errorPx}px`,
+      );
+    }
   }
 
   /**
@@ -75,9 +79,11 @@ export class CameraAutoScorer {
       maxDarts: this.config.maxDartsPerFrame,
     });
 
-    console.log(
-      `[CameraAutoScorer] Frame quality: ${detection.frameQuality.toFixed(2)}, darts: ${detection.darts.length}`,
-    );
+    if (CameraAutoScorer.DEBUG) {
+      console.log(
+        `[CameraAutoScorer] Frame quality: ${detection.frameQuality.toFixed(2)}, darts: ${detection.darts.length}`,
+      );
+    }
 
     if (detection.darts.length === 0) {
       return { darts: [], stableDarts: [], confidence: 0 };

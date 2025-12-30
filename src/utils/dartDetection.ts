@@ -51,6 +51,7 @@ export function detectDarts(
   canvas: HTMLCanvasElement,
   config: DartDetectionConfig = {},
 ): DartDetectionResult {
+  const DEBUG = false;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) {
     return {
@@ -106,9 +107,11 @@ export function detectDarts(
 
   // 3. Evaluate frame quality
   const frameQuality = Math.min(1, redPixelCount / (w * h * 0.05)); // 5% red = perfect
-  console.log(
-    `[detectDarts] Frame quality: ${frameQuality.toFixed(2)} (red pixels: ${redPixelCount})`,
-  );
+  if (DEBUG) {
+    console.log(
+      `[detectDarts] Frame quality: ${frameQuality.toFixed(2)} (red pixels: ${redPixelCount})`,
+    );
+  }
 
   if (frameQuality < 0.1) {
     // Very few red pixels, probably wrong lighting
@@ -144,7 +147,7 @@ export function detectDarts(
     }
   }
 
-  console.log(`[detectDarts] Found ${blobs.length} red blobs`);
+  if (DEBUG) console.log(`[detectDarts] Found ${blobs.length} red blobs`);
 
   // 5. Convert blobs to circles and estimate tip
   const candidates: DetectedDart[] = [];
@@ -160,10 +163,12 @@ export function detectDarts(
   candidates.sort((a, b) => b.confidence - a.confidence);
   const darts = candidates.slice(0, cfg.maxDarts);
 
-  console.log(
-    `[detectDarts] Detected ${darts.length} darts with confidence`,
-    darts.map((d) => d.confidence.toFixed(2)),
-  );
+  if (DEBUG) {
+    console.log(
+      `[detectDarts] Detected ${darts.length} darts with confidence`,
+      darts.map((d) => d.confidence.toFixed(2)),
+    );
+  }
 
   // 7. Compute overall confidence
   const overallConfidence =
