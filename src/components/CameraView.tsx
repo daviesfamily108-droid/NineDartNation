@@ -628,6 +628,53 @@ export default forwardRef(function CameraView(
   const [detectionLog, setDetectionLog] = useState<DetectionLogEntry[]>([]);
   const [showDetectionLog, setShowDetectionLog] = useState(false);
 
+  // Diagnostics overlay (hidden by default)
+  // Toggle with Ctrl+Shift+D (or Cmd+Shift+D on Mac).
+  const [showDiagnosticsOverlay, setShowDiagnosticsOverlay] = useState(false);
+  const diagnosticsRef = useRef<{
+    lastTs: number;
+    lastTip?: Point | null;
+    lastPcal?: Point | null;
+    lastPboard?: Point | null;
+    lastConfidence?: number | null;
+    lastLabel?: string | null;
+    lastValue?: number | null;
+    lastRing?: Ring | null;
+    lastReject?: string | null;
+  }>({ lastTs: 0 });
+  const [, setDiagnosticsTick] = useState(0);
+  const updateDiagnostics = useCallback(
+    (patch: Partial<(typeof diagnosticsRef)["current"]>) => {
+      try {
+        diagnosticsRef.current = {
+          ...diagnosticsRef.current,
+          ...patch,
+          lastTs: Date.now(),
+        };
+        // Lightweight re-render when overlay is open.
+        if (showDiagnosticsOverlay) setDiagnosticsTick((n) => (n + 1) % 100000);
+        try {
+          (window as any).ndnAutoscoreDiagnostics = diagnosticsRef.current;
+        } catch {}
+      } catch {}
+    },
+    [showDiagnosticsOverlay],
+  );
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      try {
+        const key = String(e.key || "").toLowerCase();
+        if (key !== "d") return;
+        if (!(e.shiftKey && (e.ctrlKey || e.metaKey))) return;
+        e.preventDefault();
+        setShowDiagnosticsOverlay((v) => !v);
+      } catch {}
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
   // If a detection is below the confidence threshold and confirm is enabled,
   // hold it for user confirmation instead of immediately applying it.
   const [pendingConfirm, setPendingConfirm] = useState<null | {
@@ -2583,6 +2630,32 @@ export default forwardRef(function CameraView(
               pCalInImage,
               isGhost,
             });
+
+            // Update diagnostics overlay state (best-effort, never throw).
+            try {
+              updateDiagnostics({
+                lastTip: tipRefined ?? null,
+                lastPcal: pCal ?? null,
+                lastPboard: pBoard ?? null,
+                lastConfidence:
+                  detectionLogRef.current[detectionLogRef.current.length - 1]
+                    ?.confidence ?? null,
+                lastLabel: label ?? null,
+                lastValue: value ?? null,
+                lastRing: ring ?? null,
+                lastReject: !calibrationGood
+                  ? "calibration-invalid"
+                  : !tipInVideo
+                    ? "tip-outside-video"
+                    : !pCalInImage
+                      ? "pCal-outside-image"
+                      : !_onBoard
+                        ? "off-board"
+                        : warmupActive
+                          ? "warmup"
+                          : null,
+              });
+            } catch {}
             setLastAutoScore(label);
             setLastAutoValue(value);
             setLastAutoRing(ring);
@@ -2610,6 +2683,21 @@ export default forwardRef(function CameraView(
                   candidate.value,
                   candidate.ring,
                 );
+                try {
+                  updateDiagnostics({
+                    lastLabel: candidate.label ?? null,
+                    lastValue: candidate.value ?? null,
+                    lastRing: candidate.ring ?? null,
+                    lastConfidence:
+                      diagnosticsRef.current.lastConfidence ??
+                      detectionLogRef.current[
+                        detectionLogRef.current.length - 1
+                      ]?.confidence ??
+                      null,
+                    lastPboard: null,
+                    lastReject: "calibration-invalid",
+                  });
+                } catch {}
                 try {
                   // Inform parent for transparency, but mark as not calibration-valid
                   if (onAutoDart)
@@ -4212,10 +4300,110 @@ export default forwardRef(function CameraView(
               >
                 {showDetectionLog ? "Hide" : "Show"} detection log
               </button>
+              <button
+                className={`btn btn--ghost px-3 py-1 text-xs font-semibold ${showDiagnosticsOverlay ? "bg-indigo-500/80 text-white" : ""}`}
+                onClick={() => setShowDiagnosticsOverlay((prev) => !prev)}
+                title="Toggle diagnostics overlay (Ctrl+Shift+D)"
+              >
+                {showDiagnosticsOverlay ? "Hide" : "Show"} diagnostics
+              </button>
               <span className="text-xs text-slate-400">
                 Recent detections: {detectionLog.length}
               </span>
             </div>
+
+            {showDiagnosticsOverlay && (
+              <div className="mt-2 rounded-2xl border border-white/15 bg-slate-950/80 p-3 text-[11px] text-white font-mono space-y-1">
+                <div className="flex flex-wrap gap-x-4 gap-y-1 items-center">
+                  <span className="text-slate-300">Toggle:</span>
+                  <span className="text-slate-400">Ctrl+Shift+D</span>
+                  <span className="text-slate-300">Commit:</span>
+                  <span>
+                    {shouldDeferCommit ? "wait-for-clear" : "immediate"}
+                    {awaitingClear ? " (awaiting-clear)" : ""}
+                  </span>
+                  <span className="text-slate-300">Online:</span>
+                  <span>{isOnlineMatch ? "yes" : "no"}</span>
+                </div>
+
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <span className="text-slate-300">Calibration:</span>
+                  <span
+                    className={
+                      calibrationValid
+                        ? "text-emerald-300"
+                        : "text-rose-300"
+                    }
+                  >
+                    {calibrationValid ? "VALID" : "INVALID"}
+                  </span>
+                  <span className="text-slate-300">locked:</span>
+                  <span>{locked ? "yes" : "no"}</span>
+                  <span className="text-slate-300">errorPx:</span>
+                  <span>
+                    {errorPxVal == null ? "(missing)" : errorPxVal.toFixed(2)}
+                  </span>
+                  <span className="text-slate-300">conf:</span>
+                  <span>
+                    {calibrationConfidence == null
+                      ? "(n/a)"
+                      : `${Math.round(calibrationConfidence)}%`}
+                  </span>
+                </div>
+
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="rounded-xl border border-white/10 bg-black/30 p-2">
+                    <div className="text-slate-300 mb-1">Last detection</div>
+                    <div>label: {diagnosticsRef.current.lastLabel ?? "(none)"}</div>
+                    <div>
+                      confidence:{" "}
+                      {diagnosticsRef.current.lastConfidence == null
+                        ? "(n/a)"
+                        : Number(diagnosticsRef.current.lastConfidence).toFixed(
+                            3,
+                          )}
+                    </div>
+                    <div>
+                      reject:{" "}
+                      <span
+                        className={
+                          diagnosticsRef.current.lastReject
+                            ? "text-amber-300"
+                            : "text-emerald-300"
+                        }
+                      >
+                        {diagnosticsRef.current.lastReject ?? "(accepted)"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-black/30 p-2">
+                    <div className="text-slate-300 mb-1">Mapping</div>
+                    <div>
+                      tip:{" "}
+                      {diagnosticsRef.current.lastTip
+                        ? `${Math.round(diagnosticsRef.current.lastTip.x)},${Math.round(diagnosticsRef.current.lastTip.y)}`
+                        : "(n/a)"}
+                    </div>
+                    <div>
+                      pCal:{" "}
+                      {diagnosticsRef.current.lastPcal
+                        ? `${Math.round(diagnosticsRef.current.lastPcal.x)},${Math.round(diagnosticsRef.current.lastPcal.y)}`
+                        : "(n/a)"}
+                    </div>
+                    <div>
+                      pBoard:{" "}
+                      {diagnosticsRef.current.lastPboard
+                        ? `${Math.round(diagnosticsRef.current.lastPboard.x)},${Math.round(diagnosticsRef.current.lastPboard.y)}`
+                        : "(n/a)"}
+                    </div>
+                    <div className="text-slate-500 mt-1">
+                      tipStableFrames: {tipStabilityRef.current.stableFrames}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {showDetectionLog && (
               <div className="mt-2 rounded-2xl border border-white/15 bg-slate-900/80 p-3 text-xs text-white font-mono max-h-36 overflow-y-auto space-y-1">
                 {detectionLog.length === 0 ? (
