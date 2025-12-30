@@ -260,20 +260,23 @@ export class DartDetector {
     vx /= vlen;
     vy /= vlen;
 
-    // Determine which direction along the axis points outward from board center
+    // Enforce radial alignment: reject if principal axis deviates too much from radial direction.
+    // NOTE: The principal axis has 180° ambiguity (vx,vy) and (-vx,-vy) describe the same line.
+    // We therefore compare against BOTH directions by taking abs(dot) so we don't reject a valid
+    // dart just because the eigenvector points "inward".
     const dxc = meanX - this.roiCx;
     const dyc = meanY - this.roiCy;
-    const outward = dxc * vx + dyc * vy > 0 ? 1 : -1;
-    vx *= outward;
-    vy *= outward;
 
-    // Enforce radial alignment: reject if principal axis deviates too much from radial direction
-    const rlen = Math.hypot(dxc, dyc) || 1;
-    const rx = dxc / rlen,
-      ry = dyc / rlen;
-    const cosAng = Math.max(-1, Math.min(1, vx * rx + vy * ry));
-    const angDeg = (Math.acos(cosAng) * 180) / Math.PI;
-    if (angDeg > this.angMaxDeg) {
+    // Near the ROI center, the radial direction is unstable and the angle check becomes noisy.
+    // Skip the angle gate in that zone.
+    const rlen = Math.hypot(dxc, dyc);
+    const minRForAngle = Math.max(8, this.roiRadius * 0.05);
+    if (rlen >= minRForAngle) {
+      const rx = dxc / rlen;
+      const ry = dyc / rlen;
+      const cosAng = Math.max(-1, Math.min(1, Math.abs(vx * rx + vy * ry)));
+      const angDeg = (Math.acos(cosAng) * 180) / Math.PI;
+      if (angDeg > this.angMaxDeg) {
       // likely glare or non-radial artifact
       if (!recent) this.updateBackground(frame, 0.02);
       console.log("[DETECTOR] Rejected - angle too large:", {
@@ -281,6 +284,7 @@ export class DartDetector {
         maxAllowed: this.angMaxDeg,
       });
       return null;
+      }
     }
 
     // Project all blob points onto axis and pick extreme (max t) as tip candidate
