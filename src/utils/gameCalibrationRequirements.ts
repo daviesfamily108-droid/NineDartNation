@@ -267,7 +267,8 @@ export function isCalibrationSuitableForGame(
   errorPx: number | null,
 ): boolean {
   // Treat missing/unknown error as not suitable. IMPORTANT: don't treat 0 as missing.
-  if (errorPx == null || Number.isNaN(errorPx as any) || errorPx < 0) return false;
+  if (errorPx == null || Number.isNaN(errorPx as any) || errorPx < 0)
+    return false;
 
   const req = GAME_CALIBRATION_REQUIREMENTS[gameMode];
   if (!req) return true; // Unknown game, assume suitable
@@ -339,9 +340,13 @@ export function getCalibrationStatus(params: {
     imageSize.w > 0 &&
     imageSize.h > 0
   );
-  const errorVal = typeof errorPx === "number" && !Number.isNaN(errorPx) ? errorPx : null;
+  const errorVal =
+    typeof errorPx === "number" && !Number.isNaN(errorPx) ? errorPx : null;
 
-  if (hasImageSize && (locked || (errorVal != null && errorVal <= maxErrorPx))) {
+  if (
+    hasImageSize &&
+    (locked || (errorVal != null && errorVal <= maxErrorPx))
+  ) {
     return "verified";
   }
   return "unknown";

@@ -274,7 +274,7 @@ function blobToCircle(
   // Estimate radius as sqrt(area / π)
   const estimatedRadius = Math.sqrt(blob.size / Math.PI);
 
-   // Reject blobs that are clearly too small/large to be dart tips
+  // Reject blobs that are clearly too small/large to be dart tips
   if (estimatedRadius < 3 || estimatedRadius > 40) return null;
 
   // Refine center by finding densest pixel cluster

@@ -8,9 +8,9 @@ describe("scoreDarts", () => {
     // with the board center at (160,120).
     const H_boardToImage = [1, 0, 160, 0, 1, 120, 0, 0, 1] as any;
 
-  // Pick a point that's clearly in a SINGLE band and away from boundaries.
-  // Base orientation: pointing up (0,-r) is sector 20 in this codebase.
-  const r = 120; // safely between trebleOuter(107) and doubleInner(162)
+    // Pick a point that's clearly in a SINGLE band and away from boundaries.
+    // Base orientation: pointing up (0,-r) is sector 20 in this codebase.
+    const r = 120; // safely between trebleOuter(107) and doubleInner(162)
     const pBoardUp = { x: 0, y: -r };
     const pImg = { x: pBoardUp.x + 160, y: pBoardUp.y + 120 };
 
@@ -19,9 +19,9 @@ describe("scoreDarts", () => {
       H_boardToImage,
       0,
     );
-  // Single 20 => 20
-  expect(scored0.score).toBe(20);
-  expect(scored0.ring).toBe("SINGLE");
+    // Single 20 => 20
+    expect(scored0.score).toBe(20);
+    expect(scored0.ring).toBe("SINGLE");
 
     // Rotate by +18 degrees (one sector). That should shift from sector 20 to sector 1.
     const theta = (18 * Math.PI) / 180;
@@ -31,7 +31,7 @@ describe("scoreDarts", () => {
       theta,
     );
     // Sector after rotating 1 step clockwise in our index space should be SectorOrder[1] = 1
-  // => single 1 = 1
+    // => single 1 = 1
     const expectedSector = SectorOrder[1];
     expect(expectedSector).toBe(1);
     expect(scored1.score).toBe(1);

@@ -48,7 +48,7 @@ export default function Drawer({
     // If side is right, swipe right (negative diffX) closes it
     // If side is bottom, swipe down (negative diffY) closes it
     const threshold = 50; // px
-    
+
     if (side === "left" && diffX > threshold) {
       onClose();
     } else if (side === "right" && diffX < -threshold) {
@@ -76,7 +76,8 @@ export default function Drawer({
     const originalPaddingRight = document.body.style.paddingRight;
 
     // Avoid layout shift when the scrollbar disappears
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const scrollbarWidth =
+      window.innerWidth - document.documentElement.clientWidth;
     document.body.style.overflow = "hidden";
     if (scrollbarWidth > 0) {
       document.body.style.paddingRight = `${scrollbarWidth}px`;

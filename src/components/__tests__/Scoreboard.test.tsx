@@ -132,7 +132,7 @@ describe("Scoreboard", () => {
     });
     // Ensure the input was updated
     expect((input as HTMLInputElement).value).toBe("41");
-  const addBtn = await screen.findByRole("button", { name: /add visit/i });
+    const addBtn = await screen.findByRole("button", { name: /add visit/i });
     fireEvent.click(addBtn);
     await waitFor(() =>
       expect(matchActions.addVisit).toHaveBeenCalledWith(41, 3),

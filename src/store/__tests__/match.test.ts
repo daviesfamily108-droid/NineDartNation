@@ -80,7 +80,11 @@ describe("visit per-dart entries", () => {
     const v = leg.visits[0] as any;
     expect(Array.isArray(v.entries)).toBe(true);
     expect(v.entries).toHaveLength(3);
-    expect(v.entries[1]).toMatchObject({ label: "MISS 0", value: 0, ring: "MISS" });
+    expect(v.entries[1]).toMatchObject({
+      label: "MISS 0",
+      value: 0,
+      ring: "MISS",
+    });
   });
 
   it("stores per-dart entries even when score is 0 (double-in pre-open)", () => {

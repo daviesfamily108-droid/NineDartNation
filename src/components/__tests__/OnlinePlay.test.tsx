@@ -102,8 +102,8 @@ describe("OnlinePlay", () => {
         prestartEndsAt: Date.now() + 1000,
       });
     });
-  // Modal should appear
-  expect(await screen.findByText(/Join Match/i)).toBeTruthy();
+    // Modal should appear
+    expect(await screen.findByText(/Join Match/i)).toBeTruthy();
     // Choose Bull Up - should send prestart-choice message
     const bullBtn = await screen.findByText("Bull Up");
     fireEvent.click(bullBtn);

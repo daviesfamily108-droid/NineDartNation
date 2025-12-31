@@ -5,7 +5,7 @@
   useState,
   Suspense,
 } from "react";
-import { MobileTabBar, Sidebar, TabKey } from "./components/Sidebar";
+import { Sidebar, TabKey } from "./components/Sidebar";
 const Home = React.lazy(() => import("./components/Home"));
 import ScrollFade from "./components/ScrollFade";
 import Calibrator from "./components/Calibrator";
@@ -932,9 +932,7 @@ export default function App() {
                 </div>
 
                 {/* Right: Status + Actions */}
-                <div
-                  className="flex items-center gap-1.5 sm:gap-3 shrink-0"
-                >
+                <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
                   {/* Calibration Status (Desktop) */}
                   {!isMobile && calibrationStatus !== "none" && (
                     <button
@@ -1149,10 +1147,10 @@ export default function App() {
       {/* Debug banner removed - not shown to users in production builds */}
       {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
       {!minimalUI && <GlobalCameraLogger />}
-    {/* Global camera watchdog: auto-recovers stalled video/stream */}
-    {!minimalUI && <GlobalCameraWatchdog />}
-    {/* User-facing recovery toast + one-click retry */}
-    {!minimalUI && <GlobalCameraRecoveryToasts />}
+      {/* Global camera watchdog: auto-recovers stalled video/stream */}
+      {!minimalUI && <GlobalCameraWatchdog />}
+      {/* User-facing recovery toast + one-click retry */}
+      {!minimalUI && <GlobalCameraRecoveryToasts />}
       {/* Full Screen Notification Modal - Moved to root level for proper overlay */}
       {notificationsOpen && (
         <div

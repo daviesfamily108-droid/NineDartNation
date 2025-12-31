@@ -1,6 +1,12 @@
 ﻿// @vitest-environment jsdom
 import React from "react";
-import { render, screen, act, waitFor, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  act,
+  waitFor,
+  fireEvent,
+} from "@testing-library/react";
 import OfflinePlay from "../OfflinePlay";
 // Mock CameraView to avoid async camera effects in OfflinePlay tests
 vi.mock("../CameraView", () => ({
@@ -48,7 +54,9 @@ describe("OfflinePlay", () => {
     const user = { email: "a@example.com", username: "Alice" };
     render(<OfflinePlay user={user} />);
     // Trigger match start through the UI so OfflinePlay updates any internal view state
-    const startBtn = await screen.findByRole("button", { name: /Start Match/i });
+    const startBtn = await screen.findByRole("button", {
+      name: /Start Match/i,
+    });
     act(() => {
       fireEvent.click(startBtn);
     });

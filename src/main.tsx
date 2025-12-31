@@ -50,9 +50,14 @@ function Root() {
  */
 const enablePwaSw =
   new URLSearchParams(window.location.search).get("pwa") === "1" ||
-  (typeof localStorage !== "undefined" && localStorage.getItem("NDN_ENABLE_PWA") === "1");
+  (typeof localStorage !== "undefined" &&
+    localStorage.getItem("NDN_ENABLE_PWA") === "1");
 
-if (enablePwaSw && typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+if (
+  enablePwaSw &&
+  typeof navigator !== "undefined" &&
+  "serviceWorker" in navigator
+) {
   try {
     navigator.serviceWorker
       .register("/sw.js")

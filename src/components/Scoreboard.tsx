@@ -182,7 +182,8 @@ export default function Scoreboard({
                         >
                           {[0, 1, 2].map((i) => {
                             // Only active/current player's pendingEntries matter; other players get translucent placeholders
-                            const committed = getLastCommittedEntriesForPlayer(idx);
+                            const committed =
+                              getLastCommittedEntriesForPlayer(idx);
                             const e =
                               idx === currentPlayerIdx
                                 ? ((pendingEntries[i] as any) ?? null)

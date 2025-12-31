@@ -81,7 +81,8 @@ vi.mock("../../store/userSettings", () => {
     setCallerVoice: () => {},
     setCallerVolume: () => {},
   };
-  const useUserSettings: any = (selector: any) => (selector ? selector(state) : state);
+  const useUserSettings: any = (selector: any) =>
+    selector ? selector(state) : state;
   useUserSettings.setState = (s: any) => {
     const obj = typeof s === "function" ? s(state) : s;
     Object.assign(state, obj);
@@ -95,7 +96,13 @@ vi.mock("../../store/match", () => {
   const state: any = {
     startingScore: 501,
     currentPlayerIdx: 0,
-    players: [{ id: "p1", name: "Alice", legs: [{ totalScoreRemaining: 501, visits: [] }] }],
+    players: [
+      {
+        id: "p1",
+        name: "Alice",
+        legs: [{ totalScoreRemaining: 501, visits: [] }],
+      },
+    ],
     addVisit: vi.fn(),
     endLeg: vi.fn(),
   };
@@ -107,7 +114,8 @@ vi.mock("../../store/match", () => {
 
 vi.mock("../../store/pendingVisit", () => {
   const state: any = { setVisit: vi.fn(), reset: vi.fn() };
-  const usePendingVisit: any = (selector: any) => (selector ? selector(state) : state);
+  const usePendingVisit: any = (selector: any) =>
+    selector ? selector(state) : state;
   return { usePendingVisit };
 });
 
@@ -132,7 +140,8 @@ vi.mock("../../store/cameraSession", () => {
 
 vi.mock("../../store/matchControl", () => {
   const state: any = { paused: false };
-  const useMatchControl: any = (selector: any) => (selector ? selector(state) : state);
+  const useMatchControl: any = (selector: any) =>
+    selector ? selector(state) : state;
   return { useMatchControl };
 });
 
@@ -144,13 +153,17 @@ vi.mock("../../store/audit", () => {
 
 vi.mock("../../store/heatmap", () => {
   const state: any = { addSample: vi.fn() };
-  const useHeatmapStore: any = (selector: any) => (selector ? selector(state) : state);
+  const useHeatmapStore: any = (selector: any) =>
+    selector ? selector(state) : state;
   return { default: useHeatmapStore };
 });
 
 vi.mock("../../utils/broadcast", () => ({ broadcastMessage: vi.fn() }));
 vi.mock("../../utils/matchSync", () => ({ writeMatchSnapshot: vi.fn() }));
-vi.mock("../../utils/cameraHandoff", () => ({ startForwarding: vi.fn(), stopForwarding: vi.fn() }));
+vi.mock("../../utils/cameraHandoff", () => ({
+  startForwarding: vi.fn(),
+  stopForwarding: vi.fn(),
+}));
 vi.mock("../../store/profileStats", () => ({ addSample: vi.fn() }));
 vi.mock("../../utils/scoring", () => ({ subscribeExternalWS: vi.fn() }));
 vi.mock("../../utils/checkout", () => ({ sayDart: vi.fn() }));
@@ -188,8 +201,8 @@ describe("CameraView confirm-on-uncertain", () => {
       });
     });
 
-  // Should show confirmation UI
-  expect(getByText("Confirm detected dart")).toBeTruthy();
+    // Should show confirmation UI
+    expect(getByText("Confirm detected dart")).toBeTruthy();
 
     // Accept
     fireEvent.click(getByText("Accept"));
@@ -199,7 +212,6 @@ describe("CameraView confirm-on-uncertain", () => {
   });
 
   it("auto-adds a dart when confidence >= threshold (no confirm modal)", async () => {
-
     // Ensure calibration is present so autoscore can commit.
     try {
       const calib = require("../../store/calibration").useCalibration;
@@ -241,10 +253,16 @@ describe("CameraView confirm-on-uncertain", () => {
 
     // High confidence should bypass modal and commit.
     await act(async () => {
-      cameraRef.current.__test_addDart(60, "T20", "TRIPLE", {
-        source: "camera",
-        confidence: 0.95,
-      }, { emulateApplyAutoHit: true });
+      cameraRef.current.__test_addDart(
+        60,
+        "T20",
+        "TRIPLE",
+        {
+          source: "camera",
+          confidence: 0.95,
+        },
+        { emulateApplyAutoHit: true },
+      );
     });
 
     // No confirm UI should appear.

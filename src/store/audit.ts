@@ -42,7 +42,7 @@ type AuditState = {
   reset: () => void;
 };
 
-export const useAudit = create<AuditState>((set, get) => ({
+export const useAudit = create<AuditState>((set) => ({
   recent: [],
   totals: { visits: 0, darts: 0, points: 0, finishes: 0, busts: 0, byMode: {} },
   calibration: {

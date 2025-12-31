@@ -39,7 +39,8 @@ export default function Toaster() {
               >
                 <div className="flex items-center gap-2">
                   <span className="flex-1">{t.message}</span>
-                  {t.actionLabel && typeof (t as any).onAction === "function" ? (
+                  {t.actionLabel &&
+                  typeof (t as any).onAction === "function" ? (
                     <button
                       className="btn px-2 py-1 text-xs bg-slate-200/10 hover:bg-slate-200/20"
                       onClick={() => {

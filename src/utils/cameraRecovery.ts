@@ -19,7 +19,8 @@ export function dispatchCameraRecovery(reason: CameraRecoveryReason) {
   const now = Date.now();
 
   const wantsPhone =
-    settings.preferredCameraLabel === "Phone Camera" || session.mode === "phone";
+    settings.preferredCameraLabel === "Phone Camera" ||
+    session.mode === "phone";
 
   if (wantsPhone) {
     window.dispatchEvent(

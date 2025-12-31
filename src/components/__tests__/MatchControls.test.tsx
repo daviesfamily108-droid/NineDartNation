@@ -67,7 +67,11 @@ describe("MatchControls component", () => {
     const onAddVisit = vi.fn();
 
     render(
-      <MatchControls inProgress={true} startingScore={501} onAddVisit={onAddVisit} />,
+      <MatchControls
+        inProgress={true}
+        startingScore={501}
+        onAddVisit={onAddVisit}
+      />,
     );
 
     const input = screen.getByRole("spinbutton") as HTMLInputElement;

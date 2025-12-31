@@ -89,8 +89,8 @@ vi.mock("../../store/userSettings", () => {
     cameraAspect: "wide",
     cameraFitMode: "fit",
     autoCommitMode: "wait-for-clear",
-  confirmUncertainDarts: true,
-  autoScoreConfidenceThreshold: 0.85,
+    confirmUncertainDarts: true,
+    autoScoreConfidenceThreshold: 0.85,
     cameraEnabled: true,
     hideCameraOverlay: false,
     preserveCalibrationOverlay: true,
@@ -230,7 +230,11 @@ describe("CameraView autoscore commit gates", () => {
 
     const CameraView = (await vi.importActual("../CameraView")).default as any;
     const out = render(
-      <CameraView manualOnly={false} onVisitCommitted={vi.fn()} onAutoDart={vi.fn()} />,
+      <CameraView
+        manualOnly={false}
+        onVisitCommitted={vi.fn()}
+        onAutoDart={vi.fn()}
+      />,
     );
 
     // We can't reliably force the internal `settled` gate from here without
@@ -682,11 +686,9 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
     });
     const entries = pendingVisitStore.getState().entries;
     expect(entries[0]).toMatchObject({ value: 60, ring: "TRIPLE" });
-    expect(sayDartMock).toHaveBeenCalledTimes(1);
-    // Caller uses the user-provided label in this injected path
-    expect(sayDartMock).toHaveBeenCalledWith("raw-cam-label", "TestVoice", {
-      volume: 0.42,
-    });
+    // We no longer voice-announce individual dart segments from CameraView.
+    // The caller announces *visit totals* when the visit commits.
+    expect(sayDartMock).toHaveBeenCalledTimes(0);
     await act(async () => {
       out!.unmount();
     });
@@ -765,6 +767,108 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
       value: 0,
       ring: "MISS",
     });
+    await act(async () => {
+      out!.unmount();
+    });
+  });
+
+  it("aggregates visit total (T18 T18 S20 => 128) in pendingVisit and commit meta", async () => {
+    const cameraRef = React.createRef<any>();
+    const pendingVisitStore = (
+      await vi.importActual("../../store/pendingVisit")
+    ).usePendingVisit as any;
+    pendingVisitStore.setState?.({ darts: 0, total: 0, entries: [] });
+
+    // Enable the camera commit emulation path.
+    useCalibration.setState?.({
+      H: [1, 0, 160, 0, 1, 120, 0, 0, 1],
+      imageSize: { w: 320, h: 240 },
+      locked: true,
+      errorPx: 1,
+    });
+
+    // Disable detector-driven writes so our totals are deterministic.
+    __setMockDetectionGenerator(() => null);
+
+    const addVisitSpy = vi.fn();
+    const { default: CameraView } = await vi.importActual("../CameraView");
+
+    let out: ReturnType<typeof render> | null = null;
+    await act(async () => {
+      out = render(
+        <CameraView
+          ref={cameraRef}
+          scoringMode="x01"
+          cameraAutoCommit="camera"
+          onAddVisit={addVisitSpy}
+        />,
+      );
+    });
+
+    const canvases = out!.container.querySelectorAll("canvas");
+    canvases.forEach((c) => {
+      try {
+        (c as HTMLCanvasElement).width = 320;
+        (c as HTMLCanvasElement).height = 240;
+      } catch {}
+      stubCanvasContext(c as HTMLCanvasElement);
+    });
+    const video = out!.container.querySelector(
+      "video",
+    ) as HTMLVideoElement | null;
+    if (video) {
+      try {
+        Object.defineProperty(video, "videoWidth", {
+          value: 320,
+          configurable: true,
+        });
+      } catch {}
+      try {
+        Object.defineProperty(video, "videoHeight", {
+          value: 240,
+          configurable: true,
+        });
+      } catch {}
+      try {
+        (video as any).paused = false;
+      } catch {}
+    }
+
+    await waitFor(() => cameraRef.current?.__test_addDart, { timeout: 2000 });
+
+    // Set pending visit deterministically (avoid detector dedupe/timing in unit tests).
+    await act(async () => {
+      cameraRef.current?.__test_forceSetPendingVisit?.([
+        { label: "T18 54", value: 54, ring: "TRIPLE" },
+        { label: "T18 54", value: 54, ring: "TRIPLE" },
+        { label: "S20 20", value: 20, ring: "SINGLE" },
+      ]);
+    });
+
+    // Commit deterministically (auto-commit can be gated by settle/visibility).
+    await act(async () => {
+      cameraRef.current?.__test_commitVisit?.();
+    });
+
+    await waitFor(() => expect(addVisitSpy).toHaveBeenCalledTimes(1), {
+      timeout: 4000,
+    });
+
+    const lastCall = addVisitSpy.mock.calls[addVisitSpy.mock.calls.length - 1];
+    expect(lastCall?.[0]).toBe(128);
+    expect(lastCall?.[1]).toBe(3);
+    expect(lastCall?.[2]).toEqual(expect.objectContaining({ visitTotal: 128 }));
+
+    // After commit, pending visit should reset.
+    await waitFor(() => {
+      const st = pendingVisitStore.getState();
+      expect(st.darts).toBe(0);
+      expect(st.total).toBe(0);
+    });
+
+    // We no longer voice-announce individual dart segments from CameraView.
+    expect(sayDartMock).toHaveBeenCalledTimes(0);
+
     await act(async () => {
       out!.unmount();
     });

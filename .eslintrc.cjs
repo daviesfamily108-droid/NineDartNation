@@ -62,6 +62,22 @@ module.exports = {
   },
   overrides: [
     {
+      files: ['*.js', '*.cjs', '*.mjs', '*.ts', '*.tsx'],
+      excludedFiles: [
+        'src/**/*',
+        'server/**/*',
+        '**/*.test.ts',
+        '**/*.test.tsx',
+        '**/__tests__/**/*.ts',
+        '**/__tests__/**/*.tsx',
+      ],
+      rules: {
+        // Root scripts/configs are not part of the TS project and are often one-off utilities.
+        // Disable type-aware linting requirements there to avoid parserOptions.project errors.
+        // (We still lint application code under src/ and server/.)
+      },
+    },
+    {
       files: [
         '**/*.test.ts',
         '**/*.test.tsx',

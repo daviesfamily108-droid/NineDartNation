@@ -1119,7 +1119,9 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         >
                           <option value="manual">Manual Scoring</option>
                           <option value="built-in">Built-in Vision</option>
-                          <option value="built-in-v2">Built-in Vision (v2)</option>
+                          <option value="built-in-v2">
+                            Built-in Vision (v2)
+                          </option>
                           <option value="external-ws">
                             External (WebSocket)
                           </option>
@@ -1210,9 +1212,10 @@ export default function SettingsPanel({ user }: { user?: any }) {
                               htmlFor="autoScoreConfidenceThreshold"
                               className="block text-sm mb-2"
                             >
-                              Confidence threshold: {(
-                                autoScoreConfidenceThreshold ?? 0.85
-                              ).toFixed(2)}
+                              Confidence threshold:{" "}
+                              {(autoScoreConfidenceThreshold ?? 0.85).toFixed(
+                                2,
+                              )}
                             </label>
                             <input
                               type="range"
@@ -1242,7 +1245,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
                             <div className="mt-3 space-y-3">
                               <div>
                                 <label className="block text-sm mb-2">
-                                  Min blob area: {autoscoreDetectorMinArea ?? 30}
+                                  Min blob area:{" "}
+                                  {autoscoreDetectorMinArea ?? 30}
                                 </label>
                                 <input
                                   type="range"
@@ -1265,7 +1269,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
                               <div>
                                 <label className="block text-sm mb-2">
-                                  Foreground threshold: {autoscoreDetectorThresh ?? 15}
+                                  Foreground threshold:{" "}
+                                  {autoscoreDetectorThresh ?? 15}
                                 </label>
                                 <input
                                   type="range"
@@ -1287,7 +1292,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
                               <div>
                                 <label className="block text-sm mb-2">
-                                  Stable frames required: {autoscoreDetectorRequireStableN ?? 2}
+                                  Stable frames required:{" "}
+                                  {autoscoreDetectorRequireStableN ?? 2}
                                 </label>
                                 <input
                                   type="range"

@@ -4,7 +4,13 @@
 // Multi-camera support: Phone camera, OBS Virtual Cam, USB cameras, etc
 // Auto-Calibration: Snap a picture and auto-detect board features
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import { useCalibration } from "../store/calibration";
 import {
   computeHomographyDLT,
@@ -892,8 +898,14 @@ export default function Calibrator() {
           confidence: derivedConfidence.percentage,
           imageSize: { w: canvas.width, h: canvas.height },
           overlaySize: {
-            w: videoRef.current?.clientWidth || videoRef.current?.videoWidth || canvas.width,
-            h: videoRef.current?.clientHeight || videoRef.current?.videoHeight || canvas.height,
+            w:
+              videoRef.current?.clientWidth ||
+              videoRef.current?.videoWidth ||
+              canvas.width,
+            h:
+              videoRef.current?.clientHeight ||
+              videoRef.current?.videoHeight ||
+              canvas.height,
           },
         }); // Not locked yet
 
@@ -1378,308 +1390,311 @@ export default function Calibrator() {
   const detectionCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
 
-  const drawCanvas = useCallback((ref: React.RefObject<HTMLCanvasElement>) => {
-    try {
-      const canvas = ref.current;
-      if (!canvas) return;
+  const drawCanvas = useCallback(
+    (ref: React.RefObject<HTMLCanvasElement>) => {
+      try {
+        const canvas = ref.current;
+        if (!canvas) return;
 
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
 
-      const video = videoRef.current;
-      let vw = canvas.width;
-      let vh = canvas.height;
-      let cropW = canvas.width / zoom;
-      let cropH = canvas.height / zoom;
-      let cropX = (vw - cropW) / 2;
-      let cropY = (vh - cropH) / 2;
+        const video = videoRef.current;
+        let vw = canvas.width;
+        let vh = canvas.height;
+        let cropW = canvas.width / zoom;
+        let cropH = canvas.height / zoom;
+        let cropX = (vw - cropW) / 2;
+        let cropY = (vh - cropH) / 2;
 
-      const drawFallbackBackground = (message?: string) => {
-        ctx.fillStyle = "#374151";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        if (message) {
-          ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
-          ctx.font = "14px sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillText(message, canvas.width / 2, canvas.height / 2);
-        }
-      };
-
-      if (video) {
-        const hasStream = video.srcObject instanceof MediaStream;
-        const readyState = video.readyState;
-
-        if (hasStream && readyState >= 2) {
-          try {
-            vw = video.videoWidth || canvas.width;
-            vh = video.videoHeight || canvas.height;
-            cropW = vw / zoom;
-            cropH = vh / zoom;
-            cropX = (vw - cropW) / 2;
-            cropY = (vh - cropH) / 2;
-
-            ctx.drawImage(
-              video,
-              cropX,
-              cropY,
-              cropW,
-              cropH,
-              0,
-              0,
-              canvas.width,
-              canvas.height,
-            );
-          } catch (err) {
-            console.error("Failed to draw video frame:", err);
-            drawFallbackBackground();
+        const drawFallbackBackground = (message?: string) => {
+          ctx.fillStyle = "#374151";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          if (message) {
+            ctx.fillStyle = "rgba(255, 255, 255, 0.2)";
+            ctx.font = "14px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(message, canvas.width / 2, canvas.height / 2);
           }
+        };
 
-          // Periodically run board detection on the full video frame (not cropped)
-          const now = performance.now();
-          const allowDetection =
-            (typeof document === "undefined" ||
-              document.visibilityState !== "hidden") &&
-            !autoPlacementFrozenRef.current &&
-            !dragStateRef.current;
-          const needsDetection =
-            allowDetection &&
-            calibrationPoints.length < 5 &&
-            video.videoWidth > 0 &&
-            video.videoHeight > 0 &&
-            (!boardEstimateRef.current ||
-              now - boardEstimateRef.current.timestamp > 600);
+        if (video) {
+          const hasStream = video.srcObject instanceof MediaStream;
+          const readyState = video.readyState;
 
-          if (needsDetection) {
-            if (!detectionCanvasRef.current) {
-              detectionCanvasRef.current = document.createElement("canvas");
+          if (hasStream && readyState >= 2) {
+            try {
+              vw = video.videoWidth || canvas.width;
+              vh = video.videoHeight || canvas.height;
+              cropW = vw / zoom;
+              cropH = vh / zoom;
+              cropX = (vw - cropW) / 2;
+              cropY = (vh - cropH) / 2;
+
+              ctx.drawImage(
+                video,
+                cropX,
+                cropY,
+                cropW,
+                cropH,
+                0,
+                0,
+                canvas.width,
+                canvas.height,
+              );
+            } catch (err) {
+              console.error("Failed to draw video frame:", err);
+              drawFallbackBackground();
             }
-            const detectCanvas = detectionCanvasRef.current;
-            if (detectCanvas) {
-              detectCanvas.width = video.videoWidth;
-              detectCanvas.height = video.videoHeight;
-              const detectCtx = detectCanvas.getContext("2d");
-              if (detectCtx) {
-                detectCtx.drawImage(
-                  video,
-                  0,
-                  0,
-                  detectCanvas.width,
-                  detectCanvas.height,
-                );
-                try {
-                  const detection = detectBoard(detectCanvas);
-                  if (detection?.success && detection.doubleOuter > 0) {
-                    boardEstimateRef.current = {
-                      cx: detection.cx,
-                      cy: detection.cy,
-                      radius: detection.doubleOuter,
-                      timestamp: now,
-                    };
+
+            // Periodically run board detection on the full video frame (not cropped)
+            const now = performance.now();
+            const allowDetection =
+              (typeof document === "undefined" ||
+                document.visibilityState !== "hidden") &&
+              !autoPlacementFrozenRef.current &&
+              !dragStateRef.current;
+            const needsDetection =
+              allowDetection &&
+              calibrationPoints.length < 5 &&
+              video.videoWidth > 0 &&
+              video.videoHeight > 0 &&
+              (!boardEstimateRef.current ||
+                now - boardEstimateRef.current.timestamp > 600);
+
+            if (needsDetection) {
+              if (!detectionCanvasRef.current) {
+                detectionCanvasRef.current = document.createElement("canvas");
+              }
+              const detectCanvas = detectionCanvasRef.current;
+              if (detectCanvas) {
+                detectCanvas.width = video.videoWidth;
+                detectCanvas.height = video.videoHeight;
+                const detectCtx = detectCanvas.getContext("2d");
+                if (detectCtx) {
+                  detectCtx.drawImage(
+                    video,
+                    0,
+                    0,
+                    detectCanvas.width,
+                    detectCanvas.height,
+                  );
+                  try {
+                    const detection = detectBoard(detectCanvas);
+                    if (detection?.success && detection.doubleOuter > 0) {
+                      boardEstimateRef.current = {
+                        cx: detection.cx,
+                        cy: detection.cy,
+                        radius: detection.doubleOuter,
+                        timestamp: now,
+                      };
+                    }
+                  } catch (err) {
+                    console.warn("Board detection failed", err);
                   }
-                } catch (err) {
-                  console.warn("Board detection failed", err);
                 }
               }
             }
-          }
-        } else {
-          drawFallbackBackground(
-            readyState < 2 ? "Loading video..." : undefined,
-          );
-        }
-      } else {
-        drawFallbackBackground("Camera feed unavailable");
-      }
-
-      cropInfoRef.current = {
-        cropX,
-        cropY,
-        cropW,
-        cropH,
-        canvasWidth: canvas.width,
-        canvasHeight: canvas.height,
-      };
-
-      const boardEstimate = boardEstimateRef.current;
-      const activeDragIndex = dragStateRef.current?.targetIndex ?? null;
-
-      // Draw target circles for uncaptured points
-      for (let i = 0; i < 5; i++) {
-        if (i >= calibrationPoints.length) {
-          const targetPoint = canonicalTargets[i];
-          let drawX: number;
-          let drawY: number;
-
-          const override = targetOverridesRef.current[i];
-          if (override) {
-            const mapped = mapImageToCanvas(override.x, override.y);
-            drawX = mapped.x;
-            drawY = mapped.y;
-          } else if (boardEstimate) {
-            const pxPerMm = boardEstimate.radius / BoardRadii.doubleOuter;
-            const imageX = boardEstimate.cx + targetPoint.x * pxPerMm;
-            const imageY = boardEstimate.cy + targetPoint.y * pxPerMm;
-            const mapped = mapImageToCanvas(imageX, imageY);
-            drawX = mapped.x;
-            drawY = mapped.y;
           } else {
-            const fallbackScale = Math.min(canvas.width, canvas.height) / 390;
-            drawX = canvas.width / 2 + targetPoint.x * fallbackScale;
-            drawY = canvas.height / 2 + targetPoint.y * fallbackScale;
+            drawFallbackBackground(
+              readyState < 2 ? "Loading video..." : undefined,
+            );
           }
+        } else {
+          drawFallbackBackground("Camera feed unavailable");
+        }
 
-          targetScreenPositionsRef.current[i] = { x: drawX, y: drawY };
-          const isDraggingTarget = activeDragIndex === i;
+        cropInfoRef.current = {
+          cropX,
+          cropY,
+          cropW,
+          cropH,
+          canvasWidth: canvas.width,
+          canvasHeight: canvas.height,
+        };
 
-          if (isDraggingTarget) {
-            ctx.strokeStyle = "rgba(255,255,255,0.8)";
-            ctx.lineWidth = 7;
-            ctx.globalAlpha = 0.2;
+        const boardEstimate = boardEstimateRef.current;
+        const activeDragIndex = dragStateRef.current?.targetIndex ?? null;
+
+        // Draw target circles for uncaptured points
+        for (let i = 0; i < 5; i++) {
+          if (i >= calibrationPoints.length) {
+            const targetPoint = canonicalTargets[i];
+            let drawX: number;
+            let drawY: number;
+
+            const override = targetOverridesRef.current[i];
+            if (override) {
+              const mapped = mapImageToCanvas(override.x, override.y);
+              drawX = mapped.x;
+              drawY = mapped.y;
+            } else if (boardEstimate) {
+              const pxPerMm = boardEstimate.radius / BoardRadii.doubleOuter;
+              const imageX = boardEstimate.cx + targetPoint.x * pxPerMm;
+              const imageY = boardEstimate.cy + targetPoint.y * pxPerMm;
+              const mapped = mapImageToCanvas(imageX, imageY);
+              drawX = mapped.x;
+              drawY = mapped.y;
+            } else {
+              const fallbackScale = Math.min(canvas.width, canvas.height) / 390;
+              drawX = canvas.width / 2 + targetPoint.x * fallbackScale;
+              drawY = canvas.height / 2 + targetPoint.y * fallbackScale;
+            }
+
+            targetScreenPositionsRef.current[i] = { x: drawX, y: drawY };
+            const isDraggingTarget = activeDragIndex === i;
+
+            if (isDraggingTarget) {
+              ctx.strokeStyle = "rgba(255,255,255,0.8)";
+              ctx.lineWidth = 7;
+              ctx.globalAlpha = 0.2;
+              ctx.beginPath();
+              ctx.arc(drawX, drawY, 30, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+
+            ctx.strokeStyle = TARGET_COLORS[i];
+            ctx.lineWidth = isDraggingTarget ? 4 : 3;
+            ctx.globalAlpha = isDraggingTarget ? 1 : 0.8;
             ctx.beginPath();
-            ctx.arc(drawX, drawY, 30, 0, Math.PI * 2);
+            ctx.arc(drawX, drawY, 22, 0, Math.PI * 2);
             ctx.stroke();
+
+            ctx.fillStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(drawX, drawY, 7, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = TARGET_COLORS[i];
+            ctx.beginPath();
+            ctx.arc(drawX, drawY, 5, 0, Math.PI * 2);
+            if (typeof ctx.fill === "function") ctx.fill();
+            ctx.globalAlpha = 1;
+
+            ctx.fillStyle = TARGET_COLORS[i];
+            ctx.font = "bold 12px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(TARGET_LABELS[i].split(" ")[0], drawX, drawY - 35);
+          }
+        }
+
+        // Draw completed points with larger markers
+        calibrationPoints.forEach((point, i) => {
+          targetScreenPositionsRef.current[i] = null;
+          const mapped = mapImageToCanvas(point.x, point.y);
+          const drawX = mapped.x;
+          const drawY = mapped.y;
+
+          const quality = evaluateClickQuality(
+            i,
+            point,
+            canonicalTargets[i],
+            H || undefined,
+          );
+
+          // Use green if valid, red if invalid
+          const pointColor = quality.isValid ? "#22c55e" : "#ef4444";
+
+          // Draw outer circle (validation ring)
+          ctx.strokeStyle = pointColor;
+          ctx.lineWidth = 2;
+          ctx.globalAlpha = 0.8;
+          ctx.beginPath();
+          ctx.arc(drawX, drawY, 15, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Draw filled circle background
+          ctx.fillStyle = pointColor;
+          ctx.globalAlpha = 0.6;
+          ctx.beginPath();
+          ctx.arc(drawX, drawY, 12, 0, Math.PI * 2);
+          if (typeof ctx.fill === "function") ctx.fill();
+
+          // Draw checkmark or X (white text)
+          ctx.fillStyle = "#fff";
+          ctx.font = "bold 14px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.globalAlpha = 1;
+          ctx.fillText(quality.isValid ? "✓" : "✗", drawX, drawY);
+          ctx.fillText(quality.isValid ? sym("ok") : sym("no"), drawX, drawY);
+
+          // Draw glow effect around valid clicks
+          if (quality.isValid) {
+            ctx.strokeStyle = "#22c55e";
+            ctx.lineWidth = 1.5;
+            ctx.globalAlpha = 0.3;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.arc(drawX, drawY, 22, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        });
+
+        // Draw calibration status circle when complete
+        if (isComplete && errorPx !== null && confidence) {
+          // Only draw the status badge at the top (small indicator)
+          // Individual point circles above show pass/fail for each point
+
+          const badgeWidth = 140;
+          const badgeHeight = 36;
+          const badgeX = canvas.width / 2 - badgeWidth / 2;
+          const badgeY = 15;
+
+          // Determine color based on confidence level
+          let badgeColor: string;
+          if (confidence.percentage >= 75) {
+            // PASS: Bright green
+            badgeColor = "#22c55e";
+          } else {
+            // FAIL: Bright red
+            badgeColor = "#ef4444";
           }
 
-          ctx.strokeStyle = TARGET_COLORS[i];
-          ctx.lineWidth = isDraggingTarget ? 4 : 3;
-          ctx.globalAlpha = isDraggingTarget ? 1 : 0.8;
+          // Draw badge background with slight shadow
+          ctx.globalAlpha = 0.9;
+          ctx.fillStyle = badgeColor;
           ctx.beginPath();
-          ctx.arc(drawX, drawY, 22, 0, Math.PI * 2);
-          ctx.stroke();
-
-          ctx.fillStyle = "#ffffff";
-          ctx.beginPath();
-          ctx.arc(drawX, drawY, 7, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.fillStyle = TARGET_COLORS[i];
-          ctx.beginPath();
-          ctx.arc(drawX, drawY, 5, 0, Math.PI * 2);
+          if (typeof (ctx as any).roundRect === "function") {
+            (ctx as any).roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 8);
+          } else {
+            // Fallback for environments (jsdom) without roundRect/arcTo support
+            // Draw a simple rectangle instead of a rounded rect to avoid errors
+            ctx.rect(badgeX, badgeY, badgeWidth, badgeHeight);
+          }
           if (typeof ctx.fill === "function") ctx.fill();
+
+          // Draw badge text
           ctx.globalAlpha = 1;
-
-          ctx.fillStyle = TARGET_COLORS[i];
-          ctx.font = "bold 12px sans-serif";
+          ctx.fillStyle = "#fff";
+          ctx.font = "bold 14px sans-serif";
           ctx.textAlign = "center";
-          ctx.fillText(TARGET_LABELS[i].split(" ")[0], drawX, drawY - 35);
+          ctx.textBaseline = "middle";
+          const statusText =
+            confidence.percentage >= 75
+              ? `${sym("ok")} PASS ${confidence.percentage}%`
+              : `${sym("no")} FAIL ${confidence.percentage}%`;
+          ctx.fillText(statusText, canvas.width / 2, badgeY + badgeHeight / 2);
         }
+      } catch (err) {
+        // In test environments (jsdom) some Canvas APIs are missing. We
+        // swallow drawing errors to avoid breaking test flow; drawing is
+        // non-critical for logic and mapping correctness.
+        // console.debug("drawCanvas skipped due to unsupported canvas API", err);
+        return;
       }
-
-      // Draw completed points with larger markers
-      calibrationPoints.forEach((point, i) => {
-        targetScreenPositionsRef.current[i] = null;
-        const mapped = mapImageToCanvas(point.x, point.y);
-        const drawX = mapped.x;
-        const drawY = mapped.y;
-
-        const quality = evaluateClickQuality(
-          i,
-          point,
-          canonicalTargets[i],
-          H || undefined,
-        );
-
-        // Use green if valid, red if invalid
-        const pointColor = quality.isValid ? "#22c55e" : "#ef4444";
-
-        // Draw outer circle (validation ring)
-        ctx.strokeStyle = pointColor;
-        ctx.lineWidth = 2;
-        ctx.globalAlpha = 0.8;
-        ctx.beginPath();
-        ctx.arc(drawX, drawY, 15, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Draw filled circle background
-        ctx.fillStyle = pointColor;
-        ctx.globalAlpha = 0.6;
-        ctx.beginPath();
-        ctx.arc(drawX, drawY, 12, 0, Math.PI * 2);
-        if (typeof ctx.fill === "function") ctx.fill();
-
-        // Draw checkmark or X (white text)
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 14px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.globalAlpha = 1;
-        ctx.fillText(quality.isValid ? "✓" : "✗", drawX, drawY);
-        ctx.fillText(quality.isValid ? sym("ok") : sym("no"), drawX, drawY);
-
-        // Draw glow effect around valid clicks
-        if (quality.isValid) {
-          ctx.strokeStyle = "#22c55e";
-          ctx.lineWidth = 1.5;
-          ctx.globalAlpha = 0.3;
-          ctx.setLineDash([3, 3]);
-          ctx.beginPath();
-          ctx.arc(drawX, drawY, 22, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-      });
-
-      // Draw calibration status circle when complete
-      if (isComplete && errorPx !== null && confidence) {
-        // Only draw the status badge at the top (small indicator)
-        // Individual point circles above show pass/fail for each point
-
-        const badgeWidth = 140;
-        const badgeHeight = 36;
-        const badgeX = canvas.width / 2 - badgeWidth / 2;
-        const badgeY = 15;
-
-        // Determine color based on confidence level
-        let badgeColor: string;
-        if (confidence.percentage >= 75) {
-          // PASS: Bright green
-          badgeColor = "#22c55e";
-        } else {
-          // FAIL: Bright red
-          badgeColor = "#ef4444";
-        }
-
-        // Draw badge background with slight shadow
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = badgeColor;
-        ctx.beginPath();
-        if (typeof (ctx as any).roundRect === "function") {
-          (ctx as any).roundRect(badgeX, badgeY, badgeWidth, badgeHeight, 8);
-        } else {
-          // Fallback for environments (jsdom) without roundRect/arcTo support
-          // Draw a simple rectangle instead of a rounded rect to avoid errors
-          ctx.rect(badgeX, badgeY, badgeWidth, badgeHeight);
-        }
-        if (typeof ctx.fill === "function") ctx.fill();
-
-        // Draw badge text
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 14px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        const statusText =
-          confidence.percentage >= 75
-            ? `${sym("ok")} PASS ${confidence.percentage}%`
-            : `${sym("no")} FAIL ${confidence.percentage}%`;
-        ctx.fillText(statusText, canvas.width / 2, badgeY + badgeHeight / 2);
-      }
-    } catch (err) {
-      // In test environments (jsdom) some Canvas APIs are missing. We
-      // swallow drawing errors to avoid breaking test flow; drawing is
-      // non-critical for logic and mapping correctness.
-      // console.debug("drawCanvas skipped due to unsupported canvas API", err);
-      return;
-    }
-  }, [
-    calibrationPoints,
-    canonicalTargets,
-    confidence,
-    errorPx,
-    isComplete,
-    zoom,
-    H,
-  ]);
+    },
+    [
+      calibrationPoints,
+      canonicalTargets,
+      confidence,
+      errorPx,
+      isComplete,
+      zoom,
+      H,
+    ],
+  );
 
   // Redraw when points change - continuous animation loop
   useEffect(() => {

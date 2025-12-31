@@ -56,7 +56,11 @@ type VideoDiagnostics = {
     exists: boolean;
     videoTracks: number;
     audioTracks: number;
-    videoTrackStates: Array<{ enabled: boolean; muted?: boolean; readyState: string }>;
+    videoTrackStates: Array<{
+      enabled: boolean;
+      muted?: boolean;
+      readyState: string;
+    }>;
   };
   session: {
     mode?: any;
@@ -198,6 +202,8 @@ export type CameraViewHandle = {
     meta?: any,
     opts?: { emulateApplyAutoHit?: boolean },
   ) => void;
+  // Test-only helper to commit the currently pending visit.
+  __test_commitVisit?: () => void;
 };
 
 export default forwardRef(function CameraView(
@@ -310,9 +316,8 @@ export default forwardRef(function CameraView(
   const [streaming, setStreaming] = useState(false);
   const [videoReady, setVideoReady] = useState(false); // Track when video has dimensions
   const [showVideoDiagnostics, setShowVideoDiagnostics] = useState(false);
-  const [videoDiagnostics, setVideoDiagnostics] = useState<VideoDiagnostics | null>(
-    null,
-  );
+  const [videoDiagnostics, setVideoDiagnostics] =
+    useState<VideoDiagnostics | null>(null);
   const cameraSession = useCameraSession();
   const handleVideoRef = useCallback(
     (el: HTMLVideoElement | null) => {
@@ -434,51 +439,58 @@ export default forwardRef(function CameraView(
     };
   }, []);
 
-  const collectVideoDiagnostics = useCallback((
-    opts?: { error?: string | null },
-  ): VideoDiagnostics => {
-    const v = videoRef.current;
-    const s = (cameraSession.getMediaStream?.() || null) as MediaStream | null;
-    const videoTracks = s ? s.getVideoTracks() : [];
-    const audioTracks = s ? s.getAudioTracks() : [];
-    return {
-      ts: Date.now(),
-      hasVideoEl: !!v,
-      video: {
-        hasSrcObject: !!(v as any)?.srcObject,
-        readyState: typeof (v as any)?.readyState === "number" ? (v as any).readyState : null,
-        paused: typeof (v as any)?.paused === "boolean" ? (v as any).paused : null,
-        ended: typeof (v as any)?.ended === "boolean" ? (v as any).ended : null,
-        videoWidth: v?.videoWidth || 0,
-        videoHeight: v?.videoHeight || 0,
-      },
-      stream: {
-        exists: !!s,
-        videoTracks: videoTracks.length,
-        audioTracks: audioTracks.length,
-        videoTrackStates: videoTracks.map((t) => ({
-          enabled: t.enabled,
-          muted: (t as any).muted,
-          readyState: t.readyState,
-        })),
-      },
-      session: {
-        mode: (cameraSession as any).mode,
-        isStreaming: (cameraSession as any).isStreaming,
-      },
-      preferredCamera: {
-        id: preferredCameraId,
-        label: preferredCameraLabel,
-        locked: preferredCameraLocked,
-      },
-      error: opts?.error ?? null,
-    };
-  }, [
-    cameraSession,
-    preferredCameraId,
-    preferredCameraLabel,
-    preferredCameraLocked,
-  ]);
+  const collectVideoDiagnostics = useCallback(
+    (opts?: { error?: string | null }): VideoDiagnostics => {
+      const v = videoRef.current;
+      const s = (cameraSession.getMediaStream?.() ||
+        null) as MediaStream | null;
+      const videoTracks = s ? s.getVideoTracks() : [];
+      const audioTracks = s ? s.getAudioTracks() : [];
+      return {
+        ts: Date.now(),
+        hasVideoEl: !!v,
+        video: {
+          hasSrcObject: !!(v as any)?.srcObject,
+          readyState:
+            typeof (v as any)?.readyState === "number"
+              ? (v as any).readyState
+              : null,
+          paused:
+            typeof (v as any)?.paused === "boolean" ? (v as any).paused : null,
+          ended:
+            typeof (v as any)?.ended === "boolean" ? (v as any).ended : null,
+          videoWidth: v?.videoWidth || 0,
+          videoHeight: v?.videoHeight || 0,
+        },
+        stream: {
+          exists: !!s,
+          videoTracks: videoTracks.length,
+          audioTracks: audioTracks.length,
+          videoTrackStates: videoTracks.map((t) => ({
+            enabled: t.enabled,
+            muted: (t as any).muted,
+            readyState: t.readyState,
+          })),
+        },
+        session: {
+          mode: (cameraSession as any).mode,
+          isStreaming: (cameraSession as any).isStreaming,
+        },
+        preferredCamera: {
+          id: preferredCameraId,
+          label: preferredCameraLabel,
+          locked: preferredCameraLocked,
+        },
+        error: opts?.error ?? null,
+      };
+    },
+    [
+      cameraSession,
+      preferredCameraId,
+      preferredCameraLabel,
+      preferredCameraLocked,
+    ],
+  );
 
   // Poll diagnostics when enabled. This catches the most common "white feed"
   // symptom: stream exists but videoWidth stays 0 and/or track is muted/ended.
@@ -607,7 +619,8 @@ export default forwardRef(function CameraView(
   // - Only skip waiting when the user/parent explicitly opts into immediate commits.
   // NOTE: cameraAutoCommit MUST NOT implicitly force immediate commits; that behavior
   // causes premature/incorrect scoring in real play (especially online/tournaments).
-  const shouldDeferCommit = !immediateAutoCommit && autoCommitMode !== "immediate";
+  const shouldDeferCommit =
+    !immediateAutoCommit && autoCommitMode !== "immediate";
   const [indicatorVersion, setIndicatorVersion] = useState(0);
   const [indicatorEntryVersions, setIndicatorEntryVersions] = useState<
     number[]
@@ -686,7 +699,13 @@ export default forwardRef(function CameraView(
   }>(null);
 
   const maybeHoldForConfirmation = useCallback(
-    (payload: { value: number; label: string; ring: Ring; confidence?: number; meta?: any }) => {
+    (payload: {
+      value: number;
+      label: string;
+      ring: Ring;
+      confidence?: number;
+      meta?: any;
+    }) => {
       try {
         if (!confirmUncertainDarts) return false;
         if (pendingConfirm) return true;
@@ -870,6 +889,43 @@ export default forwardRef(function CameraView(
                   /* ignore */
                 }
               }
+            } catch (e) {}
+          }
+        : undefined,
+    __test_commitVisit:
+      process.env.NODE_ENV === "test"
+        ? () => {
+            try {
+              onCommitVisit();
+            } catch (e) {}
+          }
+        : undefined,
+    __test_forceSetPendingVisit:
+      process.env.NODE_ENV === "test"
+        ? (entries: Array<{ label: string; value: number; ring: Ring }>) => {
+            try {
+              const safe = (entries || []).slice(0, 3);
+              const darts = safe.length;
+              const total = safe.reduce(
+                (sum, e) => sum + (Number((e as any)?.value) || 0),
+                0,
+              );
+              setPendingEntries(
+                safe.map((e) => ({
+                  ...e,
+                  meta: {
+                    calibrationValid: true,
+                    pBoard: null,
+                    source: "camera",
+                  },
+                })) as any,
+              );
+              setPendingDarts(darts);
+              pendingDartsRef.current = darts;
+              setPendingScore(total);
+              try {
+                usePendingVisit.getState().setVisit(safe as any, darts, total);
+              } catch (e) {}
             } catch (e) {}
           }
         : undefined,
@@ -1093,21 +1149,18 @@ export default forwardRef(function CameraView(
   const endLeg = useMatch((s) => s.endLeg);
   // Helper: convert the current pendingEntries into a minimal, serializable
   // per-dart breakdown that can be stored with the committed visit.
-  const snapshotPendingDartEntries = useCallback(
-    (entries: any[]) => {
-      try {
-        if (!Array.isArray(entries)) return undefined;
-        return entries.slice(0, 3).map((e) => ({
-          label: String(e?.label ?? ""),
-          value: Number(e?.value ?? 0),
-          ring: String(e?.ring ?? ""),
-        }));
-      } catch {
-        return undefined;
-      }
-    },
-    [],
-  );
+  const snapshotPendingDartEntries = useCallback((entries: any[]) => {
+    try {
+      if (!Array.isArray(entries)) return undefined;
+      return entries.slice(0, 3).map((e) => ({
+        label: String(e?.label ?? ""),
+        value: Number(e?.value ?? 0),
+        ring: String(e?.ring ?? ""),
+      }));
+    } catch {
+      return undefined;
+    }
+  }, []);
   // Prefer provided adapters (matchActions wrappers) when available
   const callAddVisit = (score: number, darts: number, meta?: any) => {
     try {
@@ -1475,7 +1528,9 @@ export default forwardRef(function CameraView(
         return;
       }
       // If flagged active but no live tracks, fall back to local camera startup
-      dlog("[CAMERA] Phone feed flagged active but no live tracks; starting local camera");
+      dlog(
+        "[CAMERA] Phone feed flagged active but no live tracks; starting local camera",
+      );
     }
 
     setCameraStarting(true);
@@ -1693,7 +1748,9 @@ export default forwardRef(function CameraView(
   useEffect(() => {
     if (!showVideoDiagnostics) return;
     try {
-      setVideoDiagnostics(collectVideoDiagnostics({ error: cameraAccessError }));
+      setVideoDiagnostics(
+        collectVideoDiagnostics({ error: cameraAccessError }),
+      );
     } catch {}
   }, [showVideoDiagnostics, cameraAccessError, collectVideoDiagnostics]);
 
@@ -1913,31 +1970,34 @@ export default forwardRef(function CameraView(
             <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
               <div className="opacity-70">preferred</div>
               <div className="break-all">
-                {preferredCameraLabel || "(none)"} {preferredCameraId ? `(${preferredCameraId})` : ""}
+                {preferredCameraLabel || "(none)"}{" "}
+                {preferredCameraId ? `(${preferredCameraId})` : ""}
               </div>
 
               <div className="opacity-70">session</div>
               <div>
-                mode={String(videoDiagnostics?.session?.mode ?? "?")} stream={String(
-                  videoDiagnostics?.session?.isStreaming ?? "?",
-                )}
+                mode={String(videoDiagnostics?.session?.mode ?? "?")} stream=
+                {String(videoDiagnostics?.session?.isStreaming ?? "?")}
               </div>
 
               <div className="opacity-70">video el</div>
               <div>
-                srcObject={String(videoDiagnostics?.video?.hasSrcObject ?? false)} rs={String(
-                  videoDiagnostics?.video?.readyState ?? "?",
-                )} paused={String(videoDiagnostics?.video?.paused ?? "?")}
+                srcObject=
+                {String(videoDiagnostics?.video?.hasSrcObject ?? false)} rs=
+                {String(videoDiagnostics?.video?.readyState ?? "?")} paused=
+                {String(videoDiagnostics?.video?.paused ?? "?")}
               </div>
 
               <div className="opacity-70">dimensions</div>
               <div>
-                {videoDiagnostics?.video?.videoWidth ?? 0}×{videoDiagnostics?.video?.videoHeight ?? 0}
+                {videoDiagnostics?.video?.videoWidth ?? 0}×
+                {videoDiagnostics?.video?.videoHeight ?? 0}
               </div>
 
               <div className="opacity-70">tracks</div>
               <div>
-                v={videoDiagnostics?.stream?.videoTracks ?? 0} a={videoDiagnostics?.stream?.audioTracks ?? 0}
+                v={videoDiagnostics?.stream?.videoTracks ?? 0} a=
+                {videoDiagnostics?.stream?.audioTracks ?? 0}
               </div>
             </div>
 
@@ -1948,7 +2008,9 @@ export default forwardRef(function CameraView(
                   {videoDiagnostics.stream.videoTrackStates.map((t, idx) => (
                     <div key={idx} className="text-xxs opacity-90">
                       #{idx} ready={t.readyState} enabled={String(t.enabled)}
-                      {typeof t.muted === "boolean" ? ` muted=${String(t.muted)}` : ""}
+                      {typeof t.muted === "boolean"
+                        ? ` muted=${String(t.muted)}`
+                        : ""}
                     </div>
                   ))}
                 </div>
@@ -1962,8 +2024,10 @@ export default forwardRef(function CameraView(
             ) : null}
 
             <div className="mt-2 text-xxs opacity-60">
-              If dims stay 0×0 but tracks&gt;0, the video element isn't receiving frames (often a virtual cam / autoplay / stream ownership issue).
-              If tracks=0, getUserMedia succeeded but no video track is being delivered.
+              If dims stay 0×0 but tracks&gt;0, the video element isn't
+              receiving frames (often a virtual cam / autoplay / stream
+              ownership issue). If tracks=0, getUserMedia succeeded but no video
+              track is being delivered.
             </div>
           </div>
         )}
@@ -2110,7 +2174,10 @@ export default forwardRef(function CameraView(
     // Built-in autoscore providers are handled locally (offline CV).
     // built-in-v2 currently shares the same detector/commit loop but may evolve to
     // different scoring/refinement logic.
-    if (autoscoreProvider !== "built-in" && autoscoreProvider !== "built-in-v2") {
+    if (
+      autoscoreProvider !== "built-in" &&
+      autoscoreProvider !== "built-in-v2"
+    ) {
       console.log(
         "[DETECTION] Exiting: autoscoreProvider is",
         autoscoreProvider,
@@ -2402,7 +2469,10 @@ export default forwardRef(function CameraView(
                 calibH: imageSize.h,
                 fitMode,
               });
-              const pCal = fit.toCalibration({ x: tipRefined.x, y: tipRefined.y });
+              const pCal = fit.toCalibration({
+                x: tipRefined.x,
+                y: tipRefined.y,
+              });
               const score = scoreFromImagePoint(
                 H,
                 pCal,
@@ -2419,7 +2489,11 @@ export default forwardRef(function CameraView(
               const ring = score.ring as Ring;
               const value = score.base;
               const sector = (score.sector ?? null) as number | null;
-              const mult = Math.max(0, Number(score.mult) || 0) as 0 | 1 | 2 | 3;
+              const mult = Math.max(0, Number(score.mult) || 0) as
+                | 0
+                | 1
+                | 2
+                | 3;
               let label = "";
               if (ring === "MISS") {
                 label = "MISS";
@@ -2621,7 +2695,7 @@ export default forwardRef(function CameraView(
                 }
               } catch (e) {}
             }
-              // (shouldAccept already initialized above)
+            // (shouldAccept already initialized above)
             dlog("CameraView: detection details", {
               value,
               ring,
@@ -3085,10 +3159,16 @@ export default forwardRef(function CameraView(
                 // If overlays are disabled, keep canvas clean and skip drawing.
                 if (overlayRef.current) {
                   const octx = overlayRef.current.getContext("2d");
-                  octx?.clearRect(0, 0, overlayRef.current.width, overlayRef.current.height);
+                  octx?.clearRect(
+                    0,
+                    0,
+                    overlayRef.current.width,
+                    overlayRef.current.height,
+                  );
                 }
               } else {
-                const drawOverlayHint = value > 0 && ring !== "MISS" && !isGhost;
+                const drawOverlayHint =
+                  value > 0 && ring !== "MISS" && !isGhost;
                 if (drawOverlayHint) {
                   const o = overlayRef.current;
                   if (o) {
@@ -3255,8 +3335,11 @@ export default forwardRef(function CameraView(
 
   const compactCameraView = () => {
     if (!hideInlinePanels) return null;
-    const aspect = cameraAspect || useUserSettings.getState().cameraAspect || "wide";
-    const fit = (cameraFitMode || useUserSettings.getState().cameraFitMode || "fit") === "fit";
+    const aspect =
+      cameraAspect || useUserSettings.getState().cameraAspect || "wide";
+    const fit =
+      (cameraFitMode || useUserSettings.getState().cameraFitMode || "fit") ===
+      "fit";
     const videoClass =
       aspect === "square"
         ? "absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black"
@@ -3296,7 +3379,9 @@ export default forwardRef(function CameraView(
             <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-center px-4">
               <div className="space-y-3">
                 <div className="text-sm font-semibold text-white">
-                  {showPhoneReconnect ? "Phone camera not streaming" : "Camera not running"}
+                  {showPhoneReconnect
+                    ? "Phone camera not streaming"
+                    : "Camera not running"}
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
                   <button
@@ -3427,7 +3512,7 @@ export default forwardRef(function CameraView(
         return;
       // Route external provider hits through the same confidence/confirmation gate
       // used by the built-in camera detector so behavior is consistent.
-      const ring = (d.ring as any) as Ring;
+      const ring = d.ring as any as Ring;
       const value = Number(d.value) || 0;
       const sector = (d.sector ?? null) as number | null;
       const mult = Math.max(0, Number(d.mult) || 0) as 0 | 1 | 2 | 3;
@@ -3497,11 +3582,7 @@ export default forwardRef(function CameraView(
       }
     });
     return () => sub.close();
-  }, [
-    autoscoreProvider,
-    autoscoreWsUrl,
-    maybeHoldForConfirmation,
-  ]);
+  }, [autoscoreProvider, autoscoreWsUrl, maybeHoldForConfirmation]);
 
   function onOverlayClick(e: React.MouseEvent<HTMLCanvasElement>) {
     if (!overlayRef.current || !H || !imageSize) return;
@@ -3589,12 +3670,9 @@ export default forwardRef(function CameraView(
       source?: "camera" | "manual";
     },
   ) {
-    // Announce the dart if caller is enabled and this came from camera detection
-    if (callerEnabled && meta?.source === "camera") {
-      try {
-        sayDart(label, callerVoice, { volume: callerVolume });
-      } catch (e) {}
-    }
+    // Note: we intentionally do NOT voice-announce individual dart segments here.
+    // Users want the *visit total* (e.g., 128) rather than "T18 T18 S20".
+    // Visit totals are announced when the visit commits (3 darts / bust / finish).
 
     if (shouldDeferCommit && awaitingClear) {
       if (!pulseManualPill) {
@@ -3614,6 +3692,17 @@ export default forwardRef(function CameraView(
       pBoard: null,
       source: "manual",
     };
+
+    // Allow unit tests to bypass camera auto-dedupe/cooldown by providing a stable,
+    // explicit board point. Production callers can omit it.
+    if (process.env.NODE_ENV === "test") {
+      try {
+        const anyMeta = entryMeta as any;
+        if (anyMeta?.__test_point && !anyMeta.pBoard) {
+          anyMeta.pBoard = anyMeta.__test_point;
+        }
+      } catch (e) {}
+    }
     // In generic mode, delegate to parent without X01 bust/finish rules
     if (scoringMode === "custom") {
       if (onGenericDart)
@@ -3626,6 +3715,15 @@ export default forwardRef(function CameraView(
         setPendingDarts(1);
         setPendingScore(value);
         setPendingEntries([{ label, value, ring, meta: entryMeta }]);
+        try {
+          usePendingVisit
+            .getState()
+            .setVisit(
+              [{ label, value, ring, meta: entryMeta }] as any,
+              1,
+              value,
+            );
+        } catch (e) {}
         return;
       }
       const newDarts = pendingDarts + 1;
@@ -3633,6 +3731,19 @@ export default forwardRef(function CameraView(
       pendingDartsRef.current = newDarts;
       setPendingScore((s) => s + value);
       setPendingEntries((e) => [...e, { label, value, ring, meta: entryMeta }]);
+      try {
+        const nextEntries = [
+          ...(pendingEntries as any[]),
+          { label, value, ring, meta: entryMeta },
+        ];
+        const total = nextEntries.reduce(
+          (sum, en) => sum + (Number(en?.value) || 0),
+          0,
+        );
+        usePendingVisit
+          .getState()
+          .setVisit(nextEntries as any, newDarts, total);
+      } catch (e) {}
       return;
     }
 
@@ -3640,7 +3751,9 @@ export default forwardRef(function CameraView(
     if ((pendingDartsRef.current || 0) >= 3) {
       const previousScore = pendingScore;
       const previousDarts = pendingDarts;
-      const previousEntries = snapshotPendingDartEntries(pendingEntries as any[]);
+      const previousEntries = snapshotPendingDartEntries(
+        pendingEntries as any[],
+      );
       // Commit previous full visit
       callAddVisit(previousScore, previousDarts, {
         preOpenDarts: pendingPreOpenDarts || 0,
@@ -3661,6 +3774,15 @@ export default forwardRef(function CameraView(
       pendingDartsRef.current = 1;
       setPendingScore(applied);
       setPendingEntries([{ label, value: applied, ring, meta: entryMeta }]);
+      try {
+        usePendingVisit
+          .getState()
+          .setVisit(
+            [{ label, value: applied, ring, meta: entryMeta }] as any,
+            1,
+            applied,
+          );
+      } catch (e) {}
       setPendingPreOpenDarts(willCount ? 0 : 1);
       setPendingDartsAtDouble(0);
       if (
@@ -3731,6 +3853,9 @@ export default forwardRef(function CameraView(
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
       enqueueVisitCommit({ score: 0, darts: newDarts, finished: false });
+      try {
+        usePendingVisit.getState().reset();
+      } catch (e) {}
       return;
     }
 
@@ -3738,10 +3863,20 @@ export default forwardRef(function CameraView(
     setPendingDarts(newDarts);
     pendingDartsRef.current = newDarts;
     setPendingScore(newScore);
-    setPendingEntries((e) => [
-      ...e,
-      { label, value: appliedValue, ring, meta: entryMeta },
-    ]);
+    setPendingEntries((e) => {
+      const next = [
+        ...e,
+        { label, value: appliedValue, ring, meta: entryMeta },
+      ];
+      try {
+        const total = next.reduce(
+          (sum, en) => sum + (Number(en?.value) || 0),
+          0,
+        );
+        usePendingVisit.getState().setVisit(next as any, newDarts, total);
+      } catch (e) {}
+      return next;
+    });
     if (
       x01DoubleIn &&
       !isOpened &&
@@ -3790,6 +3925,9 @@ export default forwardRef(function CameraView(
           frame,
         },
       });
+      try {
+        usePendingVisit.getState().reset();
+      } catch (e) {}
       return;
     }
 
@@ -3812,6 +3950,9 @@ export default forwardRef(function CameraView(
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: false });
+      try {
+        usePendingVisit.getState().reset();
+      } catch (e) {}
     }
   }
 
@@ -4056,8 +4197,11 @@ export default forwardRef(function CameraView(
     }
     const visitScore = pendingScore;
     const visitDarts = pendingDarts;
-  const commitEntries = snapshotPendingDartEntries(pendingEntries as any[]);
-  callAddVisit(visitScore, visitDarts, { entries: commitEntries, visitTotal: visitScore });
+    const commitEntries = snapshotPendingDartEntries(pendingEntries as any[]);
+    callAddVisit(visitScore, visitDarts, {
+      entries: commitEntries,
+      visitTotal: visitScore,
+    });
     try {
       const name = matchState.players[matchState.currentPlayerIdx]?.name;
       if (name) addSample(name, visitDarts, visitScore);
@@ -4330,9 +4474,7 @@ export default forwardRef(function CameraView(
                   <span className="text-slate-300">Calibration:</span>
                   <span
                     className={
-                      calibrationValid
-                        ? "text-emerald-300"
-                        : "text-rose-300"
+                      calibrationValid ? "text-emerald-300" : "text-rose-300"
                     }
                   >
                     {calibrationValid ? "VALID" : "INVALID"}
@@ -4354,7 +4496,9 @@ export default forwardRef(function CameraView(
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div className="rounded-xl border border-white/10 bg-black/30 p-2">
                     <div className="text-slate-300 mb-1">Last detection</div>
-                    <div>label: {diagnosticsRef.current.lastLabel ?? "(none)"}</div>
+                    <div>
+                      label: {diagnosticsRef.current.lastLabel ?? "(none)"}
+                    </div>
                     <div>
                       confidence:{" "}
                       {diagnosticsRef.current.lastConfidence == null
@@ -4886,7 +5030,8 @@ export default forwardRef(function CameraView(
               </div>
               <div className="flex flex-col gap-2 mb-3">
                 <div>
-                  <span className="font-semibold">Detected:</span> {pendingConfirm.label}
+                  <span className="font-semibold">Detected:</span>{" "}
+                  {pendingConfirm.label}
                 </div>
                 <div>
                   <span className="font-semibold">Confidence:</span>{" "}

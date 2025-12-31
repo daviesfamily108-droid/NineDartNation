@@ -141,7 +141,9 @@ export default function CameraTile({
     try {
       const existingStream = cameraSession.getMediaStream();
       if (!existingStream) {
-        console.log("[CameraTile] attachExistingStream: No existing stream found");
+        console.log(
+          "[CameraTile] attachExistingStream: No existing stream found",
+        );
         return false;
       }
       if (!videoRef.current) {
@@ -360,9 +362,13 @@ export default function CameraTile({
         } catch {}
       }
     };
-    Promise.resolve(apply()).then(maybeClear).catch(() => {});
+    Promise.resolve(apply())
+      .then(maybeClear)
+      .catch(() => {});
     t = setInterval(() => {
-      Promise.resolve(apply()).then(maybeClear).catch(() => {});
+      Promise.resolve(apply())
+        .then(maybeClear)
+        .catch(() => {});
     }, 800);
     return () => {
       try {
@@ -380,7 +386,9 @@ export default function CameraTile({
     if (mode === "wifi") {
       return startWifiConnection();
     }
-    console.log("[CameraTile] Attempting to attach global stream for phone mode...");
+    console.log(
+      "[CameraTile] Attempting to attach global stream for phone mode...",
+    );
 
     // If phone camera is selected and paired, don't try to start local camera
     if (preferredCameraLabel === "Phone Camera" || mode === "phone") {
@@ -390,7 +398,10 @@ export default function CameraTile({
       );
       if (s && liveTracks.length > 0 && videoRef.current) {
         try {
-          const res = await ensureVideoPlays({ video: videoRef.current, stream: s });
+          const res = await ensureVideoPlays({
+            video: videoRef.current,
+            stream: s,
+          });
           setStreaming(!!res.played);
           if (res.played) return;
         } catch {}
@@ -415,7 +426,10 @@ export default function CameraTile({
         (t) => t.readyState === "live",
       );
       if (s && liveTracks.length > 0 && videoRef.current) {
-        const res = await ensureVideoPlays({ video: videoRef.current, stream: s });
+        const res = await ensureVideoPlays({
+          video: videoRef.current,
+          stream: s,
+        });
         setStreaming(!!res.played);
         if (res.played) return;
       }
@@ -450,7 +464,8 @@ export default function CameraTile({
           ensureVideoPlays({
             video: v,
             stream: s,
-            onPlayError: (e) => console.warn("[CameraTile] Failsafe play error", e),
+            onPlayError: (e) =>
+              console.warn("[CameraTile] Failsafe play error", e),
           }),
         )
           .then((res) => {
@@ -475,7 +490,13 @@ export default function CameraTile({
       );
       start().catch(() => {});
     }
-  }, [cameraSession, forceAutoStart, autoStart, start, cameraSession.isStreaming]);
+  }, [
+    cameraSession,
+    forceAutoStart,
+    autoStart,
+    start,
+    cameraSession.isStreaming,
+  ]);
   const stop = useCallback(() => {
     // Detach preview only. Do NOT stop tracks here, as the global cameraSession
     // stream may be shared by CameraView and other UI surfaces.

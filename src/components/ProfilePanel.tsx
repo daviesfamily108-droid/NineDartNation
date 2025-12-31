@@ -96,8 +96,9 @@ interface ProfilePanelProps {
 }
 
 export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
-  const [availableVoices, setAvailableVoices] =
-    useState<SpeechSynthesisVoice[]>([]);
+  const [availableVoices, setAvailableVoices] = useState<
+    SpeechSynthesisVoice[]
+  >([]);
   // Profile bio fields
   const [isEditing, setIsEditing] = useState(false);
   const [favPlayer, setFavPlayer] = useState("");

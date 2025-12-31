@@ -28,7 +28,9 @@ describe("dispatchCameraRecovery", () => {
     mod.dispatchCameraRecovery("user-click");
 
     expect(
-      dispatchSpy.mock.calls.some((c) => (c[0] as any)?.type === "ndn:camera-reset"),
+      dispatchSpy.mock.calls.some(
+        (c) => (c[0] as any)?.type === "ndn:camera-reset",
+      ),
     ).toBe(true);
   });
 

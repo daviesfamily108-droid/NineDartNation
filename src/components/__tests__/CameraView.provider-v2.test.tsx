@@ -55,7 +55,9 @@ vi.mock("../../store/userSettings", async () => {
 describe("CameraView autoscoreProvider built-in-v2", () => {
   it("mounts without throwing (provider is accepted)", () => {
     const ref = createRef<CameraViewHandle>();
-    expect(() => render(<CameraView ref={ref as any} scoringMode="x01" />)).not.toThrow();
+    expect(() =>
+      render(<CameraView ref={ref as any} scoringMode="x01" />),
+    ).not.toThrow();
   });
 
   it("does not crash when provider is built-in-v2 (even without cameras)", async () => {

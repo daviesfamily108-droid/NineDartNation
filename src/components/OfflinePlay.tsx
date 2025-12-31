@@ -3600,7 +3600,11 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   <div className="rounded-2xl overflow-hidden bg-black border border-white/10">
                                     {cameraEnabled ? (
                                       <CameraView
-                                        scoringMode={selectedMode === "X01" ? "x01" : "custom"}
+                                        scoringMode={
+                                          selectedMode === "X01"
+                                            ? "x01"
+                                            : "custom"
+                                        }
                                         showToolbar={cameraToolbarVisible}
                                         immediateAutoCommit
                                         cameraAutoCommit="camera"
@@ -5791,7 +5795,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                               </div>
                             )}
                           </div>
-
                         </div>
                         {/* Remove the separate camera view below scoreboard */}
                         {(selectedMode as any) === "X01" && !cameraEnabled && (
@@ -6069,7 +6072,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                     <div className="h-1" />
                   </div>
                 </div>
-
               </div>
             </ResizableModal>
           </div>

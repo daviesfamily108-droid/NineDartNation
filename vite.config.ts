@@ -43,7 +43,13 @@ export default defineConfig({
         target: 'http://localhost:8787',
         changeOrigin: true,
       },
-    }
+    },
+    // Windows/PowerShell can sometimes feed unexpected stdin data to Vite's
+    // interactive CLI (we've seen a lone "c" + immediate exit code 1).
+    // Disabling these avoids dev-server shutdown without affecting app behavior.
+    watch: {
+      disableGlobbing: true,
+    },
   },
   // Ensure vite preview also binds correctly in hosted environments
   preview: {

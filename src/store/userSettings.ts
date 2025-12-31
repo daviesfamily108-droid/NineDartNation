@@ -203,15 +203,15 @@ function load(): Pick<
         cameraEnabled: true,
         hideCameraOverlay: false,
         offlineLayout: "modern",
-  hideInGameSidebar: true,
+        hideInGameSidebar: true,
         autoscoreProvider: "built-in",
         autoscoreWsUrl: "",
         autoCommitMode: "wait-for-clear",
-  confirmUncertainDarts: true,
-  autoScoreConfidenceThreshold: 0.85,
-    autoscoreDetectorMinArea: 30,
-    autoscoreDetectorThresh: 15,
-    autoscoreDetectorRequireStableN: 2,
+        confirmUncertainDarts: true,
+        autoScoreConfidenceThreshold: 0.85,
+        autoscoreDetectorMinArea: 30,
+        autoscoreDetectorThresh: 15,
+        autoscoreDetectorRequireStableN: 2,
         allowAutocommitInOnline: false,
         textSize: "medium",
         boxSize: "medium",
@@ -278,7 +278,9 @@ function load(): Pick<
       autoCommitMode:
         j.autoCommitMode === "immediate" ? "immediate" : "wait-for-clear",
       confirmUncertainDarts:
-        typeof j.confirmUncertainDarts === "boolean" ? j.confirmUncertainDarts : true,
+        typeof j.confirmUncertainDarts === "boolean"
+          ? j.confirmUncertainDarts
+          : true,
       autoScoreConfidenceThreshold:
         typeof j.autoScoreConfidenceThreshold === "number" &&
         isFinite(j.autoScoreConfidenceThreshold)
@@ -297,7 +299,10 @@ function load(): Pick<
       autoscoreDetectorRequireStableN:
         typeof j.autoscoreDetectorRequireStableN === "number" &&
         isFinite(j.autoscoreDetectorRequireStableN)
-          ? Math.max(1, Math.min(10, Math.round(j.autoscoreDetectorRequireStableN)))
+          ? Math.max(
+              1,
+              Math.min(10, Math.round(j.autoscoreDetectorRequireStableN)),
+            )
           : 2,
       allowAutocommitInOnline: !!j.allowAutocommitInOnline,
       calibrationGuide:

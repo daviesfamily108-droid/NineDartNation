@@ -234,18 +234,23 @@ export function Sidebar({
   }, [showDiscord]);
 
   // Group tabs for professional layout
-  const playTabs = tabs.filter(t => ['score', 'online', 'offline', 'tournaments'].includes(t.key));
-  const socialTabs = tabs.filter(t => ['friends'].includes(t.key));
-  const systemTabs = tabs.filter(t => ['stats', 'calibrate', 'settings', 'admin', 'fullaccess'].includes(t.key));
+  const playTabs = tabs.filter((t) =>
+    ["score", "online", "offline", "tournaments"].includes(t.key),
+  );
+  const socialTabs = tabs.filter((t) => ["friends"].includes(t.key));
+  const systemTabs = tabs.filter((t) =>
+    ["stats", "calibrate", "settings", "admin", "fullaccess"].includes(t.key),
+  );
 
   const renderTab = (t: TabDefinition) => {
     const { key, label, icon: Icon } = t;
     const isActive = active === key;
-    
+
     // Calculate total notifications for this tab
     let badgeCount = 0;
-    if (key === 'friends') badgeCount = notifications.friendRequests;
-    if (key === 'score') badgeCount = notifications.messages + notifications.tournaments;
+    if (key === "friends") badgeCount = notifications.friendRequests;
+    if (key === "score")
+      badgeCount = notifications.messages + notifications.tournaments;
 
     return (
       <button
@@ -255,17 +260,21 @@ export function Sidebar({
         title={label}
       >
         <div className="flex items-center gap-3">
-          <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-          <span className={`font-semibold text-[1rem] ${isActive ? 'text-white' : 'text-slate-300'}`}>
+          <Icon
+            className={`w-5 h-5 ${isActive ? "text-white" : "text-slate-400"}`}
+          />
+          <span
+            className={`font-semibold text-[1rem] ${isActive ? "text-white" : "text-slate-300"}`}
+          >
             {label}
           </span>
         </div>
-        
+
         <div className="flex items-center gap-2">
           {key === "online" && !user?.fullAccess && freeLeft <= 0 && (
             <Lock className="w-3 h-3 text-rose-500" />
           )}
-          
+
           {badgeCount > 0 && (
             <span className="notification-badge animate-pulse">
               {badgeCount > 9 ? "9+" : badgeCount}
@@ -288,22 +297,30 @@ export function Sidebar({
       {/* Logo / Brand Area */}
       <div className="px-2 mb-2">
         <h1 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400 tracking-tight">
-          NINE DART<br/>NATION
+          NINE DART
+          <br />
+          NATION
         </h1>
       </div>
 
       <div className="flex flex-col gap-2">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">Play</h3>
+        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">
+          Play
+        </h3>
         {playTabs.map(renderTab)}
       </div>
 
       <div className="flex flex-col gap-2">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">Social</h3>
+        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">
+          Social
+        </h3>
         {socialTabs.map(renderTab)}
       </div>
 
       <div className="flex flex-col gap-2">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">System</h3>
+        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider px-3 mb-2">
+          System
+        </h3>
         {systemTabs.map((t) => {
           const rendered = renderTab(t);
           if (t.key === "settings") {
@@ -317,7 +334,9 @@ export function Sidebar({
                   title="BullseyeDartsLeague"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  <span className="truncate text-sm font-semibold">Bullseye League</span>
+                  <span className="truncate text-sm font-semibold">
+                    Bullseye League
+                  </span>
                 </button>
                 {/* NineDartNation Discord tab */}
                 <button
@@ -326,7 +345,9 @@ export function Sidebar({
                   title="NineDartNation"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  <span className="truncate text-sm font-semibold">NDN Community</span>
+                  <span className="truncate text-sm font-semibold">
+                    NDN Community
+                  </span>
                 </button>
               </React.Fragment>
             );
@@ -442,13 +463,11 @@ export function MobileTabBar({
   const tabs = buildTabList(userForTabs, isAdmin);
 
   // Helper to clean labels for mobile (remove emojis)
-  const cleanLabel = (l: string) => l.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/gu, '').trim();
+  const cleanLabel = (l: string) =>
+    l.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]/gu, "").trim();
 
   return (
-    <nav 
-      className="ndn-mobile-tabbar" 
-      aria-label="Mobile navigation"
-    >
+    <nav className="ndn-mobile-tabbar" aria-label="Mobile navigation">
       {tabs.map(({ key, label, icon: Icon }) => (
         <button
           key={key}

@@ -74,7 +74,7 @@ describe("Settings Panel pill open/close", () => {
         />
       </ThemeProvider>,
     );
-  const btn = r.getAllByTestId("pill-button-calibration")[0];
+    const btn = r.getAllByTestId("pill-button-calibration")[0];
     expect(btn).toBeTruthy();
     fireEvent.click(btn);
     expect(r.getByTestId("pill-calibration-content")).toBeTruthy();

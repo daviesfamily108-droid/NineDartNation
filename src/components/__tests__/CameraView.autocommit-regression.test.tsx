@@ -10,15 +10,12 @@ import { render } from "@testing-library/react";
 // commit mode plumbing and ensure we don't reintroduce a bypass.
 
 // Minimal stubs for browser APIs CameraView touches.
-vi.stubGlobal(
-  "navigator",
-  {
-    mediaDevices: {
-      enumerateDevices: vi.fn(async () => []),
-      getUserMedia: vi.fn(async () => ({ getTracks: () => [] })),
-    },
-  } as any,
-);
+vi.stubGlobal("navigator", {
+  mediaDevices: {
+    enumerateDevices: vi.fn(async () => []),
+    getUserMedia: vi.fn(async () => ({ getTracks: () => [] })),
+  },
+} as any);
 
 // Mock stores/hooks CameraView depends on.
 vi.mock("../../store/match", () => {
@@ -109,10 +106,12 @@ async function loadCameraView() {
 describe("CameraView autocommit regression", () => {
   it("does not throw with diagnostics overlay present", async () => {
     const CameraView = await loadCameraView();
-    expect(() => render(<CameraView cameraAutoCommit="camera" />)).not.toThrow();
+    expect(() =>
+      render(<CameraView cameraAutoCommit="camera" />),
+    ).not.toThrow();
   });
 
-  it("does not immediately callAddVisit when cameraAutoCommit=\"camera\" in wait-for-clear mode", async () => {
+  it('does not immediately callAddVisit when cameraAutoCommit="camera" in wait-for-clear mode', async () => {
     const CameraView = await loadCameraView();
 
     const { useMatch } = await import("../../store/match");
@@ -125,7 +124,7 @@ describe("CameraView autocommit regression", () => {
     expect(match.callAddVisit).not.toHaveBeenCalled();
   });
 
-  it("does not immediately callAddVisit when cameraAutoCommit=\"parent\" unless immediateAutoCommit is true", async () => {
+  it('does not immediately callAddVisit when cameraAutoCommit="parent" unless immediateAutoCommit is true', async () => {
     const CameraView = await loadCameraView();
 
     const { useMatch } = await import("../../store/match");

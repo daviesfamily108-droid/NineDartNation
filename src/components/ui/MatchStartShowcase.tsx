@@ -1,4 +1,11 @@
-﻿import { useEffect, useMemo, useState, useRef, useLayoutEffect, useCallback } from "react";
+﻿import {
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  useLayoutEffect,
+  useCallback,
+} from "react";
 import { createPortal } from "react-dom";
 import { getCalibrationStatus } from "../../utils/gameCalibrationRequirements";
 import {
@@ -303,7 +310,12 @@ export default function MatchStartShowcase({
         imageSize: calibrationImageSize as any,
         errorPx: calibrationErrorPx as any,
       }),
-    [hasHomography, calibrationLocked, calibrationImageSize, calibrationErrorPx],
+    [
+      hasHomography,
+      calibrationLocked,
+      calibrationImageSize,
+      calibrationErrorPx,
+    ],
   );
 
   const calibratedCameraLinked =
@@ -332,7 +344,8 @@ export default function MatchStartShowcase({
   const DEV =
     typeof import.meta !== "undefined" &&
     !!(import.meta as any).env &&
-    ((import.meta as any).env.DEV || (import.meta as any).env.MODE === "development");
+    ((import.meta as any).env.DEV ||
+      (import.meta as any).env.MODE === "development");
   const [previewDiag, setPreviewDiag] = useState<any>(null);
   const lastPlayErrorRef = useRef<string | null>(null);
 
@@ -469,12 +482,14 @@ export default function MatchStartShowcase({
     // - create only when needed
     // - stop at 0 to avoid going negative (which causes useless re-renders)
     const t = allPlayersSkipped
-      ? setInterval(() =>
-          setSeconds((s) => {
-            if (s <= 0) return 0;
-            return s - 1;
-          }),
-        1000)
+      ? setInterval(
+          () =>
+            setSeconds((s) => {
+              if (s <= 0) return 0;
+              return s - 1;
+            }),
+          1000,
+        )
       : null;
     const onKey = (e: KeyboardEvent) => {
       if (!mountedRef.current) return;
@@ -712,271 +727,293 @@ export default function MatchStartShowcase({
         >
           <FocusLock returnFocus={true}>
             <div ref={hostRef} className="relative">
-            {/* Decorative background glow */}
-            <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 rounded-[3rem] blur-3xl -z-10 opacity-50 animate-pulse" />
+              {/* Decorative background glow */}
+              <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 rounded-[3rem] blur-3xl -z-10 opacity-50 animate-pulse" />
 
-            <div className="bg-[#13111C] border border-white/10 rounded-3xl p-4 md:p-6 w-full shadow-2xl ring-1 ring-white/5 relative overflow-hidden">
-              {/* Background pattern */}
-              <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none mix-blend-overlay"></div>
+              <div className="bg-[#13111C] border border-white/10 rounded-3xl p-4 md:p-6 w-full shadow-2xl ring-1 ring-white/5 relative overflow-hidden">
+                {/* Background pattern */}
+                <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none mix-blend-overlay"></div>
 
-              <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-3 mb-4 border-b border-white/5 pb-3">
-                <div>
-                  <div className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-0.5">
-                    Get Ready 🚀
+                <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-3 mb-4 border-b border-white/5 pb-3">
+                  <div>
+                    <div className="text-[9px] font-bold text-indigo-400 uppercase tracking-widest mb-0.5">
+                      Get Ready 🚀
+                    </div>
+                    <div
+                      id="match-start-heading"
+                      className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/10 tracking-tighter"
+                    >
+                      Match Starting Soon 🎯
+                    </div>
                   </div>
-                  <div
-                    id="match-start-heading"
-                    className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/10 tracking-tighter"
-                  >
-                    Match Starting Soon 🎯
+
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-emerald-500/70 blur-[4rem] rounded-full animate-pulse"></div>
+                        <div className="relative">
+                          <ProgressRing
+                            secondsLeft={seconds}
+                            totalSeconds={initialSeconds || 15}
+                            size={60}
+                            stroke={6}
+                            color={seconds > 5 ? "emerald" : "amber"}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-xl font-black text-white tabular-nums">
+                              {seconds}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5 sm:flex-row">
+                      <button
+                        ref={startNowRef}
+                        className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 transition-all duration-200 active:scale-95 text-xs"
+                        onClick={() => {
+                          try {
+                            onDone?.();
+                          } catch {}
+                          try {
+                            try {
+                              document
+                                .getElementById("root")
+                                ?.removeAttribute("aria-hidden");
+                            } catch {}
+                            setTimeout(() => {
+                              try {
+                                onRequestClose?.();
+                              } catch {}
+                            }, 0);
+                          } catch {}
+                        }}
+                        aria-label="Start match now"
+                      >
+                        Start Now ▶️
+                      </button>
+                      <button
+                        ref={closeRef}
+                        className="px-3 py-1.5 rounded-lg bg-white/5 text-white/70 font-semibold hover:bg-white/10 hover:text-white transition-colors text-xs"
+                        aria-label="Close match start showcase"
+                        onClick={() => {
+                          try {
+                            onRequestClose?.();
+                          } catch {}
+                        }}
+                      >
+                        Close ✖️
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-emerald-500/70 blur-[4rem] rounded-full animate-pulse"></div>
-                      <div className="relative">
-                        <ProgressRing
-                          secondsLeft={seconds}
-                          totalSeconds={initialSeconds || 15}
-                          size={60}
-                          stroke={6}
-                          color={seconds > 5 ? "emerald" : "amber"}
+                <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5 mb-4">
+                  {/* VS Badge for Desktop */}
+                  <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-16 h-16 bg-[#13111C] rounded-full items-center justify-center border-2 border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
+                    <span className="text-xl font-black text-white/20 italic tracking-tighter">
+                      VS ⚔️
+                    </span>
+                  </div>
+
+                  {stats.map((st, idx) => (
+                    <div
+                      key={st.id}
+                      className={`group relative p-3 md:p-4 rounded-3xl border border-white/5 flex flex-col items-center shadow-xl transition-all duration-300 hover:border-white/10 hover:bg-white/[0.02] max-h-[80vh] overflow-hidden ${idx === 0 ? "bg-gradient-to-br from-indigo-500/5 to-transparent" : "bg-gradient-to-bl from-emerald-500/5 to-transparent"}`}
+                    >
+                      <div className="flex items-center gap-3 mb-2 w-full">
+                        <div
+                          className={`w-12 h-12 shrink-0 rounded-xl rotate-3 group-hover:rotate-6 transition-transform duration-300 flex items-center justify-center text-xl font-black text-white shadow-lg ring-2 ring-white/10 ${idx === 0 ? "bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/50" : "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/50"}`}
+                        >
+                          {st.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .toUpperCase()
+                            .slice(0, 2)}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <div className="text-2xl font-black text-white tracking-tighter truncate">
+                            {st.name}
+                          </div>
+                          <div className="text-[10px] font-black tracking-tight text-white/60">
+                            {st.one80s}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {user && user.username === st.name && (
+                              <div className="text-[0.5rem] font-bold uppercase tracking-wider bg-white/10 text-white/60 px-1.5 py-0.5 rounded-md">
+                                You ⭐
+                              </div>
+                            )}
+                            <PlayerCalibrationPreview
+                              player={
+                                players.find((p) => p.id === st.id) as any
+                              }
+                              user={user}
+                              playerCalibrations={playerCalibrations}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-1 w-full bg-black/50 rounded-xl p-2 border border-white/10 shadow-2xl">
+                        <StatBlock
+                          label="Avg 📊"
+                          value={st.avg3}
+                          scale={getScaleFor(seconds) * 0.7}
+                          className="p-0.5"
                         />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <span className="text-xl font-black text-white tabular-nums">
-                            {seconds}
+                        <StatBlock
+                          label="F9 📈"
+                          value={st.best9}
+                          scale={getScaleFor(seconds) * 0.7}
+                          className="p-0.5"
+                        />
+                        <StatBlock
+                          label="CO 🏆"
+                          value={st.bestCheckout || "—"}
+                          scale={getScaleFor(seconds) * 0.7}
+                          className="p-0.5"
+                        />
+                        <StatBlock
+                          label="Leg ⚡"
+                          value={st.bestLeg || "—"}
+                          scale={getScaleFor(seconds) * 0.7}
+                          className="p-0.5"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 w-full mt-2 text-[0.6rem]">
+                        <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/5 border border-white/5">
+                          <span className="tracking-widest uppercase text-white/40">
+                            Lifetime pts
+                          </span>
+                          <span className="text-white/90 font-semibold">
+                            {st.lifetimeScored.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/5 border border-white/5">
+                          <span className="tracking-widest uppercase text-white/40">
+                            Lifetime darts
+                          </span>
+                          <span className="text-white/90 font-semibold">
+                            {st.lifetimeDarts.toLocaleString()}
                           </span>
                         </div>
                       </div>
-                    </div>
-                  </div>
 
-                  <div className="flex flex-col gap-1.5 sm:flex-row">
-                    <button
-                      ref={startNowRef}
-                      className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 hover:scale-105 transition-all duration-200 active:scale-95 text-xs"
-                      onClick={() => {
-                        try {
-                          onDone?.();
-                        } catch {}
-                        try {
-                          try {
-                            document
-                              .getElementById("root")
-                              ?.removeAttribute("aria-hidden");
-                          } catch {}
-                          setTimeout(() => {
-                            try {
-                              onRequestClose?.();
-                            } catch {}
-                          }, 0);
-                        } catch {}
-                      }}
-                      aria-label="Start match now"
-                    >
-                      Start Now ▶️
-                    </button>
-                    <button
-                      ref={closeRef}
-                      className="px-3 py-1.5 rounded-lg bg-white/5 text-white/70 font-semibold hover:bg-white/10 hover:text-white transition-colors text-xs"
-                      aria-label="Close match start showcase"
-                      onClick={() => {
-                        try {
-                          onRequestClose?.();
-                        } catch {}
-                      }}
-                    >
-                      Close ✖️
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-5 mb-4">
-                {/* VS Badge for Desktop */}
-                <div className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-20 w-16 h-16 bg-[#13111C] rounded-full items-center justify-center border-2 border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.8)]">
-                  <span className="text-xl font-black text-white/20 italic tracking-tighter">
-                    VS ⚔️
-                  </span>
-                </div>
-
-                {stats.map((st, idx) => (
-                  <div
-                    key={st.id}
-                    className={`group relative p-3 md:p-4 rounded-3xl border border-white/5 flex flex-col items-center shadow-xl transition-all duration-300 hover:border-white/10 hover:bg-white/[0.02] max-h-[80vh] overflow-hidden ${idx === 0 ? "bg-gradient-to-br from-indigo-500/5 to-transparent" : "bg-gradient-to-bl from-emerald-500/5 to-transparent"}`}
-                  >
-                    <div className="flex items-center gap-3 mb-2 w-full">
-                      <div
-                        className={`w-12 h-12 shrink-0 rounded-xl rotate-3 group-hover:rotate-6 transition-transform duration-300 flex items-center justify-center text-xl font-black text-white shadow-lg ring-2 ring-white/10 ${idx === 0 ? "bg-gradient-to-br from-indigo-500 to-purple-600 shadow-indigo-500/50" : "bg-gradient-to-br from-emerald-500 to-teal-600 shadow-emerald-500/50"}`}
-                      >
-                        {st.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .toUpperCase()
-                          .slice(0, 2)}
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <div className="text-2xl font-black text-white tracking-tighter truncate">
-                          {st.name}
+                      <div className="mt-2 flex items-center justify-between w-full px-1">
+                        <div className="flex items-center gap-2 text-sm text-white/40 font-black">
+                          <span>180s 🔥:</span>
+                          <span className="text-white/90">{st.one80s} ✨</span>
                         </div>
-                        <div className="text-[10px] font-black tracking-tight text-white/60">
-                          {st.one80s}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {user && user.username === st.name && (
-                            <div className="text-[0.5rem] font-bold uppercase tracking-wider bg-white/10 text-white/60 px-1.5 py-0.5 rounded-md">
-                              You ⭐
-                            </div>
-                          )}
-                          <PlayerCalibrationPreview
-                            player={players.find((p) => p.id === st.id) as any}
-                            user={user}
-                            playerCalibrations={playerCalibrations}
-                          />
-                        </div>
+                        <RecentForm
+                          player={players.find((p) => p.id === st.id) as Player}
+                          limit={3}
+                        />
                       </div>
-                    </div>
 
-                    <div className="grid grid-cols-4 gap-1 w-full bg-black/50 rounded-xl p-2 border border-white/10 shadow-2xl">
-                      <StatBlock
-                        label="Avg 📊"
-                        value={st.avg3}
-                        scale={getScaleFor(seconds) * 0.7}
-                        className="p-0.5"
-                      />
-                      <StatBlock
-                        label="F9 📈"
-                        value={st.best9}
-                        scale={getScaleFor(seconds) * 0.7}
-                        className="p-0.5"
-                      />
-                      <StatBlock
-                        label="CO 🏆"
-                        value={st.bestCheckout || "—"}
-                        scale={getScaleFor(seconds) * 0.7}
-                        className="p-0.5"
-                      />
-                      <StatBlock
-                        label="Leg ⚡"
-                        value={st.bestLeg || "—"}
-                        scale={getScaleFor(seconds) * 0.7}
-                        className="p-0.5"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 w-full mt-2 text-[0.6rem]">
-                      <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/5 border border-white/5">
-                        <span className="tracking-widest uppercase text-white/40">
-                          Lifetime pts
-                        </span>
-                        <span className="text-white/90 font-semibold">
-                          {st.lifetimeScored.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/5 border border-white/5">
-                        <span className="tracking-widest uppercase text-white/40">
-                          Lifetime darts
-                        </span>
-                        <span className="text-white/90 font-semibold">
-                          {st.lifetimeDarts.toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="mt-2 flex items-center justify-between w-full px-1">
-                      <div className="flex items-center gap-2 text-sm text-white/40 font-black">
-                        <span>180s 🔥:</span>
-                        <span className="text-white/90">{st.one80s} ✨</span>
-                      </div>
-                      <RecentForm
-                        player={players.find((p) => p.id === st.id) as Player}
-                        limit={3}
-                      />
-                    </div>
-
-                    {/* Pre-match live camera preview (uses the global camera session) */}
-                    {idx === 0 && (
-                      <div className="w-full mt-2">
-                        <div
-                          ref={previewContainerRef}
-                          className="rounded-lg overflow-hidden border border-white/10 bg-black/30 relative"
-                        >
+                      {/* Pre-match live camera preview (uses the global camera session) */}
+                      {idx === 0 && (
+                        <div className="w-full mt-2">
                           <div
-                            className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[0.6rem] font-bold tracking-wide uppercase shadow-lg ${calibratedCameraLinked ? "bg-emerald-500/90 text-emerald-50" : "bg-rose-500/80 text-white"}`}
+                            ref={previewContainerRef}
+                            className="rounded-lg overflow-hidden border border-white/10 bg-black/30 relative"
                           >
-                            {calibrationStatusText}
-                          </div>
-                          {/* Show the full board (no crop) */}
-                          <div className="w-full h-[240px] sm:h-[300px] md:h-[360px] flex flex-col">
-                            <CameraTile
-                              autoStart
-                              forceAutoStart
-                              fill
-                              aspect="free"
-                              tileFitModeOverride="fit"
-                              scale={1}
-                            />
-                          </div>
-
-                          {DEV && previewDiag && (
-                            <div className="absolute bottom-2 left-2 right-2 rounded-lg bg-black/70 border border-white/10 p-2 text-[10px] leading-snug text-white/80">
-                              <div className="flex flex-wrap gap-x-3 gap-y-1">
-                                <span>
-                                  <span className="text-white/40">mode</span>: {String(previewDiag?.session?.mode)}
-                                </span>
-                                <span>
-                                  <span className="text-white/40">isStreaming</span>: {String(previewDiag?.session?.isStreaming)}
-                                </span>
-                                <span>
-                                  <span className="text-white/40">stream</span>: {previewDiag?.stream?.exists ? "yes" : "no"}
-                                </span>
-                                <span>
-                                  <span className="text-white/40">liveTracks</span>: {String(previewDiag?.stream?.liveTracks)}
-                                </span>
-                                <span>
-                                  <span className="text-white/40">video</span>: {previewDiag?.video?.videoWidth}×{previewDiag?.video?.videoHeight}
-                                </span>
-                                <span>
-                                  <span className="text-white/40">readyState</span>: {String(previewDiag?.video?.readyState)}
-                                </span>
-                                <span>
-                                  <span className="text-white/40">paused</span>: {String(previewDiag?.video?.paused)}
-                                </span>
-                              </div>
-                              {previewDiag?.lastPlayError ? (
-                                <div className="mt-1 text-rose-200">
-                                  play(): {String(previewDiag.lastPlayError)}
-                                </div>
-                              ) : null}
+                            <div
+                              className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[0.6rem] font-bold tracking-wide uppercase shadow-lg ${calibratedCameraLinked ? "bg-emerald-500/90 text-emerald-50" : "bg-rose-500/80 text-white"}`}
+                            >
+                              {calibrationStatusText}
                             </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                            {/* Show the full board (no crop) */}
+                            <div className="w-full h-[240px] sm:h-[300px] md:h-[360px] flex flex-col">
+                              <CameraTile
+                                autoStart
+                                forceAutoStart
+                                fill
+                                aspect="free"
+                                tileFitModeOverride="fit"
+                                scale={1}
+                              />
+                            </div>
 
-              <div className="text-center pt-6 border-t border-white/50">
-                {seconds <= 1 ? (
-                  <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 animate-bounce tracking-tighter py-4">
-                    GAME ON! 🚀
-                  </div>
-                ) : (
-                  <div className="text-lg font-black text-white/80 uppercase tracking-[1em]">
-                    {players.map((p) => p.name).join(" vs ")} ⚔️
-                  </div>
-                )}
+                            {DEV && previewDiag && (
+                              <div className="absolute bottom-2 left-2 right-2 rounded-lg bg-black/70 border border-white/10 p-2 text-[10px] leading-snug text-white/80">
+                                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                  <span>
+                                    <span className="text-white/40">mode</span>:{" "}
+                                    {String(previewDiag?.session?.mode)}
+                                  </span>
+                                  <span>
+                                    <span className="text-white/40">
+                                      isStreaming
+                                    </span>
+                                    :{" "}
+                                    {String(previewDiag?.session?.isStreaming)}
+                                  </span>
+                                  <span>
+                                    <span className="text-white/40">
+                                      stream
+                                    </span>
+                                    :{" "}
+                                    {previewDiag?.stream?.exists ? "yes" : "no"}
+                                  </span>
+                                  <span>
+                                    <span className="text-white/40">
+                                      liveTracks
+                                    </span>
+                                    : {String(previewDiag?.stream?.liveTracks)}
+                                  </span>
+                                  <span>
+                                    <span className="text-white/40">video</span>
+                                    : {previewDiag?.video?.videoWidth}×
+                                    {previewDiag?.video?.videoHeight}
+                                  </span>
+                                  <span>
+                                    <span className="text-white/40">
+                                      readyState
+                                    </span>
+                                    : {String(previewDiag?.video?.readyState)}
+                                  </span>
+                                  <span>
+                                    <span className="text-white/40">
+                                      paused
+                                    </span>
+                                    : {String(previewDiag?.video?.paused)}
+                                  </span>
+                                </div>
+                                {previewDiag?.lastPlayError ? (
+                                  <div className="mt-1 text-rose-200">
+                                    play(): {String(previewDiag.lastPlayError)}
+                                  </div>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="text-center pt-6 border-t border-white/50">
+                  {seconds <= 1 ? (
+                    <div className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-cyan-400 to-blue-400 animate-bounce tracking-tighter py-4">
+                      GAME ON! 🚀
+                    </div>
+                  ) : (
+                    <div className="text-lg font-black text-white/80 uppercase tracking-[1em]">
+                      {players.map((p) => p.name).join(" vs ")} ⚔️
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </FocusLock>
+          </FocusLock>
+        </div>
       </div>
     </div>
-  </div>
   );
   return createPortal(
     <>

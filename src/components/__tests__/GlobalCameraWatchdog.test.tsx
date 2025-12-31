@@ -13,7 +13,7 @@ vi.mock("../../utils/cameraRecovery", () => {
 
 // Mock stores used by the watchdog
 vi.mock("../../store/userSettings", () => {
-  let state: any = { cameraEnabled: true, preferredCameraLabel: undefined };
+  const state: any = { cameraEnabled: true, preferredCameraLabel: undefined };
   return {
     useUserSettings: (sel: any) => (sel ? sel(state) : state),
   };
@@ -30,7 +30,7 @@ vi.mock("../../store/cameraSession", () => {
   const session: any = {
     isStreaming: true,
     mode: "local",
-    getMediaStream: vi.fn(() => ({} as any)),
+    getMediaStream: vi.fn(() => ({}) as any),
     getVideoElementRef: vi.fn(() => {
       video.currentTime = videoTime;
       return video;
@@ -60,7 +60,9 @@ describe("GlobalCameraWatchdog", () => {
   it("dispatches recovery when video stalls", async () => {
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
     const recMod = await import("../../utils/cameraRecovery");
-    const rec = (recMod as any).dispatchCameraRecovery as ReturnType<typeof vi.fn>;
+    const rec = (recMod as any).dispatchCameraRecovery as ReturnType<
+      typeof vi.fn
+    >;
     render(<GlobalCameraWatchdog />);
 
     // Keep currentTime constant for >4 ticks

@@ -277,13 +277,13 @@ export class DartDetector {
       const cosAng = Math.max(-1, Math.min(1, Math.abs(vx * rx + vy * ry)));
       const angDeg = (Math.acos(cosAng) * 180) / Math.PI;
       if (angDeg > this.angMaxDeg) {
-      // likely glare or non-radial artifact
-      if (!recent) this.updateBackground(frame, 0.02);
-      console.log("[DETECTOR] Rejected - angle too large:", {
-        angDeg,
-        maxAllowed: this.angMaxDeg,
-      });
-      return null;
+        // likely glare or non-radial artifact
+        if (!recent) this.updateBackground(frame, 0.02);
+        console.log("[DETECTOR] Rejected - angle too large:", {
+          angDeg,
+          maxAllowed: this.angMaxDeg,
+        });
+        return null;
       }
     }
 

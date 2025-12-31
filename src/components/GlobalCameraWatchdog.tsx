@@ -5,10 +5,7 @@ import {
   dispatchCameraRecovery,
   type CameraRecoveryReason,
 } from "../utils/cameraRecovery";
-import {
-  dispatchCameraRecoveryUi,
-} from "../utils/cameraRecoveryEvents";
-
+import { dispatchCameraRecoveryUi } from "../utils/cameraRecoveryEvents";
 
 /**
  * GlobalCameraWatchdog
@@ -110,7 +107,8 @@ export default function GlobalCameraWatchdog() {
 
         // If track ended (permissions revoked, device unplugged, phone stream dropped), recover.
         try {
-          const tracks = (stream?.getVideoTracks?.() || []) as MediaStreamTrack[];
+          const tracks = (stream?.getVideoTracks?.() ||
+            []) as MediaStreamTrack[];
           if (
             stream &&
             tracks.length > 0 &&

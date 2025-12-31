@@ -186,14 +186,14 @@ describe("OnlinePlay focus mode", () => {
     const focusBtn = screen.getByTitle(/Toggle focus mode/i);
     fireEvent.click(focusBtn);
 
-  await screen.findByText(/Exit Focus/i);
+    await screen.findByText(/Exit Focus/i);
 
     // Sidebar and header should be hidden (check for absence of key elements)
     expect(screen.queryByRole("banner")).toBeNull();
     expect(screen.queryByRole("complementary")).toBeNull();
 
     // Exit focus mode
-  const exitBtn = screen.getByText(/Exit Focus/i);
+    const exitBtn = screen.getByText(/Exit Focus/i);
     fireEvent.click(exitBtn);
 
     await waitFor(() => {

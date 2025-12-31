@@ -28,17 +28,16 @@ export default function MatchPage() {
     total: s.total,
   }));
   const pendingEntries = usePendingVisit((s) => s.entries);
-  const [winningShot, setWinningShot] = useState<
-    | {
-        label?: string;
-        ring?: string;
-        frame?: string | null;
-        ts?: number;
-      }
-    | null
-  >(null);
+  const [winningShot, setWinningShot] = useState<{
+    label?: string;
+    ring?: string;
+    frame?: string | null;
+    ts?: number;
+  } | null>(null);
   const [remoteFrame, setRemoteFrame] = useState<string | null>(null);
-  const lastOfflineStart = useUserSettings((s) => s.lastOffline?.x01Start || 501);
+  const lastOfflineStart = useUserSettings(
+    (s) => s.lastOffline?.x01Start || 501,
+  );
   const [playerVisitDarts, setPlayerVisitDarts] = useState(0);
   const [playerDartPoints, setPlayerDartPoints] = useState<number>(0);
   const [visitTotalInput, setVisitTotalInput] = useState<string>("");
@@ -266,7 +265,7 @@ export default function MatchPage() {
 
   const resetManualState = () => {
     setManualEntries([]);
-  setPlayerVisitDarts(0);
+    setPlayerVisitDarts(0);
     setPlayerDartPoints(0);
     setVisitTotalInput("");
     setManualBox("");
@@ -316,7 +315,11 @@ export default function MatchPage() {
         (p.legs || []).forEach((leg: any) => {
           if (leg?.finished) {
             const lastVisit = (leg.visits || []).slice(-1)[0];
-            legs.push({ ts: leg.endTime || Date.now(), visit: lastVisit, player: p });
+            legs.push({
+              ts: leg.endTime || Date.now(),
+              visit: lastVisit,
+              player: p,
+            });
           }
         });
       });
@@ -474,7 +477,9 @@ export default function MatchPage() {
                 >
                   Auto Detect
                 </button>
-                <button className="btn px-4 py-2 text-sm">Manual Correction</button>
+                <button className="btn px-4 py-2 text-sm">
+                  Manual Correction
+                </button>
               </div>
             </div>
 
@@ -558,7 +563,9 @@ export default function MatchPage() {
                           min={0}
                           max={match.startingScore}
                           value={visitTotalInput}
-                          onChange={(e) => handleVisitTotalChange(e.target.value)}
+                          onChange={(e) =>
+                            handleVisitTotalChange(e.target.value)
+                          }
                           onKeyDown={(e) => {
                             if (e.key === "Enter") addVisitTotal();
                           }}
@@ -573,7 +580,9 @@ export default function MatchPage() {
                         <button
                           className="btn btn--ghost px-3 py-1 text-sm"
                           onClick={() =>
-                            manualEntries.length ? replaceLast() : match.undoVisit()
+                            manualEntries.length
+                              ? replaceLast()
+                              : match.undoVisit()
                           }
                         >
                           Undo Visit
@@ -652,10 +661,12 @@ export default function MatchPage() {
                   legsWon: p.legsWon || 0,
                   score:
                     p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
-                    match.startingScore ?? lastOfflineStart,
+                    match.startingScore ??
+                    lastOfflineStart,
                   lastScore:
                     p.legs && p.legs.length
-                      ? p.legs[p.legs.length - 1].visits.slice(-1)[0]?.score || 0
+                      ? p.legs[p.legs.length - 1].visits.slice(-1)[0]?.score ||
+                        0
                       : 0,
                 }))}
               />
@@ -667,41 +678,43 @@ export default function MatchPage() {
                 <span className="text-xs text-slate-300">Compact view</span>
               </div>
               <div className="relative h-56 rounded-xl overflow-hidden bg-black">
-                  <CameraView
-                    hideInlinePanels={true}
-                    forceAutoStart={true}
-                    onVisitCommitted={(_score, _darts, finished, meta) => {
-                      if (!finished) return;
-                      const frame = meta?.frame ?? remoteFrame ?? null;
-                      setWinningShot({
-                        label: meta?.label || deriveWinningLabel() || undefined,
-                        ring: meta?.ring,
-                        frame,
-                        ts: Date.now(),
-                      });
-                      // Ensure the match fully ends so the header stats refresh and the
-                      // winning zoom overlay can render (it only shows once inProgress=false).
-                      // endGame is idempotent: it will no-op if already ended.
-                      try {
-                        match.endGame();
-                      } catch {}
-                    }}
-                  />
-                  {winningShot?.frame && !match.inProgress && (
-                    <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
-                      <img
-                        src={winningShot.frame}
-                        alt="Winning double zoom"
-                        className="w-full h-full object-cover scale-125"
-                      />
-                      <div className="absolute bottom-2 left-2 right-2 text-xs text-white bg-black/60 rounded-md px-2 py-1 flex items-center justify-between gap-2">
-                        <span className="font-semibold">Winning dart zoom</span>
-                        {winningShot.label && (
-                          <span className="text-emerald-200">{winningShot.label}</span>
-                        )}
-                      </div>
+                <CameraView
+                  hideInlinePanels={true}
+                  forceAutoStart={true}
+                  onVisitCommitted={(_score, _darts, finished, meta) => {
+                    if (!finished) return;
+                    const frame = meta?.frame ?? remoteFrame ?? null;
+                    setWinningShot({
+                      label: meta?.label || deriveWinningLabel() || undefined,
+                      ring: meta?.ring,
+                      frame,
+                      ts: Date.now(),
+                    });
+                    // Ensure the match fully ends so the header stats refresh and the
+                    // winning zoom overlay can render (it only shows once inProgress=false).
+                    // endGame is idempotent: it will no-op if already ended.
+                    try {
+                      match.endGame();
+                    } catch {}
+                  }}
+                />
+                {winningShot?.frame && !match.inProgress && (
+                  <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
+                    <img
+                      src={winningShot.frame}
+                      alt="Winning double zoom"
+                      className="w-full h-full object-cover scale-125"
+                    />
+                    <div className="absolute bottom-2 left-2 right-2 text-xs text-white bg-black/60 rounded-md px-2 py-1 flex items-center justify-between gap-2">
+                      <span className="font-semibold">Winning dart zoom</span>
+                      {winningShot.label && (
+                        <span className="text-emerald-200">
+                          {winningShot.label}
+                        </span>
+                      )}
                     </div>
-                  )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

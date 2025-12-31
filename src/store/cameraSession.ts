@@ -54,7 +54,7 @@ type CameraSessionState = {
 
 export const useCameraSession = create<CameraSessionState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       isStreaming: false,
       mode: "local",
       pairingCode: null,

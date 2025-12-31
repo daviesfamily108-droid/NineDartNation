@@ -137,15 +137,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const normalizeMatch = React.useCallback((m: any) => {
     if (!m) return m;
     const modeType = m.modeType || m.mode || "";
-    const legs =
-      m.legs ??
-      m.value ??
-      m.bestOf ??
-      m.sets ??
-      m.games ??
-      1;
-    const createdBy =
-      m.createdBy || m.creatorName || m.creator || m.host || "";
+    const legs = m.legs ?? m.value ?? m.bestOf ?? m.sets ?? m.games ?? 1;
+    const createdBy = m.createdBy || m.creatorName || m.creator || m.host || "";
     const createdAt = m.createdAt || m.ts || Date.now();
 
     return {
@@ -164,24 +157,25 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     return (list: any[] = []) =>
       (list || [])
         .map(normalizeMatch)
-        .filter((m: any) =>
-          !(
-            m?.isTest ||
-            m?.test ||
-            m?.migrated ||
-            m?.isMigration ||
-            m?.migration ||
-            m?.seeded ||
-            (typeof m?.createdBy === "string" &&
-              m.createdBy.toLowerCase().includes("test")) ||
-            (typeof m?.creatorName === "string" &&
-              m.creatorName.toLowerCase().includes("test")) ||
-            (typeof m?.createdBy === "string" &&
-              /^(alice-|host-|demo|dummy|sample)/i.test(m.createdBy)) ||
-            (typeof m?.creatorName === "string" &&
-              /^(alice-|host-|demo|dummy|sample)/i.test(m.creatorName)) ||
-            !(m?.game && m?.modeType && m?.legs)
-          ),
+        .filter(
+          (m: any) =>
+            !(
+              m?.isTest ||
+              m?.test ||
+              m?.migrated ||
+              m?.isMigration ||
+              m?.migration ||
+              m?.seeded ||
+              (typeof m?.createdBy === "string" &&
+                m.createdBy.toLowerCase().includes("test")) ||
+              (typeof m?.creatorName === "string" &&
+                m.creatorName.toLowerCase().includes("test")) ||
+              (typeof m?.createdBy === "string" &&
+                /^(alice-|host-|demo|dummy|sample)/i.test(m.createdBy)) ||
+              (typeof m?.creatorName === "string" &&
+                /^(alice-|host-|demo|dummy|sample)/i.test(m.creatorName)) ||
+              !(m?.game && m?.modeType && m?.legs)
+            ),
         );
     // NOTE: do NOT hard-cap here; tests and pagination expect the full
     // list to render (page size controls how many are visible).
@@ -209,7 +203,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
     // Last-resort fallback for test environments where state updates are
     // async and the memo can run before serverMatches is visible.
-    if ((all?.length || 0) === 0 && (serverMatchesRef.current?.length || 0) > 0) {
+    if (
+      (all?.length || 0) === 0 &&
+      (serverMatchesRef.current?.length || 0) > 0
+    ) {
       all = filterMatches(serverMatchesRef.current);
     }
 
@@ -248,7 +245,16 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     });
 
     return all.slice(0, maxMatchesPerRoom);
-  }, [currentRoom, serverMatches, filterMatches, searchQuery, filterGame, filterMode, sortBy, maxMatchesPerRoom]);
+  }, [
+    currentRoom,
+    serverMatches,
+    filterMatches,
+    searchQuery,
+    filterGame,
+    filterMode,
+    sortBy,
+    maxMatchesPerRoom,
+  ]);
 
   // Reset page when filters change
   useEffect(() => {

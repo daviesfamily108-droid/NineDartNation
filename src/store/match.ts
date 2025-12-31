@@ -123,7 +123,7 @@ export type Actions = {
   setPlayerCurrentAverage: (playerIndex: number, avg: number) => void;
 };
 
-export const useMatch = create<MatchState & Actions>((set, get) => ({
+export const useMatch = create<MatchState & Actions>((set) => ({
   roomId: "",
   players: [],
   currentPlayerIdx: 0,

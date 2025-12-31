@@ -23,7 +23,10 @@ describe("cameraSession getMediaStream fallback", () => {
     useCameraSession.getState().setMediaStream(null);
 
     // Provide a fake video element that carries the stream on srcObject
-    const video = { srcObject: fake, tagName: "VIDEO" } as unknown as HTMLVideoElement;
+    const video = {
+      srcObject: fake,
+      tagName: "VIDEO",
+    } as unknown as HTMLVideoElement;
     useCameraSession.getState().setVideoElementRef(video);
 
     expect(useCameraSession.getState().getMediaStream()).toBe(fake);

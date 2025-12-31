@@ -77,7 +77,7 @@ describe("App header", () => {
 
     // The header should still exist but be in compact mode; the All-time avg text should be hidden
     await waitFor(() => expect(screen.getByTestId("ndn-header")).toBeTruthy());
-  expect(screen.getByText(/All-time 3-dart avg/i)).toBeTruthy();
+    expect(screen.getByText(/All-time 3-dart avg/i)).toBeTruthy();
 
     // Simulate returning to Home (header is hidden while in-game so we can't click it)
     act(() => {
