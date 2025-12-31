@@ -28,9 +28,12 @@ vi.mock("../../store/userSettings", async () => {
     autoCommitMode: "wait-for-clear",
     confirmUncertainDarts: true,
     autoScoreConfidenceThreshold: 0.85,
+    harshLightingMode: false,
+    enhanceBigTrebles: false,
     cameraEnabled: true,
     preferredCameraLocked: false,
     hideCameraOverlay: false,
+    cameraAspect: "wide",
     cameraFitMode: "fit",
     cameraScale: 1,
   };

@@ -13,6 +13,21 @@
 
 (async () => {
   try {
+    // Some Node 25 + Windows setups will terminate the process if an unhandled
+    // rejection occurs. When the backend isn't running, Vite's proxy can emit
+    // ECONNREFUSED which may surface as an unhandled rejection depending on
+    // runtime/tooling versions.
+    //
+    // In dev, we prefer to keep the frontend alive and let the browser show
+    // API failures rather than killing the dev server.
+    process.on('unhandledRejection', (reason) => {
+      console.warn('[dev] unhandledRejection (ignored in dev):', reason)
+    })
+    process.on('uncaughtException', (err) => {
+      console.error('[dev] uncaughtException:', err)
+      // Keep the dev server alive; Vite will log and recover in many cases.
+    })
+
     const vite = await import('vite')
 
     const server = await vite.createServer({

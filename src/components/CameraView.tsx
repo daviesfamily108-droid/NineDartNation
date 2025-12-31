@@ -116,6 +116,48 @@ const DISABLE_CAMERA_OVERLAY = true;
 // for small test-only knobs.
 const TEST_MODE = false;
 
+// Ring-light / glare mitigation
+// When enabled, we apply a lightweight highlight compression to the captured
+// frame BEFORE running background subtraction / blob detection.
+// Enable via DevTools:
+//   localStorage.setItem('ndn.glareClamp', '1'); location.reload();
+// Disable:
+//   localStorage.removeItem('ndn.glareClamp'); location.reload();
+function glareClampFrameInPlace(
+  frame: ImageData,
+  opts?: { knee?: number; strength?: number },
+) {
+  // knee: luma threshold where compression starts (0..255)
+  // strength: 0..1, higher compresses highlights more
+  const knee = Math.max(0, Math.min(255, opts?.knee ?? 210));
+  const strength = Math.max(0, Math.min(1, opts?.strength ?? 0.65));
+
+  const d = frame.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i];
+    const g = d[i + 1];
+    const b = d[i + 2];
+
+    // Fast approx luma (integer math)
+    const y = (r * 77 + g * 150 + b * 29) >> 8; // ~0.299,0.587,0.114
+    if (y <= knee) continue;
+
+    // Normalize how far above the knee we are
+    const over = y - knee; // 0..(255-knee)
+    const t = over / Math.max(1, 255 - knee); // 0..1
+
+    // Compression curve: dampen highlights; keeps midtones stable.
+    // y' = y - strength * over * t
+    const y2 = y - strength * over * t;
+    const ratio = y > 0 ? y2 / y : 1;
+
+    d[i] = Math.max(0, Math.min(255, Math.round(r * ratio)));
+    d[i + 1] = Math.max(0, Math.min(255, Math.round(g * ratio)));
+    d[i + 2] = Math.max(0, Math.min(255, Math.round(b * ratio)));
+    // alpha unchanged
+  }
+}
+
 type FitTransform = {
   // Map a point in the processing canvas (video pixel space) into the
   // calibration image space used by the homography.
@@ -312,6 +354,8 @@ export default forwardRef(function CameraView(
     useUserSettings((s) => s.autoscoreDetectorThresh) ?? 15;
   const autoscoreDetectorRequireStableN =
     useUserSettings((s) => s.autoscoreDetectorRequireStableN) ?? 2;
+  const harshLightingMode = useUserSettings((s) => s.harshLightingMode) ?? false;
+  const enhanceBigTrebles = useUserSettings((s) => s.enhanceBigTrebles) ?? false;
   const cameraEnabled = useUserSettings((s) => s.cameraEnabled);
   const preferredCameraLocked = useUserSettings((s) => s.preferredCameraLocked);
   const hideCameraOverlay = useUserSettings((s) => s.hideCameraOverlay);
@@ -595,6 +639,11 @@ export default forwardRef(function CameraView(
   const [manualScore, setManualScore] = useState<string>("");
   const [lastAutoValue, setLastAutoValue] = useState<number>(0);
   const [lastAutoRing, setLastAutoRing] = useState<Ring>("MISS");
+
+  // Visual aid: briefly emphasize big trebles (T20/T19/T18) after detection.
+  const bigTrebleFlashRef = useRef<
+    { value: 18 | 19 | 20; until: number } | null
+  >(null);
 
   // Bounceout tracking:
   // If a confident candidate is observed but never reaches commit readiness and
@@ -1621,6 +1670,52 @@ export default forwardRef(function CameraView(
     try {
       setCameraAccessError(null);
     } catch {}
+
+    // Best-effort anti-glare hints. These are optional constraints; many browsers/devices
+    // ignore them. If they fail, we just proceed with the stream as-is.
+    async function applyAntiGlare(track: MediaStreamTrack | undefined) {
+      if (!track) return;
+      // Only video tracks support these constraint keys.
+      if (track.kind !== "video") return;
+
+      // Only apply camera-track constraints when the user opted into
+      // harsh lighting mode OR the legacy localStorage flag is enabled.
+      const enabled =
+        harshLightingMode ||
+        (typeof window !== "undefined" &&
+          window.localStorage?.getItem("ndn.glareClamp") === "1");
+      if (!enabled) return;
+      const caps: any = (track as any).getCapabilities?.() || {};
+      const supports = (k: string) => k in caps;
+
+      // Prefer: reduce over-exposure highlights & avoid backlight compensation
+      // which can brighten the board and blow out whites.
+      const desired: any = {
+        // Some cams expose this as a mode rather than a boolean.
+        // We try a conservative setting.
+        ...(supports("exposureMode") ? { exposureMode: "continuous" } : {}),
+        ...(supports("whiteBalanceMode")
+          ? { whiteBalanceMode: "continuous" }
+          : {}),
+        ...(supports("focusMode") ? { focusMode: "continuous" } : {}),
+        ...(supports("sharpness") ? { sharpness: caps.sharpness?.max } : {}),
+        ...(supports("contrast") ? { contrast: caps.contrast?.max } : {}),
+        // Minimize any auto "backlight" boosting.
+        ...(supports("backlightCompensation")
+          ? { backlightCompensation: false }
+          : {}),
+      };
+
+      // If nothing is supported, skip.
+      if (!Object.keys(desired).length) return;
+
+      try {
+        await (track as any).applyConstraints(desired);
+        dlog("[CAMERA] Applied anti-glare track constraints:", desired);
+      } catch (e) {
+        console.warn("[CAMERA] Anti-glare track constraints not supported:", e);
+      }
+    }
     try {
       // If a preferred camera is set, request it; otherwise default to back camera on mobile
       // Prefer a crisp feed (up to 4K) but let the browser/device fall back.
@@ -1705,6 +1800,15 @@ export default forwardRef(function CameraView(
       if (videoRef.current) {
         dlog("[CAMERA] Setting stream to video element");
         videoRef.current.srcObject = stream;
+
+        // Apply anti-glare hints after we have the actual track.
+        // This is particularly helpful at 1080p where glare can blow out ring edges.
+        // NOTE: in tests, the MediaStream mock may not implement getVideoTracks.
+        try {
+          const track = (stream as any)?.getVideoTracks?.()?.[0];
+          await applyAntiGlare(track);
+        } catch {}
+
         try {
           await videoRef.current.play();
         } catch (e) {}
@@ -2207,6 +2311,61 @@ export default forwardRef(function CameraView(
         BoardRadii.doubleInner,
         BoardRadii.doubleOuter,
       ];
+
+      // Visual aid: highlight big trebles (T20/T19/T18) briefly.
+      const drawBigTrebleHighlight = (value: 18 | 19 | 20) => {
+        // Expire window check
+        const now = performance.now();
+        const active = bigTrebleFlashRef.current;
+        if (!active || active.value !== value || active.until <= now) return;
+
+        // Board wedges: use standard dartboard ordering.
+        // 20 segments starting at "20" and going clockwise.
+        const standardOrder: number[] = [
+          20, 1, 18, 4, 13, 6, 10, 15, 2, 17,
+          3, 19, 7, 16, 8, 11, 14, 9, 12, 5,
+        ];
+        const i = Math.max(0, standardOrder.indexOf(value));
+  const offset = typeof sectorOffset === "number" ? sectorOffset : 0;
+  const a0 = offset + (i * (Math.PI * 2)) / 20;
+  const a1 = offset + ((i + 1) * (Math.PI * 2)) / 20;
+
+        // Use a slightly "fatter" radius band than the actual treble ring.
+        const rInner = BoardRadii.trebleInner * 0.92;
+        const rOuter = BoardRadii.trebleOuter * 1.08;
+
+        const steps = 48;
+        const outer: Point[] = [];
+        const inner: Point[] = [];
+        for (let s = 0; s <= steps; s++) {
+          const t = s / steps;
+          const a = a0 + (a1 - a0) * t;
+          outer.push(applyHomography(Hs, { x: Math.cos(a) * rOuter, y: Math.sin(a) * rOuter }));
+          inner.push(applyHomography(Hs, { x: Math.cos(a) * rInner, y: Math.sin(a) * rInner }));
+        }
+
+        // Convert to overlay canvas space (crop + drawScale)
+        const poly = [...outer, ...inner.reverse()].map((p) => ({
+          x: (p.x - cropOverlayX) * drawScaleX,
+          y: (p.y - cropOverlayY) * drawScaleY,
+        }));
+
+        // Fade out over time
+        const alpha = Math.max(0, Math.min(1, (active.until - now) / 900));
+        ctx.save();
+        ctx.globalAlpha = 0.18 + 0.32 * alpha;
+        ctx.fillStyle = "#facc15"; // amber
+        ctx.beginPath();
+        ctx.moveTo(poly[0].x, poly[0].y);
+        for (let k = 1; k < poly.length; k++) ctx.lineTo(poly[k].x, poly[k].y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 0.35 + 0.45 * alpha;
+        ctx.strokeStyle = "#fde047";
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.restore();
+      };
       // If useOverlay differs from actual canvas size, draw scale from useOverlay space to overlay space.
       const drawScaleX = w / useOverlay.w;
       const drawScaleY = h / useOverlay.h;
@@ -2245,6 +2404,16 @@ export default forwardRef(function CameraView(
           r === BoardRadii.doubleOuter ? "#22d3ee" : "#a78bfa",
           r === BoardRadii.doubleOuter ? 3 : 2,
         );
+      }
+
+      // Draw on top of rings.
+      if (enhanceBigTrebles) {
+        try {
+          const active = bigTrebleFlashRef.current;
+          if (active && active.until > performance.now()) {
+            drawBigTrebleHighlight(active.value);
+          }
+        } catch {}
       }
     } catch (e) {
       // Silently ignore drawing errors to prevent re-render loops
@@ -2425,23 +2594,45 @@ export default forwardRef(function CameraView(
     if (!proc) return;
 
     // Initialize or reset detector with tuned params for resolution/phone cameras
-    if (!detectorRef.current) {
+    // We also want to re-create the detector if camera resolution changes, because
+    // the background model is resolution-dependent.
+    const detectorSizeRef = (detectorRef as any)._sizeRef || ((detectorRef as any)._sizeRef = { w: 0, h: 0 });
+    const shouldResetDetector =
+      !detectorRef.current ||
+      (initVw > 0 && initVh > 0 && (detectorSizeRef.w !== initVw || detectorSizeRef.h !== initVh));
+
+    if (shouldResetDetector) {
       // default tuning
       let minArea = autoscoreDetectorMinArea;
       let thresh = autoscoreDetectorThresh;
       let requireStableN = autoscoreDetectorRequireStableN;
-      // if resolution is low (common for phone cameras), make detector more permissive
-      if (initVw > 0 && initVh > 0 && initVw * initVh < 1280 * 720) {
+      let angMaxDeg = 70;
+
+      const px = initVw * initVh;
+
+      // If resolution is low (common for phone cameras), make detector more permissive
+      if (initVw > 0 && initVh > 0 && px < 1280 * 720) {
         minArea = Math.min(minArea, 20);
         thresh = Math.min(thresh, 14);
         requireStableN = Math.min(requireStableN, 2);
       }
+
+      // At higher resolutions, the PCA-based angle estimation can be noisy (more
+      // pixels of glare/feathering), which can cause the "Rejected - angle too large"
+      // spam you’re seeing. Loosen the gate a bit so we don’t throw away real darts.
+      if (initVw > 0 && initVh > 0 && px >= 1920 * 1080) {
+        angMaxDeg = 82;
+        requireStableN = Math.max(requireStableN, 2);
+      }
+
       detectorRef.current = new DartDetector({
         minArea,
         thresh,
         requireStableN,
-        angMaxDeg: 70,
+        angMaxDeg,
       });
+      detectorSizeRef.w = initVw;
+      detectorSizeRef.h = initVh;
     }
 
     const tick = () => {
@@ -2471,6 +2662,17 @@ export default forwardRef(function CameraView(
         }
         ctx.drawImage(v, 0, 0, vw, vh);
         const frame = ctx.getImageData(0, 0, vw, vh);
+
+        // Optional detector-side glare clamp (ring-light hotspots).
+        // This directly improves edge visibility for the detector.
+        const glareClampEnabled =
+          harshLightingMode ||
+          (typeof window !== "undefined" &&
+            window.localStorage?.getItem("ndn.glareClamp") === "1");
+        if (glareClampEnabled) {
+          // Tuned defaults for bright 360° ring lights.
+          glareClampFrameInPlace(frame, { knee: 212, strength: 0.72 });
+        }
 
         frameCountRef.current++;
 
@@ -2930,6 +3132,22 @@ export default forwardRef(function CameraView(
             setLastAutoScore(label);
             setLastAutoValue(value);
             setLastAutoRing(ring);
+
+            // Visual aid: briefly emphasize the big trebles when detected.
+            // This is purely a UI overlay hint; it does not affect scoring.
+            try {
+              if (
+                enhanceBigTrebles &&
+                ring === "TRIPLE" &&
+                (value === 20 || value === 19 || value === 18)
+              ) {
+                const flash = {
+                  value: value as 18 | 19 | 20,
+                  until: performance.now() + 900,
+                };
+                bigTrebleFlashRef.current = flash;
+              }
+            } catch {}
 
             const applyAutoHit = async (candidate: AutoCandidate) => {
               dlog(
@@ -3544,10 +3762,29 @@ export default forwardRef(function CameraView(
           ? "absolute inset-0 w-full h-full object-contain object-center bg-black"
           : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black";
     const videoScale = cameraScale ?? 1;
+
+    // Optional, low-risk glare reduction for the *preview* video element.
+    // This does not change the underlying detector input (which reads pixels
+    // from the raw video into a canvas). It simply makes the board easier to
+    // see when bright lights are washing out the white/metallic areas.
+    //
+    // Enable via localStorage flag so we don't need to add new settings UI.
+    // In DevTools console: localStorage.setItem('ndn.glareDimming', '1')
+    // Disable: localStorage.removeItem('ndn.glareDimming')
+    const glareDimmingEnabled =
+      harshLightingMode ||
+      (typeof window !== "undefined" &&
+        (window.localStorage?.getItem("ndn.glareDimming") === "1" ||
+          window.localStorage?.getItem("ndn.glareClamp") === "1"));
+
     const videoStyle = {
       transform: `scale(${videoScale})`,
       transformOrigin: "center center" as const,
-      filter: "saturate(1.25) contrast(1.12) brightness(1.04)",
+      // When glare-dimming is on, reduce brightness and increase contrast so
+      // bright hotspots don't blow out ring edges.
+      filter: glareDimmingEnabled
+        ? "saturate(1.05) contrast(1.25) brightness(0.86)"
+        : "saturate(1.25) contrast(1.12) brightness(1.04)",
       imageRendering: "crisp-edges" as const,
     };
     const activeStream =
@@ -4526,11 +4763,17 @@ export default forwardRef(function CameraView(
                       ? "absolute inset-0 w-full h-full object-contain object-center bg-black"
                       : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black";
                 const videoScale = cameraScale ?? 1;
+                const glareDimmingEnabled =
+                  typeof window !== "undefined" &&
+                  (window.localStorage?.getItem("ndn.glareDimming") === "1" ||
+                    window.localStorage?.getItem("ndn.glareClamp") === "1");
                 const videoStyle = {
                   transform: `scale(${videoScale})`,
                   transformOrigin: "center center" as const,
                   // Mild pop and clarity boost (safe for detection). Adjusted to be crisper without over-sharpening.
-                  filter: "saturate(1.25) contrast(1.12) brightness(1.04)",
+                  filter: glareDimmingEnabled
+                    ? "saturate(1.05) contrast(1.25) brightness(0.86)"
+                    : "saturate(1.25) contrast(1.12) brightness(1.04)",
                   imageRendering: "crisp-edges" as const,
                 };
                 const containerClass =

@@ -39,6 +39,10 @@ type SettingsState = {
   autoscoreDetectorMinArea?: number;
   autoscoreDetectorThresh?: number;
   autoscoreDetectorRequireStableN?: number;
+  // Lighting / glare mitigation (optional)
+  harshLightingMode?: boolean;
+  // Visual aid: emphasize big trebles (T20/T19/T18)
+  enhanceBigTrebles?: boolean;
   // Allow immediate autocommit when playing online/tournaments
   allowAutocommitInOnline?: boolean;
   calibrationGuide: boolean;
@@ -108,6 +112,8 @@ type SettingsState = {
   setAutoscoreDetectorMinArea: (n: number) => void;
   setAutoscoreDetectorThresh: (n: number) => void;
   setAutoscoreDetectorRequireStableN: (n: number) => void;
+  setHarshLightingMode: (v: boolean) => void;
+  setEnhanceBigTrebles: (v: boolean) => void;
   setAllowAutocommitInOnline: (v: boolean) => void;
   setTextSize: (size: "small" | "medium" | "large") => void;
   setBoxSize: (size: "small" | "medium" | "large") => void;
@@ -161,6 +167,8 @@ function load(): Pick<
   | "autoscoreDetectorMinArea"
   | "autoscoreDetectorThresh"
   | "autoscoreDetectorRequireStableN"
+  | "harshLightingMode"
+  | "enhanceBigTrebles"
   | "allowAutocommitInOnline"
   | "textSize"
   | "boxSize"
@@ -212,6 +220,8 @@ function load(): Pick<
         autoscoreDetectorMinArea: 30,
         autoscoreDetectorThresh: 15,
         autoscoreDetectorRequireStableN: 2,
+  harshLightingMode: false,
+  enhanceBigTrebles: false,
         allowAutocommitInOnline: false,
         textSize: "medium",
         boxSize: "medium",
@@ -304,6 +314,10 @@ function load(): Pick<
               Math.min(10, Math.round(j.autoscoreDetectorRequireStableN)),
             )
           : 2,
+      harshLightingMode:
+        typeof j.harshLightingMode === "boolean" ? j.harshLightingMode : false,
+      enhanceBigTrebles:
+        typeof j.enhanceBigTrebles === "boolean" ? j.enhanceBigTrebles : false,
       allowAutocommitInOnline: !!j.allowAutocommitInOnline,
       calibrationGuide:
         typeof j.calibrationGuide === "boolean" ? j.calibrationGuide : true,
@@ -384,6 +398,8 @@ function load(): Pick<
       autoCommitMode: "wait-for-clear",
       confirmUncertainDarts: true,
       autoScoreConfidenceThreshold: 0.85,
+      harshLightingMode: false,
+  enhanceBigTrebles: false,
       textSize: "medium",
       boxSize: "medium",
       matchType: "singles",
@@ -526,6 +542,16 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
         : 2;
     save({ autoscoreDetectorRequireStableN: next } as any);
     set({ autoscoreDetectorRequireStableN: next });
+  },
+  setHarshLightingMode: (v) => {
+    const next = !!v;
+    save({ harshLightingMode: next } as any);
+    set({ harshLightingMode: next });
+  },
+  setEnhanceBigTrebles: (v) => {
+    const next = !!v;
+    save({ enhanceBigTrebles: next } as any);
+    set({ enhanceBigTrebles: next });
   },
   setAllowAutocommitInOnline: (v) => {
     save({ allowAutocommitInOnline: v } as any);

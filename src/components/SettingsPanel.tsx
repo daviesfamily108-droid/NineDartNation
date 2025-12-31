@@ -44,6 +44,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
     autoscoreDetectorMinArea,
     autoscoreDetectorThresh,
     autoscoreDetectorRequireStableN,
+    harshLightingMode,
+    enhanceBigTrebles,
     calibrationGuide: _calibrationGuide,
     preferredCameraId: _preferredCameraId,
     preferredCameraLabel: _preferredCameraLabel,
@@ -73,6 +75,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
     setAutoscoreDetectorMinArea,
     setAutoscoreDetectorThresh,
     setAutoscoreDetectorRequireStableN,
+    setHarshLightingMode,
+    setEnhanceBigTrebles,
     setCalibrationGuide: _setCalibrationGuide,
     preserveCalibrationOverlay,
     setPreserveCalibrationOverlay,
@@ -969,6 +973,48 @@ export default function SettingsPanel({ user }: { user?: any }) {
                   </div>
                   {cameraEnabled && (
                     <>
+                      <div className="pt-2 border-t border-white/10">
+                        <div className="font-semibold mb-2 text-sm">
+                          Lighting
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            id="harshLightingMode"
+                            checked={!!harshLightingMode}
+                            onChange={(e) =>
+                              setHarshLightingMode(e.target.checked)
+                            }
+                            className="w-4 h-4"
+                          />
+                          <label htmlFor="harshLightingMode" className="text-sm">
+                            Reduce glare (ring lights / harsh lighting)
+                          </label>
+                        </div>
+                        <p className="text-xs opacity-70 mt-1">
+                          Applies highlight compression for better dart detection and slightly dims the preview.
+                        </p>
+
+                        <div className="mt-3 flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            id="enhanceBigTrebles"
+                            checked={!!enhanceBigTrebles}
+                            onChange={(e) =>
+                              setEnhanceBigTrebles(e.target.checked)
+                            }
+                            className="w-4 h-4"
+                          />
+                          <label htmlFor="enhanceBigTrebles" className="text-sm">
+                            Enhance big trebles (T20/T19/T18)
+                          </label>
+                        </div>
+                        <p className="text-xs opacity-70 mt-1">
+                          Visual aid only. Briefly enlarges/highlights the treble segment when detected.
+                        </p>
+                      </div>
+
                       <div>
                         <label
                           htmlFor="cameraScale"
