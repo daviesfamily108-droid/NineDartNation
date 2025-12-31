@@ -39,7 +39,11 @@ import PauseTimerBadge from "./ui/PauseTimerBadge";
 import { writeMatchSnapshot } from "../utils/matchSync";
 import { broadcastMessage } from "../utils/broadcast";
 import { startForwarding, stopForwarding } from "../utils/cameraHandoff";
-import { sayDart } from "../utils/checkout";
+import { sayDart, sayScore } from "../utils/checkout";
+import {
+  distanceFromBullMm,
+  mmPerBoardUnitFromBullOuter,
+} from "../utils/bullDistance";
 
 type VideoDiagnostics = {
   ts: number;
@@ -192,6 +196,21 @@ type DetectionLogEntry = {
   tip?: Point;
 };
 
+type BounceoutEvent = {
+  ts: number;
+  // Best-effort derived distance (from last seen tip point) so a bounceout can
+  // still feel "real" in online play.
+  bullDistanceMm?: number;
+};
+
+type CameraDartMeta = {
+  calibrationValid?: boolean;
+  pBoard?: Point | null;
+  source?: "camera" | "manual";
+  // Optional testing/advanced flags
+  __allowMultipleBullUp?: boolean;
+};
+
 export type CameraViewHandle = {
   runDetectionTick: () => void;
   // Test-only helper to directly add a dart without relying on detector
@@ -242,6 +261,9 @@ export default forwardRef(function CameraView(
         mult: 0 | 1 | 2 | 3;
         calibrationValid?: boolean;
         pBoard?: Point | null;
+        bullDistanceMm?: number;
+        tipVideoPx?: Point;
+        bounceout?: boolean;
       },
     ) => boolean | void | Promise<boolean | void>;
     immediateAutoCommit?: boolean;
@@ -294,6 +316,7 @@ export default forwardRef(function CameraView(
   const preferredCameraLocked = useUserSettings((s) => s.preferredCameraLocked);
   const hideCameraOverlay = useUserSettings((s) => s.hideCameraOverlay);
   const callerEnabled = useUserSettings((s) => s.callerEnabled);
+  const speakCheckoutOnly = useUserSettings((s) => s.speakCheckoutOnly);
   const callerVoice = useUserSettings((s) => s.callerVoice);
   const callerVolume = useUserSettings((s) => s.callerVolume);
 
@@ -572,6 +595,16 @@ export default forwardRef(function CameraView(
   const [manualScore, setManualScore] = useState<string>("");
   const [lastAutoValue, setLastAutoValue] = useState<number>(0);
   const [lastAutoRing, setLastAutoRing] = useState<Ring>("MISS");
+
+  // Bounceout tracking:
+  // If a confident candidate is observed but never reaches commit readiness and
+  // then disappears, treat it as a bounceout (MISS).
+  const bounceoutRef = useRef<{
+    pending: boolean;
+    lastSeenTs: number;
+    lastBullDistanceMm: number | null;
+    lastTipVideoPx: Point | null;
+  }>({ pending: false, lastSeenTs: 0, lastBullDistanceMm: null, lastTipVideoPx: null });
   const [pendingDarts, setPendingDarts] = useState<number>(0);
   const pendingDartsRef = useRef<number>(0);
   const [pendingScore, setPendingScore] = useState<number>(0);
@@ -738,6 +771,17 @@ export default forwardRef(function CameraView(
       setPendingConfirm,
     ],
   );
+
+  // Bull-up-only gate: when CameraView is used in custom mode for bull-up,
+  // only the first dart should count. Any further darts are void.
+  //
+  // We implement this entirely inside CameraView so it applies to Offline,
+  // Online, and Tournament flows that reuse the same component.
+  const bullUpFirstDartTakenRef = useRef(false);
+  useEffect(() => {
+    // Reset when switching scoring modes (or remount).
+    bullUpFirstDartTakenRef.current = false;
+  }, [scoringMode]);
   const clearPendingCommitTimer = useCallback(() => {
     if (pendingCommitTimerRef.current) {
       clearTimeout(pendingCommitTimerRef.current);
@@ -964,6 +1008,22 @@ export default forwardRef(function CameraView(
       pendingCommitRef.current = null;
       clearPendingCommitTimer();
       setAwaitingClear(false);
+
+      // Voice announcements happen at the commit boundary (never per-dart).
+      // 1) Speak the latest bull distance (mm) for this visit, if available.
+      // 2) Speak the final 3-dart visit total.
+      try {
+        const maybeEntries = (pending.meta as any)?.entries as
+          | Array<{ meta?: { bullDistanceMm?: number } }>
+          | undefined;
+        const lastBull = maybeEntries?.[maybeEntries.length - 1]?.meta
+          ?.bullDistanceMm;
+        sayBullDistanceMm(lastBull);
+      } catch {}
+      try {
+        sayVisitTotal(pending.score);
+      } catch {}
+
       if (onVisitCommitted) {
         try {
           onVisitCommitted(
@@ -1007,6 +1067,18 @@ export default forwardRef(function CameraView(
     }) => {
       if (!onVisitCommitted) return;
       if (!shouldDeferCommit) {
+        // Same announcements in immediate mode.
+        try {
+          const maybeEntries = (payload.meta as any)?.entries as
+            | Array<{ meta?: { bullDistanceMm?: number } }>
+            | undefined;
+          const lastBull = maybeEntries?.[maybeEntries.length - 1]?.meta
+            ?.bullDistanceMm;
+          sayBullDistanceMm(lastBull);
+        } catch {}
+        try {
+          sayVisitTotal(payload.score);
+        } catch {}
         try {
           onVisitCommitted(
             payload.score,
@@ -1030,6 +1102,8 @@ export default forwardRef(function CameraView(
       shouldDeferCommit,
       clearPendingCommitTimer,
       finalizePendingCommit,
+      sayBullDistanceMm,
+      sayVisitTotal,
     ],
   );
   const clearPendingManual = useCallback((reason: "indicator" | "toolbar") => {
@@ -1476,12 +1550,21 @@ export default forwardRef(function CameraView(
         if (!vw || !vh) return;
         const cw = c.clientWidth || 640;
         const ch = c.clientHeight || 360;
-        // Set backing size to match display for crisp rendering
-        if (c.width !== cw) c.width = cw;
-        if (c.height !== ch) c.height = ch;
+        const dpr = Math.max(
+          1,
+          Math.round(((window.devicePixelRatio as number) || 1) * 100) / 100,
+        );
+        // DPR-aware backing store so the preview isn't blurry on high-DPI screens
+        const bw = Math.floor(cw * dpr);
+        const bh = Math.floor(ch * dpr);
+        if (c.width !== bw) c.width = bw;
+        if (c.height !== bh) c.height = bh;
         const ctx = c.getContext("2d");
         if (!ctx) return;
         ctx.imageSmoothingEnabled = true;
+        try {
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        } catch {}
         // Letterbox fit
         const scale = Math.min(cw / vw, ch / vh);
         const dw = Math.round(vw * scale);
@@ -1540,22 +1623,55 @@ export default forwardRef(function CameraView(
     } catch {}
     try {
       // If a preferred camera is set, request it; otherwise default to back camera on mobile
-      const qualityHints: MediaTrackConstraints = {
+      // Prefer a crisp feed (up to 4K) but let the browser/device fall back.
+      // Note: requesting 4K can increase CPU usage; we keep frameRate modest.
+      const qualityHints4k: MediaTrackConstraints = {
+        width: { ideal: 3840 },
+        height: { ideal: 2160 },
+        frameRate: { ideal: 30 },
+      };
+      const qualityHints1440p: MediaTrackConstraints = {
         width: { ideal: 2560 },
         height: { ideal: 1440 },
+        frameRate: { ideal: 30 },
+      };
+      const qualityHints1080p: MediaTrackConstraints = {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
         frameRate: { ideal: 30 },
       };
       const baseVideo: MediaTrackConstraints = preferredCameraId
         ? { deviceId: { exact: preferredCameraId } }
         : { facingMode: "environment" };
-      const constraints: MediaStreamConstraints = {
-        video: { ...baseVideo, ...qualityHints },
-        audio: false,
-      };
-      dlog("[CAMERA] Using constraints:", constraints);
+
+      async function tryGetStream(
+        hints: MediaTrackConstraints,
+        label: string,
+      ): Promise<MediaStream> {
+        const constraints: MediaStreamConstraints = {
+          video: { ...baseVideo, ...hints },
+          audio: false,
+        };
+        dlog(`[CAMERA] Using constraints (${label}):`, constraints);
+        return navigator.mediaDevices.getUserMedia(constraints);
+      }
+
       let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        try {
+          stream = await tryGetStream(qualityHints4k, "4k");
+        } catch (err4k: any) {
+          console.warn("[CAMERA] 4K request failed, trying 1440p:", err4k);
+          try {
+            stream = await tryGetStream(qualityHints1440p, "1440p");
+          } catch (err1440: any) {
+            console.warn(
+              "[CAMERA] 1440p request failed, trying 1080p:",
+              err1440,
+            );
+            stream = await tryGetStream(qualityHints1080p, "1080p");
+          }
+        }
         dlog("[CAMERA] Got stream:", !!stream);
       } catch (err: any) {
         console.warn("[CAMERA] First attempt failed:", err);
@@ -1567,7 +1683,7 @@ export default forwardRef(function CameraView(
         ) {
           dlog("[CAMERA] Trying fallback without deviceId");
           stream = await navigator.mediaDevices.getUserMedia({
-            video: { ...qualityHints },
+            video: { ...qualityHints1440p },
             audio: false,
           });
         } else if (
@@ -1579,7 +1695,7 @@ export default forwardRef(function CameraView(
           dlog("[CAMERA] Trying fallback for facingMode not supported");
           // Fallback for devices that don't support facingMode
           stream = await navigator.mediaDevices.getUserMedia({
-            video: { ...qualityHints },
+            video: { ...qualityHints1440p },
             audio: false,
           });
         } else {
@@ -2423,6 +2539,51 @@ export default forwardRef(function CameraView(
           dlog("CameraView: raw detection", det);
           const nowPerf = performance.now();
 
+          // Bounceout heuristic: if we were tracking a candidate and the detection
+          // vanishes before we ever became ready to commit, treat as a bounceout MISS.
+          // This is intentionally conservative to avoid false MISS spam.
+          try {
+            const pending = bounceoutRef.current.pending;
+            const vanished = pending && !det;
+            const elapsed = nowPerf - bounceoutRef.current.lastSeenTs;
+            if (vanished && elapsed > 40 && elapsed < 900) {
+              bounceoutRef.current.pending = false;
+              autoCandidateRef.current = null;
+              setHadRecentAuto(false);
+
+              const distMm = bounceoutRef.current.lastBullDistanceMm;
+              const tipPx = bounceoutRef.current.lastTipVideoPx;
+
+              // Emit as a MISS to any parent handler.
+              try {
+                if (onAutoDart)
+                  onAutoDart(0, "MISS" as any, {
+                    sector: null,
+                    mult: 0,
+                    calibrationValid: true,
+                    pBoard: null,
+                    bullDistanceMm: typeof distMm === "number" ? distMm : undefined,
+                    tipVideoPx: tipPx ?? undefined,
+                    bounceout: true,
+                  } as any);
+              } catch (e) {}
+
+              // Keep detection log consistent for debugging.
+              try {
+                captureDetectionLog({
+                  ts: nowPerf,
+                  label: "BOUNCEOUT",
+                  value: 0,
+                  ring: "MISS" as Ring,
+                  confidence: 0,
+                  ready: false,
+                  accepted: false,
+                  warmup: false,
+                });
+              } catch {}
+            }
+          } catch {}
+
           // Treat sudden appearance/disappearance of detections as a motion-like event.
           // This helps prevent committing on flicker/blur right as a dart is thrown.
           try {
@@ -2606,7 +2767,9 @@ export default forwardRef(function CameraView(
               theta ?? 0,
               sectorOffset ?? 0,
             );
-            // Map to board-space coordinates (mm) using homography mapping
+            // Map the *dart tip* into board-space coordinates via homography.
+            // This is the actual point entering the board and is what we should
+            // use for bullseye distance.
             let pBoard: Point | null = null;
             try {
               // H is board->image; imageToBoard inverts internally.
@@ -2672,6 +2835,34 @@ export default forwardRef(function CameraView(
             const _skipLocalCommit2 = false;
             if (onAutoDart) {
               try {
+                const mmPerBoardUnit = mmPerBoardUnitFromBullOuter({
+                  bullOuterRadiusBoardUnits: BoardRadii.bullOuter,
+                });
+                const bullDistance = pBoard
+                  ? distanceFromBullMm({
+                      pBoard,
+                      bullCenter: { x: 0, y: 0 },
+                      mmPerBoardUnit,
+                      bullInnerRadiusBoardUnits: BoardRadii.bullInner,
+                      bullOuterRadiusBoardUnits: BoardRadii.bullOuter,
+                    })
+                  : null;
+
+                // Track potential bounceouts: if we see a confident detection but it
+                // never commits (not stable/settled long enough) and then disappears,
+                // we'll emit a MISS bounceout.
+                try {
+                  if (!isGhost && ring !== "MISS") {
+                    bounceoutRef.current.pending = true;
+                    bounceoutRef.current.lastSeenTs = nowPerf;
+                    bounceoutRef.current.lastBullDistanceMm =
+                      typeof bullDistance?.distanceMm === "number"
+                        ? bullDistance.distanceMm
+                        : null;
+                    bounceoutRef.current.lastTipVideoPx = tipRefined;
+                  }
+                } catch {}
+
                 const pSig = `${score.base}|${score.ring}|${score.mult}`;
                 const pNow = performance.now();
                 if (
@@ -2685,6 +2876,12 @@ export default forwardRef(function CameraView(
                     mult,
                     calibrationValid: Boolean(calibrationGood),
                     pBoard,
+                    // The video-space tip point (after refinement). Useful for debugging
+                    // and for any future parallax/offset correction.
+                    tipVideoPx: tipRefined,
+                    // Precise bull-up "feel": distance from bull center in mm.
+                    // Consumers can announce/log/send to server without UI.
+                    bullDistanceMm: bullDistance?.distanceMm,
                   });
                   if (maybe === true) {
                     lastParentSigRef.current = pSig;
@@ -3660,15 +3857,50 @@ export default forwardRef(function CameraView(
     return leg.totalScoreRemaining;
   }
 
+  function sayBullDistanceMm(bullDistanceMm?: number) {
+    if (!callerEnabled) return;
+    if (typeof bullDistanceMm !== "number" || !Number.isFinite(bullDistanceMm))
+      return;
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      const msg = new SpeechSynthesisUtterance();
+      const rounded = Math.round(bullDistanceMm);
+      msg.text = `${rounded} millimetres`;
+      msg.rate = 0.95;
+      msg.pitch = 1.0;
+      if (callerVoice) {
+        const v = synth.getVoices().find((v) => v.name === callerVoice);
+        if (v) msg.voice = v;
+      }
+      msg.volume =
+        typeof callerVolume === "number"
+          ? Math.max(0, Math.min(1, callerVolume))
+          : 1;
+      try {
+        synth.cancel();
+      } catch {}
+      synth.speak(msg);
+    } catch {}
+  }
+
+  function sayVisitTotal(visitTotal: number) {
+    if (!callerEnabled) return;
+    try {
+      const name = matchState.players[matchState.currentPlayerIdx]?.name;
+      const remaining = getCurrentRemaining();
+      sayScore(name || "Player", visitTotal, Math.max(0, remaining), callerVoice, {
+        volume: callerVolume,
+        checkoutOnly: speakCheckoutOnly,
+      });
+    } catch {}
+  }
+
   function addDart(
     value: number,
     label: string,
     ring: Ring,
-    meta?: {
-      calibrationValid?: boolean;
-      pBoard?: Point | null;
-      source?: "camera" | "manual";
-    },
+    meta?: CameraDartMeta,
   ) {
     // Note: we intentionally do NOT voice-announce individual dart segments here.
     // Users want the *visit total* (e.g., 128) rather than "T18 T18 S20".
@@ -3687,7 +3919,7 @@ export default forwardRef(function CameraView(
       }
       return;
     }
-    const entryMeta = meta ?? {
+    const entryMeta: CameraDartMeta = meta ?? {
       calibrationValid: false,
       pBoard: null,
       source: "manual",
@@ -3705,6 +3937,15 @@ export default forwardRef(function CameraView(
     }
     // In generic mode, delegate to parent without X01 bust/finish rules
     if (scoringMode === "custom") {
+      // Bull-up only: accept exactly one dart per session.
+      // If the caller explicitly opts out (tests / future callers), respect it.
+      if (!entryMeta.__allowMultipleBullUp) {
+        if (bullUpFirstDartTakenRef.current) {
+          // Void/ignore any further darts.
+          return;
+        }
+        bullUpFirstDartTakenRef.current = true;
+      }
       if (onGenericDart)
         try {
           onGenericDart(value, ring, { label });

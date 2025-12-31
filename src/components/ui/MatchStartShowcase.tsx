@@ -23,6 +23,7 @@ import { useUserSettings } from "../../store/userSettings";
 import { ensureVideoPlays } from "../../utils/ensureVideoPlays";
 
 import { memo } from "react";
+import CameraView from "../CameraView";
 
 const StatBlock = memo(function StatBlock({
   label,
@@ -285,6 +286,9 @@ export default function MatchStartShowcase({
   const [seconds, setSeconds] = useState(initialSeconds || 15);
   // Overlay visibility is controlled by parent; the component should be controlled using `open` and `onRequestClose`.
   const visible = !!open;
+  // CameraTile is preview-only; ensure we have a real stream available while
+  // the overlay is visible (users may not have enabled the app-wide warm-up).
+  const shouldWarmupCamera = visible;
   const cameraSession = useCameraSession();
   const setCameraEnabled = useUserSettings.getState().setCameraEnabled;
   // Subscribe only to the specific fields we need. Avoid returning a new object
@@ -727,6 +731,27 @@ export default function MatchStartShowcase({
         >
           <FocusLock returnFocus={true}>
             <div ref={hostRef} className="relative">
+              {shouldWarmupCamera && (
+                <div
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    left: -9999,
+                    width: 320,
+                    height: 240,
+                    overflow: "hidden",
+                    pointerEvents: "none",
+                    opacity: 0,
+                  }}
+                >
+                  <CameraView
+                    showToolbar={false}
+                    hideInlinePanels
+                    scoringMode="custom"
+                    immediateAutoCommit={false}
+                  />
+                </div>
+              )}
               {/* Decorative background glow */}
               <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 rounded-[3rem] blur-3xl -z-10 opacity-50 animate-pulse" />
 

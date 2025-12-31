@@ -1493,7 +1493,18 @@ export default function OnlinePlay({ user }: { user?: any }) {
                   // For online matches, prefer server-side verification: send auto-visit to server
                   if (roomId && wsGlobal && wsGlobal.connected) {
                     try {
-                      wsGlobal.send({ type: 'auto-visit', roomId, value, darts: 3, ring, sector: info?.sector ?? null, pBoard: info?.pBoard ?? null, calibrationValid: !!info?.calibrationValid });
+                      wsGlobal.send({
+                        type: 'auto-visit',
+                        roomId,
+                        value,
+                        darts: 3,
+                        ring,
+                        sector: info?.sector ?? null,
+                        pBoard: info?.pBoard ?? null,
+                        calibrationValid: !!info?.calibrationValid,
+                        bullDistanceMm: info?.bullDistanceMm ?? null,
+                        tipVideoPx: info?.tipVideoPx ?? null,
+                      });
                     } catch {}
                   } else {
                     // fallback to local submit

@@ -81,6 +81,12 @@ vi.mock("../../store/userSettings", () => {
 function mockEnumerateDevices(list: MediaDeviceInfo[]) {
   const md: any = {
     enumerateDevices: () => Promise.resolve(list),
+    // CameraView starts the camera on mount; keep it from throwing in jsdom.
+    getUserMedia: () =>
+      Promise.resolve({
+        getTracks: () => [],
+        getVideoTracks: () => [],
+      }),
     addEventListener: () => {},
     removeEventListener: () => {},
   };

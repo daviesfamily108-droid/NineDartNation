@@ -683,14 +683,46 @@ export default function Calibrator() {
       });
 
       setCameraError(null);
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          deviceId: cameraId ? { exact: cameraId } : undefined,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
+
+      const baseVideo: MediaTrackConstraints = {
+        deviceId: cameraId ? { exact: cameraId } : undefined,
+      };
+      const q4k: MediaTrackConstraints = {
+        width: { ideal: 3840 },
+        height: { ideal: 2160 },
+        frameRate: { ideal: 30 },
+      };
+      const q1440: MediaTrackConstraints = {
+        width: { ideal: 2560 },
+        height: { ideal: 1440 },
+        frameRate: { ideal: 30 },
+      };
+      const q1080: MediaTrackConstraints = {
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 30 },
+      };
+
+      async function tryGet(label: string, hints: MediaTrackConstraints) {
+        console.log("Requesting camera stream:", label, { ...baseVideo, ...hints });
+        return navigator.mediaDevices.getUserMedia({
+          video: { ...baseVideo, ...hints },
+          audio: false,
+        });
+      }
+
+      let mediaStream: MediaStream;
+      try {
+        mediaStream = await tryGet("4k", q4k);
+      } catch (e4k) {
+        console.warn("4K calibration request failed; trying 1440p", e4k);
+        try {
+          mediaStream = await tryGet("1440p", q1440);
+        } catch (e1440) {
+          console.warn("1440p calibration request failed; trying 1080p", e1440);
+          mediaStream = await tryGet("1080p", q1080);
+        }
+      }
 
       console.log("Got media stream:", {
         tracks: mediaStream.getTracks().length,

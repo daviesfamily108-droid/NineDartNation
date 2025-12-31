@@ -59,6 +59,41 @@ vi.doMock("zustand/middleware", async () => {
       removeItem: () => {},
     }),
   };
+
+  test("bull-up (custom): only first dart counts; others void", async () => {
+    const React = (await vi.importActual("react")) as any;
+    const cameraRef = React.createRef<any>();
+
+    const onGeneric = vi.fn();
+    const CameraView = (await vi.importActual("../CameraView")).default as any;
+
+    render(
+      <CameraView
+        ref={cameraRef}
+        scoringMode="custom"
+        onGenericDart={onGeneric}
+      />,
+    );
+
+    // First dart should be forwarded
+    cameraRef.current.__test_addDart?.(25, "BULL 25", "BULL", {
+      source: "camera",
+      calibrationValid: true,
+      confidence: 0.99,
+      __allowMultipleBullUp: false,
+    });
+    // Second dart should be ignored (void)
+    cameraRef.current.__test_addDart?.(50, "INNER_BULL 50", "INNER_BULL", {
+      source: "camera",
+      calibrationValid: true,
+      confidence: 0.99,
+      __allowMultipleBullUp: false,
+    });
+
+    expect(onGeneric).toHaveBeenCalledTimes(1);
+    expect(onGeneric.mock.calls[0][0]).toBe(25);
+    expect(onGeneric.mock.calls[0][1]).toBe("BULL");
+  });
 });
 
 // Provide a simple mock for the calibration store to avoid persistent storage
