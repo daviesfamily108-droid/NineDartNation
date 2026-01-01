@@ -494,6 +494,7 @@ export function scoreAtBoardPointTheta(
   p: Point,
   theta: number,
   sectorOffset: number = 0,
+  rotationOffsetRad: number = 0,
 ): {
   base: number;
   ring: "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL";
@@ -501,7 +502,10 @@ export function scoreAtBoardPointTheta(
   mult: 0 | 1 | 2 | 3;
 } {
   const r = Math.hypot(p.x, p.y);
-  const ang = Math.atan2(p.y, p.x) + (Number.isFinite(theta) ? theta : 0);
+  const ang =
+    Math.atan2(p.y, p.x) +
+    (Number.isFinite(theta) ? theta : 0) +
+    (Number.isFinite(rotationOffsetRad) ? rotationOffsetRad : 0);
   let deg = (ang * 180) / Math.PI;
   deg = (deg + 360 + 90) % 360;
   const index = Math.floor(((deg + 9) % 360) / 18);

@@ -36,6 +36,11 @@
 
     await server.listen()
 
+    // Some environments (notably Node 25 on Windows) can end up with a non-zero
+    // exit code even when the dev server is running. Force a clean exit code
+    // after successful startup.
+    process.exitCode = 0
+
     server.printUrls()
 
     const shutdown = async () => {

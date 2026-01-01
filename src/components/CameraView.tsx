@@ -1549,9 +1549,15 @@ export default forwardRef(function CameraView(
       setDartTimeLeft((prev) => {
         const next = (prev ?? dartTimerSeconds) - 1;
         if (next <= 0) {
-          // Time expired: record a MISS and reset will occur via pendingEntries change
+          // Time expired: guarantee the visit completes to 3 darts by auto-filling
+          // the remaining darts as MISS. This keeps gameplay moving even when the
+          // camera misses a dart or the player pauses.
           try {
-            addDart(0, "MISS 0", "MISS");
+            const already = pendingDartsRef.current || 0;
+            const remaining = Math.max(0, 3 - already);
+            for (let i = 0; i < remaining; i++) {
+              addDart(0, "MISS 0", "MISS");
+            }
           } catch (e) {}
           // Stop interval until effect re-initializes on state change
           if (timerRef.current) {
@@ -1647,7 +1653,17 @@ export default forwardRef(function CameraView(
     const existingStream =
       (cameraSession.getMediaStream?.() as MediaStream | null) ||
       ((videoRef.current?.srcObject as MediaStream | null) ?? null);
-    const hasActiveTracks = !!existingStream?.getVideoTracks()?.length;
+    const hasActiveTracks = (() => {
+      try {
+        const anyStream: any = existingStream as any;
+        if (!anyStream) return false;
+        const fn = anyStream.getVideoTracks;
+        if (typeof fn !== "function") return false;
+        return !!fn.call(anyStream)?.length;
+      } catch {
+        return false;
+      }
+    })();
     if (cameraStarting || (streaming && hasActiveTracks)) return;
 
     // Only skip local startup when the phone feed is actively streaming
@@ -4144,17 +4160,12 @@ export default forwardRef(function CameraView(
     // Visit totals are announced when the visit commits (3 darts / bust / finish).
 
     if (shouldDeferCommit && awaitingClear) {
-      if (!pulseManualPill) {
-        setPulseManualPill(true);
-        try {
-          if (pulseTimeoutRef.current) clearTimeout(pulseTimeoutRef.current);
-        } catch (e) {}
-        pulseTimeoutRef.current = window.setTimeout(() => {
-          setPulseManualPill(false);
-          pulseTimeoutRef.current = null;
-        }, 1200);
-      }
-      return;
+      // Hardening: never drop a real dart just because we're waiting for an
+      // explicit "board cleared" signal. If the player throws again, assume
+      // they want to continue play and finalize the pending commit now.
+      try {
+        finalizePendingCommit("event");
+      } catch (e) {}
     }
     const entryMeta: CameraDartMeta = meta ?? {
       calibrationValid: false,

@@ -14,6 +14,10 @@ type CalibrationState = {
   anchors: { src: Point[]; dst: Point[] } | null;
   // Detected board orientation (radians). 0 means canonical orientation with 20 at top.
   theta: number | null;
+  // Fine-grained rotation offset (radians) applied on top of `theta`.
+  // Positive values rotate CCW in board space before sector mapping.
+  // This is intended for TV-style alignment using a D20 wire-intersection anchor.
+  rotationOffsetRad: number | null;
   // Optional integer sector offset to correct any residual rotation mismatch (units: sectors)
   sectorOffset: number | null;
   // Camera ID that was used for this calibration
@@ -37,6 +41,7 @@ export const useCalibration = create<CalibrationState>()((set, _get) => ({
   overlaySize: null,
   anchors: null,
   theta: null,
+  rotationOffsetRad: 0,
   sectorOffset: 0,
   cameraId: null,
   locked: false,
@@ -68,6 +73,7 @@ export const useCalibration = create<CalibrationState>()((set, _get) => ({
       overlaySize: null,
       anchors: null,
       theta: null,
+      rotationOffsetRad: 0,
       sectorOffset: 0,
       cameraId: null,
       locked: false,

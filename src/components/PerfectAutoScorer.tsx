@@ -160,7 +160,13 @@ export function PerfectAutoScorer({
         if (!calibration.homography) {
           return dart;
         }
-        const scored = scoreDarts([dart], calibration.homography)[0];
+        const scored = scoreDarts(
+          [dart],
+          calibration.homography,
+          (calibration as any).theta,
+          (calibration as any).rotationOffsetRad,
+          (calibration as any).sectorOffset,
+        )[0];
         return scored;
       });
 

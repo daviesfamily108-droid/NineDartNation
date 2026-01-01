@@ -340,12 +340,13 @@ export default function CameraTile({
         if (v.srcObject !== s) {
           v.srcObject = s;
         }
-        v.muted = true;
-        (v as any).playsInline = true;
+        // Ensure playback starts reliably (autoplay policies / metadata timing)
         try {
-          await v.play();
-        } catch {}
-        setStreaming(true);
+          const res = await ensureVideoPlays({ video: v, stream: s });
+          setStreaming(!!res.played);
+        } catch {
+          setStreaming(true);
+        }
         // Once attached and playing, no need to keep polling.
         return true;
       } catch {}
@@ -498,14 +499,14 @@ export default function CameraTile({
     cameraSession.isStreaming,
   ]);
   const stop = useCallback(() => {
-    // Detach preview only. Do NOT stop tracks here, as the global cameraSession
-    // stream may be shared by CameraView and other UI surfaces.
-    if (videoRef.current && videoRef.current.srcObject) {
-      try {
-        videoRef.current.srcObject = null;
-      } catch {}
-      setStreaming(false);
-    }
+    // Preview-only: do NOT stop tracks here, as the global cameraSession stream
+    // may be shared by CameraView and other UI surfaces.
+    //
+    // IMPORTANT: do not aggressively detach srcObject here.
+    // On some browsers/devices, repeatedly clearing srcObject while other
+    // components are reusing the same stream can lead to a black preview until a
+    // full reattach/replay happens.
+    setStreaming(false);
   }, [registerStream]);
 
   // Auto-start/stop the tile when requested.

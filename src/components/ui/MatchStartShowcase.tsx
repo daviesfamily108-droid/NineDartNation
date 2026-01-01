@@ -291,6 +291,21 @@ export default function MatchStartShowcase({
   const shouldWarmupCamera = visible;
   const cameraSession = useCameraSession();
   const setCameraEnabled = useUserSettings.getState().setCameraEnabled;
+
+  // Keep the MediaStream holder alive while this overlay is mounted so the
+  // embedded pre-game CameraTile can’t go black due to a racey clearSession()
+  // from another surface.
+  useEffect(() => {
+    if (!visible) return;
+    try {
+      cameraSession.acquireKeepAlive?.("MatchStartShowcase");
+    } catch {}
+    return () => {
+      try {
+        cameraSession.releaseKeepAlive?.("MatchStartShowcase");
+      } catch {}
+    };
+  }, [visible, cameraSession]);
   // Subscribe only to the specific fields we need. Avoid returning a new object
   // from the selector on every store update, which can cause extra re-renders.
   const hasHomography = useCalibration((s) => !!s.H);

@@ -192,6 +192,8 @@ export function scoreDarts(
   // board->image homography
   H_boardToImage: Homography,
   theta?: number,
+  rotationOffsetRad?: number,
+  sectorOffset?: number,
 ): DetectedDart[] {
   return darts.map((dart) => {
     try {
@@ -204,8 +206,12 @@ export function scoreDarts(
       const score =
         typeof theta === "number"
           ? // If theta is known, use orientation-correct sector mapping.
-            // (sectorOffset is applied elsewhere when available)
-            scoreAtBoardPointTheta(boardPoint, theta, 0)
+            scoreAtBoardPointTheta(
+              boardPoint,
+              theta,
+              sectorOffset ?? 0,
+              rotationOffsetRad ?? 0,
+            )
           : scoreAtBoardPoint(boardPoint);
       if (!score) return dart;
 

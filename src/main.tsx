@@ -10,6 +10,7 @@ import { WSProvider } from "./components/WSProvider";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { installApiInterceptor } from "./utils/api";
 import { setupInstallPromptHooks } from "./utils/installPrompt";
+import { installQuietConsole } from "./utils/quietConsole";
 
 // In some hosting setups, third-party or legacy code may expect a global React.
 // This ensures `React` is available at runtime to prevent 'React is not defined' errors.
@@ -19,6 +20,7 @@ try {
 
 installApiInterceptor();
 setupInstallPromptHooks();
+installQuietConsole();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <StrictMode>

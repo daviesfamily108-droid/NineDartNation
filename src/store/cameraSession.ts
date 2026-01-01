@@ -16,6 +16,10 @@ let mediaStreamRefHolder: MediaStream | null = null;
 let pcRefHolder: RTCPeerConnection | null = null;
 let wsRefHolder: WebSocket | null = null;
 
+// Prevent UI transitions (like the pre-game overlay mounting/unmounting) from
+// accidentally tearing down the shared stream.
+let keepAliveCount = 0;
+
 type CameraSessionState = {
   // Stream state - persists across navigation (ONLY serializable data)
   isStreaming: boolean;
@@ -48,6 +52,10 @@ type CameraSessionState = {
   getVideoElementRef: () => HTMLVideoElement | null;
   setVideoElementRef: (ref: HTMLVideoElement | null) => void;
 
+  // Keep-alive helpers for UI surfaces that briefly mount/unmount
+  acquireKeepAlive: (reason?: string) => void;
+  releaseKeepAlive: (reason?: string) => void;
+
   // Clear session when user stops camera
   clearSession: () => void;
 };
@@ -79,6 +87,8 @@ export const useCameraSession = create<CameraSessionState>()(
 
       // Non-serializable refs stored outside state
       setMediaStream: (stream) => {
+        // If the UI is holding a keep-alive, never clear the holder.
+        if (!stream && keepAliveCount > 0) return;
         mediaStreamRefHolder = stream;
       },
       getMediaStream: () => {
@@ -127,9 +137,20 @@ export const useCameraSession = create<CameraSessionState>()(
         videoElementRefHolder = ref;
       },
 
+      acquireKeepAlive: (_reason?: string) => {
+        keepAliveCount += 1;
+      },
+      releaseKeepAlive: (_reason?: string) => {
+        keepAliveCount = Math.max(0, keepAliveCount - 1);
+      },
+
       clearSession: () => {
-        videoElementRefHolder = null;
-        mediaStreamRefHolder = null;
+        // If a UI surface is currently asking us to keep the stream alive
+        // (e.g., pre-game overlay), don't clear shared refs.
+        if (keepAliveCount === 0) {
+          videoElementRefHolder = null;
+          mediaStreamRefHolder = null;
+        }
         pcRefHolder = null;
         wsRefHolder = null;
         set({
