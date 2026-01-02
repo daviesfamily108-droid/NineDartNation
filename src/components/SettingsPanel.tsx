@@ -466,9 +466,28 @@ export default function SettingsPanel({ user }: { user?: any }) {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 ndn-page">
+      <div className="rounded-[28px] border border-white/10 bg-gradient-to-br from-slate-950/70 via-indigo-950/30 to-slate-950/60 p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs uppercase tracking-[0.35em] text-slate-400">
+              Preferences
+            </div>
+            <h2 className="mt-1 text-2xl font-extrabold text-white">
+              Settings
+            </h2>
+            <div className="mt-1 text-sm text-slate-300/80">
+              Tune your camera, scoring, and app experience.
+            </div>
+          </div>
+          <div className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
+            <ThemeToggle />
+          </div>
+        </div>
+      </div>
+
       {/* ==== USER INFO PILL ==== */}
-      <div className="relative rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-1">
+      <div className="relative rounded-[22px] bg-gradient-to-br from-white/[0.08] to-white/[0.03] backdrop-blur-md border border-white/10 p-2 shadow-xl">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-1">
           <PillButton
             label="User Info 👤"
@@ -502,7 +521,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
       {expandedPill === "user" && (
         <div
           data-testid="pill-user-content"
-          className="p-6 rounded-2xl border border-white/10 bg-white/[0.02] space-y-4"
+          className="p-5 sm:p-6 rounded-[28px] border border-white/10 bg-slate-950/50 shadow-2xl space-y-4"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Account */}
@@ -988,12 +1007,16 @@ export default function SettingsPanel({ user }: { user?: any }) {
                             }
                             className="w-4 h-4"
                           />
-                          <label htmlFor="harshLightingMode" className="text-sm">
+                          <label
+                            htmlFor="harshLightingMode"
+                            className="text-sm"
+                          >
                             Reduce glare (ring lights / harsh lighting)
                           </label>
                         </div>
                         <p className="text-xs opacity-70 mt-1">
-                          Applies highlight compression for better dart detection and slightly dims the preview.
+                          Applies highlight compression for better dart
+                          detection and slightly dims the preview.
                         </p>
 
                         <div className="mt-3 flex items-center gap-3">
@@ -1006,12 +1029,16 @@ export default function SettingsPanel({ user }: { user?: any }) {
                             }
                             className="w-4 h-4"
                           />
-                          <label htmlFor="enhanceBigTrebles" className="text-sm">
+                          <label
+                            htmlFor="enhanceBigTrebles"
+                            className="text-sm"
+                          >
                             Enhance big trebles (T20/T19/T18)
                           </label>
                         </div>
                         <p className="text-xs opacity-70 mt-1">
-                          Visual aid only. Briefly enlarges/highlights the treble segment when detected.
+                          Visual aid only. Briefly enlarges/highlights the
+                          treble segment when detected.
                         </p>
                       </div>
 

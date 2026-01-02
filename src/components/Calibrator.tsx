@@ -703,13 +703,16 @@ export default function Calibrator() {
         frameRate: { ideal: 30 },
       };
 
-      async function tryGet(label: string, hints: MediaTrackConstraints) {
-        console.log("Requesting camera stream:", label, { ...baseVideo, ...hints });
+      const tryGet = async (label: string, hints: MediaTrackConstraints) => {
+        console.log("Requesting camera stream:", label, {
+          ...baseVideo,
+          ...hints,
+        });
         return navigator.mediaDevices.getUserMedia({
           video: { ...baseVideo, ...hints },
           audio: false,
         });
-      }
+      };
 
       let mediaStream: MediaStream;
       try {

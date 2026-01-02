@@ -2537,27 +2537,69 @@ app.post('/api/friends/message', (req, res) => {
   if (!to || !from || !raw) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   let msg
   try { msg = profanityFilter.clean(raw) } catch { msg = raw }
+  // Store as a true 2-way thread.
+  // Keep legacy `messages` (inbox by recipient) for backwards compatibility.
+  const now = Date.now()
+  const id = `${now}-${Math.random().toString(36).slice(2,8)}`
+  const threadKey = [from, to].sort().join('|')
+  if (!global.dmThreads) global.dmThreads = new Map()
+  const dmThreads = global.dmThreads
+  const thread = dmThreads.get(threadKey) || []
+  const item = { id, from, to, message: msg, ts: now, readBy: [from] }
+  thread.push(item)
+  dmThreads.set(threadKey, thread)
+
+  // Legacy inbox storage (recipient only)
   const arr = messages.get(to) || []
-  const item = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, from, message: msg, ts: Date.now() }
-  arr.push(item)
+  arr.push({ id, from, message: msg, ts: now, read: false })
   messages.set(to, arr)
   // Try deliver via WS if recipient online
   const u = users.get(to)
   if (u && u.wsId) {
     const target = clients.get(u.wsId)
     if (target && target.readyState === 1) {
-      target.send(JSON.stringify({ type: 'friend-message', from, message: msg, ts: item.ts, id: item.id }))
+      target.send(JSON.stringify({ type: 'friend-message', from, to, message: msg, ts: item.ts, id: item.id }))
     }
   }
   res.json({ ok: true, delivered: !!(u && u.wsId) })
 })
 
-// Fetch recent inbox messages
+// Fetch recent inbox messages (legacy endpoint)
 app.get('/api/friends/messages', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   if (!email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   const arr = messages.get(email) || []
   res.json({ ok: true, messages: arr.slice(-200).sort((a,b)=>b.ts-a.ts) })
+})
+
+// Fetch a true 2-way thread between the current user and another user.
+app.get('/api/friends/thread', (req, res) => {
+  const me = String(req.query.email || '').toLowerCase()
+  const other = String(req.query.other || '').toLowerCase()
+  if (!me || !other || me === other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  const threadKey = [me, other].sort().join('|')
+  const dmThreads = global.dmThreads || new Map()
+
+  const thread = (dmThreads.get(threadKey) || []).slice(-400).sort((a,b)=>a.ts-b.ts)
+  // Mark as read for `me` (idempotent)
+  for (const m of thread) {
+    try {
+      if (Array.isArray(m.readBy) && !m.readBy.includes(me)) m.readBy.push(me)
+    } catch {}
+  }
+  dmThreads.set(threadKey, dmThreads.get(threadKey) || thread)
+  global.dmThreads = dmThreads
+
+  // Also mark legacy inbox items from `other` as read.
+  try {
+    const inbox = messages.get(me) || []
+    for (const m of inbox) {
+      if (String(m.from||'').toLowerCase() === other) m.read = true
+    }
+    messages.set(me, inbox)
+  } catch {}
+
+  res.json({ ok: true, thread })
 })
 
 // Report bad behavior or a specific message

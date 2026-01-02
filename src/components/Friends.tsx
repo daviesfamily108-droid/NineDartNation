@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../store/toast";
 import { useMessages } from "../store/messages";
 import { censorProfanity } from "../utils/profanity";
@@ -43,6 +43,12 @@ export default function Friends({ user }: { user?: any }) {
   >("all");
   const [loading, setLoading] = useState(false);
   const msgs = useMessages();
+  const [activeChat, setActiveChat] = useState<{
+    email: string;
+    username?: string;
+  } | null>(null);
+  const [chatDraft, setChatDraft] = useState("");
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const [requests, setRequests] = useState<
     Array<{
       id: string;
@@ -69,6 +75,62 @@ export default function Friends({ user }: { user?: any }) {
     toEmail?: string;
     replyTo?: string;
   }>({ show: false });
+
+  const loadThread = useCallback(
+    async (otherEmail: string) => {
+      const other = String(otherEmail || "").toLowerCase();
+      if (!email || !other || other === email) return;
+      try {
+        const res = await fetch(
+          `/api/friends/thread?email=${encodeURIComponent(email)}&other=${encodeURIComponent(other)}`,
+        );
+        const data = await res.json();
+        if (data?.ok && Array.isArray(data.thread)) {
+          msgs.loadThread(other, data.thread);
+        }
+      } catch {
+        // ignore
+      }
+    },
+    [email, msgs],
+  );
+
+  const activeThread = useMemo(() => {
+    if (!activeChat?.email) return [];
+    const other = activeChat.email.toLowerCase();
+    const thread = msgs.threads?.[other]?.messages;
+    if (Array.isArray(thread) && thread.length) return thread;
+    // Fallback: Backend may still only return inbound messages.
+    return msgs.inbox
+      .filter((m) => String(m.from || "").toLowerCase() === other)
+      .slice()
+      .sort((a, b) => a.ts - b.ts);
+  }, [activeChat?.email, msgs.inbox, msgs.threads]);
+
+  const threadPreviewByEmail = useMemo(() => {
+    const map = new Map<string, { ts: number; message: string }>();
+    for (const m of msgs.inbox) {
+      const from = String(m.from || "").toLowerCase();
+      const prev = map.get(from);
+      if (!prev || m.ts > prev.ts)
+        map.set(from, { ts: m.ts, message: m.message });
+    }
+    return map;
+  }, [msgs.inbox]);
+
+  const unreadCountByEmail = useMemo(() => {
+    // Message store only tracks a global unread count; approximate per-friend
+    // by counting recent messages (purely a UI hint).
+    const map = new Map<string, number>();
+    const recentMs = 1000 * 60 * 60 * 24 * 3; // last 3 days
+    const cutoff = Date.now() - recentMs;
+    for (const m of msgs.inbox) {
+      if ((m.ts || 0) < cutoff) continue;
+      const from = String(m.from || "").toLowerCase();
+      map.set(from, (map.get(from) || 0) + 1);
+    }
+    return map;
+  }, [msgs.inbox]);
 
   async function refresh() {
     if (!email) return;
@@ -97,6 +159,31 @@ export default function Friends({ user }: { user?: any }) {
   useEffect(() => {
     refresh();
   }, [email]);
+
+  // Load inbox on mount/user change.
+  useEffect(() => {
+    if (!email) return;
+    fetch(`/api/friends/messages?email=${encodeURIComponent(email)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.ok && Array.isArray(d.messages)) msgs.load(d.messages);
+      })
+      .catch(() => {});
+  }, [email]);
+
+  // Load real 2-way thread whenever we open/switch chats.
+  useEffect(() => {
+    if (!activeChat?.email) return;
+    void loadThread(activeChat.email);
+  }, [activeChat?.email, loadThread]);
+
+  // Keep thread scrolled to bottom when opening or receiving new messages.
+  useEffect(() => {
+    if (!activeChat) return;
+    const el = chatScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [activeChat?.email, activeThread.length]);
 
   async function search(term: string) {
     setQ(term);
@@ -204,6 +291,40 @@ export default function Friends({ user }: { user?: any }) {
     } catch {}
   }
 
+  async function sendChatMessage() {
+    if (!email || !activeChat?.email) return;
+    const message = chatDraft.trim();
+    if (!message) return;
+    try {
+      await fetch("/api/friends/message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fromEmail: email,
+          toEmail: activeChat.email,
+          message,
+        }),
+      });
+
+      // Optimistically append to the active thread.
+      const now = Date.now();
+      const id = `${now}-${Math.random().toString(36).slice(2, 8)}`;
+      msgs.pushThread(activeChat.email, {
+        id,
+        from: email,
+        to: String(activeChat.email).toLowerCase(),
+        message,
+        ts: now,
+        readBy: [email],
+      });
+
+      setChatDraft("");
+      toast("Message sent", { type: "success" });
+    } catch {
+      toast("Failed to send message", { type: "error" });
+    }
+  }
+
   const filtered = useMemo(() => {
     if (filter === "all") return friends;
     return friends.filter((f) => (f.status || "offline") === filter);
@@ -236,8 +357,10 @@ export default function Friends({ user }: { user?: any }) {
   // Friend Requests pill: use real requests data
   const requestsCount = requests.length + outgoingRequests.length;
   return (
-    <div className="card ndn-game-shell">
-      <h2 className="text-2xl font-bold text-brand-700 mb-2">Friends 👥</h2>
+    <div className="card ndn-game-shell ndn-page">
+      <h2 className="text-2xl font-bold text-brand-700 mb-2 ndn-section-title">
+        Friends 👥
+      </h2>
       <p className="mb-2 text-brand-600">
         Manage your friends. See who's online, in-game, or offline; find new
         teammates; and invite people to play.
@@ -279,10 +402,15 @@ export default function Friends({ user }: { user?: any }) {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-        <div className="md:col-span-2 p-4 rounded-[28px] bg-gradient-to-br from-slate-900/80 to-indigo-900/60 border border-white/10 shadow-2xl">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-4">
+        {/* Friends (master list) */}
+        <div
+          className={`${activeChat ? "hidden lg:block" : "block"} lg:col-span-2 p-4 rounded-[28px] bg-gradient-to-br from-slate-900/80 to-indigo-900/60 border border-white/10 shadow-2xl`}
+        >
           <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold text-white/90">Your Friends 👥</div>
+            <div className="font-semibold text-white/90">
+              Friends & Requests
+            </div>
           </div>
           <TabPills
             tabs={[
@@ -364,46 +492,86 @@ export default function Friends({ user }: { user?: any }) {
             </ul>
           ) : (
             <ul className="space-y-3">
-              {filtered.map((f) => (
-                <li
-                  key={f.email}
-                  className="rounded-2xl border border-white/10 bg-slate-900/40 p-4 flex flex-col gap-3 shadow-lg"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`inline-block w-2.5 h-2.5 rounded-full ${
-                            f.status === "online"
-                              ? "bg-emerald-400"
-                              : f.status === "ingame"
-                                ? "bg-amber-400"
-                                : "bg-slate-400"
-                          }`}
-                        ></span>
-                        <span className="font-semibold text-white">
-                          {f.username || f.email}
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        {f.status || "offline"}
-                        {f.status !== "online" && f.lastSeen
-                          ? ` · ${timeAgo(f.lastSeen)}`
-                          : ""}
-                      </div>
-                      {f.status === "ingame" && f.match && (
-                        <div className="text-[11px] inline-flex items-center gap-1 mt-2 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-3 py-0.5 text-indigo-200">
-                          <span className="font-medium">Live Match</span>
-                          <span>
-                            {f.match.game} {labelForMode(f.match.mode)}{" "}
-                            {f.match.value}
-                            {f.match.game === "X01" && f.match.startingScore
-                              ? ` · ${f.match.startingScore}`
+              {filtered.map((f) => {
+                const fKey = String(f.email || "").toLowerCase();
+                const preview = threadPreviewByEmail.get(fKey);
+                const pseudoUnread = unreadCountByEmail.get(fKey) || 0;
+                const isSelected = activeChat?.email?.toLowerCase() === fKey;
+
+                return (
+                  <li
+                    key={f.email}
+                    className={`rounded-2xl border bg-slate-900/40 p-4 flex flex-col gap-3 shadow-lg transition-colors ${
+                      isSelected
+                        ? "border-indigo-400/60 bg-indigo-500/10"
+                        : "border-white/10 hover:border-white/20"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setActiveChat({ email: f.email, username: f.username })
+                      }
+                      className="text-left"
+                      title="Open messages"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-block w-2.5 h-2.5 rounded-full ${
+                                f.status === "online"
+                                  ? "bg-emerald-400"
+                                  : f.status === "ingame"
+                                    ? "bg-amber-400"
+                                    : "bg-slate-400"
+                              }`}
+                            ></span>
+                            <span className="font-semibold text-white truncate">
+                              {f.username || f.email}
+                            </span>
+                            {pseudoUnread > 0 && (
+                              <span className="ml-2 inline-flex items-center rounded-full bg-indigo-500/20 border border-indigo-400/30 px-2 py-0.5 text-[10px] font-bold text-indigo-200">
+                                {pseudoUnread > 9 ? "9+" : pseudoUnread} new
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {f.status || "offline"}
+                            {f.status !== "online" && f.lastSeen
+                              ? ` · ${timeAgo(f.lastSeen)}`
                               : ""}
-                          </span>
+                          </div>
+                          <div className="mt-2 text-xs text-slate-300/80 line-clamp-2">
+                            {preview
+                              ? censorProfanity(preview.message)
+                              : "Tap to view messages"}
+                          </div>
+                          {preview?.ts && (
+                            <div className="mt-1 text-[10px] text-slate-500">
+                              {new Date(preview.ts).toLocaleString()}
+                            </div>
+                          )}
+                          {f.status === "ingame" && f.match && (
+                            <div className="text-[11px] inline-flex items-center gap-1 mt-2 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-3 py-0.5 text-indigo-200">
+                              <span className="font-medium">Live Match</span>
+                              <span>
+                                {f.match.game} {labelForMode(f.match.mode)}{" "}
+                                {f.match.value}
+                                {f.match.game === "X01" && f.match.startingScore
+                                  ? ` · ${f.match.startingScore}`
+                                  : ""}
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+
+                        <div className="shrink-0 text-xs text-slate-400">
+                          {preview?.ts ? timeAgo(preview.ts) : ""}
+                        </div>
+                      </div>
+                    </button>
+
                     <div className="flex gap-2 flex-wrap">
                       {f.status === "ingame" && f.roomId && (
                         <button
@@ -414,16 +582,15 @@ export default function Friends({ user }: { user?: any }) {
                         </button>
                       )}
                       <button
-                        onClick={() => {
-                          setMessagePopup({
-                            show: true,
-                            toEmail: f.email,
-                            toUser: f.username || f.email,
-                          });
-                        }}
-                        className="flex-1 px-3 py-2 rounded-xl bg-indigo-500/20 text-indigo-400 text-xs font-bold hover:bg-indigo-500/30 transition-colors"
+                        onClick={() =>
+                          setActiveChat({
+                            email: f.email,
+                            username: f.username,
+                          })
+                        }
+                        className="flex-1 px-3 py-2 rounded-xl bg-indigo-600/25 text-indigo-200 text-xs font-bold hover:bg-indigo-600/35 transition-colors"
                       >
-                        Message 💬
+                        Open Chat 💬
                       </button>
                       <button
                         onClick={() => removeFriend(f.email)}
@@ -433,9 +600,9 @@ export default function Friends({ user }: { user?: any }) {
                         Remove 🗑️
                       </button>
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
               {filtered.length === 0 && (
                 <li className="text-sm opacity-70">
                   No friends {filter !== "all" ? `in ${filter}` : ""} yet.
@@ -445,7 +612,174 @@ export default function Friends({ user }: { user?: any }) {
           )}
         </div>
 
-        <div className="p-4 rounded-[28px] bg-slate-950/70 border border-white/10 shadow-xl">
+        {/* Messages (detail / thread) */}
+        <div
+          className={`${activeChat ? "block" : "hidden lg:block"} lg:col-span-3 p-4 rounded-[28px] bg-slate-950/70 border border-white/10 shadow-2xl`}
+        >
+          {!activeChat ? (
+            <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center gap-2">
+              <div className="text-lg font-semibold text-white/90">
+                Messages 💬
+              </div>
+              <div className="text-sm text-slate-400 max-w-sm">
+                Pick a friend to see your conversation. New messages will show
+                up here.
+              </div>
+              {msgs.inbox.length > 0 && (
+                <button
+                  onClick={() => msgs.markAllRead()}
+                  className="mt-2 text-xs text-indigo-400 font-bold hover:text-indigo-300 transition-colors"
+                >
+                  Mark all read ✅
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col h-full">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2 min-w-0">
+                  <button
+                    className="lg:hidden px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/80 text-xs font-bold"
+                    onClick={() => setActiveChat(null)}
+                  >
+                    ← Back
+                  </button>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-white truncate">
+                      {activeChat.username || activeChat.email}
+                    </div>
+                    <div className="text-xs text-slate-400 truncate">
+                      {activeChat.email}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => msgs.markAllRead()}
+                    className="text-xs text-indigo-400 font-bold hover:text-indigo-300 transition-colors"
+                    title="This clears the global unread counter"
+                  >
+                    Mark all read ✅
+                  </button>
+                </div>
+              </div>
+
+              <div
+                ref={chatScrollRef}
+                className="flex-1 min-h-[260px] max-h-[55vh] overflow-auto rounded-2xl border border-white/10 bg-black/20 p-3"
+              >
+                {activeThread.length === 0 ? (
+                  <div className="text-sm text-slate-400 p-3">
+                    No messages from this friend yet. Say hi 👋
+                  </div>
+                ) : (
+                  <ul className="space-y-2">
+                    {activeThread.map((m) => {
+                      const isMine =
+                        String(m.from || "").toLowerCase() === email;
+                      return (
+                        <li
+                          key={m.id}
+                          className={isMine ? "flex justify-end" : "flex"}
+                        >
+                          <div
+                            className={
+                              isMine
+                                ? "max-w-[95%] rounded-2xl bg-indigo-600/80 border border-indigo-300/20 px-3 py-2"
+                                : "max-w-[95%] rounded-2xl bg-slate-900/60 border border-white/10 px-3 py-2"
+                            }
+                          >
+                            <div className="text-[10px] text-slate-300/80 mb-1 flex items-center justify-between gap-2">
+                              <span className="font-bold">
+                                {isMine
+                                  ? "You"
+                                  : activeChat.username || activeChat.email}
+                              </span>
+                              <span className="shrink-0">
+                                {new Date(m.ts).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="text-sm whitespace-pre-wrap break-words text-white/90">
+                              {censorProfanity(m.message)}
+                            </div>
+                            {!isMine && (
+                              <div className="mt-2 flex gap-2">
+                                <button
+                                  onClick={() => msgs.remove(m.id)}
+                                  className="px-3 py-1 rounded-lg bg-rose-500/15 text-rose-300 text-[11px] font-bold hover:bg-rose-500/25 transition-colors"
+                                >
+                                  Delete 🗑️
+                                </button>
+                                <button
+                                  className="px-3 py-1 rounded-lg bg-rose-500/15 text-rose-300 text-[11px] font-bold hover:bg-rose-500/25 transition-colors"
+                                  onClick={async () => {
+                                    const reason = prompt(
+                                      "Report reason (what happened)?",
+                                    );
+                                    if (!reason) return;
+                                    try {
+                                      await fetch("/api/friends/report", {
+                                        method: "POST",
+                                        headers: {
+                                          "Content-Type": "application/json",
+                                        },
+                                        body: JSON.stringify({
+                                          reporterEmail: email,
+                                          offenderEmail: m.from,
+                                          reason,
+                                          messageId: m.id,
+                                        }),
+                                      });
+                                      toast("Report sent to admin", {
+                                        type: "info",
+                                      });
+                                    } catch {}
+                                  }}
+                                >
+                                  Report
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              <div className="mt-3 rounded-2xl border border-white/10 bg-slate-900/30 p-3">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <textarea
+                    className="w-full min-h-[44px] max-h-40 bg-slate-700/60 border border-slate-600 rounded-xl px-3 py-2 text-white placeholder-slate-400 resize-y"
+                    placeholder={`Message ${activeChat.username || "friend"}...`}
+                    value={chatDraft}
+                    onChange={(e) => setChatDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        sendChatMessage();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={sendChatMessage}
+                    className="px-5 py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-500 transition-colors"
+                  >
+                    Send
+                  </button>
+                </div>
+                <div className="mt-2 text-[11px] text-slate-400">
+                  Tip: Press Enter to send, Shift+Enter for a new line.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Find friends */}
+        <div className="lg:col-span-2 p-4 rounded-[28px] bg-slate-950/70 border border-white/10 shadow-xl">
           <div className="font-semibold mb-2 text-white/90">Find Friends</div>
           <input
             className="input w-full mb-2"
@@ -507,81 +841,7 @@ export default function Friends({ user }: { user?: any }) {
         </div>
       </div>
 
-      {/* Direct Messages */}
-      <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40">
-        <div className="flex items-center justify-between mb-2">
-          <div className="font-semibold">Messages 💬</div>
-          <button
-            onClick={() => msgs.markAllRead()}
-            className="text-xs text-indigo-400 font-bold hover:text-indigo-300 transition-colors"
-          >
-            Mark all read ✅
-          </button>
-        </div>
-        {msgs.inbox.length === 0 ? (
-          <div className="text-sm opacity-70">No messages yet.</div>
-        ) : (
-          <ul className="space-y-2 max-h-72 overflow-auto">
-            {msgs.inbox.map((m) => (
-              <li key={m.id} className="p-2 rounded bg-black/20 text-sm">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-semibold">{m.from}</span>{" "}
-                    <span className="opacity-70 text-xs">
-                      · {new Date(m.ts).toLocaleString()}
-                    </span>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        setMessagePopup({
-                          show: true,
-                          toEmail: m.from,
-                          toUser: m.from,
-                        });
-                      }}
-                      className="px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-400 text-xs font-bold hover:bg-indigo-500/30 transition-colors"
-                    >
-                      Reply ↩️
-                    </button>
-                    <button
-                      onClick={() => msgs.remove(m.id)}
-                      className="px-3 py-1 rounded-lg bg-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/30 transition-colors"
-                    >
-                      Delete 🗑️
-                    </button>
-                    <button
-                      className="btn bg-rose-600 hover:bg-rose-700 px-2 py-1 text-xs"
-                      onClick={async () => {
-                        const reason = prompt("Report reason (what happened)?");
-                        if (!reason) return;
-                        try {
-                          await fetch("/api/friends/report", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                              reporterEmail: email,
-                              offenderEmail: m.from,
-                              reason,
-                              messageId: m.id,
-                            }),
-                          });
-                          toast("Report sent to admin", { type: "info" });
-                        } catch {}
-                      }}
-                    >
-                      Report
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-1 whitespace-pre-wrap break-words">
-                  {censorProfanity(m.message)}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {/* Note: legacy global inbox list replaced by per-friend thread view above */}
 
       {/* Message Popup */}
       {messagePopup.show && (

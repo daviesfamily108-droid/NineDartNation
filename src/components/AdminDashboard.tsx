@@ -785,8 +785,8 @@ export default function AdminDashboard({ user }: { user: any }) {
 
   if (!isOwner) {
     return (
-      <div className="card">
-        <h2 className="text-2xl font-bold mb-2">Admin 🛡️</h2>
+      <div className="card ndn-page">
+        <h2 className="text-2xl font-bold mb-2 ndn-section-title">Admin 🛡️</h2>
         <div className="text-sm opacity-80">
           You don't have permission to manage admins.
         </div>
@@ -795,10 +795,10 @@ export default function AdminDashboard({ user }: { user: any }) {
   }
 
   return (
-    <div className="p-4 md:p-8 max-w-7xl mx-auto">
+    <div className="p-4 md:p-8 max-w-7xl mx-auto ndn-page">
       <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-3xl font-black text-white tracking-tight">
+          <h2 className="text-3xl font-black text-white tracking-tight ndn-section-title">
             Admin 🛡️
           </h2>
           <p className="text-white/40 font-medium">

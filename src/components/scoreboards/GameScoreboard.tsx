@@ -66,7 +66,7 @@ export default function GameScoreboard({
   gameMode,
   players,
   matchScore,
-  gameRules,
+  gameRules: _gameRules,
 }: GameScoreboardProps) {
   if (!players || players.length === 0) return null;
 

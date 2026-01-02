@@ -157,7 +157,7 @@ export function analyzeUserQuestion(question: string): AIResponse | null {
   const lowerQ = question.toLowerCase();
 
   // Find matching topic
-  for (const [key, topic] of Object.entries(HELP_TOPICS)) {
+  for (const [, topic] of Object.entries(HELP_TOPICS)) {
     for (const keyword of topic.keywords) {
       if (lowerQ.includes(keyword)) {
         return {

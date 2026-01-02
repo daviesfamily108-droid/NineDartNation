@@ -52,7 +52,10 @@ export function distanceFromBullMm(params: {
   const dx = (pBoard?.x ?? 0) - (bullCenter?.x ?? 0);
   const dy = (pBoard?.y ?? 0) - (bullCenter?.y ?? 0);
   const dBoard = Math.sqrt(dx * dx + dy * dy);
-  const mm = Math.max(0, dBoard * (Number.isFinite(mmPerBoardUnit) ? mmPerBoardUnit : 0));
+  const mm = Math.max(
+    0,
+    dBoard * (Number.isFinite(mmPerBoardUnit) ? mmPerBoardUnit : 0),
+  );
 
   const inInnerBull =
     typeof bullInnerRadiusBoardUnits === "number" &&

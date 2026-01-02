@@ -9,8 +9,8 @@
  * 5. Providing fallback strategies for edge cases
  */
 
-import type { Point, Homography } from "./vision";
-import { imageToBoard, isPointOnBoard, scoreAtBoardPoint } from "./vision";
+import type { Homography } from "./vision";
+import { isPointOnBoard } from "./vision";
 import type { DetectedDart } from "./dartDetection";
 import type { BoardDetectionResult } from "./boardDetection";
 
@@ -148,7 +148,7 @@ class ScoringAccuracyValidator {
    */
   validateDetection(
     detection: DetectedDart,
-    calibration: BoardDetectionResult,
+    _calibration: BoardDetectionResult,
   ): {
     valid: boolean;
     confidence: number;

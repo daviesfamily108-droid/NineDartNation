@@ -1,5 +1,4 @@
-﻿import type { DartDetector as DD } from "./dartDetector";
-import { scoreFromImagePoint } from "./autoscore";
+﻿import { scoreFromImagePoint } from "./autoscore";
 import type { Homography, Point } from "./vision";
 
 export async function runDetectionAndNotify(

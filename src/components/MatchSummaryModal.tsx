@@ -69,7 +69,7 @@ export default function MatchSummaryModal({
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[120]">
       <ResizableModal
         storageKey="ndn:modal:match-summary"
-        className="w-full relative"
+        className="ndn-modal w-full relative"
         defaultWidth={860}
         defaultHeight={540}
         minWidth={640}

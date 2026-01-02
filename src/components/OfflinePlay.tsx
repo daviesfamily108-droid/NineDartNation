@@ -75,7 +75,6 @@ import {
 import ResizableModal from "./ui/ResizableModal";
 import MatchStartShowcase from "./ui/MatchStartShowcase";
 import { useAudit } from "../store/audit";
-import ResizablePanel from "./ui/ResizablePanel";
 import GameHeaderBar from "./ui/GameHeaderBar";
 import PauseQuitModal from "./ui/PauseQuitModal";
 import { useMatchControl } from "../store/matchControl";
@@ -2332,7 +2331,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   // no external overlay: we render the match modal as absolute inset-0 inside this card
 
   return (
-    <div className="card ndn-game-shell relative overflow-hidden">
+    <div className="card ndn-game-shell ndn-page relative overflow-hidden">
       {showStartShowcase && (
         <MatchStartShowcase
           players={(match.players || []) as any}
@@ -2340,7 +2339,7 @@ export default function OfflinePlay({ user }: { user: any }) {
           onDone={() => setShowStartShowcase(false)}
         />
       )}
-      <h2 className="text-3xl font-bold text-brand-700 mb-4">
+      <h2 className="text-3xl font-bold text-brand-700 mb-4 ndn-section-title">
         Offline Mode �{" "}
         {offlineLayout === "classic" ? (
           <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">

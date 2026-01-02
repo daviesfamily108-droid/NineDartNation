@@ -260,16 +260,20 @@ export default function StatsPanel({ user }: { user?: any }) {
       window.removeEventListener("ndn:stats-updated", onUpdate as any);
   }, []);
 
+  // Mobile layout hooks: ensure content is fully visible above bottom nav
+
   return (
     <div
-      className="card ndn-game-shell"
+      className="card ndn-game-shell ndn-page"
       style={{
         background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
       }}
     >
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-2xl font-extrabold text-white">Match Stats 🎯</h2>
+          <h2 className="text-2xl font-extrabold text-white ndn-section-title">
+            Match Stats 🎯
+          </h2>
           <span className="text-xs opacity-70">View 🎯</span>
         </div>
         <TabPills

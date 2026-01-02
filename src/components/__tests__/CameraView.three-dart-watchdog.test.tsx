@@ -40,7 +40,8 @@ vi.mock("../../store/userSettings", async () => {
     setCameraScale: vi.fn(),
   } as any;
 
-  const useUserSettings: any = (sel: any) => (typeof sel === "function" ? sel(state) : state);
+  const useUserSettings: any = (sel: any) =>
+    typeof sel === "function" ? sel(state) : state;
   useUserSettings.getState = () => state;
 
   return {
@@ -127,14 +128,14 @@ describe("CameraView three-dart watchdog", () => {
     // Third dart should be filled as MISS and the visit should be committed.
     expect(onAddVisit).toHaveBeenCalled();
 
-    const lastAddVisit = onAddVisit.mock.calls[onAddVisit.mock.calls.length - 1];
+    const lastAddVisit =
+      onAddVisit.mock.calls[onAddVisit.mock.calls.length - 1];
     const [_score, darts] = lastAddVisit;
     expect(darts).toBe(3);
 
     expect(onVisitCommitted).toHaveBeenCalled();
-    const lastCommit = onVisitCommitted.mock.calls[
-      onVisitCommitted.mock.calls.length - 1
-    ];
+    const lastCommit =
+      onVisitCommitted.mock.calls[onVisitCommitted.mock.calls.length - 1];
     expect(lastCommit[1]).toBe(3);
 
     vi.useRealTimers();

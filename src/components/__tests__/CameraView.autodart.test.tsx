@@ -126,7 +126,7 @@ vi.mock("../../store/userSettings", () => {
     autoCommitMode: "wait-for-clear",
     confirmUncertainDarts: true,
     autoScoreConfidenceThreshold: 0.85,
-  enhanceBigTrebles: false,
+    enhanceBigTrebles: false,
     cameraEnabled: true,
     hideCameraOverlay: false,
     preserveCalibrationOverlay: true,

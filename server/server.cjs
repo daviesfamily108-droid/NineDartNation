@@ -2335,35 +2335,95 @@ app.post('/api/auth/confirm-reset', async (req, res) => {
 })
 
 // Friends API routes
-app.get('/api/friends/requests', (req, res) => {
-  // For now, return empty array. In a real app, fetch pending friend requests for the user.
-  res.json({ requests: [] });
-});
+// NOTE: Keep these minimal for the built/server entry used by integration tests.
+// The full friends system may be implemented elsewhere, but messaging must work here.
 
+// Simple message stub; deliver if online and store
+app.post('/api/friends/message', (req, res) => {
+  const { fromEmail, toEmail, message } = req.body || {}
+  const to = String(toEmail || '').toLowerCase()
+  const from = String(fromEmail || '').toLowerCase()
+  let raw = String(message || '').slice(0, 500)
+  if (!to || !from || !raw) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  let msg
+  try { msg = profanityFilter.clean(raw) } catch { msg = raw }
+
+  const now = Date.now()
+  const id = `${now}-${Math.random().toString(36).slice(2,8)}`
+
+  // Store as a true 2-way thread (in-memory)
+  const threadKey = [from, to].sort().join('|')
+  if (!global.dmThreads) global.dmThreads = new Map()
+  const dmThreads = global.dmThreads
+  const thread = dmThreads.get(threadKey) || []
+  const item = { id, from, to, message: msg, ts: now, readBy: [from] }
+  thread.push(item)
+  dmThreads.set(threadKey, thread)
+
+  // Legacy inbox storage (recipient only)
+  if (!global.messages) global.messages = new Map()
+  const messages = global.messages
+  const arr = messages.get(to) || []
+  arr.push({ id, from, message: msg, ts: now, read: false })
+  messages.set(to, arr)
+
+  // Try deliver via WS if recipient online
+  try {
+    const users = global.users
+    const clients = global.clients
+    const u = users && users.get ? users.get(to) : null
+    if (u && u.wsId && clients && clients.get) {
+      const target = clients.get(u.wsId)
+      if (target && target.readyState === 1) {
+        target.send(JSON.stringify({ type: 'friend-message', from, to, message: msg, ts: item.ts, id: item.id }))
+      }
+    }
+  } catch {}
+
+  res.json({ ok: true })
+})
+
+// Fetch recent inbox messages (legacy endpoint)
 app.get('/api/friends/messages', (req, res) => {
-  // For now, return empty array. In a real app, fetch chat messages for the user.
-  res.json({ messages: [] });
-});
+  const email = String(req.query.email || '').toLowerCase()
+  if (!email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  if (!global.messages) global.messages = new Map()
+  const messages = global.messages
+  const arr = messages.get(email) || []
+  res.json({ ok: true, messages: arr.slice(-200).sort((a,b)=>b.ts-a.ts) })
+})
 
-app.get('/api/friends/list', (req, res) => {
-  // For now, return empty array. In a real app, fetch friends list for the user.
-  res.json({ friends: [] });
-});
+// Fetch a true 2-way thread between the current user and another user.
+app.get('/api/friends/thread', (req, res) => {
+  const me = String(req.query.email || '').toLowerCase()
+  const other = String(req.query.other || '').toLowerCase()
+  if (!me || !other || me === other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  const threadKey = [me, other].sort().join('|')
+  const dmThreads = global.dmThreads || new Map()
 
-app.get('/api/friends/suggested', (req, res) => {
-  // For now, return empty array. In a real app, fetch suggested friends for the user.
-  res.json({ suggestions: [] });
-});
+  const thread = (dmThreads.get(threadKey) || []).slice(-400).sort((a,b)=>a.ts-b.ts)
+  // Mark read by `me`
+  for (const m of thread) {
+    try {
+      if (Array.isArray(m.readBy) && !m.readBy.includes(me)) m.readBy.push(me)
+    } catch {}
+  }
+  dmThreads.set(threadKey, dmThreads.get(threadKey) || thread)
+  global.dmThreads = dmThreads
 
-app.get('/api/friends/outgoing', (req, res) => {
-  // For now, return empty array. In a real app, fetch outgoing friend requests.
-  res.json({ requests: [] });
-});
+  // Mark legacy inbox items from `other` as read
+  try {
+    if (!global.messages) global.messages = new Map()
+    const messages = global.messages
+    const inbox = messages.get(me) || []
+    for (const m of inbox) {
+      if (String(m.from||'').toLowerCase() === other) m.read = true
+    }
+    messages.set(me, inbox)
+  } catch {}
 
-app.get('/api/friends/search', (req, res) => {
-  // For now, return empty array. In a real app, search for friends by query.
-  res.json({ results: [] });
-});
+  res.json({ ok: true, thread })
+})
 
 if (!global.__NDN_PATCHED) {
 // --- Minimal auth helpers + in-memory notifications & wallet for integration tests ---

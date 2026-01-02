@@ -114,7 +114,7 @@ export function isFivesValid(value: number): boolean {
 export function addFivesAuto(
   state: FivesState,
   value: number,
-  ring?: string,
+  _ring?: string,
 ): FivesState {
   if (state.finished) return state;
 
@@ -168,7 +168,7 @@ export function isSevensValid(value: number): boolean {
 export function addSevensAuto(
   state: SevensState,
   value: number,
-  ring?: string,
+  _ring?: string,
 ): SevensState {
   if (state.finished) return state;
 

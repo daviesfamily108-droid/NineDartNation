@@ -42,7 +42,7 @@ export function setOnlineUsage(user: string, usage: Usage) {
   } catch {}
 }
 
-export function incOnlineUsage(user: string, cap = 3): Usage {
+export function incOnlineUsage(user: string, _cap = 3): Usage {
   const currentWeek = getWeekId();
   const u = getOnlineUsage(user);
   const next: Usage = {

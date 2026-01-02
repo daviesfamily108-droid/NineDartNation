@@ -39,7 +39,7 @@ import PauseTimerBadge from "./ui/PauseTimerBadge";
 import { writeMatchSnapshot } from "../utils/matchSync";
 import { broadcastMessage } from "../utils/broadcast";
 import { startForwarding, stopForwarding } from "../utils/cameraHandoff";
-import { sayDart, sayScore } from "../utils/checkout";
+import { sayScore } from "../utils/checkout";
 import {
   distanceFromBullMm,
   mmPerBoardUnitFromBullOuter,
@@ -238,7 +238,7 @@ type DetectionLogEntry = {
   tip?: Point;
 };
 
-type BounceoutEvent = {
+type _BounceoutEvent = {
   ts: number;
   // Best-effort derived distance (from last seen tip point) so a bounceout can
   // still feel "real" in online play.
@@ -354,8 +354,10 @@ export default forwardRef(function CameraView(
     useUserSettings((s) => s.autoscoreDetectorThresh) ?? 15;
   const autoscoreDetectorRequireStableN =
     useUserSettings((s) => s.autoscoreDetectorRequireStableN) ?? 2;
-  const harshLightingMode = useUserSettings((s) => s.harshLightingMode) ?? false;
-  const enhanceBigTrebles = useUserSettings((s) => s.enhanceBigTrebles) ?? false;
+  const harshLightingMode =
+    useUserSettings((s) => s.harshLightingMode) ?? false;
+  const enhanceBigTrebles =
+    useUserSettings((s) => s.enhanceBigTrebles) ?? false;
   const cameraEnabled = useUserSettings((s) => s.cameraEnabled);
   const preferredCameraLocked = useUserSettings((s) => s.preferredCameraLocked);
   const hideCameraOverlay = useUserSettings((s) => s.hideCameraOverlay);
@@ -641,9 +643,10 @@ export default forwardRef(function CameraView(
   const [lastAutoRing, setLastAutoRing] = useState<Ring>("MISS");
 
   // Visual aid: briefly emphasize big trebles (T20/T19/T18) after detection.
-  const bigTrebleFlashRef = useRef<
-    { value: 18 | 19 | 20; until: number } | null
-  >(null);
+  const bigTrebleFlashRef = useRef<{
+    value: 18 | 19 | 20;
+    until: number;
+  } | null>(null);
 
   // Bounceout tracking:
   // If a confident candidate is observed but never reaches commit readiness and
@@ -653,7 +656,12 @@ export default forwardRef(function CameraView(
     lastSeenTs: number;
     lastBullDistanceMm: number | null;
     lastTipVideoPx: Point | null;
-  }>({ pending: false, lastSeenTs: 0, lastBullDistanceMm: null, lastTipVideoPx: null });
+  }>({
+    pending: false,
+    lastSeenTs: 0,
+    lastBullDistanceMm: null,
+    lastTipVideoPx: null,
+  });
   const [pendingDarts, setPendingDarts] = useState<number>(0);
   const pendingDartsRef = useRef<number>(0);
   const [pendingScore, setPendingScore] = useState<number>(0);
@@ -1065,8 +1073,8 @@ export default forwardRef(function CameraView(
         const maybeEntries = (pending.meta as any)?.entries as
           | Array<{ meta?: { bullDistanceMm?: number } }>
           | undefined;
-        const lastBull = maybeEntries?.[maybeEntries.length - 1]?.meta
-          ?.bullDistanceMm;
+        const lastBull =
+          maybeEntries?.[maybeEntries.length - 1]?.meta?.bullDistanceMm;
         sayBullDistanceMm(lastBull);
       } catch {}
       try {
@@ -1121,8 +1129,8 @@ export default forwardRef(function CameraView(
           const maybeEntries = (payload.meta as any)?.entries as
             | Array<{ meta?: { bullDistanceMm?: number } }>
             | undefined;
-          const lastBull = maybeEntries?.[maybeEntries.length - 1]?.meta
-            ?.bullDistanceMm;
+          const lastBull =
+            maybeEntries?.[maybeEntries.length - 1]?.meta?.bullDistanceMm;
           sayBullDistanceMm(lastBull);
         } catch {}
         try {
@@ -1322,8 +1330,7 @@ export default forwardRef(function CameraView(
   const [nonRegCount, setNonRegCount] = useState(0);
   const [showRecalModal, setShowRecalModal] = useState(false);
   const [hadRecentAuto, setHadRecentAuto] = useState(false);
-  const [pulseManualPill, setPulseManualPill] = useState(false);
-  const pulseTimeoutRef = useRef<number | null>(null);
+  const [_pulseManualPill, setPulseManualPill] = useState(false);
   const [activeTab, setActiveTab] = useState<"auto" | "manual">("auto");
   const [showManualModal, setShowManualModal] = useState(false);
   const [showAutoModal, setShowAutoModal] = useState(false);
@@ -1343,6 +1350,7 @@ export default forwardRef(function CameraView(
   const lastParentSigRef = useRef<string | null>(null);
   const lastParentSigAtRef = useRef<number>(0);
   const inFlightAutoCommitRef = useRef<boolean>(false);
+  const pulseTimeoutRef = useRef<number | null>(null);
   const [detectorSeedVersion, setDetectorSeedVersion] = useState(0);
   const handlePhoneReconnect = useCallback(() => {
     try {
@@ -1689,7 +1697,7 @@ export default forwardRef(function CameraView(
 
     // Best-effort anti-glare hints. These are optional constraints; many browsers/devices
     // ignore them. If they fail, we just proceed with the stream as-is.
-    async function applyAntiGlare(track: MediaStreamTrack | undefined) {
+    const applyAntiGlare = async (track: MediaStreamTrack | undefined) => {
       if (!track) return;
       // Only video tracks support these constraint keys.
       if (track.kind !== "video") return;
@@ -1731,7 +1739,7 @@ export default forwardRef(function CameraView(
       } catch (e) {
         console.warn("[CAMERA] Anti-glare track constraints not supported:", e);
       }
-    }
+    };
     try {
       // If a preferred camera is set, request it; otherwise default to back camera on mobile
       // Prefer a crisp feed (up to 4K) but let the browser/device fall back.
@@ -1755,17 +1763,17 @@ export default forwardRef(function CameraView(
         ? { deviceId: { exact: preferredCameraId } }
         : { facingMode: "environment" };
 
-      async function tryGetStream(
+      const tryGetStream = async (
         hints: MediaTrackConstraints,
         label: string,
-      ): Promise<MediaStream> {
+      ): Promise<MediaStream> => {
         const constraints: MediaStreamConstraints = {
           video: { ...baseVideo, ...hints },
           audio: false,
         };
         dlog(`[CAMERA] Using constraints (${label}):`, constraints);
         return navigator.mediaDevices.getUserMedia(constraints);
-      }
+      };
 
       let stream: MediaStream;
       try {
@@ -2019,7 +2027,7 @@ export default forwardRef(function CameraView(
     };
     // Always show a discovery UI so users can rescan / request permission even when no cameras were enumerated
     return (
-      <div className="absolute top-2 right-2 z-20 flex items-center gap-2 bg-black/40 rounded px-2 py-1 text-xs">
+      <div className="camera-selector absolute top-2 right-2 z-20 flex items-center gap-2 bg-black/40 rounded px-2 py-1 text-xs">
         <span>Cam:</span>
         <select
           onPointerDown={(e) => {
@@ -2338,13 +2346,12 @@ export default forwardRef(function CameraView(
         // Board wedges: use standard dartboard ordering.
         // 20 segments starting at "20" and going clockwise.
         const standardOrder: number[] = [
-          20, 1, 18, 4, 13, 6, 10, 15, 2, 17,
-          3, 19, 7, 16, 8, 11, 14, 9, 12, 5,
+          20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5,
         ];
         const i = Math.max(0, standardOrder.indexOf(value));
-  const offset = typeof sectorOffset === "number" ? sectorOffset : 0;
-  const a0 = offset + (i * (Math.PI * 2)) / 20;
-  const a1 = offset + ((i + 1) * (Math.PI * 2)) / 20;
+        const offset = typeof sectorOffset === "number" ? sectorOffset : 0;
+        const a0 = offset + (i * (Math.PI * 2)) / 20;
+        const a1 = offset + ((i + 1) * (Math.PI * 2)) / 20;
 
         // Use a slightly "fatter" radius band than the actual treble ring.
         const rInner = BoardRadii.trebleInner * 0.92;
@@ -2356,8 +2363,18 @@ export default forwardRef(function CameraView(
         for (let s = 0; s <= steps; s++) {
           const t = s / steps;
           const a = a0 + (a1 - a0) * t;
-          outer.push(applyHomography(Hs, { x: Math.cos(a) * rOuter, y: Math.sin(a) * rOuter }));
-          inner.push(applyHomography(Hs, { x: Math.cos(a) * rInner, y: Math.sin(a) * rInner }));
+          outer.push(
+            applyHomography(Hs, {
+              x: Math.cos(a) * rOuter,
+              y: Math.sin(a) * rOuter,
+            }),
+          );
+          inner.push(
+            applyHomography(Hs, {
+              x: Math.cos(a) * rInner,
+              y: Math.sin(a) * rInner,
+            }),
+          );
         }
 
         // Convert to overlay canvas space (crop + drawScale)
@@ -2612,10 +2629,14 @@ export default forwardRef(function CameraView(
     // Initialize or reset detector with tuned params for resolution/phone cameras
     // We also want to re-create the detector if camera resolution changes, because
     // the background model is resolution-dependent.
-    const detectorSizeRef = (detectorRef as any)._sizeRef || ((detectorRef as any)._sizeRef = { w: 0, h: 0 });
+    const detectorSizeRef =
+      (detectorRef as any)._sizeRef ||
+      ((detectorRef as any)._sizeRef = { w: 0, h: 0 });
     const shouldResetDetector =
       !detectorRef.current ||
-      (initVw > 0 && initVh > 0 && (detectorSizeRef.w !== initVw || detectorSizeRef.h !== initVh));
+      (initVw > 0 &&
+        initVh > 0 &&
+        (detectorSizeRef.w !== initVw || detectorSizeRef.h !== initVh));
 
     if (shouldResetDetector) {
       // default tuning
@@ -2775,15 +2796,20 @@ export default forwardRef(function CameraView(
               // Emit as a MISS to any parent handler.
               try {
                 if (onAutoDart)
-                  onAutoDart(0, "MISS" as any, {
-                    sector: null,
-                    mult: 0,
-                    calibrationValid: true,
-                    pBoard: null,
-                    bullDistanceMm: typeof distMm === "number" ? distMm : undefined,
-                    tipVideoPx: tipPx ?? undefined,
-                    bounceout: true,
-                  } as any);
+                  onAutoDart(
+                    0,
+                    "MISS" as any,
+                    {
+                      sector: null,
+                      mult: 0,
+                      calibrationValid: true,
+                      pBoard: null,
+                      bullDistanceMm:
+                        typeof distMm === "number" ? distMm : undefined,
+                      tipVideoPx: tipPx ?? undefined,
+                      bounceout: true,
+                    } as any,
+                  );
               } catch (e) {}
 
               // Keep detection log consistent for debugging.
@@ -2886,7 +2912,6 @@ export default forwardRef(function CameraView(
               } else {
                 label = `${ring} ${value > 0 ? value : ""}`.trim();
               }
-              const errorPxVal = typeof errorPx === "number" ? errorPx : null;
               const hasCalibration = !!H && !!imageSize;
               const calibrationGood = hasCalibration && calibrationValid;
 
@@ -3013,14 +3038,12 @@ export default forwardRef(function CameraView(
             } else {
               label = `${ring} ${value > 0 ? value : ""}`.trim();
             }
-            const ERROR_PX_MAX = 12; // threshold for acceptable calibration error in pixels
             const TIP_MARGIN_PX = 3; // small margin (px) to allow rounding / proc-to-video pixel mismatch
             const PCAL_MARGIN_PX = 3; // allow small margin in calibration image space
             const hasCalibration = !!H && !!imageSize;
             // IMPORTANT: errorPx should reflect real calibration quality.
             // Treat missing errorPx as *unknown* (not zero) unless calibration is locked.
             // This prevents the UI from implying "0.0px" and reduces false-positive scoring.
-            const errorPxVal = typeof errorPx === "number" ? errorPx : null;
             const calibrationGood = hasCalibration && calibrationValid;
             const tipInVideo =
               tipRefined.x >= -TIP_MARGIN_PX &&
@@ -4142,10 +4165,16 @@ export default forwardRef(function CameraView(
     try {
       const name = matchState.players[matchState.currentPlayerIdx]?.name;
       const remaining = getCurrentRemaining();
-      sayScore(name || "Player", visitTotal, Math.max(0, remaining), callerVoice, {
-        volume: callerVolume,
-        checkoutOnly: speakCheckoutOnly,
-      });
+      sayScore(
+        name || "Player",
+        visitTotal,
+        Math.max(0, remaining),
+        callerVoice,
+        {
+          volume: callerVolume,
+          checkoutOnly: speakCheckoutOnly,
+        },
+      );
     } catch {}
   }
 
@@ -4792,7 +4821,7 @@ export default forwardRef(function CameraView(
                     ? "relative w-full mx-auto aspect-square bg-black"
                     : "relative w-full aspect-[4/3] bg-black";
                 const renderVideoSurface = () => (
-                  <div className={containerClass}>
+                  <div className={`camera-viewport ${containerClass}`}>
                     <video
                       ref={handleVideoRef}
                       className={videoClass}

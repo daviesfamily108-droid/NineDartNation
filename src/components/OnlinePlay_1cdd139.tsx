@@ -691,7 +691,16 @@ export default function OnlinePlay({ user }: { user?: any }) {
           toast('Invite declined', { type: 'info' })
         }
       } else if (data.type === 'friend-message') {
-        msgs.add({ id: data.id || `${data.ts}-${data.from}`, from: data.from, message: data.message, ts: data.ts || Date.now() })
+        const ts = data.ts || Date.now()
+        const id = data.id || `${ts}-${data.from}`
+        const from = String(data.from || '').toLowerCase()
+        const to = String(data.to || user?.email || '').toLowerCase()
+        const message = String(data.message || '')
+        msgs.add({ id, from, message, ts })
+        try {
+          const other = from === String(user?.email || '').toLowerCase() ? to : from
+          if (other) msgs.pushThread(other, { id, from, to, message, ts, readBy: [from] })
+        } catch {}
         // Show toast only if not currently in a game
         if (!match.inProgress) toast(`${data.from}: ${data.message}`, { type: 'info' })
       } else if (data.type === 'celebration') {

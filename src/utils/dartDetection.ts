@@ -14,7 +14,6 @@ import {
   scoreAtBoardPoint,
   scoreAtBoardPointTheta,
   isPointOnBoard,
-  BoardRadii,
 } from "./vision";
 
 export interface DartDetectionConfig {
@@ -237,7 +236,7 @@ function floodFill(
   startX: number,
   startY: number,
   w: number,
-  h: number,
+  _h: number,
 ): { cx: number; cy: number; size: number; pixels: number[] } {
   const stack: Array<[number, number]> = [[startX, startY]];
   const pixels: number[] = [];
@@ -248,7 +247,7 @@ function floodFill(
     const [x, y] = stack.pop()!;
     const idx = y * w + x;
 
-    if (x < 0 || x >= w || y < 0 || y >= h) continue;
+    if (x < 0 || x >= w || y < 0 || y >= _h) continue;
     if (visited[idx] !== 0 || mask[idx] === 0) continue;
 
     visited[idx] = 1;
@@ -275,7 +274,7 @@ function blobToCircle(
   blob: { cx: number; cy: number; size: number; pixels: number[] },
   data: Uint8ClampedArray,
   w: number,
-  h: number,
+  _h: number,
 ): DetectedDart | null {
   // Estimate radius as sqrt(area / π)
   const estimatedRadius = Math.sqrt(blob.size / Math.PI);
@@ -284,11 +283,11 @@ function blobToCircle(
   if (estimatedRadius < 3 || estimatedRadius > 40) return null;
 
   // Refine center by finding densest pixel cluster
-  const refinedCenter = refineCircleCenter(blob, w, h);
+  const refinedCenter = refineCircleCenter(blob, w, _h);
 
   // Estimate confidence based on blob circularity
   // Perfect circle = 1.0, very elongated = 0.0
-  const circularity = calculateCircularity(blob, refinedCenter, w, h);
+  const circularity = calculateCircularity(blob, refinedCenter, w, _h);
 
   // Sample color at center
   const centerIdx =
@@ -329,12 +328,12 @@ function blobToCircle(
 function refineCircleCenter(
   blob: { cx: number; cy: number; size: number; pixels: number[] },
   w: number,
-  h: number,
+  _h: number,
 ): Point {
   // Start at centroid
   let bestX = blob.cx;
   let bestY = blob.cy;
-  let bestScore = calculateDensityAt(blob, bestX, bestY, w, h);
+  let bestScore = calculateDensityAt(blob, bestX, bestY, w, _h);
 
   // Hill climbing: try nearby positions
   const searchRadius = 5;
@@ -342,7 +341,7 @@ function refineCircleCenter(
     for (let dy = -searchRadius; dy <= searchRadius; dy++) {
       const x = blob.cx + dx;
       const y = blob.cy + dy;
-      const score = calculateDensityAt(blob, x, y, w, h);
+      const score = calculateDensityAt(blob, x, y, w, _h);
       if (score > bestScore) {
         bestScore = score;
         bestX = x;
@@ -362,7 +361,7 @@ function calculateDensityAt(
   cx: number,
   cy: number,
   w: number,
-  h: number,
+  _h: number,
 ): number {
   let count = 0;
   const radius = 10;
@@ -385,7 +384,7 @@ function calculateCircularity(
   blob: { cx: number; cy: number; size: number; pixels: number[] },
   center: Point,
   w: number,
-  h: number,
+  __h: number,
 ): number {
   // Calculate distance variance from center
   const distances: number[] = [];

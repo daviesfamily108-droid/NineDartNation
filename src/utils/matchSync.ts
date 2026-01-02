@@ -1,10 +1,9 @@
 ﻿// Lightweight match state sync helper using BroadcastChannel + localStorage
 import { useMatch } from "../store/match";
 import { useMatchControl } from "../store/matchControl";
-import { broadcastMessage, subscribeMatchSync } from "./broadcast";
+import { broadcastMessage } from "./broadcast";
 
 const STORAGE_KEY = "ndn:match-sync";
-const CHANNEL = "ndn-match-sync";
 
 function getSnapshotState() {
   try {

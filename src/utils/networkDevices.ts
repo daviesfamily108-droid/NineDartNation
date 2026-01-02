@@ -175,7 +175,7 @@ async function scanNetwork(
  */
 async function checkPort(ip: string, port: number): Promise<boolean> {
   try {
-    const response = await fetch(`http://${ip}:${port}/`, {
+    await fetch(`http://${ip}:${port}/`, {
       method: "HEAD",
       mode: "no-cors",
       signal: AbortSignal.timeout(2000),

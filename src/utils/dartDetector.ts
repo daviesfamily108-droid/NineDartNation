@@ -173,7 +173,7 @@ export class DartDetector {
         idxs.push(cur);
         area++;
         const y = (cur / w) | 0;
-        const x = cur - y * w;
+        const _x = cur - y * w;
         // 4-neighborhood
         const nbs = [cur - 1, cur + 1, cur - w, cur + w];
         for (const nb of nbs) {

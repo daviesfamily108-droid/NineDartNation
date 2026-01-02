@@ -1,5 +1,6 @@
 ﻿import { create } from "zustand";
-import { dlog, dinfo } from "../utils/logger";
+// Import logger for side-effects (initialization/patching in some builds)
+import "../utils/logger";
 
 type LastOffline = {
   mode: string;
@@ -220,8 +221,8 @@ function load(): Pick<
         autoscoreDetectorMinArea: 30,
         autoscoreDetectorThresh: 15,
         autoscoreDetectorRequireStableN: 2,
-  harshLightingMode: false,
-  enhanceBigTrebles: false,
+        harshLightingMode: false,
+        enhanceBigTrebles: false,
         allowAutocommitInOnline: false,
         textSize: "medium",
         boxSize: "medium",
@@ -399,7 +400,7 @@ function load(): Pick<
       confirmUncertainDarts: true,
       autoScoreConfidenceThreshold: 0.85,
       harshLightingMode: false,
-  enhanceBigTrebles: false,
+      enhanceBigTrebles: false,
       textSize: "medium",
       boxSize: "medium",
       matchType: "singles",

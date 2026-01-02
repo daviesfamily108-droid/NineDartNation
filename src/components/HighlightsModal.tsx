@@ -94,7 +94,7 @@ export default function HighlightsModal({ onClose }: { onClose?: () => void }) {
   return (
     <ResizableModal
       storageKey="ndn:modal:highlights"
-      className="w-[640px]"
+      className="ndn-modal w-[640px]"
       defaultWidth={640}
       defaultHeight={420}
       minWidth={420}
@@ -122,7 +122,7 @@ export default function HighlightsModal({ onClose }: { onClose?: () => void }) {
             No highlights saved to your account.
           </div>
         ) : (
-          <div className="space-y-2 max-h-[48vh] overflow-y:auto">
+          <div className="space-y-2 max-h-[48vh] overflow-y-auto">
             {highlights.map((h) => (
               <div
                 key={h.id}

@@ -9,7 +9,9 @@ import { isDev } from "./logger";
  */
 export function installQuietConsole() {
   // Keep production transparent unless explicitly enabled.
-  const enabled = isDev || String((import.meta as any).env?.VITE_QUIET_CONSOLE || "").trim() === "1";
+  const enabled =
+    isDev ||
+    String((import.meta as any).env?.VITE_QUIET_CONSOLE || "").trim() === "1";
   if (!enabled) return;
 
   // Avoid double-installation.
@@ -32,7 +34,8 @@ export function installQuietConsole() {
     // - WebSocket reconnect failures when offline
     // - browser network transitions
     // - jsdom/test media play not implemented
-    if (/Not implemented: HTMLMediaElement's play\(\) method/i.test(msg)) return true;
+    if (/Not implemented: HTMLMediaElement's play\(\) method/i.test(msg))
+      return true;
     if (/WebSocket connection to .* failed/i.test(msg)) return true;
     if (/ERR_NETWORK_IO_SUSPENDED|ERR_NETWORK_CHANGED/i.test(msg)) return true;
 
@@ -44,7 +47,8 @@ export function installQuietConsole() {
   const lastPrintedAt = new Map<string, number>();
   const RATE_MS = 2000;
 
-  const wrap = (fn: (...a: any[]) => void) =>
+  const wrap =
+    (fn: (...a: any[]) => void) =>
     (...args: any[]) => {
       if (shouldSuppress(args)) return;
       const key = String(args[0] ?? "");
@@ -62,7 +66,9 @@ export function installQuietConsole() {
   // Also prevent "Unhandled promise rejection" style errors from being silent
   // killers—log once, but don't spam.
   window.addEventListener("unhandledrejection", (ev) => {
-    const msg = (ev.reason && (ev.reason.message || String(ev.reason))) || "unhandledrejection";
+    const msg =
+      (ev.reason && (ev.reason.message || String(ev.reason))) ||
+      "unhandledrejection";
     const now = Date.now();
     const last = lastPrintedAt.get(msg) || 0;
     if (now - last < RATE_MS) return;

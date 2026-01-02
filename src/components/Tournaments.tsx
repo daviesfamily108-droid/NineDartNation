@@ -313,6 +313,12 @@ export default function Tournaments({ user }: { user: any }) {
 
   const email = String(user?.email || "").toLowerCase();
 
+  const hasJoined = (t: Tournament | null | undefined) => {
+    if (!t || !email) return false;
+    const ps = Array.isArray(t.participants) ? t.participants : [];
+    return ps.some((p) => String(p?.email || "").toLowerCase() === email);
+  };
+
   // Simple, persistent match preference UI
   const MatchPrefs = () => (
     <div className="mb-3 p-2 rounded-lg bg-slate-900/40 border border-white/10 text-white text-xs flex items-center gap-2 flex-wrap">
@@ -358,9 +364,6 @@ export default function Tournaments({ user }: { user: any }) {
       abort = true;
     };
   }, [email]);
-  function hasJoined(t: Tournament) {
-    return !!t.participants?.some((p) => p.email === email);
-  }
 
   // Helper to delete a tournament with proper error handling and owner fallback
   async function deleteTournament(t: Tournament) {
@@ -613,9 +616,9 @@ export default function Tournaments({ user }: { user: any }) {
   }
 
   return (
-    <div className="card ndn-game-shell">
+    <div className="card ndn-game-shell ndn-page">
       <div className="flex items-center justify-between mb-3">
-        <h2 className="text-2xl font-bold">Tournaments 🎯</h2>
+        <h2 className="text-2xl font-bold ndn-section-title">Tournaments 🎯</h2>
       </div>
       <div className="ndn-shell-body">
         {/* Create Tournament + and default match prefs on a single header row */}

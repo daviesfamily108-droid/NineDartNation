@@ -2,7 +2,7 @@
 export function makeOnlineAddVisitAdapter(
   submitVisitManual: (v: number) => void,
 ) {
-  return (score: number, darts: number) => {
+  return (score: number, _darts: number) => {
     submitVisitManual(score);
   };
 }
@@ -10,7 +10,7 @@ export function makeOnlineAddVisitAdapter(
 export function makeOfflineAddVisitAdapter(
   commitManualVisitTotal: (v: number) => boolean,
 ) {
-  return (score: number, darts: number) => {
+  return (score: number, _darts: number) => {
     commitManualVisitTotal(score);
   };
 }

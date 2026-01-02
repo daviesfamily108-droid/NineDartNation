@@ -15,7 +15,7 @@ import MatchStartShowcase from "./ui/MatchStartShowcase";
 
 export default function MatchPage() {
   const match = useMatch();
-  const hideInGameSidebar = useUserSettings((s) => s.hideInGameSidebar ?? true);
+  useUserSettings((s) => s.hideInGameSidebar ?? true);
   const _setMatchState = useMatch().importState;
   const _setControl = useMatchControl((s) => s.setPaused);
   const _control = useMatchControl();
@@ -275,10 +275,10 @@ export default function MatchPage() {
     const dart = Math.max(0, Math.min(60, Math.round(value)));
     const nextEntries = [...manualEntries, dart].slice(0, 3);
     const darts = nextEntries.length;
-    const sum = nextEntries.reduce((acc, v) => acc + v, 0);
     setManualEntries(nextEntries);
     setPlayerVisitDarts(darts);
     if (darts >= 3) {
+      const sum = nextEntries.reduce((acc, v) => acc + v, 0);
       commitVisit(sum, darts, { visitTotal: sum });
       resetManualState();
     }
@@ -287,7 +287,6 @@ export default function MatchPage() {
   const replaceLast = () => {
     if (manualEntries.length === 0) return;
     const next = manualEntries.slice(0, -1);
-    const sum = next.reduce((acc, v) => acc + v, 0);
     setManualEntries(next);
     setPlayerVisitDarts(next.length);
   };
@@ -348,7 +347,6 @@ export default function MatchPage() {
     if (parsed == null) return;
     const next = [...manualEntries];
     next[next.length - 1] = parsed;
-    const sum = next.reduce((acc, v) => acc + v, 0);
     setManualEntries(next);
     setPlayerVisitDarts(next.length);
     setManualBox("");
@@ -394,7 +392,13 @@ export default function MatchPage() {
   }, [match.inProgress, deriveWinningLabel, winningShot?.label]);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
+    <div
+      className="min-h-screen bg-slate-900 text-white"
+      style={{
+        paddingBottom:
+          "calc(var(--ndn-bottomnav-h, 0px) + env(safe-area-inset-bottom, 0px) + 16px)",
+      }}
+    >
       {showStartShowcase && (
         <MatchStartShowcase
           open={showStartShowcase}
@@ -410,7 +414,7 @@ export default function MatchPage() {
           showCalibrationDefault={true}
         />
       )}
-      <div className="p-3 max-w-6xl mx-auto">
+      <div className="p-2 sm:p-3 max-w-6xl mx-auto">
         <GameHeaderBar
           left={
             <div className="flex items-center gap-2">
@@ -456,15 +460,15 @@ export default function MatchPage() {
           }
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-4 mt-3 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-3 sm:gap-4 mt-3 items-start">
           <div className="min-w-0 space-y-4">
-            <div className="card p-3 flex items-center justify-between gap-3">
+            <div className="card p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-sm font-medium opacity-80">
                 <span className="text-xs uppercase tracking-wide text-white/60">
                   Match Controls
                 </span>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   className="btn px-4 py-2 text-sm"
                   onClick={() => {

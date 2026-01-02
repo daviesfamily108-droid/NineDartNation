@@ -11,7 +11,6 @@
  * 7. Automatic fallback to manual scoring if detection fails
  */
 
-import type { Point, Homography } from "./vision";
 import type { DetectedDart } from "./dartDetection";
 import type { BoardDetectionResult } from "./boardDetection";
 import { getScoringValidator, type ScoringValidation } from "./scoringAccuracy";

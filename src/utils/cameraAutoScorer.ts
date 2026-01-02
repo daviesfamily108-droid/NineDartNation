@@ -5,13 +5,7 @@
  * Manages detection pipeline, confidence filtering, and scoring
  */
 
-import type { Homography, Point } from "./vision";
-import {
-  detectDarts,
-  scoreDarts,
-  type DetectedDart,
-  type DartDetectionResult,
-} from "./dartDetection";
+import { detectDarts, scoreDarts, type DetectedDart } from "./dartDetection";
 import type { BoardDetectionResult } from "./boardDetection";
 
 export interface AutoScoringConfig {

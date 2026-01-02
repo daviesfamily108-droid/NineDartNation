@@ -64,13 +64,13 @@ export default function Home({ user }: { user?: any }) {
         <div className="home-background__pulse home-background__pulse--two"></div>
       </div>
 
-      <div className="home-content relative z-10 w-full max-w-6xl mx-auto bg-white/10 backdrop-blur-lg rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 md:p-8 lg:p-10 flex flex-col">
+      <div className="home-content relative z-10 w-full max-w-6xl mx-auto bg-white/10 backdrop-blur-lg rounded-2xl sm:rounded-3xl shadow-2xl p-3 sm:p-6 md:p-8 lg:p-10 flex flex-col">
         <div className="home-intro space-y-2 text-center flex flex-col items-center">
-          <div className="home-brand-row flex w-full items-center justify-between gap-3 text-xs sm:text-sm uppercase tracking-[0.35em] text-white/80 font-semibold">
+          <div className="home-brand-row flex w-full items-center justify-between gap-3 text-[0.7rem] sm:text-sm uppercase tracking-[0.35em] text-white/80 font-semibold">
             <span className="home-brand-tag">Nine Dart Nation 🎯</span>
             <button
               onClick={openNotifications}
-              className="home-menu-button btn px-5 py-2 text-[0.8rem] rounded-full bg-amber-400 text-slate-900 font-bold transition hover:scale-[1.02]"
+              className="home-menu-button btn px-4 py-2 text-[0.8rem] rounded-full bg-amber-400 text-slate-900 font-bold transition hover:scale-[1.02]"
             >
               Notifications 🔔
             </button>
@@ -78,7 +78,7 @@ export default function Home({ user }: { user?: any }) {
           <h2 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-400 to-blue-400 drop-shadow-xl leading-tight">
             Welcome to Nine Dart Nation 🎯
           </h2>
-          <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-white/80 font-semibold px-2">
+          <p className="text-sm sm:text-lg md:text-xl lg:text-2xl text-white/80 font-semibold px-2">
             Your home for competitive darts, stats, and online play.
           </p>
           <p className="text-xs sm:text-sm md:text-base lg:text-lg text-white/60 italic px-2">
@@ -98,71 +98,76 @@ export default function Home({ user }: { user?: any }) {
           </div>
         )}
 
-        <div className="flex flex-wrap gap-3 sm:gap-4 md:gap-6 justify-center mb-6 md:mb-8 w-full max-w-4xl mx-auto">
-          <button
-            onClick={() => {
-              // Switch to Offline and auto-start using the last saved offline settings
-              goTab("offline");
-              try {
-                // Preconfigure format and starting score
-                window.dispatchEvent(
-                  new CustomEvent("ndn:offline-format", {
-                    detail: {
-                      formatType: "first",
-                      formatCount: Number(lastOffline?.firstTo) || 1,
-                      startScore: Number(lastOffline?.x01Start) || 501,
-                    },
-                  }),
-                );
-              } catch {}
-              try {
-                // Give the Offline tab a tick to mount, then auto-start the chosen mode
-                setTimeout(() => {
+        <div className="w-full max-w-4xl mx-auto mb-5 sm:mb-6 md:mb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
+            <button
+              onClick={() => {
+                // Switch to Offline and auto-start using the last saved offline settings
+                goTab("offline");
+                try {
+                  // Preconfigure format and starting score
                   window.dispatchEvent(
-                    new CustomEvent("ndn:auto-start", {
-                      detail: { mode: lastOffline?.mode || "X01" },
+                    new CustomEvent("ndn:offline-format", {
+                      detail: {
+                        formatType: "first",
+                        formatCount: Number(lastOffline?.firstTo) || 1,
+                        startScore: Number(lastOffline?.x01Start) || 501,
+                      },
                     }),
                   );
-                }, 50);
-              } catch {}
-            }}
-            className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
-          >
-            <span aria-hidden>{sym("target")}</span> Start New Match ⚔️
-          </button>
-          <button
-            onClick={() => goTab("stats")}
-            className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
-          >
-            <span aria-hidden>{sym("info")}</span> View Stats 📊
-          </button>
-          <button
-            onClick={() => goTab("online")}
-            className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-green-500 to-blue-400 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
-          >
-            <span aria-hidden>{sym("ok")}</span> Join Online Match 🎯
-          </button>
-          <button
-            onClick={() => setShowProfile(true)}
-            className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
-          >
-            <span aria-hidden>{sym("bullet")}</span> Profile 👤
-          </button>
-          <button
-            onClick={() => {
-              goTab("offline");
-              try {
-                window.dispatchEvent(
-                  new CustomEvent("ndn:auto-start", {
-                    detail: { mode: "Double Practice" },
-                  }),
-                );
-              } catch {}
-            }}
-            className="flex-1 min-w-[200px] sm:flex-none px-4 sm:px-6 md:px-8 py-3 md:py-4 rounded-full bg-gradient-to-r from-pink-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg md:text-xl touch-manipulation"
-          >
-            <span aria-hidden>{sym("dash")}</span> Practice Doubles 🎯
-          </button>
+                } catch {}
+                try {
+                  // Give the Offline tab a tick to mount, then auto-start the chosen mode
+                  setTimeout(() => {
+                    window.dispatchEvent(
+                      new CustomEvent("ndn:auto-start", {
+                        detail: { mode: lastOffline?.mode || "X01" },
+                      }),
+                    );
+                  }, 50);
+                } catch {}
+              }}
+              className="w-full px-3 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl sm:rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 flex items-center justify-center gap-2 text-[0.95rem] sm:text-lg md:text-xl touch-manipulation"
+            >
+              <span aria-hidden>{sym("target")}</span> Start New Match ⚔️
+            </button>
+            <button
+              onClick={() => goTab("stats")}
+              className="w-full px-3 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl sm:rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 flex items-center justify-center gap-2 text-[0.95rem] sm:text-lg md:text-xl touch-manipulation"
+            >
+              <span aria-hidden>{sym("info")}</span> View Stats 📊
+            </button>
+            <button
+              onClick={() => goTab("online")}
+              className="w-full px-3 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl sm:rounded-full bg-gradient-to-r from-green-500 to-blue-400 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 flex items-center justify-center gap-2 text-[0.95rem] sm:text-lg md:text-xl touch-manipulation"
+            >
+              <span aria-hidden>{sym("ok")}</span> Join Online Match 🎯
+            </button>
+            <button
+              onClick={() => setShowProfile(true)}
+              className="w-full px-3 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl sm:rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 flex items-center justify-center gap-2 text-[0.95rem] sm:text-lg md:text-xl touch-manipulation"
+            >
+              <span aria-hidden>{sym("bullet")}</span> Profile 👤
+            </button>
+            <button
+              onClick={() => {
+                goTab("offline");
+                try {
+                  window.dispatchEvent(
+                    new CustomEvent("ndn:auto-start", {
+                      detail: { mode: "Double Practice" },
+                    }),
+                  );
+                } catch {}
+              }}
+              className="w-full px-3 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl sm:rounded-full bg-gradient-to-r from-pink-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 flex items-center justify-center gap-2 text-[0.95rem] sm:text-lg md:text-xl touch-manipulation"
+            >
+              <span aria-hidden>{sym("dash")}</span> Practice Doubles 🎯
+            </button>
+          </div>
+          <p className="mt-2 text-center text-[0.72rem] sm:text-xs text-white/60">
+            Tip: rotate your phone for more room — the buttons auto-reflow.
+          </p>
         </div>
 
         {/* Removed older stat pill grid; now using BEST/WORST grid below */}
@@ -285,7 +290,7 @@ export default function Home({ user }: { user?: any }) {
         })()}
 
         <button
-          className="mt-6 sm:mt-8 md:mt-10 px-6 sm:px-8 md:px-10 py-3 md:py-4 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 text-base sm:text-lg md:text-xl touch-manipulation"
+          className="mt-5 sm:mt-8 md:mt-10 px-6 sm:px-8 md:px-10 py-3 md:py-4 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 text-base sm:text-lg md:text-xl touch-manipulation"
           onClick={() => setShowHowTo(true)}
         >
           How to Play / Getting Started 📖
@@ -293,7 +298,13 @@ export default function Home({ user }: { user?: any }) {
       </div>
 
       {/* Footer */}
-      <footer className="w-full py-2 md:py-2 text-center text-white/80 text-xs md:text-sm font-medium absolute bottom-0 left-0 z-20 flex items-center justify-center gap-1 md:gap-2">
+      <footer
+        className="w-full py-2 md:py-2 text-center text-white/80 text-xs md:text-sm font-medium absolute left-0 z-20 flex items-center justify-center gap-1 md:gap-2"
+        style={{
+          bottom:
+            "calc(var(--ndn-bottomnav-h, 0px) + env(safe-area-inset-bottom, 0px))",
+        }}
+      >
         <button
           className="flex items-center gap-1 md:gap-2 hover:text-white transition"
           onClick={() => setShowLegal(true)}

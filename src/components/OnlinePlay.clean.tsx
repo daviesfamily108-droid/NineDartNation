@@ -1,7 +1,6 @@
 ﻿import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Search,
-  Filter,
   Zap,
   Target,
   Trophy,
@@ -181,15 +180,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     // list to render (page size controls how many are visible).
   }, [normalizeMatch]);
 
-  const worldLobby = useMemo(() => {
-    if (serverMatches && serverMatches.length)
-      return filterMatches(serverMatches as any[]);
-    return filterMatches(
-      (rooms || []).flatMap((r) =>
-        (r?.matches || []).map((m) => ({ ...m, roomName: r?.name })),
-      ),
-    );
-  }, [rooms, serverMatches, filterMatches]);
+  // NOTE: worldLobby was previously used for an alternate lobby view; keep the
+  // computation removed to avoid unused-vars warnings.
 
   // Combined matches: show only current room, filtered
   const combinedMatches = useMemo(() => {
@@ -498,7 +490,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
   return (
     <div
-      className="flex-1 min-h-0"
+      className="flex-1 min-h-0 ndn-page"
       style={{ position: "relative", marginTop: 0 }}
     >
       <div className="card ndn-game-shell relative overflow-hidden h-full flex flex-col">
@@ -510,7 +502,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             onRequestClose={() => setShowStartShowcase(false)}
           />
         )}
-        <h2 className="text-3xl font-bold text-black dark:text-white mb-4">
+        <h2 className="text-3xl font-bold text-black dark:text-white mb-4 ndn-section-title">
           Online Lobby 🌐
         </h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
@@ -550,7 +542,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             {/* Filters & Controls */}
             {!inProgress && (
               <div className="mb-4 p-3 rounded-none bg-slate-950/70 border border-slate-850 flex flex-col gap-3 shadow-sm">
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="ndn-filterbar">
                   <div className="flex-1 min-w-[240px] relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                     <input
@@ -601,7 +593,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       {focusMode ? "Exit Focus" : "Focus Mode"}
                     </button>
                   </div>
-                  <div className="flex items-center gap-2 ml-auto">
+                  <div className="flex items-center gap-2">
                     <button
                       className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm flex items-center gap-2 px-4 rounded-none"
                       onClick={handleQuickJoin}
@@ -653,7 +645,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       )}
                       <div
                         ref={matchesRef}
-                        className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[28rem] overflow-auto p-1 ${focusMode ? "opacity-90" : ""}`}
+                        className={`ndn-card-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-h-[28rem] overflow-auto p-1 ${focusMode ? "opacity-90" : ""}`}
                         data-testid="matches-grid"
                       >
                         {paginatedMatches.map((m: any) => (

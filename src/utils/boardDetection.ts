@@ -215,8 +215,8 @@ function findDartboardRings(
   scanCtx.drawImage(canvas, 0, 0, scanW, scanH);
   const scanData = scanCtx.getImageData(0, 0, scanW, scanH).data;
 
-  const roughCxScaled = roughCx * scanScale;
-  const roughCyScaled = roughCy * scanScale;
+  // NOTE: roughCxScaled/roughCyScaled were used in an earlier debug path; keep
+  // them removed to avoid unused-vars warnings.
 
   // Pre-compute gradients for scan image
   const scanDx = new Float32Array(scanW * scanH);
@@ -227,7 +227,7 @@ function findDartboardRings(
       const i = (y * scanW + x) * 4;
 
       // Luminance
-      const lum =
+      const _lum =
         scanData[i] * 0.299 + scanData[i + 1] * 0.587 + scanData[i + 2] * 0.114;
 
       // Neighbors
@@ -292,14 +292,12 @@ function findDartboardRings(
     const gradients: { r: number; grad: number }[] = [];
 
     for (let r = 30; r < Math.min(w, h) / 2; r += 1) {
-      const x = roughCx + r * cos;
-      const y = roughCy + r * sin;
+      // Probe point (kept implicit via inner/outer sampling below)
       const xInner = roughCx + (r - 2) * cos;
       const yInner = roughCy + (r - 2) * sin;
       const xOuter = roughCx + (r + 2) * cos;
       const yOuter = roughCy + (r + 2) * sin;
 
-      const lumCenter = lum(x, y);
       const lumInner = lum(xInner, yInner);
       const lumOuter = lum(xOuter, yOuter);
 
@@ -867,7 +865,6 @@ export function detectBoard(
     // More lenient success criteria: if homography computed, consider it success
     const success = !!homographyValid && pointsValid && confidence > 50;
     const detRingCount = detection.ringCount ?? 0;
-    const detRingStrength = detection.ringStrength ?? 0;
 
     const result = {
       success,
