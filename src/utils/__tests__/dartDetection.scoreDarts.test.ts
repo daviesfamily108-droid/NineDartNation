@@ -18,6 +18,8 @@ describe("scoreDarts", () => {
       [{ x: pImg.x, y: pImg.y, radius: 5, confidence: 1 } as any],
       H_boardToImage,
       0,
+      0,
+      0,
     );
     // Single 20 => 20
     expect(scored0.score).toBe(20);
@@ -29,6 +31,8 @@ describe("scoreDarts", () => {
       [{ x: pImg.x, y: pImg.y, radius: 5, confidence: 1 } as any],
       H_boardToImage,
       theta,
+      0,
+      0,
     );
     // Sector after rotating 1 step clockwise in our index space should be SectorOrder[1] = 1
     // => single 1 = 1
@@ -36,5 +40,33 @@ describe("scoreDarts", () => {
     expect(expectedSector).toBe(1);
     expect(scored1.score).toBe(1);
     expect(scored1.ring).toBe("SINGLE");
+  });
+
+  it("applies rotationOffsetRad on top of theta", () => {
+    const H_boardToImage = [1, 0, 160, 0, 1, 120, 0, 0, 1] as any;
+    const r = 120;
+    const pBoardUp = { x: 0, y: -r };
+    const pImg = { x: pBoardUp.x + 160, y: pBoardUp.y + 120 };
+
+    // No rotation: single 20
+    const [b] = scoreDarts(
+      [{ x: pImg.x, y: pImg.y, radius: 5, confidence: 1 } as any],
+      H_boardToImage,
+      0,
+      0,
+      0,
+    );
+    expect(b.score).toBe(20);
+
+    // Apply one-sector rotation via rotationOffsetRad (18 degrees)
+    const rot = (18 * Math.PI) / 180;
+    const [c] = scoreDarts(
+      [{ x: pImg.x, y: pImg.y, radius: 5, confidence: 1 } as any],
+      H_boardToImage,
+      0,
+      rot,
+      0,
+    );
+    expect(c.score).toBe(SectorOrder[1]);
   });
 });

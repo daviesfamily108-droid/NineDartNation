@@ -16,6 +16,57 @@ vi.mock("../../../store/profileStats", () => ({
   getAllTime: (name: string) => ({ darts: 3, scored: 180 }),
   getAllTime180s: (name: string) => 5,
 }));
+
+const mockAcquireKeepAlive = vi.fn();
+const mockReleaseKeepAlive = vi.fn();
+vi.mock("../../../store/cameraSession", () => ({
+  useCameraSession: Object.assign(
+    () => ({
+      isStreaming: false,
+      mode: "local",
+      showOverlay: true,
+      acquireKeepAlive: mockAcquireKeepAlive,
+      releaseKeepAlive: mockReleaseKeepAlive,
+      // Methods CameraTile expects
+      getMediaStream: () => null,
+      setMediaStream: () => {},
+      getVideoElementRef: () => null,
+      setVideoElementRef: () => {},
+      clearSession: () => {},
+      // Methods other camera flows may call
+      setStreaming: () => {},
+      setMode: () => {},
+      setPairingCode: () => {},
+      setExpiresAt: () => {},
+      setPaired: () => {},
+      setMobileUrl: () => {},
+      setShowOverlay: () => {},
+    }),
+    {
+      // Zustand store access pattern used in CameraView/CameraTile
+      getState: () => ({
+        isStreaming: false,
+        mode: "local",
+        showOverlay: true,
+        acquireKeepAlive: mockAcquireKeepAlive,
+        releaseKeepAlive: mockReleaseKeepAlive,
+        getMediaStream: () => null,
+        setMediaStream: () => {},
+        getVideoElementRef: () => null,
+        setVideoElementRef: () => {},
+        clearSession: () => {},
+        setStreaming: () => {},
+        setMode: () => {},
+        setPairingCode: () => {},
+        setExpiresAt: () => {},
+        setPaired: () => {},
+        setMobileUrl: () => {},
+        setShowOverlay: () => {},
+      }),
+      subscribe: () => () => {},
+    },
+  ),
+}));
 import MatchStartShowcase from "../MatchStartShowcase";
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
@@ -318,5 +369,46 @@ describe("MatchStartShowcase", () => {
     };
     const { unmount } = render(<Wrapper />);
     unmount();
+  });
+
+  test("acquires camera keepAlive while visible and releases on close", async () => {
+    const players = [
+      { id: "1", name: "Player1", legsWon: 0, legs: [] },
+      { id: "2", name: "Player2", legsWon: 0, legs: [] },
+    ] as any;
+
+    const onDone = vi.fn();
+    const Wrapper = () => {
+      const { useState } = require("react");
+      const [open, setOpen] = useState(true);
+      return (
+        <MatchStartShowcase
+          open={open}
+          players={players}
+          onDone={onDone}
+          onRequestClose={() => {
+            setOpen(false);
+            onDone();
+          }}
+          showCalibrationDefault={false}
+          initialSeconds={3}
+        />
+      );
+    };
+
+    act(() => {
+      vi.useRealTimers();
+    });
+    render(<Wrapper />);
+
+    await waitFor(() => expect(mockAcquireKeepAlive).toHaveBeenCalled());
+
+    const closeBtn = screen.getByRole("button", {
+      name: /close match start showcase/i,
+    });
+    fireEvent.click(closeBtn);
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    await waitFor(() => expect(mockReleaseKeepAlive).toHaveBeenCalled());
   });
 });
