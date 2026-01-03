@@ -58,6 +58,22 @@
   }
   .logo { font-size: 1.25rem; font-weight: 800; }
 
+  /* Ensure the hamburger/menu button is always visible and tappable on mobile.
+     Avoid relying on aria-label text (can change); target common patterns. */
+  #ndn-header button[aria-label],
+  #ndn-header [data-testid="mobile-menu-button"],
+  #ndn-header .ndn-mobile-menu-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 70;
+    min-width: 44px;
+    min-height: 44px;
+    margin-right: 6px;
+    flex: 0 0 auto;
+  }
+
   /* Hide large sidebar and surface as bottom nav when needed */
   .sidebar { display: none !important; }
   .sidebar.mobile-sidebar-visible { display: flex !important; }
