@@ -58,6 +58,75 @@
   }
   .logo { font-size: 1.25rem; font-weight: 800; }
 
+  /* Home page: more like the screenshot (spaced, no overlap, 2-up tiles) */
+  .home-shell {
+    min-height: auto !important;
+    justify-content: flex-start !important;
+    padding: 2px 0 14px 0;
+  }
+  .home-content {
+    max-width: 720px !important;
+    margin: 0 auto !important;
+    padding: 16px !important;
+    border-radius: 18px !important;
+  }
+  .home-intro { gap: 10px !important; }
+  .home-brand-row {
+    flex-wrap: wrap !important;
+    row-gap: 10px !important;
+    column-gap: 10px !important;
+    letter-spacing: 0.14em !important; /* calmer tracking than 0.35em */
+  }
+  .home-brand-tag {
+    font-size: 12px;
+    opacity: 0.9;
+  }
+  .home-brand-row .home-menu-button {
+    width: auto !important;
+    border-radius: 999px !important;
+    padding: 10px 14px !important;
+    min-height: 40px;
+  }
+
+  /* Headline hierarchy (avoid giant jumps and prevent crowding) */
+  .home-content h2 {
+    font-size: 28px !important;
+    line-height: 1.1 !important;
+    letter-spacing: -0.02em;
+  }
+  .home-content p {
+    line-height: 1.35;
+  }
+
+  /* Force the home buttons grid to be 2 columns on phones for comfortable spacing */
+  .home-content .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+  .home-content .grid > button {
+    border-radius: 18px !important;
+    padding: 14px 12px !important;
+    min-height: 68px;
+    font-size: 15px !important;
+    line-height: 1.2;
+    white-space: normal;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* Keep the "Did you know" pill from causing horizontal overflow */
+  .home-content .home-intro + div {
+    margin-top: 10px;
+  }
+  .home-content .home-intro + div > div {
+    max-width: 100% !important;
+    border-radius: 999px !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
   /* Ensure the hamburger/menu button is always visible and tappable on mobile.
      Avoid relying on aria-label text (can change); target common patterns. */
   #ndn-header button[aria-label],
@@ -77,6 +146,23 @@
   /* Hide large sidebar and surface as bottom nav when needed */
   .sidebar { display: none !important; }
   .sidebar.mobile-sidebar-visible { display: flex !important; }
+
+  /* Drawer sidebar polish (mobile) */
+  .sidebar.mobile-sidebar-visible {
+    padding: 12px !important;
+    gap: 14px !important;
+  }
+  .sidebar.mobile-sidebar-visible h3 {
+    margin: 8px 0 2px 0 !important;
+    padding-left: 8px !important;
+    letter-spacing: 0.14em !important;
+  }
+  .sidebar.mobile-sidebar-visible .tab {
+    width: 100%;
+    padding: 12px 12px !important;
+    border-radius: 14px !important;
+    white-space: normal !important;
+  }
 
   /* Convert main layout to a single-column flow */
   .container, .app-shell, .main-content, .ndn-game-shell { padding: 0.5rem !important; }
@@ -134,13 +220,13 @@
   .camera-page,
   .calibrator-page,
   .ndn-camera-page {
-    padding-bottom: calc(var(--ndn-bottomnav-h) + var(--ndn-safe-bottom) + 18px) !important;
+    padding-bottom: calc(var(--ndn-safe-bottom) + 18px) !important;
   }
 
   /* A sticky bottom action bar for camera/calibration screens */
   .ndn-action-rail {
     position: sticky;
-    bottom: calc(var(--ndn-bottomnav-h) + var(--ndn-safe-bottom) + 8px);
+    bottom: calc(var(--ndn-safe-bottom) + 8px);
     z-index: 45;
     padding: 10px;
     margin: 10px 0 0 0;
@@ -176,8 +262,8 @@
 
   /* Mobile scroll area: keep header clearance, but don't reserve space for a bottom tab bar */
   #ndn-main-scroll {
-    padding-bottom: calc(var(--ndn-bottomnav-h) + var(--ndn-safe-bottom) + 16px) !important;
-    scroll-padding-bottom: calc(var(--ndn-bottomnav-h) + var(--ndn-safe-bottom) + 16px) !important;
+    padding-bottom: calc(var(--ndn-safe-bottom) + 18px) !important;
+    scroll-padding-bottom: calc(var(--ndn-safe-bottom) + 18px) !important;
     padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 12px) !important;
     scroll-padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 12px) !important;
   }
@@ -193,59 +279,10 @@
   .scoreboard .row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
 
   /* Footer spacing to avoid UI overlap */
-  .ndn-shell-body { padding-bottom: 24px !important; }
+  .ndn-shell-body { padding-bottom: calc(var(--ndn-safe-bottom) + 18px) !important; }
 
-  /* A dedicated bottom navigation bar (added in App.tsx) */
-  .ndn-bottom-nav {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 55;
-    height: calc(var(--ndn-bottomnav-h) + var(--ndn-safe-bottom));
-    padding-bottom: var(--ndn-safe-bottom);
-    background: rgba(15, 23, 42, 0.92);
-    backdrop-filter: blur(12px);
-    border-top: 1px solid rgba(255,255,255,0.06);
-  }
-
-  .ndn-bottom-nav-inner {
-    height: var(--ndn-bottomnav-h);
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 6px;
-    padding: 8px 10px;
-    max-width: 720px;
-    margin: 0 auto;
-  }
-
-  .ndn-bottom-nav-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    border-radius: 14px;
-    color: rgba(226, 232, 240, 0.85);
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.06);
-    padding: 8px 6px;
-    min-height: 48px;
-  }
-
-  .ndn-bottom-nav-btn[aria-current="page"] {
-    background: rgba(99, 102, 241, 0.18);
-    border-color: rgba(99, 102, 241, 0.35);
-    color: #fff;
-  }
-
-  .ndn-bottom-nav-label {
-    font-size: 11px;
-    line-height: 1;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-    white-space: nowrap;
-  }
+  /* Bottom nav removed from layout; keep any leftover markup hidden just in case */
+  .ndn-bottom-nav { display: none !important; }
 
   /* Landscape tuning: reclaim vertical space */
   @media (orientation: landscape) {

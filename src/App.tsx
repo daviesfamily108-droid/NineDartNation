@@ -23,10 +23,8 @@ import {
   Bell,
   CalendarDays,
   Handshake,
-  Home as HomeIcon,
   Menu,
   MessageCircle,
-  Settings as SettingsIcon,
   Trophy,
   Users,
 } from "lucide-react";
@@ -1143,66 +1141,7 @@ export default function App() {
         {/* Mobile bottom navigation (primary routes) */}
       </div>
 
-      {isMobile && !!user && (
-        <nav className="ndn-bottom-nav" aria-label="Primary">
-          <div className="ndn-bottom-nav-inner">
-            <button
-              type="button"
-              className="ndn-bottom-nav-btn"
-              aria-current={tab === "score" ? "page" : undefined}
-              onClick={() => setTab("score")}
-              title="Home"
-            >
-              <HomeIcon className="w-5 h-5" />
-              <span className="ndn-bottom-nav-label">Home</span>
-            </button>
-
-            <button
-              type="button"
-              className="ndn-bottom-nav-btn"
-              aria-current={tab === "online" ? "page" : undefined}
-              onClick={() => setTab("online")}
-              title="Online"
-            >
-              <Users className="w-5 h-5" />
-              <span className="ndn-bottom-nav-label">Online</span>
-            </button>
-
-            <button
-              type="button"
-              className="ndn-bottom-nav-btn"
-              aria-current={tab === "offline" ? "page" : undefined}
-              onClick={() => setTab("offline")}
-              title="Offline"
-            >
-              <Trophy className="w-5 h-5" />
-              <span className="ndn-bottom-nav-label">Offline</span>
-            </button>
-
-            <button
-              type="button"
-              className="ndn-bottom-nav-btn"
-              aria-current={tab === "calibrate" ? "page" : undefined}
-              onClick={() => setTab("calibrate")}
-              title="Calibrate"
-            >
-              <span className="text-base leading-none">🎯</span>
-              <span className="ndn-bottom-nav-label">Calibrate</span>
-            </button>
-
-            <button
-              type="button"
-              className="ndn-bottom-nav-btn"
-              aria-current={tab === "settings" ? "page" : undefined}
-              onClick={() => setTab("settings")}
-              title="Settings"
-            >
-              <SettingsIcon className="w-5 h-5" />
-              <span className="ndn-bottom-nav-label">Settings</span>
-            </button>
-          </div>
-        </nav>
-      )}
+      {/* Mobile bottom navigation removed (hamburger drawer is primary navigation on mobile) */}
 
       {/* Floating Help Assistant - Always visible */}
       <HelpAssistant />
@@ -1505,12 +1444,12 @@ function MobileNav({
       side="left"
       title="Navigate"
     >
-      <div className="mt-0 h-full px-3 pb-6">
+      <div className="mt-0 h-full px-3 pb-6 overflow-y-auto">
         <Sidebar
           active={active}
           onChange={onChange}
           user={user}
-          className="flex relative static w-full shadow-none bg-transparent p-0 mobile-sidebar-visible overflow-visible"
+          className="flex relative static w-full shadow-none bg-transparent p-0 mobile-sidebar-visible"
         />
       </div>
     </Drawer>
