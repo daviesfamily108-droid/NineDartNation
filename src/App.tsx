@@ -49,7 +49,6 @@ import GlobalCameraLogger from "./components/GlobalCameraLogger";
 import GlobalPhoneVideoSink from "./components/GlobalPhoneVideoSink";
 import GlobalCameraWatchdog from "./components/GlobalCameraWatchdog";
 import GlobalCameraRecoveryToasts from "./components/GlobalCameraRecoveryToasts";
-import CameraStatusBadge from "./components/CameraStatusBadge";
 import InstallPicker from "./components/InstallPicker";
 import AddToHomeButton from "./components/AddToHomeButton";
 import Footer from "./components/Footer";
@@ -1007,7 +1006,6 @@ export default function App() {
                     >
                       {isFullscreen ? "Exit" : "Full"}
                     </button>
-                    <CameraStatusBadge />
                   </div>
 
                   {!isCompact && (
