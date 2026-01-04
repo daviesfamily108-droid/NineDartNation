@@ -65,29 +65,39 @@
   }
   .logo { font-size: 1.25rem; font-weight: 800; }
 
-  /* Home page: more like the screenshot (spaced, no overlap, 2-up tiles) */
+  /* Home page: clean separation, no overlap, professional spacing */
   .home-shell {
     min-height: auto !important;
     justify-content: flex-start !important;
-    padding: 2px 0 14px 0;
+    padding: 0 !important;
+    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 12px) !important;
   }
+  
   .home-content {
     max-width: 720px !important;
     margin: 0 auto !important;
-    padding: 16px !important;
+    padding: 20px !important;
     border-radius: 18px !important;
+    margin-top: 0 !important;
   }
-  .home-intro { gap: 10px !important; }
+  
+  .home-intro { 
+    gap: 12px !important;
+    margin-bottom: 16px !important;
+  }
+  
   .home-brand-row {
     flex-wrap: wrap !important;
     row-gap: 10px !important;
     column-gap: 10px !important;
-    letter-spacing: 0.14em !important; /* calmer tracking than 0.35em */
+    letter-spacing: 0.14em !important;
   }
+  
   .home-brand-tag {
     font-size: 12px;
     opacity: 0.9;
   }
+  
   .home-brand-row .home-menu-button {
     width: auto !important;
     border-radius: 999px !important;
@@ -150,25 +160,39 @@
     flex: 0 0 auto;
   }
 
-  /* Hide large sidebar and surface as bottom nav when needed */
-  .sidebar { display: none !important; }
-  .sidebar.mobile-sidebar-visible { display: flex !important; }
-
-  /* Drawer sidebar polish (mobile) */
-  .sidebar.mobile-sidebar-visible {
-    padding: 12px !important;
-    gap: 14px !important;
+  /* Hide large sidebar on mobile EXCEPT when explicitly shown in drawer */
+  .sidebar:not(.mobile-sidebar-visible) { 
+    display: none !important; 
   }
+  
+  /* Drawer sidebar polish (mobile) - make it visible and styled */
+  .sidebar.mobile-sidebar-visible {
+    display: flex !important;
+    padding: 16px !important;
+    gap: 20px !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+  }
+  
   .sidebar.mobile-sidebar-visible h3 {
-    margin: 8px 0 2px 0 !important;
+    margin: 8px 0 4px 0 !important;
     padding-left: 8px !important;
     letter-spacing: 0.14em !important;
+    font-size: 10px !important;
   }
+  
   .sidebar.mobile-sidebar-visible .tab {
-    width: 100%;
-    padding: 12px 12px !important;
-    border-radius: 14px !important;
+    width: 100% !important;
+    padding: 14px 16px !important;
+    border-radius: 12px !important;
     white-space: normal !important;
+    font-size: 15px !important;
   }
 
   /* Let the hamburger drawer behave like a proper mobile sheet */
@@ -176,8 +200,16 @@
     max-width: min(92vw, 420px) !important;
   }
 
-  /* Convert main layout to a single-column flow */
-  .container, .app-shell, .main-content, .ndn-game-shell { padding: 0.5rem !important; }
+  /* Convert main layout to a single-column flow with proper header clearance */
+  .container, .app-shell, .main-content, .ndn-game-shell { 
+    padding: 0.5rem !important; 
+  }
+  
+  /* Main scroll area needs space below the fixed header */
+  #ndn-main-scroll {
+    padding-top: 8px !important;
+  }
+  
   .ndn-game-shell {
     margin-top: calc(var(--ndn-header-h) + var(--ndn-safe-top)); /* account for fixed header */
   }
