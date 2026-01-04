@@ -466,6 +466,27 @@ export default function App() {
     };
   }, []);
 
+  // Keep the CSS header height token in sync with the actual header element so
+  // mobile offsets (drawer / main scroll padding) are accurate.
+  useEffect(() => {
+    function updateHeaderHeight() {
+      const el = document.getElementById("ndn-header");
+      if (!el) return;
+      const h = Math.ceil(el.getBoundingClientRect().height);
+      document.documentElement.style.setProperty("--ndn-header-h", `${h}px`);
+    }
+
+    updateHeaderHeight();
+    window.addEventListener("resize", updateHeaderHeight);
+    window.addEventListener("orientationchange", updateHeaderHeight);
+    // Also respond when the compact mode changes so header height updates
+    // (isCompact is part of the dependency list)
+    return () => {
+      window.removeEventListener("resize", updateHeaderHeight);
+      window.removeEventListener("orientationchange", updateHeaderHeight);
+    };
+  }, [isCompact]);
+
   // Global logout handler: return to sign-in screen and clear minimal local user context
   useEffect(() => {
     const onLogout = () => {
