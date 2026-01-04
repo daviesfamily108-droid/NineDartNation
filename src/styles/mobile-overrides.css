@@ -48,13 +48,20 @@
     align-items: center;
     justify-content: space-between;
     min-height: var(--ndn-header-h);
-    padding: 10px 12px;
+  padding: 10px 10px;
     padding-top: calc(10px + var(--ndn-safe-top));
     border-radius: 0;
     background: rgba(15, 23, 42, 0.95);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255,255,255,0.05);
     box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+  /* Header layout: allow left greeting block to shrink so the hamburger stays at far-left */
+  #ndn-header {
+    gap: 8px !important;
+  }
+  #ndn-header > :nth-child(2) {
+    min-width: 0 !important;
   }
   .logo { font-size: 1.25rem; font-weight: 800; }
 
@@ -162,6 +169,11 @@
     padding: 12px 12px !important;
     border-radius: 14px !important;
     white-space: normal !important;
+  }
+
+  /* Let the hamburger drawer behave like a proper mobile sheet */
+  .ndn-drawer {
+    max-width: min(92vw, 420px) !important;
   }
 
   /* Convert main layout to a single-column flow */

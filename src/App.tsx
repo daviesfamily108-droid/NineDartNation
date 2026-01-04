@@ -860,7 +860,7 @@ export default function App() {
                 )}
 
                 {/* Left: Brand + Greeting */}
-                <div className="flex flex-col justify-center gap-1 shrink-0 min-w-[220px]">
+                <div className="flex flex-col justify-center gap-1 min-w-0 shrink">
                   {user?.username && (
                     <div className="flex flex-col gap-0.5 text-left -translate-y-[2px]">
                       <div className="flex items-center gap-2">
@@ -1440,14 +1440,17 @@ function MobileNav({
     <Drawer
       open={open}
       onClose={onClose}
-      width={300}
+      width={320}
       side="left"
       title="Navigate"
     >
-      <div className="mt-0 h-full px-3 pb-6 overflow-y-auto">
+      <div className="mt-0 h-full overflow-y-auto">
         <Sidebar
           active={active}
-          onChange={onChange}
+          onChange={(k) => {
+            onChange(k);
+            onClose();
+          }}
           user={user}
           className="flex relative static w-full shadow-none bg-transparent p-0 mobile-sidebar-visible"
         />
