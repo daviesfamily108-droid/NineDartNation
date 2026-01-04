@@ -11,7 +11,7 @@
 @media (max-width: 768px) {
   :root {
     /* Shared sizing tokens */
-    --ndn-header-h: 56px;
+    --ndn-header-h: 48px;
     --ndn-bottomnav-h: 64px;
     --ndn-safe-top: env(safe-area-inset-top, 0px);
     --ndn-safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -48,8 +48,8 @@
     align-items: center;
     justify-content: space-between;
     min-height: var(--ndn-header-h);
-  padding: 10px 10px;
-    padding-top: calc(10px + var(--ndn-safe-top));
+    padding: 8px 10px;
+    padding-top: calc(8px + var(--ndn-safe-top));
     border-radius: 0;
     background: rgba(15, 23, 42, 0.95);
     backdrop-filter: blur(12px);

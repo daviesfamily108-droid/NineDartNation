@@ -865,8 +865,8 @@ export default function App() {
                 id="ndn-header"
                 data-testid="ndn-header"
                 className={`header glass flex items-center justify-between gap-2 sm:gap-4 transition-all duration-200 ${
-                  isCompact ? "py-1 px-3" : "py-3 px-6"
-                }`}
+                    isCompact ? "py-1 px-2" : "py-2 px-4"
+                  }`}
                 style={{ willChange: "transform" }}
               >
                 {isMobile && (
@@ -880,40 +880,32 @@ export default function App() {
                   </button>
                 )}
 
-                {/* Left: Brand + Greeting */}
-                <div className="flex flex-col justify-center gap-1 min-w-0 shrink">
-                  {user?.username && (
-                    <div className="flex flex-col gap-0.5 text-left -translate-y-[2px]">
-                      <div className="flex items-center gap-2">
-                        <div className="relative shrink-0">
-                          <img
-                            src={avatar || fallbackAvatar}
-                            alt="avatar"
-                            className="w-7 h-7 sm:w-9 sm:h-9 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
-                          />
-                          <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
-                        </div>
-                        <span className="text-xs sm:text-sm font-medium text-white/80">
-                          Welcome,{" "}
-                          <span className="font-black text-white">
-                            {user.username}
-                          </span>{" "}
-                          👋
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 flex-wrap text-[11px] sm:text-xs text-white/60">
+                {/* Left: Brand + Greeting - compact single-line with avg */}
+                <div className="flex items-center gap-3 min-w-0 shrink">
+                  <div className="relative shrink-0">
+                    <img
+                      src={avatar || fallbackAvatar}
+                      alt="avatar"
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
+                    />
+                    <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="truncate text-sm sm:text-sm font-medium text-white/80">
+                        Welcome, <span className="font-black text-white">{user.username}</span> 👋
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0 text-[11px] sm:text-xs text-white/60">
                         <span className="uppercase tracking-[0.3em] text-white/35 text-[9px]">
                           All-Time 3-Dart Avg
                         </span>
-                        <span className="text-base sm:text-lg font-black text-white tracking-tight">
+                        <span className="text-sm sm:text-base font-black text-white tracking-tight">
                           {allTimeAvg.toFixed(1)}
                         </span>
                         {normalizedDelta !== 0 ? (
                           <span
                             className={`flex items-center gap-1 text-[11px] sm:text-xs font-semibold ${
-                              normalizedDelta > 0
-                                ? "text-emerald-300"
-                                : "text-rose-300"
+                              normalizedDelta > 0 ? "text-emerald-300" : "text-rose-300"
                             }`}
                           >
                             {normalizedDelta > 0 ? (
@@ -922,16 +914,14 @@ export default function App() {
                               <ArrowDownRight className="w-3 h-3" />
                             )}
                             {normalizedDelta > 0 ? "+" : ""}
-                            {normalizedDelta.toFixed(1)} vs yesterday
+                            {normalizedDelta.toFixed(1)}
                           </span>
                         ) : (
-                          <span className="text-[11px] text-white/40">
-                            Steady today
-                          </span>
+                          <span className="text-[11px] text-white/40">Steady today</span>
                         )}
                       </div>
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* Center brand display */}

@@ -99,8 +99,8 @@ export default function Drawer({
           setPanelTop(null);
           return;
         }
-        const rect = header.getBoundingClientRect();
-        const top = Math.ceil(rect.bottom) + 6; // 6px breathing room
+  const rect = header.getBoundingClientRect();
+  const top = Math.ceil(rect.bottom) + 10; // 10px breathing room
         setPanelTop(top);
       } catch (e) {
         setPanelTop(null);
