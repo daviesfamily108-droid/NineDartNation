@@ -910,15 +910,7 @@ export default function App() {
                       <span className="truncate text-xs text-white/70 ndn-greeting-welcome">
                         Welcome, <span className="font-bold text-white">{user.username}</span>
                       </span>
-                      {isMobile && (
-                        <div className="mt-1">
-                          <img
-                            src={avatar || fallbackAvatar}
-                            alt="avatar"
-                            className="w-8 h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
-                          />
-                        </div>
-                      )}
+                      {/* Mobile avatar removed — keep single profile picture in header only */}
                       <div className="flex items-center gap-2 shrink-0 text-[11px] sm:text-xs text-white/60 ndn-greeting-avg">
                         <span className="uppercase tracking-[0.3em] text-white/35 text-[9px]">
                           All-Time 3-Dart Avg
@@ -1037,36 +1029,7 @@ export default function App() {
                     </div>
                   )}
 
-                  {!isCompact && !isMobile && (
-                    <button
-                      className="relative flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-white/10 bg-white/5 text-white transition hover:bg-white/10 shadow-lg"
-                      onClick={() => setNotificationsOpen(true)}
-                      title="Notifications"
-                    >
-                      <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400" />
-                      {totalBadgeCount > 0 && (
-                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white shadow-xl ring-2 ring-[#13111C]">
-                          {totalBadgeCount > 9 ? "9+" : totalBadgeCount}
-                        </span>
-                      )}
-                    </button>
-                  )}
-
-                  {isMobile && (
-                    <button
-                      className="relative p-2 rounded-xl bg-indigo-600 text-white shadow-lg active:scale-95 transition-transform"
-                      onClick={() => setNotificationsOpen(true)}
-                      aria-label="Open Notifications"
-                      title="Notifications"
-                    >
-                      <Bell className="w-5 h-5 text-amber-300" />
-                      {totalBadgeCount > 0 && (
-                        <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-black text-white shadow-xl ring-2 ring-[#13111C]">
-                          {totalBadgeCount > 9 ? "9+" : totalBadgeCount}
-                        </span>
-                      )}
-                    </button>
-                  )}
+                  {/* Notifications bell removed from header — kept in main Notifications panel */}
                 </div>
               </header>
             </div>

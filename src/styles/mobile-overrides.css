@@ -170,7 +170,8 @@
       position: absolute;
       /* prominent left-aligned brand pill */
       left: 10px;
-      top: calc(var(--ndn-safe-top) + 6px);
+      /* lift the pill up by 2mm to match requested placement */
+      top: calc(var(--ndn-safe-top) + 6px - 2mm);
       z-index: 310;
   padding: 8px;
   width: 44px;
@@ -197,7 +198,8 @@
   --ndn-mobile-menu-left: calc(72px - 11mm); /* horizontal position of hamburger */
    --ndn-mobile-gap-size: 8px; /* the small rectangle gap under header (keep as-is) */
   /* move hamburger a further 3mm down (total 6mm below gap) */
-  --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size) + 6mm);
+  /* move hamburger slightly up by 1.5mm */
+  --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size) + 6mm - 1.5mm);
   }
 
     .ndn-mobile-menu-btn {
@@ -238,8 +240,8 @@
     /* Make the greeting stack so the avatar can appear directly beneath the welcome */
     #ndn-header .ndn-greeting { flex-direction: column !important; align-items: flex-start !important; }
 
-    /* Make the avg sit a little lower so it doesn't collide with the avatar */
-    #ndn-header .ndn-greeting-avg { margin-top: 6px !important; }
+  /* Make the avg sit a little lower so it doesn't avoid collision and move it left per request */
+  #ndn-header .ndn-greeting-avg { margin-top: 6px !important; transform: translate(-7mm, 2.2mm) !important; }
 
     .logo {
       transform: translate(-9mm, -3mm) !important; /* left 9mm, up 3mm */
