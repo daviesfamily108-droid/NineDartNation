@@ -236,8 +236,11 @@
       max-width: none !important;
     }
 
-    /* Make the greeting stack so the avatar can appear directly beneath the welcome */
-    #ndn-header .ndn-greeting { flex-direction: column !important; align-items: flex-start !important; }
+  /* Keep the greeting on a single row with avatar to the left of Welcome for tidy layout */
+  #ndn-header .ndn-greeting { flex-direction: row !important; align-items: center !important; }
+
+  /* Ensure welcome text doesn't underlap the avatar */
+  #ndn-header .ndn-greeting-welcome { margin-left: 6px !important; }
 
   /* Move the avg left by an additional 3.5mm as requested (total left shift) and keep vertical offset */
   #ndn-header .ndn-greeting-avg { margin-top: 6px !important; transform: translate(-10.5mm, 2.2mm) !important; }

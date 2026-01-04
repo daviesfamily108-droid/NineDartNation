@@ -971,16 +971,6 @@ export default function App() {
 
                 {/* Right: Status + Actions */}
                 <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-                  {isMobile && (
-                    <div className="relative mr-2">
-                      <img
-                        src={avatar || fallbackAvatar}
-                        alt="avatar"
-                        className="w-8 h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
-                      />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
-                    </div>
-                  )}
                   {/* Calibration Status (Desktop) */}
                   {!isMobile && calibrationStatus !== "none" && (
                     <button
