@@ -38,6 +38,7 @@ import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
 import { useMatchControl } from '../store/matchControl'
 import GameScoreboard from './scoreboards/GameScoreboard'
 import { makeOnlineAddVisitAdapter } from './matchControlAdapters'
+import { applyVisitCommit } from '../logic/applyVisitCommit'
 import { useOnlineGameStats } from './scoreboards/useGameStats'
 
 export default function OnlinePlay({ user }: { user?: any }) {
@@ -745,11 +746,25 @@ export default function OnlinePlay({ user }: { user?: any }) {
         try { setRoomAutocommit(!!data.allow) } catch {}
       } else if (data.type === 'visit-commit') {
         try {
-          // received server-validated visit commit; apply locally
-          const value = Number(data.value || 0)
-          const darts = Number(data.darts || 3)
-          // Apply commit using submitVisitManual to centralize logic
-          try { submitVisitManual(value) } catch {}
+          // received server-validated visit commit; apply locally using
+          // authoritative visit payload (preferred) or fall back to legacy fields
+          const visit = data.visit || { value: data.value, darts: data.darts };
+          try {
+            // applyVisitCommit will avoid double-applying a visit if it's already present
+            const res = applyVisitCommit(useMatch.getState(), visit);
+            // If the server visit indicates a perfect 180 or finishes a leg we might
+            // want to trigger local celebrations (best-effort)
+            try {
+              const vt = Number(visit?.value ?? visit?.score ?? 0) || Number(visit?.visitTotal ?? 0);
+              if (vt === 180) {
+                const p = useMatch.getState().players[useMatch.getState().currentPlayerIdx];
+                try { triggerCelebration && triggerCelebration('180', p?.name || 'Player'); } catch {}
+              }
+            } catch (e) {}
+          } catch (e) {
+            // Fallback to legacy behavior
+            try { submitVisitManual(Number(data.value || 0)); } catch {}
+          }
         } catch (err) {}
       }
     }

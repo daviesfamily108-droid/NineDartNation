@@ -5,7 +5,8 @@
   useState,
   Suspense,
 } from "react";
-import { Sidebar, TabKey, getTabs } from "./components/Sidebar";
+import { Sidebar, TabKey, getTabs, buildTabList } from "./components/Sidebar";
+import { useIsAdmin } from "./utils/admin";
 const Home = React.lazy(() => import("./components/Home"));
 import ScrollFade from "./components/ScrollFade";
 import Calibrator from "./components/Calibrator";
@@ -903,9 +904,9 @@ export default function App() {
                     <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
                   </div>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="truncate text-sm sm:text-sm font-medium text-white/80">
-                        Welcome, <span className="font-black text-white">{user.username}</span> 👋
+                    <div className="flex flex-col gap-1 min-w-0">
+                      <span className="truncate text-xs text-white/70">
+                        Welcome, <span className="font-bold text-white">{user.username}</span>
                       </span>
                       <div className="flex items-center gap-2 shrink-0 text-[11px] sm:text-xs text-white/60">
                         <span className="uppercase tracking-[0.3em] text-white/35 text-[9px]">
@@ -1472,21 +1473,25 @@ function MobileNav({
       title="Navigate"
     >
       <div className="mt-0 h-full overflow-y-auto">
-        {/* Quick tabs fallback: render a simple list so tabs are always visible in the drawer */}
+        {/* Quick tabs fallback: render a compact grid so tabs are always visible in the drawer */}
         <nav className="mb-3 px-2 sm:hidden ndn-drawer">
           <div className="mobile-tab-list">
-            {getTabs(user).map((t) => (
-              <button
-                key={t.key}
-                onClick={() => {
-                  onChange(t.key as TabKey);
-                  onClose();
-                }}
-                className="text-left rounded-md bg-white/3 text-white/90 font-semibold"
-              >
-                <div className="px-3 py-2 text-sm truncate">{t.label}</div>
-              </button>
-            ))}
+            {(() => {
+              const isAdmin = useIsAdmin(user?.email);
+              const tabs = buildTabList(user, isAdmin);
+              return tabs.map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => {
+                    onChange(t.key as TabKey);
+                    onClose();
+                  }}
+                  className="text-left rounded-md bg-white/3 text-white/90 font-semibold"
+                >
+                  <div className="px-3 py-2 text-sm truncate">{t.label}</div>
+                </button>
+              ));
+            })()}
           </div>
         </nav>
 
