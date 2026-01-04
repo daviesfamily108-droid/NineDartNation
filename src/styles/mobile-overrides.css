@@ -190,7 +190,7 @@
        This is easier to tweak precisely than centering. Change --ndn-mobile-menu-left
        to nudge left/right as needed. */
     :root {
-      --ndn-mobile-menu-left: calc(10px + 44px + 12px);
+      --ndn-mobile-menu-left: 82px; /* nudged per request */
     }
 
     .ndn-mobile-menu-btn {
