@@ -43,7 +43,7 @@
     top: 0;
     left: 0;
     right: 0;
-    z-index: 40;
+    z-index: 300; /* ensure header stays above mobile drawer/backdrop */
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -198,6 +198,26 @@
   /* Let the hamburger drawer behave like a proper mobile sheet */
   .ndn-drawer {
     max-width: min(92vw, 420px) !important;
+  }
+
+  /* Keep drawer panel below the fixed header on phones so header does not look overlapped */
+  /* Keep drawer panel and backdrop just below the header with a small gap */
+  .ndn-drawer-root .ndn-drawer-panel {
+    top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 6px);
+    height: calc(100% - (var(--ndn-header-h) + var(--ndn-safe-top) + 6px));
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+  }
+
+  /* Backdrop should also start below the header so header remains visible */
+  .ndn-drawer-root .ndn-drawer-backdrop {
+    top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 6px);
+    height: calc(100% - (var(--ndn-header-h) + var(--ndn-safe-top) + 6px));
+  }
+
+  /* Ensure main scroll area gets a small top padding so content sits under header with a tiny gap */
+  #ndn-main-scroll {
+    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 6px) !important;
   }
 
   /* Convert main layout to a single-column flow with proper header clearance */

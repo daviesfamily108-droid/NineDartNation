@@ -91,12 +91,12 @@ export default function Drawer({
 
   return (
     <div
-      className={`fixed inset-0 z-[200] ${open ? "" : "pointer-events-none"}`}
+      className={`fixed inset-0 z-[200] ndn-drawer-root ${open ? "" : "pointer-events-none"}`}
       aria-hidden={!open}
     >
       {/* Backdrop */}
       <div
-        className={`absolute inset-0 bg-black/60 transition-opacity ${open ? "opacity-100" : "opacity-0"}`}
+        className={`absolute inset-0 ndn-drawer-backdrop bg-black/60 transition-opacity ${open ? "opacity-100" : "opacity-0"}`}
         onClick={onClose}
         role="button"
         aria-label="Close drawer"
@@ -108,7 +108,7 @@ export default function Drawer({
       />
       {/* Panel */}
       <div
-        className={`absolute bg-slate-900 border-slate-700 shadow-2xl flex flex-col transition-transform duration-200
+        className={`absolute bg-slate-900 border-slate-700 shadow-2xl flex flex-col transition-transform duration-200 ndn-drawer-panel
           ${
             side === "bottom"
               ? `bottom-0 left-0 right-0 border-t rounded-t-2xl max-h-[85vh] w-full ${open ? "translate-y-0" : "translate-y-full"}`
