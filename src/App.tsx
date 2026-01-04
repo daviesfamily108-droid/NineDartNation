@@ -547,6 +547,33 @@ export default function App() {
           ].includes(tab)
         ) {
           setTab(tab as TabKey);
+          // Ensure the mobile hamburger sits in a visible "free" spot after
+          // navigating to a new tab (the header layout can change per tab).
+          // Compute the right edge of the left brand pill (if present) and
+          // nudge the CSS var so the hamburger sits just to its right.
+          try {
+            const brand = document.querySelector('.ndn-mobile-brand') as HTMLElement | null;
+            if (brand && window?.getComputedStyle) {
+              const rect = brand.getBoundingClientRect();
+              const leftPx = Math.max(8, Math.round(rect.right + 8));
+              document.documentElement.style.setProperty(
+                '--ndn-mobile-menu-left',
+                `${leftPx}px`,
+              );
+            }
+            // Also set a small per-tab section gap variable so specific pages
+            // can have precise spacing below the header on mobile.
+            const tabGapMap: Record<string, string> = {
+              online: '8mm',
+              tournaments: '10mm',
+              calibrate: '12mm',
+            };
+            const gap = tabGapMap[tab] || '0px';
+            document.documentElement.style.setProperty('--ndn-section-gap', gap);
+          } catch (err) {
+            // best-effort only
+            // console.warn('Could not reposition mobile hamburger', err);
+          }
         }
       } catch (e) {}
     };

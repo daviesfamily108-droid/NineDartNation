@@ -15,6 +15,8 @@
     --ndn-bottomnav-h: 64px;
     --ndn-safe-top: env(safe-area-inset-top, 0px);
     --ndn-safe-bottom: env(safe-area-inset-bottom, 0px);
+    /* per-section mobile gap (can be tweaked from JS when entering tabs) */
+    --ndn-section-gap: 0px;
   }
 
   /* Prevent iOS text-size auto bumping layouts */
@@ -231,11 +233,11 @@
 
     #ndn-header .ndn-greeting-welcome {
       transform: none !important;
-      display: inline-block;
-      white-space: normal !important;
-      overflow: visible !important;
-      text-overflow: clip !important;
-      max-width: none !important;
+      display: block;
+      white-space: nowrap !important; /* keep the welcome on one line */
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      max-width: calc(100% - 48px) !important;
       margin-left: 0 !important;
       margin-top: 3mm !important;
       text-align: center !important;
@@ -377,7 +379,7 @@
 
   /* Ensure main scroll area gets a small top padding so content sits under header with a tiny gap */
   #ndn-main-scroll {
-    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 6px) !important;
+    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size, 6px) + var(--ndn-section-gap, 0px)) !important;
   }
 
   /* Convert main layout to a single-column flow with proper header clearance */
@@ -391,7 +393,19 @@
   }
   
   .ndn-game-shell {
-    margin-top: calc(var(--ndn-header-h) + var(--ndn-safe-top)); /* account for fixed header */
+    margin-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-section-gap, 0px)); /* account for fixed header */
+  }
+
+  /* Video smoothing for mobile camera feed: apply lightweight GPU hints and
+     subtle filter adjustments so low-power devices render the feed more
+     smoothly and reduce perceived jitter. The class is added by CameraView. */
+  .ndn-video-smooth {
+    image-rendering: auto !important;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    will-change: transform, opacity;
+    filter: contrast(1) saturate(1.02);
   }
 
   /* Cards should be edge-to-edge with comfortable padding */

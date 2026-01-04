@@ -767,11 +767,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
             </div>
           )}
 
-          {/* Theme */}
-          <div>
-            <label className="text-sm mb-2 block">Theme</label>
-            <ThemeToggle />
-          </div>
+          {/* Theme is available in Settings (keeps Profile panel focused) */}
         </div>
       </Section>
 

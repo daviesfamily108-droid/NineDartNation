@@ -3798,8 +3798,8 @@ export default forwardRef(function CameraView(
       aspect === "square"
         ? "absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black"
         : fit
-          ? "absolute inset-0 w-full h-full object-contain object-center bg-black"
-          : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black";
+          ? "absolute inset-0 w-full h-full object-contain object-center bg-black ndn-video-smooth"
+          : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black ndn-video-smooth";
     const videoScale = cameraScale ?? 1;
 
     // Optional, low-risk glare reduction for the *preview* video element.
@@ -4801,7 +4801,7 @@ export default forwardRef(function CameraView(
                     ? "absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black"
                     : fit
                       ? "absolute inset-0 w-full h-full object-contain object-center bg-black"
-                      : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black";
+                      : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black ndn-video-smooth";
                 const videoScale = cameraScale ?? 1;
                 const glareDimmingEnabled =
                   typeof window !== "undefined" &&
@@ -5881,8 +5881,8 @@ export default forwardRef(function CameraView(
                         (useUserSettings.getState().cameraFitMode || "fit") ===
                         "fit";
                       const videoClass = fit
-                        ? "absolute inset-0 w-full h-full object-contain object-center bg-black"
-                        : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black";
+                        ? "absolute inset-0 w-full h-full object-contain object-center bg-black ndn-video-smooth"
+                        : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black ndn-video-smooth";
                       const renderVideoSurface = () => (
                         <div className="relative w-full aspect-[4/3] bg-black">
                           <video
