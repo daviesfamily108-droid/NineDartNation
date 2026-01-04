@@ -186,11 +186,17 @@
       font-size: 1rem;
     }
 
-    /* Center the hamburger/menu button horizontally in the header */
+    /* Place the hamburger/menu button at a fixed offset (just right of the brand pill).
+       This is easier to tweak precisely than centering. Change --ndn-mobile-menu-left
+       to nudge left/right as needed. */
+    :root {
+      --ndn-mobile-menu-left: calc(10px + 44px + 12px);
+    }
+
     .ndn-mobile-menu-btn {
       position: absolute !important;
-      left: 50% !important;
-      transform: translateX(-50%) !important;
+      left: var(--ndn-mobile-menu-left) !important;
+      transform: none !important;
       top: calc(var(--ndn-safe-top) + 6px) !important;
       z-index: 320 !important;
       min-width: 48px !important;
@@ -203,9 +209,9 @@
       backdrop-filter: blur(6px) !important;
     }
 
-    /* Make room for left brand and centered hamburger so greeting doesn't overlap */
+    /* Make room for left brand and positioned hamburger so greeting doesn't overlap */
     #ndn-header .ndn-greeting {
-      margin-left: 80px !important;
+      margin-left: calc(var(--ndn-mobile-menu-left) + 44px) !important;
       margin-right: 64px !important;
     }
   }
