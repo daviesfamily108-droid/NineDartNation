@@ -895,14 +895,16 @@ export default function App() {
 
                 {/* Left: Brand + Greeting - compact single-line with avg */}
                 <div className="flex items-center gap-3 min-w-0 shrink ndn-greeting">
-                  <div className="relative shrink-0">
-                    <img
-                      src={avatar || fallbackAvatar}
-                      alt="avatar"
-                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
-                    />
-                    <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
-                  </div>
+                  {!isMobile && (
+                    <div className="relative shrink-0">
+                      <img
+                        src={avatar || fallbackAvatar}
+                        alt="avatar"
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
+                      />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
+                    </div>
+                  )}
                   <div className="min-w-0">
                     <div className="flex flex-col gap-1 min-w-0">
                       <span className="truncate text-xs text-white/70 ndn-greeting-welcome">
@@ -959,6 +961,16 @@ export default function App() {
 
                 {/* Right: Status + Actions */}
                 <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                  {isMobile && (
+                    <div className="relative mr-2">
+                      <img
+                        src={avatar || fallbackAvatar}
+                        alt="avatar"
+                        className="w-8 h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
+                      />
+                      <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
+                    </div>
+                  )}
                   {/* Calibration Status (Desktop) */}
                   {!isMobile && calibrationStatus !== "none" && (
                     <button

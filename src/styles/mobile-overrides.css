@@ -168,18 +168,45 @@
     .ndn-mobile-brand {
       display: inline-flex;
       position: absolute;
-      /* keep the brand pill out of the way of the hamburger button */
-      left: calc(10px + 44px + 8px);
+      /* prominent left-aligned brand pill */
+      left: 10px;
       top: calc(var(--ndn-safe-top) + 6px);
       z-index: 310;
-      padding: 6px 10px;
-      border-radius: 999px;
-      background: linear-gradient(90deg,#111827,#0f172a);
-      border: 1px solid rgba(255,255,255,0.04);
-      box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+  padding: 8px;
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 12px;
+      background: linear-gradient(90deg,#0b1220,#111827);
+      border: 1px solid rgba(255,255,255,0.06);
+      box-shadow: 0 8px 24px rgba(2,6,23,0.6);
       color: white;
-      font-weight: 800;
-      font-size: 0.9rem;
+      font-weight: 900;
+      font-size: 1rem;
+    }
+
+    /* Center the hamburger/menu button horizontally in the header */
+    .ndn-mobile-menu-btn {
+      position: absolute !important;
+      left: 50% !important;
+      transform: translateX(-50%) !important;
+      top: calc(var(--ndn-safe-top) + 6px) !important;
+      z-index: 320 !important;
+      min-width: 48px !important;
+      min-height: 48px !important;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px !important;
+      background: rgba(255,255,255,0.03) !important;
+      backdrop-filter: blur(6px) !important;
+    }
+
+    /* Make room for left brand and centered hamburger so greeting doesn't overlap */
+    #ndn-header .ndn-greeting {
+      margin-left: 80px !important;
+      margin-right: 64px !important;
     }
   }
 
