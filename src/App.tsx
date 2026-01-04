@@ -1058,6 +1058,15 @@ export default function App() {
                   {/* Notifications bell removed from header — kept in main Notifications panel */}
                 </div>
               </header>
+              {/* A fixed, visible slot that marks the hamburger's dedicated spot on mobile.
+                  It is rendered just under the header so it remains visible across pages
+                  and gives the hamburger a consistent "box" to sit in. */}
+              {isMobile && (
+                <div
+                  aria-hidden
+                  className="ndn-mobile-menu-slot"
+                />
+              )}
             </div>
             {/* Mobile drawer navigation */}
             {isMobile && (

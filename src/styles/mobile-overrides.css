@@ -225,6 +225,25 @@
       will-change: left, top;
     }
 
+    /* The dedicated hamburger slot: a visible box that stays put and makes
+       the menu button always discoverable. Pointer-events none so clicks
+       fall through to the actual button. */
+    .ndn-mobile-menu-slot {
+      position: fixed !important;
+      left: var(--ndn-mobile-menu-left) !important;
+      top: calc(var(--ndn-mobile-menu-top) - 4px) !important;
+      width: 56px !important;
+      height: 56px !important;
+      border-radius: 14px !important;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)) !important;
+      border: 1px solid rgba(255,255,255,0.04) !important;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.5) !important;
+      z-index: 315 !important; /* below the hamburger (320) but above header (300) */
+      pointer-events: none !important;
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+    }
+
     /* Micro-adjustments for header content per request: keep hamburger locked,
        move welcome text and logo by the requested offsets. */
     /* Ensure the full "Welcome, (username)" is visible on mobile and place it
