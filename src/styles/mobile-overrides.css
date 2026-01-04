@@ -189,14 +189,16 @@
     /* Place the hamburger/menu button at a fixed offset (just right of the brand pill).
        This is easier to tweak precisely than centering. Change --ndn-mobile-menu-left
        to nudge left/right as needed. */
-   :root {
-    /* Base horizontal offset (px) can be combined with mm adjustments for
-      quick visual nudges. Move left by 30mm as requested. */
-    --ndn-mobile-menu-left: calc(82px - 30mm); /* moved 30mm left */
-    /* The hamburger was previously dropped 40mm down; user requested a
-      30mm upward adjustment, so net vertical offset is +10mm from safe top. */
-    --ndn-mobile-menu-top: calc(var(--ndn-safe-top) + 6px + 10mm); /* 40mm - 30mm */
-   }
+  :root {
+   /* Tuneable placement to match the small bottom-gap rectangle you marked
+     in the screenshot. Adjust these values if the tick/square needs tiny
+     nudges. */
+   --ndn-mobile-menu-left: 72px; /* horizontal position of hamburger (px) */
+   --ndn-mobile-gap-size: 8px; /* the small rectangle gap under header */
+   /* Place hamburger just below the header by the gap amount so it visually
+     aligns with the small rectangle you drew. */
+   --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size));
+  }
 
     .ndn-mobile-menu-btn {
       position: absolute !important;
