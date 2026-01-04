@@ -169,9 +169,9 @@
       display: inline-flex;
       position: absolute;
       /* prominent left-aligned brand pill */
-      left: 10px;
-      /* lift the pill up by 2mm to match requested placement */
-      top: calc(var(--ndn-safe-top) + 6px - 2mm);
+      /* move left and up by 1.8mm as requested */
+      left: calc(10px - 1.8mm);
+      top: calc(var(--ndn-safe-top) + 6px - 3.8mm);
       z-index: 310;
   padding: 8px;
   width: 44px;
@@ -226,21 +226,20 @@
     /* Micro-adjustments for header content per request: keep hamburger locked,
        move welcome text and logo by the requested offsets. */
     /* Ensure the full "Welcome, (username)" is visible on mobile and place it
-       precisely where requested. Move it down ~3mm from previous position. */
+       underneath the avatar (not wrapped). Move it down ~3mm under the avatar. */
+    #ndn-header .ndn-greeting { flex-direction: column !important; align-items: center !important; }
+
     #ndn-header .ndn-greeting-welcome {
-      transform: translate(-14mm, -1mm) !important; /* left 14mm, down 3mm from previous -4mm */
-      display: inline-block; /* ensure transform affects layout predictably */
+      transform: none !important;
+      display: inline-block;
       white-space: normal !important;
       overflow: visible !important;
       text-overflow: clip !important;
       max-width: none !important;
+      margin-left: 0 !important;
+      margin-top: 3mm !important;
+      text-align: center !important;
     }
-
-  /* Keep the greeting on a single row with avatar to the left of Welcome for tidy layout */
-  #ndn-header .ndn-greeting { flex-direction: row !important; align-items: center !important; }
-
-  /* Ensure welcome text doesn't underlap the avatar */
-  #ndn-header .ndn-greeting-welcome { margin-left: 6px !important; }
 
   /* Move the avg left by an additional 3.5mm as requested (total left shift) and keep vertical offset */
   #ndn-header .ndn-greeting-avg { margin-top: 6px !important; transform: translate(-10.5mm, 2.2mm) !important; }
