@@ -21,6 +21,7 @@ export default function Drawer({
   children,
   side = "right",
 }: DrawerProps) {
+  const [panelTop, setPanelTop] = React.useState<number | null>(null);
   // Swipe to close logic
   const touchStart = React.useRef<{ x: number; y: number } | null>(null);
   const touchCurrent = React.useRef<{ x: number; y: number } | null>(null);
@@ -89,6 +90,36 @@ export default function Drawer({
     };
   }, [open]);
 
+  // Calculate a top offset so the drawer and backdrop sit below the fixed header
+  useEffect(() => {
+    function updateTop() {
+      try {
+        const header = document.getElementById("ndn-header");
+        if (!header) {
+          setPanelTop(null);
+          return;
+        }
+        const rect = header.getBoundingClientRect();
+        const top = Math.ceil(rect.bottom) + 6; // 6px breathing room
+        setPanelTop(top);
+      } catch (e) {
+        setPanelTop(null);
+      }
+    }
+
+    updateTop();
+    window.addEventListener("resize", updateTop);
+    window.addEventListener("orientationchange", updateTop);
+    const obs = new MutationObserver(updateTop);
+    const hdr = document.getElementById("ndn-header");
+    if (hdr) obs.observe(hdr, { attributes: true, childList: true, subtree: true });
+    return () => {
+      window.removeEventListener("resize", updateTop);
+      window.removeEventListener("orientationchange", updateTop);
+      obs.disconnect();
+    };
+  }, [open]);
+
   return (
     <div
       className={`fixed inset-0 z-[200] ndn-drawer-root ${open ? "" : "pointer-events-none"}`}
@@ -115,15 +146,15 @@ export default function Drawer({
               : `top-0 h-full w-full sm:w-auto ${side === "right" ? "right-0 border-l" : "left-0 border-r"} ${open ? "translate-x-0" : side === "right" ? "translate-x-full" : "-translate-x-full"}`
           }
         `}
-        style={{
-          width:
-            side === "bottom"
-              ? "100%"
-              : typeof width === "number"
-                ? `${width}px`
-                : width,
-        }}
-        role="dialog"
+        style={
+          panelTop && side !== "bottom"
+            ? { top: `${panelTop}px`, height: `calc(100% - ${panelTop}px)`, width: typeof width === "number" ? `${width}px` : width }
+            : side === "bottom"
+            ? { width: typeof width === "number" ? `${width}px` : width }
+            : typeof width === "number"
+            ? { width: `${width}px` }
+            : { width }
+        }
         aria-modal="true"
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
@@ -131,7 +162,7 @@ export default function Drawer({
       >
         <FocusLock returnFocus={true}>
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/80 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800/80 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-40">
             <div className="text-base font-semibold text-white/90">
               {title || "Menu"}
             </div>
