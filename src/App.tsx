@@ -5,7 +5,7 @@
   useState,
   Suspense,
 } from "react";
-import { Sidebar, TabKey } from "./components/Sidebar";
+import { Sidebar, TabKey, getTabs } from "./components/Sidebar";
 const Home = React.lazy(() => import("./components/Home"));
 import ScrollFade from "./components/ScrollFade";
 import Calibrator from "./components/Calibrator";
@@ -870,14 +870,17 @@ export default function App() {
                 style={{ willChange: "transform" }}
               >
                 {isMobile && (
-                  <button
-                    className="ndn-mobile-menu-btn p-2 -ml-2 mr-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all shrink-0 relative z-[60]"
-                    data-testid="mobile-menu-button"
-                    onClick={() => setNavOpen(true)}
-                    aria-label="Open Menu"
-                  >
-                    <Menu className="w-6 h-6" />
-                  </button>
+                  <>
+                    <div className="ndn-mobile-brand">NDN 🎯</div>
+                    <button
+                      className="ndn-mobile-menu-btn p-2 -ml-2 mr-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all shrink-0 relative z-[60]"
+                      data-testid="mobile-menu-button"
+                      onClick={() => setNavOpen(true)}
+                      aria-label="Open Menu"
+                    >
+                      <Menu className="w-6 h-6" />
+                    </button>
+                  </>
                 )}
 
                 {/* Left: Brand + Greeting - compact single-line with avg */}
@@ -1456,6 +1459,22 @@ function MobileNav({
       title="Navigate"
     >
       <div className="mt-0 h-full overflow-y-auto">
+        {/* Quick tabs fallback: render a simple list so tabs are always visible in the drawer */}
+        <nav className="mb-3 px-2 sm:hidden">
+          {getTabs(user).map((t) => (
+            <button
+              key={t.key}
+              onClick={() => {
+                onChange(t.key as TabKey);
+                onClose();
+              }}
+              className="w-full text-left mb-2 p-3 rounded-lg bg-white/3 text-white/90 font-semibold"
+            >
+              {t.label}
+            </button>
+          ))}
+        </nav>
+
         <Sidebar
           active={active}
           onChange={(k) => {

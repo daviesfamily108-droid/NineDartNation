@@ -160,6 +160,28 @@
     flex: 0 0 auto;
   }
 
+  /* Mobile brand pill above the hamburger */
+  .ndn-mobile-brand {
+    display: none;
+  }
+  @media (max-width: 768px) {
+    .ndn-mobile-brand {
+      display: inline-flex;
+      position: absolute;
+      left: 10px;
+      top: calc(var(--ndn-safe-top) + 6px);
+      z-index: 310;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: linear-gradient(90deg,#111827,#0f172a);
+      border: 1px solid rgba(255,255,255,0.04);
+      box-shadow: 0 6px 20px rgba(0,0,0,0.35);
+      color: white;
+      font-weight: 800;
+      font-size: 0.9rem;
+    }
+  }
+
   /* Hide large sidebar on mobile EXCEPT when explicitly shown in drawer */
   .sidebar:not(.mobile-sidebar-visible) { 
     display: none !important; 
