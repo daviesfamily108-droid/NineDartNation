@@ -11,7 +11,7 @@
 @media (max-width: 768px) {
   :root {
     /* Shared sizing tokens */
-    --ndn-header-h: 48px;
+  --ndn-header-h: 56px;
     --ndn-bottomnav-h: 64px;
     --ndn-safe-top: env(safe-area-inset-top, 0px);
     --ndn-safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -168,7 +168,8 @@
     .ndn-mobile-brand {
       display: inline-flex;
       position: absolute;
-      left: 10px;
+      /* keep the brand pill out of the way of the hamburger button */
+      left: calc(10px + 44px + 8px);
       top: calc(var(--ndn-safe-top) + 6px);
       z-index: 310;
       padding: 6px 10px;
@@ -180,6 +181,38 @@
       font-weight: 800;
       font-size: 0.9rem;
     }
+  }
+
+  /* Greeting area: ensure welcome + 3DA remain visible and truncate sensibly */
+  .ndn-greeting {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .ndn-greeting-welcome {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+  }
+
+  .ndn-greeting-avg {
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0.95;
+  }
+
+  /* Compact the greeting into a single line on tight viewports so it doesn't get pushed out
+     by the menu/hamburger or notification icons. */
+  @media (max-width: 420px) {
+    .ndn-greeting { gap: 6px; }
+    .ndn-greeting-welcome { font-size: 11px; }
+    .ndn-greeting-avg { font-size: 11px; }
   }
 
   /* Hide large sidebar on mobile EXCEPT when explicitly shown in drawer */

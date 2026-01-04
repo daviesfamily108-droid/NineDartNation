@@ -894,7 +894,7 @@ export default function App() {
                 )}
 
                 {/* Left: Brand + Greeting - compact single-line with avg */}
-                <div className="flex items-center gap-3 min-w-0 shrink">
+                <div className="flex items-center gap-3 min-w-0 shrink ndn-greeting">
                   <div className="relative shrink-0">
                     <img
                       src={avatar || fallbackAvatar}
@@ -905,10 +905,10 @@ export default function App() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex flex-col gap-1 min-w-0">
-                      <span className="truncate text-xs text-white/70">
+                      <span className="truncate text-xs text-white/70 ndn-greeting-welcome">
                         Welcome, <span className="font-bold text-white">{user.username}</span>
                       </span>
-                      <div className="flex items-center gap-2 shrink-0 text-[11px] sm:text-xs text-white/60">
+                      <div className="flex items-center gap-2 shrink-0 text-[11px] sm:text-xs text-white/60 ndn-greeting-avg">
                         <span className="uppercase tracking-[0.3em] text-white/35 text-[9px]">
                           All-Time 3-Dart Avg
                         </span>
