@@ -191,13 +191,18 @@
        to nudge left/right as needed. */
     :root {
       --ndn-mobile-menu-left: 82px; /* nudged per request */
+      /* Allow dropping the hamburger lower on the screen when needed. Some
+         devices have notches or the user requested a position ~40mm lower. By
+         default we add the extra 40mm here; change the value or remove the
+         +40mm if you want the button closer to the header. */
+      --ndn-mobile-menu-top: calc(var(--ndn-safe-top) + 6px + 40mm);
     }
 
     .ndn-mobile-menu-btn {
       position: absolute !important;
       left: var(--ndn-mobile-menu-left) !important;
       transform: none !important;
-      top: calc(var(--ndn-safe-top) + 6px) !important;
+  top: var(--ndn-mobile-menu-top) !important;
       z-index: 320 !important;
       min-width: 48px !important;
       min-height: 48px !important;
