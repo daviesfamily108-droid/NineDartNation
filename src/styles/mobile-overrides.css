@@ -193,11 +193,11 @@
    /* Tuneable placement to match the small bottom-gap rectangle you marked
      in the screenshot. Adjust these values if the tick/square needs tiny
      nudges. */
-   /* moved 7mm left relative to 72px */
-   --ndn-mobile-menu-left: calc(72px - 7mm); /* horizontal position of hamburger */
+  /* moved additional 4mm left (total 11mm left relative to 72px) */
+  --ndn-mobile-menu-left: calc(72px - 11mm); /* horizontal position of hamburger */
    --ndn-mobile-gap-size: 8px; /* the small rectangle gap under header (keep as-is) */
-   /* move hamburger 3mm further down from the gap */
-   --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size) + 3mm);
+  /* move hamburger a further 3mm down (total 6mm below gap) */
+  --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size) + 6mm);
   }
 
     .ndn-mobile-menu-btn {
