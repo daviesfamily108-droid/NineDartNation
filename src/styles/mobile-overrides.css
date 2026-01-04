@@ -189,14 +189,14 @@
     /* Place the hamburger/menu button at a fixed offset (just right of the brand pill).
        This is easier to tweak precisely than centering. Change --ndn-mobile-menu-left
        to nudge left/right as needed. */
-    :root {
-      --ndn-mobile-menu-left: 82px; /* nudged per request */
-      /* Allow dropping the hamburger lower on the screen when needed. Some
-         devices have notches or the user requested a position ~40mm lower. By
-         default we add the extra 40mm here; change the value or remove the
-         +40mm if you want the button closer to the header. */
-      --ndn-mobile-menu-top: calc(var(--ndn-safe-top) + 6px + 40mm);
-    }
+   :root {
+    /* Base horizontal offset (px) can be combined with mm adjustments for
+      quick visual nudges. Move left by 30mm as requested. */
+    --ndn-mobile-menu-left: calc(82px - 30mm); /* moved 30mm left */
+    /* The hamburger was previously dropped 40mm down; user requested a
+      30mm upward adjustment, so net vertical offset is +10mm from safe top. */
+    --ndn-mobile-menu-top: calc(var(--ndn-safe-top) + 6px + 10mm); /* 40mm - 30mm */
+   }
 
     .ndn-mobile-menu-btn {
       position: absolute !important;
