@@ -910,6 +910,15 @@ export default function App() {
                       <span className="truncate text-xs text-white/70 ndn-greeting-welcome">
                         Welcome, <span className="font-bold text-white">{user.username}</span>
                       </span>
+                      {isMobile && (
+                        <div className="mt-1">
+                          <img
+                            src={avatar || fallbackAvatar}
+                            alt="avatar"
+                            className="w-8 h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
+                          />
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 shrink-0 text-[11px] sm:text-xs text-white/60 ndn-greeting-avg">
                         <span className="uppercase tracking-[0.3em] text-white/35 text-[9px]">
                           All-Time 3-Dart Avg

@@ -223,10 +223,23 @@
 
     /* Micro-adjustments for header content per request: keep hamburger locked,
        move welcome text and logo by the requested offsets. */
+    /* Ensure the full "Welcome, (username)" is visible on mobile and place it
+       precisely where requested. Remove truncation and allow the avatar to sit
+       directly underneath. */
     #ndn-header .ndn-greeting-welcome {
-      transform: translate(-9mm, 3mm) !important; /* left 9mm, down 3mm */
+      transform: translate(-14mm, -4mm) !important; /* left 14mm, up 4mm */
       display: inline-block; /* ensure transform affects layout predictably */
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      max-width: none !important;
     }
+
+    /* Make the greeting stack so the avatar can appear directly beneath the welcome */
+    #ndn-header .ndn-greeting { flex-direction: column !important; align-items: flex-start !important; }
+
+    /* Make the avg sit a little lower so it doesn't collide with the avatar */
+    #ndn-header .ndn-greeting-avg { margin-top: 6px !important; }
 
     .logo {
       transform: translate(-9mm, -3mm) !important; /* left 9mm, up 3mm */
