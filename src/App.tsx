@@ -871,7 +871,17 @@ export default function App() {
               >
                 {isMobile && (
                   <>
-                    <div className="ndn-mobile-brand">NDN 🎯</div>
+                    <button
+                      className="ndn-mobile-brand shrink-0 text-sm font-black px-3 py-1 rounded-xl bg-black/40 text-white/90 hover:bg-black/50 transition-colors"
+                      onClick={() => {
+                        setTab("score");
+                        setNavOpen(false);
+                      }}
+                      aria-label="Go Home"
+                      title="Go Home"
+                    >
+                      NDN 🎯
+                    </button>
                     <button
                       className="ndn-mobile-menu-btn p-2 -ml-2 mr-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all shrink-0 relative z-[60]"
                       data-testid="mobile-menu-button"
@@ -1412,7 +1422,11 @@ export default function App() {
       {!minimalUI && <GlobalPhoneVideoSink />}
       {/* Camera warm-up: keep an offscreen CameraView mounted when camera is enabled so
           entering game modes (offline/online/tournaments) shows the feed instantly. */}
-      {cameraEnabled && (
+      {/* Keep the camera active while the user is on the site so it stays warm and ready.
+          Rendering the offscreen CameraView when a user is present will request camera
+          access on first visit (browser permission prompt). If the user denies permission
+          the camera will remain inactive. */}
+      {user && (
         <div
           aria-hidden
           style={{
