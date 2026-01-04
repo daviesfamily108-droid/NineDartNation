@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- NDN high-resolution PWA icon (512×512). Matches the 192 icon but with larger canvas.
+     Intended for splash screens and launcher tiles until platform-specific PNGs are provided. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Nine Dart Nation app icon (512)</title>
+  <desc id="desc">A bold app icon with a dark background, a dart emoji and NDN initials</desc>
+  <rect width="100%" height="100%" rx="64" fill="#0f172a" />
+  <circle cx="256" cy="160" r="128" fill="#0f172a" stroke="#8F43EE" stroke-opacity="0.12" stroke-width="12" />
+  <text x="50%" y="44%" text-anchor="middle" alignment-baseline="central" font-size="220">🎯</text>
+  <text x="50%" y="84%" text-anchor="middle" alignment-baseline="central" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial" font-weight="900" font-size="92" fill="#ffffff">NDN</text>
+</svg>

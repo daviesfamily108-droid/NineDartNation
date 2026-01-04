@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple NDN square PWA icon (192×192). Designed to be legible at small sizes.
+     Uses a dark slate background, a centered dart/bullseye emoji and the app initials.
+     This is a lightweight placeholder. For best results replace with a hand-crafted
+     PNG or platform-specific exported assets from a design tool. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Nine Dart Nation app icon</title>
+  <desc id="desc">A purple-dark square with a dart emoji and the letters NDN</desc>
+  <rect width="100%" height="100%" rx="48" fill="#0f172a" />
+  <!-- subtle ring for depth -->
+  <circle cx="256" cy="160" r="96" fill="#0f172a" stroke="#8F43EE" stroke-opacity="0.12" stroke-width="8" />
+  <text x="50%" y="48%" text-anchor="middle" alignment-baseline="central" font-size="160">🎯</text>
+  <text x="50%" y="82%" text-anchor="middle" alignment-baseline="central" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial" font-weight="800" font-size="56" fill="#ffffff">NDN</text>
+</svg>
