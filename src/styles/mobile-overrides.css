@@ -201,10 +201,13 @@
   }
 
     .ndn-mobile-menu-btn {
-      position: absolute !important;
+      /* Lock the hamburger in a fixed screen position so it doesn't shift
+         when other header elements change. Using fixed ensures consistent
+         placement across scroll and layout updates. */
+      position: fixed !important;
       left: var(--ndn-mobile-menu-left) !important;
       transform: none !important;
-  top: var(--ndn-mobile-menu-top) !important;
+      top: var(--ndn-mobile-menu-top) !important;
       z-index: 320 !important;
       min-width: 48px !important;
       min-height: 48px !important;
@@ -214,6 +217,20 @@
       border-radius: 12px !important;
       background: rgba(255,255,255,0.03) !important;
       backdrop-filter: blur(6px) !important;
+      /* Prevent accidental layout shifts from transforms elsewhere */
+      will-change: left, top;
+    }
+
+    /* Micro-adjustments for header content per request: keep hamburger locked,
+       move welcome text and logo by the requested offsets. */
+    #ndn-header .ndn-greeting-welcome {
+      transform: translate(-9mm, 3mm) !important; /* left 9mm, down 3mm */
+      display: inline-block; /* ensure transform affects layout predictably */
+    }
+
+    .logo {
+      transform: translate(-9mm, -3mm) !important; /* left 9mm, up 3mm */
+      display: inline-block;
     }
 
     /* Make room for left brand and positioned hamburger so greeting doesn't overlap */
