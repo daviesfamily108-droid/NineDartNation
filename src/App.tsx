@@ -907,10 +907,21 @@ export default function App() {
                   )}
                   <div className="min-w-0">
                     <div className="flex flex-col gap-1 min-w-0">
-                      <span className="truncate text-xs text-white/70 ndn-greeting-welcome">
-                        Welcome, <span className="font-bold text-white">{user.username}</span>
-                      </span>
-                      {/* Mobile avatar removed — keep single profile picture in header only */}
+                      <div className="flex items-center gap-2">
+                        {isMobile && (
+                          <div className="relative mr-0">
+                            <img
+                              src={avatar || fallbackAvatar}
+                              alt="avatar"
+                              className="w-8 h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
+                            />
+                            <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
+                          </div>
+                        )}
+                        <span className="truncate text-xs text-white/70 ndn-greeting-welcome">
+                          Welcome, <span className="font-bold text-white">{user.username}</span>
+                        </span>
+                      </div>
                       <div className="flex items-center gap-2 shrink-0 text-[11px] sm:text-xs text-white/60 ndn-greeting-avg">
                         <span className="uppercase tracking-[0.3em] text-white/35 text-[9px]">
                           All-Time 3-Dart Avg
@@ -918,7 +929,7 @@ export default function App() {
                         <span className="text-sm sm:text-base font-black text-white tracking-tight">
                           {allTimeAvg.toFixed(1)}
                         </span>
-                        {normalizedDelta !== 0 ? (
+                        {normalizedDelta !== 0 && (
                           <span
                             className={`flex items-center gap-1 text-[11px] sm:text-xs font-semibold ${
                               normalizedDelta > 0 ? "text-emerald-300" : "text-rose-300"
@@ -932,8 +943,6 @@ export default function App() {
                             {normalizedDelta > 0 ? "+" : ""}
                             {normalizedDelta.toFixed(1)}
                           </span>
-                        ) : (
-                          <span className="text-[11px] text-white/40">Steady today</span>
                         )}
                       </div>
                     </div>
