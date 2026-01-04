@@ -928,23 +928,24 @@ export default function App() {
                 </div>
 
                 {/* Center brand display */}
-                <div className="flex-1 flex justify-center px-2">
-                  <h1 className="w-full sm:w-auto">
-                    <button
-                      type="button"
-                      className="w-full sm:w-auto flex items-center justify-center rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-base xs:text-xl sm:text-2xl font-black text-white tracking-tighter drop-shadow-lg whitespace-nowrap cursor-pointer select-none hover:bg-black/50 transition-colors"
-                      onClick={() => {
-                        setTab("score");
-                      }}
-                      title={"Go Home"}
-                    >
-                      <span className="xs:hidden">NDN 🎯</span>
-                      <span className="hidden xs:inline">
-                        NINE-DART-NATION 🎯
-                      </span>
-                    </button>
-                  </h1>
-                </div>
+                {/* Center brand display (hidden on mobile; we show compact brand above hamburger) */}
+                {!isMobile && (
+                  <div className="flex-1 flex justify-center px-2">
+                    <h1 className="w-full sm:w-auto">
+                      <button
+                        type="button"
+                        className="w-full sm:w-auto flex items-center justify-center rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-base xs:text-xl sm:text-2xl font-black text-white tracking-tighter drop-shadow-lg whitespace-nowrap cursor-pointer select-none hover:bg-black/50 transition-colors"
+                        onClick={() => {
+                          setTab("score");
+                        }}
+                        title={"Go Home"}
+                      >
+                        <span className="xs:hidden">NDN 🎯</span>
+                        <span className="hidden xs:inline">NINE-DART-NATION 🎯</span>
+                      </button>
+                    </h1>
+                  </div>
+                )}
 
                 {/* Right: Status + Actions */}
                 <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
@@ -1460,19 +1461,21 @@ function MobileNav({
     >
       <div className="mt-0 h-full overflow-y-auto">
         {/* Quick tabs fallback: render a simple list so tabs are always visible in the drawer */}
-        <nav className="mb-3 px-2 sm:hidden">
-          {getTabs(user).map((t) => (
-            <button
-              key={t.key}
-              onClick={() => {
-                onChange(t.key as TabKey);
-                onClose();
-              }}
-              className="w-full text-left mb-2 p-3 rounded-lg bg-white/3 text-white/90 font-semibold"
-            >
-              {t.label}
-            </button>
-          ))}
+        <nav className="mb-3 px-2 sm:hidden ndn-drawer">
+          <div className="mobile-tab-list">
+            {getTabs(user).map((t) => (
+              <button
+                key={t.key}
+                onClick={() => {
+                  onChange(t.key as TabKey);
+                  onClose();
+                }}
+                className="text-left rounded-md bg-white/3 text-white/90 font-semibold"
+              >
+                <div className="px-3 py-2 text-sm truncate">{t.label}</div>
+              </button>
+            ))}
+          </div>
         </nav>
 
         <Sidebar
