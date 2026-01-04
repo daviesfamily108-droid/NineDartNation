@@ -1474,12 +1474,34 @@ function MobileNav({
     >
       <div className="mt-0 h-full overflow-y-auto">
         {/* Quick tabs fallback: render a compact grid so tabs are always visible in the drawer */}
-        <nav className="mb-3 px-2 sm:hidden ndn-drawer">
+        <nav className="mb-3 px-2 sm:hidden ndn-drawer" aria-label="Drawer tabs">
           <div className="mobile-tab-list">
             {(() => {
               const isAdmin = useIsAdmin(user?.email);
               const tabs = buildTabList(user, isAdmin);
-              return tabs.map((t) => (
+              // Desired explicit order for mobile: Home, Online, Offline, Tournaments,
+              // Friends, Calibrate, Stats, Admin, Settings
+              const desired: TabKey[] = [
+                "score",
+                "online",
+                "offline",
+                "tournaments",
+                "friends",
+                "calibrate",
+                "stats",
+                "admin",
+                "settings",
+              ];
+
+              const tabMap = new Map(tabs.map((t) => [t.key, t]));
+              const ordered = desired
+                .map((k) => tabMap.get(k))
+                .filter(Boolean) as typeof tabs;
+
+              const stripEmoji = (l: string) =>
+                l.replace(/[\p{Emoji}\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu, "").trim();
+
+              return ordered.map((t) => (
                 <button
                   key={t.key}
                   onClick={() => {
@@ -1488,7 +1510,9 @@ function MobileNav({
                   }}
                   className="text-left rounded-md bg-white/3 text-white/90 font-semibold"
                 >
-                  <div className="px-3 py-2 text-sm truncate">{t.label}</div>
+                  <div className="px-3 py-3 text-base truncate">
+                    {stripEmoji(t.label)}
+                  </div>
                 </button>
               ));
             })()}

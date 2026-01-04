@@ -217,29 +217,36 @@
     font-size: 14px !important;
   }
 
-  /* Compact grid in drawer so tabs are visible without vertical scrolling.
-     Use auto-fit to adapt number of columns to available width and keep the
-     tab area sticky so it never scrolls off the top of the drawer. */
+  /* Mobile drawer tab list: a single-column stacked list that shows the
+     principal navigation items clearly and without vertical scrolling. Keep
+     it near the top of the drawer and reduce visual noise from the large
+     desktop sidebar header when inside the drawer. */
   .ndn-drawer .mobile-tab-list {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-    gap: 6px;
+    grid-template-columns: 1fr;
+    gap: 8px;
     position: sticky;
     top: 8px;
     z-index: 60;
     padding: 6px;
-    margin: 0 -6px 8px -6px; /* allow buttons to touch edges slightly */
+    margin: 0 0 8px 0;
     background: transparent;
   }
 
   .ndn-drawer .mobile-tab-list button {
-    padding: 6px 8px;
-    font-size: 13px;
-    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 15px;
+    border-radius: 12px;
     text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    white-space: normal;
+    width: 100%;
+    display: block;
+  }
+
+  /* Hide the large desktop-style brand header inside the mobile drawer so the
+     compact tab list stays visible at the top without being pushed down. */
+  .sidebar.mobile-sidebar-visible .text-2xl {
+    display: none !important;
   }
 
   /* Let the hamburger drawer behave like a proper mobile sheet */
