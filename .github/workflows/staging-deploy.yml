@@ -1,0 +1,101 @@
+name: Staging Deploy & Smoke Tests
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      staging_url:
+        description: 'Optional: staging URL to run post-deploy smoke tests against'
+        required: false
+
+jobs:
+  test_and_smoke:
+    name: Build, Unit Tests & Local Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+      - name: Build (client + server)
+        run: |
+          npm run build
+          npm run build:server
+
+      - name: Start preview server
+        run: |
+          nohup npx vite preview --port 5173 &
+          # Wait for the preview server to become healthy
+          for i in {1..30}; do if curl -sSf http://localhost:5173 >/dev/null; then echo "Preview up" && break; fi; sleep 1; done
+
+      - name: Run UI smoke tests (local preview)
+        env:
+          TARGET_URL: http://localhost:5173/
+        run: npm run e2e:ui-smoke
+
+  deploy_staging:
+    name: Deploy to Staging (manual)
+    runs-on: ubuntu-latest
+    needs: test_and_smoke
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Validate deploy secrets
+        run: |
+          echo "Checking required secrets..."
+          if [ -z "${{ secrets.RENDER_API_KEY }}" ] && [ -z "${{ secrets.VERCEL_TOKEN }}" ]; then
+            echo "No deploy credentials found in repository secrets. Please add RENDER_API_KEY and/or VERCEL_TOKEN to proceed.";
+            exit 1;
+          fi
+
+      - name: Deploy to Render (if configured)
+        if: ${{ secrets.RENDER_API_KEY && secrets.RENDER_SERVICE_ID }}
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+        run: |
+          echo "Triggering Render deploy..."
+          curl -s -X POST "https://api.render.com/deploy/srv-${RENDER_SERVICE_ID}/deploys" \
+            -H "Authorization: Bearer ${RENDER_API_KEY}" \
+            -H 'Content-Type: application/json' \
+            -d '{}'
+
+      - name: Deploy to Vercel (if configured)
+        if: ${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          echo "Deploying to Vercel..."
+          npx vercel --token ${VERCEL_TOKEN} --prod --confirm
+
+      - name: Post-deploy smoke tests against staging URL
+        env:
+          TARGET_URL: ${{ github.event.inputs.staging_url || secrets.STAGING_URL }}
+        run: |
+          if [ -z "$TARGET_URL" ]; then
+            echo "No staging URL provided (use workflow_dispatch input 'staging_url' or set STAGING_URL secret). Skipping post-deploy smoke tests.";
+            exit 0;
+          fi
+          echo "Running UI smoke tests against $TARGET_URL"
+          npm run e2e:ui-smoke
