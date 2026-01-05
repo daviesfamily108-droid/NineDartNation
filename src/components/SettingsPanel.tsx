@@ -46,6 +46,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
     autoscoreDetectorRequireStableN,
     harshLightingMode,
     enhanceBigTrebles,
+  cameraRecordDarts,
+  cameraShowLabels,
     calibrationGuide: _calibrationGuide,
     preferredCameraId: _preferredCameraId,
     preferredCameraLabel: _preferredCameraLabel,
@@ -77,6 +79,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
     setAutoscoreDetectorRequireStableN,
     setHarshLightingMode,
     setEnhanceBigTrebles,
+  setCameraRecordDarts,
+  setCameraShowLabels,
     setCalibrationGuide: _setCalibrationGuide,
     preserveCalibrationOverlay,
     setPreserveCalibrationOverlay,
@@ -996,6 +1000,36 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         <div className="font-semibold mb-2 text-sm">
                           Lighting
                         </div>
+                        <div className="mt-3 flex flex-col gap-2">
+                          <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                id="cameraRecordDarts"
+                                checked={!!cameraRecordDarts}
+                                onChange={(e) => setCameraRecordDarts(e.target.checked)}
+                                className="w-4 h-4"
+                              />
+                              <label htmlFor="cameraRecordDarts" className="text-sm">
+                                Save detection thumbnails (no continuous video)
+                              </label>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              id="cameraShowLabels"
+                              checked={!!cameraShowLabels}
+                              onChange={(e) => setCameraShowLabels(e.target.checked)}
+                              className="w-4 h-4"
+                            />
+                              <label htmlFor="cameraShowLabels" className="text-sm">
+                                Show segment labels (e.g., T20)
+                              </label>
+                          </div>
+                          </div>
+                          <p className="text-xs opacity-70 mt-1">
+                            When enabled, small thumbnails of detections and commits are saved
+                            for review. This does not record continuous video or audio.
+                          </p>
 
                         <div className="flex items-center gap-3">
                           <input

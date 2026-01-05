@@ -58,7 +58,9 @@ export interface ScoringValidation {
 class ScoringAccuracyValidator {
   private config: Required<ScoringAccuracyConfig>;
   private metrics: AccuracyMetrics = {
+    // totalDartsScored counts unique scoring attempts (accepted+rejected)
     totalDartsScored: 0,
+    // totalDetections counts raw validation attempts (frames/tries)
     totalDetections: 0,
     acceptedCount: 0,
     rejectedCount: 0,
@@ -235,21 +237,36 @@ class ScoringAccuracyValidator {
     }
 
     if (this.config.trackMetrics) {
-      this.metrics.totalDartsScored++;
+      // Increment raw validation attempts (may be called per-frame or retry)
       this.metrics.totalDetections++;
-      const confidences =
-        this.metrics.averageConfidence * (this.metrics.totalDartsScored - 1);
-      this.metrics.averageConfidence =
-        (confidences + detectVal.confidence) / this.metrics.totalDartsScored;
 
+      // Update running average confidence using totalDetections so we don't
+      // bias the value when multiple validation calls happen for the same
+      // physical dart during frame processing.
+      const prevTotal = this.metrics.totalDetections - 1;
+      const confidences = this.metrics.averageConfidence * Math.max(0, prevTotal);
+      this.metrics.averageConfidence =
+        (confidences + detectVal.confidence) / this.metrics.totalDetections;
+
+      // Record acceptance/rejection for this validation attempt. We'll treat
+      // accepted/rejected counts as unique scoring outcomes and recalc
+      // totalDartsScored from those counters to avoid double-counting.
       if (errors.length === 0) {
         this.metrics.acceptedCount++;
       } else {
         this.metrics.rejectedCount++;
       }
 
+      // Update unique scored darts count and overall success rate. Use
+      // acceptedCount / totalDetections to represent the fraction of
+      // validation attempts that resulted in accepted scores (more
+      // representative when multiple validation calls occur for a single
+      // physical dart).
+      this.metrics.totalDartsScored = this.metrics.acceptedCount + this.metrics.rejectedCount;
       this.metrics.successRate =
-        this.metrics.acceptedCount / this.metrics.totalDartsScored;
+        this.metrics.totalDetections > 0
+          ? this.metrics.acceptedCount / this.metrics.totalDetections
+          : 0;
     }
 
     return {
@@ -338,11 +355,14 @@ class ScoringAccuracyValidator {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 SCORING ACCURACY REPORT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Total Darts Scored:        ${m.totalDartsScored}
-Accepted:                  ${m.acceptedCount} ✅
-Rejected:                  ${m.rejectedCount} ❌
-Success Rate:              ${(m.successRate * 100).toFixed(1)}%
-Average Confidence:        ${(m.averageConfidence * 100).toFixed(1)}%
+Total Detections (attempts): ${m.totalDetections}
+Total Darts Scored (unique): ${m.totalDartsScored}
+Accepted:                    ${m.acceptedCount} ✅ (${(
+  (m.totalDetections > 0 ? (m.acceptedCount / m.totalDetections) * 100 : 0)
+).toFixed(1)}% of attempts)
+Rejected:                    ${m.rejectedCount} ❌
+Success Rate (accepts/attempts): ${(m.successRate * 100).toFixed(1)}%
+Average Confidence:          ${(m.averageConfidence * 100).toFixed(1)}%
 
 Issues Detected:
   Calibration Issues:      ${m.calibrationIssues}

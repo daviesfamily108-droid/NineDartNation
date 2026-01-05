@@ -60,6 +60,12 @@ type SettingsState = {
   // Camera control
   cameraEnabled: boolean;
   hideCameraOverlay: boolean;
+  // Show segment labels (e.g., 'T20') in UI/detection logs. Some users prefer numeric-only.
+  cameraShowLabels?: boolean;
+  // When true, allow the camera detector to add/record darts automatically.
+  // Some users prefer to use the camera for detection/counting only without
+  // committing darts to visits automatically.
+  cameraRecordDarts?: boolean;
   ignorePreferredCameraSync: boolean;
   // UI variants
   offlineLayout?: "classic" | "modern";
@@ -100,6 +106,8 @@ type SettingsState = {
   setPreferredCameraLocked: (v: boolean) => void;
   setCameraEnabled: (v: boolean) => void;
   setHideCameraOverlay: (v: boolean) => void;
+  setCameraShowLabels: (v: boolean) => void;
+  setCameraRecordDarts: (v: boolean) => void;
   setIgnorePreferredCameraSync: (v: boolean) => void;
   setOfflineLayout: (mode: "classic" | "modern") => void;
   setHideInGameSidebar: (v: boolean) => void;
@@ -149,6 +157,8 @@ function load(): Pick<
   | "cameraScale"
   | "cameraAspect"
   | "cameraFitMode"
+  | "cameraRecordDarts"
+  | "cameraShowLabels"
   | "calibrationGuide"
   | "calibrationUseRansac"
   | "preserveCalibrationOverlay"
@@ -201,9 +211,11 @@ function load(): Pick<
         reducedMotion: false,
         compactHeader: false,
         allowSpectate: true,
-        cameraScale: 1.0,
-        cameraAspect: "wide",
-        cameraFitMode: "fit",
+    cameraScale: 1.0,
+    cameraAspect: "wide",
+    cameraFitMode: "fit",
+    cameraRecordDarts: false,
+    cameraShowLabels: false,
         calibrationGuide: true,
         preferredCameraId: undefined,
         preferredCameraLabel: undefined,
@@ -345,7 +357,7 @@ function load(): Pick<
       cameraEnabled:
         typeof j.cameraEnabled === "boolean" ? j.cameraEnabled : true,
       hideCameraOverlay:
-        typeof j.hideCameraOverlay === "boolean" ? j.hideCameraOverlay : false,
+  typeof j.cameraRecordDarts === "boolean" ? j.cameraRecordDarts : true,
       offlineLayout: j.offlineLayout === "classic" ? "classic" : "modern",
       hideInGameSidebar:
         typeof j.hideInGameSidebar === "boolean" ? j.hideInGameSidebar : true,
@@ -365,6 +377,9 @@ function load(): Pick<
           ? Math.max(3, Math.min(60, j.dartTimerSeconds))
           : 10,
       x01DoubleIn: typeof j.x01DoubleIn === "boolean" ? j.x01DoubleIn : false,
+      cameraRecordDarts: typeof j.cameraRecordDarts === "boolean" ? j.cameraRecordDarts : false,
+      cameraShowLabels:
+        typeof j.cameraShowLabels === "boolean" ? j.cameraShowLabels : false,
     };
   } catch {
     return {
@@ -626,6 +641,15 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
   setHideCameraOverlay: (v) => {
     save({ hideCameraOverlay: v });
     set({ hideCameraOverlay: v });
+  },
+  setCameraShowLabels: (v) => {
+    save({ cameraShowLabels: v } as any);
+    set({ cameraShowLabels: !!v } as any);
+  },
+  setCameraRecordDarts: (v: boolean) => {
+    const next = !!v;
+    save({ cameraRecordDarts: next } as any);
+    set({ cameraRecordDarts: next } as any);
   },
   setOfflineLayout: (mode) => {
     save({ offlineLayout: mode });
