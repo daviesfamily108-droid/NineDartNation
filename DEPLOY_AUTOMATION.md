@@ -33,3 +33,13 @@ Notes & next steps
 - The workflow expects you to supply deploy tokens as GitHub Secrets (do not commit tokens in code).
 - If you want me to wire automatic production deploys (after successful staging smoke tests), I can add a gated production job that requires manual approval or protected environment.
 - I can also add a Canary rollout via Vercel's preview domains or Render's CLI if desired.
+
+Production deployment (already added)
+- The workflow includes a `deploy_production` job that runs after the tests pass. It is configured to use the GitHub environment named `production`, which can be protected and set to require manual approval before the job runs. This provides a safe, CI-gated promotion to production.
+- To enable production deploys, add the same deploy secrets to the repository (or organization) and set `PRODUCTION_URL` to run the post-deploy smoke checks.
+
+Recommended next steps to enable fully automatic promotion:
+1. Add deploy secrets in your repository settings (see previous section)
+2. Create a GitHub environment named `production` and require at least one reviewer to approve jobs targeting it (Settings → Environments → production)
+3. Configure your Render/Vercel projects and populate `RENDER_SERVICE_ID` / `STAGING_URL` / `PRODUCTION_URL` appropriately
+
