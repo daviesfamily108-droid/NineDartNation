@@ -81,13 +81,14 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{}'
 
-      - name: Deploy to Vercel (if configured)
-        if: ${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy to Netlify (if configured)
+        if: ${{ secrets.NETLIFY_AUTH_TOKEN && secrets.STAGING_NETLIFY_SITE_ID }}
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          STAGING_NETLIFY_SITE_ID: ${{ secrets.STAGING_NETLIFY_SITE_ID }}
         run: |
-          echo "Deploying to Vercel..."
-          npx vercel --token ${VERCEL_TOKEN} --prod --confirm
+          echo "Deploying to Netlify (staging site)..."
+          npx netlify deploy --auth ${NETLIFY_AUTH_TOKEN} --site ${STAGING_NETLIFY_SITE_ID} --dir=dist --prod
 
       - name: Post-deploy smoke tests against staging URL
         env:
@@ -137,13 +138,14 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{}'
 
-      - name: Deploy to Vercel (production)
-        if: ${{ secrets.VERCEL_TOKEN }}
+      - name: Deploy to Netlify (production)
+        if: ${{ secrets.NETLIFY_AUTH_TOKEN && secrets.PRODUCTION_NETLIFY_SITE_ID }}
         env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          PRODUCTION_NETLIFY_SITE_ID: ${{ secrets.PRODUCTION_NETLIFY_SITE_ID }}
         run: |
-          echo "Deploying to Vercel (production)..."
-          npx vercel --token ${VERCEL_TOKEN} --prod --confirm
+          echo "Deploying to Netlify (production site)..."
+          npx netlify deploy --auth ${NETLIFY_AUTH_TOKEN} --site ${PRODUCTION_NETLIFY_SITE_ID} --dir=dist --prod
 
       - name: Post-deploy smoke tests against production URL
         env:
