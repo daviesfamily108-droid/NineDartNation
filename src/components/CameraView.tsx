@@ -116,6 +116,15 @@ const DISABLE_CAMERA_OVERLAY = true;
 // for small test-only knobs.
 const TEST_MODE = false;
 
+const CAMERA_VERBOSE_LOGS =
+  String(import.meta.env?.VITE_CAMERA_VERBOSE_LOGS ?? "")
+    .trim()
+    .toLowerCase() === "1";
+const cameraVerboseLog = (...args: unknown[]) => {
+  if (!CAMERA_VERBOSE_LOGS) return;
+  console.log(...args);
+};
+
 // Ring-light / glare mitigation
 // When enabled, we apply a lightweight highlight compression to the captured
 // frame BEFORE running background subtraction / blob detection.
@@ -136,7 +145,7 @@ function glareClampFrameInPlace(
   for (let i = 0; i < d.length; i += 4) {
     const r = d[i];
     const g = d[i + 1];
-          
+
     const b = d[i + 2];
 
     // Fast approx luma (integer math)
@@ -299,7 +308,7 @@ export default forwardRef(function CameraView(
     x01DoubleInOverride,
     onAddVisit,
     onEndLeg,
-    cameraAutoCommit = "camera",
+    cameraAutoCommit: _cameraAutoCommit = "camera",
     forceAutoStart = false,
   }: {
     onVisitCommitted?: (
@@ -361,7 +370,8 @@ export default forwardRef(function CameraView(
   const cameraFitMode = useUserSettings((s) => s.cameraFitMode);
   const cameraScale = useUserSettings((s) => s.cameraScale);
   const cameraLowLatency = useUserSettings((s) => s.cameraLowLatency) ?? false;
-  const cameraProcessingFps = useUserSettings((s) => s.cameraProcessingFps) ?? 15;
+  const cameraProcessingFps =
+    useUserSettings((s) => s.cameraProcessingFps) ?? 15;
   const autoCommitMode =
     useUserSettings((s) => s.autoCommitMode) ?? "wait-for-clear";
   const confirmUncertainDarts =
@@ -382,7 +392,7 @@ export default forwardRef(function CameraView(
   const cameraEnabled = useUserSettings((s) => s.cameraEnabled);
   const preferredCameraLocked = useUserSettings((s) => s.preferredCameraLocked);
   const hideCameraOverlay = useUserSettings((s) => s.hideCameraOverlay);
-  const cameraRecordDarts = useUserSettings((s) =>
+  const _cameraRecordDarts = useUserSettings((s) =>
     typeof s.cameraRecordDarts === "boolean" ? s.cameraRecordDarts : true,
   );
   const cameraShowLabels = useUserSettings((s) =>
@@ -757,15 +767,19 @@ export default forwardRef(function CameraView(
   const tickRef = useRef<(() => void) | null>(null);
   const [detectionLog, setDetectionLog] = useState<DetectionLogEntry[]>([]);
   const [showDetectionLog, setShowDetectionLog] = useState(false);
-  const [lastDetection, setLastDetection] = useState<DetectionLogEntry | null>(null);
-  const [lastCommit, setLastCommit] = useState<
-    | { ts: number; score: number; darts: number; frame?: string | null }
-    | null
-  >(null);
-  const [selfTestStatus, setSelfTestStatus] = useState<
+  const [lastDetection, setLastDetection] = useState<DetectionLogEntry | null>(
+    null,
+  );
+  const [lastCommit, setLastCommit] = useState<{
+    ts: number;
+    score: number;
+    darts: number;
+    frame?: string | null;
+  } | null>(null);
+  const [_selfTestStatus, setSelfTestStatus] = useState<
     "idle" | "running" | "pass" | "fail"
   >("idle");
-  const [selfTestMessage, setSelfTestMessage] = useState<string | null>(null);
+  const [_selfTestMessage, setSelfTestMessage] = useState<string | null>(null);
 
   // Diagnostics overlay (hidden by default)
   // Toggle with Ctrl+Shift+D (or Cmd+Shift+D on Mac).
@@ -1094,7 +1108,8 @@ export default forwardRef(function CameraView(
   // Play a short bell sound using WebAudio if available. No-op in test env.
   const playBell = useCallback(() => {
     try {
-      const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+      const Ctx =
+        (window as any).AudioContext || (window as any).webkitAudioContext;
       if (!Ctx) return;
       const ctx = new Ctx();
       const o = ctx.createOscillator();
@@ -1133,7 +1148,13 @@ export default forwardRef(function CameraView(
         await new Promise((r) => setTimeout(r, 180));
       }
       const logs = detectionLogRef.current.slice();
-      const ok = logs.some((e) => e.accepted || (e.ready && e.confidence >= (autoScoreConfidenceThreshold ?? AUTO_COMMIT_CONFIDENCE)));
+      const ok = logs.some(
+        (e) =>
+          e.accepted ||
+          (e.ready &&
+            e.confidence >=
+              (autoScoreConfidenceThreshold ?? AUTO_COMMIT_CONFIDENCE)),
+      );
       if (ok) {
         setSelfTestStatus("pass");
         setSelfTestMessage("Detection OK");
@@ -1142,7 +1163,7 @@ export default forwardRef(function CameraView(
         setSelfTestMessage(
           logs.length
             ? `No accepted detections (best confidence ${(logs[logs.length - 1].confidence || 0).toFixed(2)})`
-            : "No detections"
+            : "No detections",
         );
       }
     } catch (e) {
@@ -1217,10 +1238,15 @@ export default forwardRef(function CameraView(
             try {
               writeMatchSnapshot();
             } catch (e) {}
-              try {
-                const f = captureFrame();
-                setLastCommit({ ts: Date.now(), score: pending.score, darts: pending.darts, frame: f });
-              } catch (e) {}
+            try {
+              const f = captureFrame();
+              setLastCommit({
+                ts: Date.now(),
+                score: pending.score,
+                darts: pending.darts,
+                frame: f,
+              });
+            } catch (e) {}
           } catch (e) {}
         } catch (e) {}
       }
@@ -1901,8 +1927,8 @@ export default forwardRef(function CameraView(
 
       let stream: MediaStream;
       try {
-  // If user prefers low-latency, attempt 720p first to reduce CPU/bandwidth
-  if (cameraLowLatency) {
+        // If user prefers low-latency, attempt 720p first to reduce CPU/bandwidth
+        if (cameraLowLatency) {
           try {
             stream = await tryGetStream(qualityHints720p, "720p");
           } catch (e720: any) {
@@ -2612,7 +2638,7 @@ export default forwardRef(function CameraView(
 
   // Built-in autoscore loop (offline/local CV)
   useEffect(() => {
-    console.log("[DETECTION] Effect running", {
+    cameraVerboseLog("[DETECTION] Effect running", {
       manualOnly,
       autoscoreProvider,
       videoReady,
@@ -2625,7 +2651,7 @@ export default forwardRef(function CameraView(
 
     if (!isDocumentVisible) return;
     if (TEST_MODE || manualOnly) {
-      console.log("[DETECTION] Exiting: TEST_MODE or manualOnly");
+      cameraVerboseLog("[DETECTION] Exiting: TEST_MODE or manualOnly");
       return;
     }
     // Built-in autoscore providers are handled locally (offline CV).
@@ -2635,7 +2661,7 @@ export default forwardRef(function CameraView(
       autoscoreProvider !== "built-in" &&
       autoscoreProvider !== "built-in-v2"
     ) {
-      console.log(
+      cameraVerboseLog(
         "[DETECTION] Exiting: autoscoreProvider is",
         autoscoreProvider,
       );
@@ -2693,7 +2719,7 @@ export default forwardRef(function CameraView(
       } as unknown as HTMLVideoElement;
     }
     if (!sourceVideo) {
-      console.log("[DETECTION] Exiting: no sourceVideo", {
+      cameraVerboseLog("[DETECTION] Exiting: no sourceVideo", {
         preferredLabel,
         isPhone,
         phoneFeedActive,
@@ -2721,7 +2747,7 @@ export default forwardRef(function CameraView(
           return;
         }
         if (performance.now() - start > 2000) {
-          console.log(
+          cameraVerboseLog(
             "[DETECTION] Exiting: video has no dimensions yet (after retries)",
             {
               vw,
@@ -2748,7 +2774,7 @@ export default forwardRef(function CameraView(
       } catch (e) {}
     }
     if (!H || !imageSize) {
-      console.log("[DETECTION] Exiting: no H or imageSize", {
+      cameraVerboseLog("[DETECTION] Exiting: no H or imageSize", {
         hasH: !!H,
         hasImageSize: !!imageSize,
         hydrated: _hydrated,
@@ -2756,7 +2782,9 @@ export default forwardRef(function CameraView(
       return;
     }
 
-    console.log("[DETECTION] ✅ All conditions met, starting detection loop!");
+    cameraVerboseLog(
+      "[DETECTION] ✅ All conditions met, starting detection loop!",
+    );
 
     let canceled = false;
     const v = sourceVideo;
@@ -3467,7 +3495,8 @@ export default forwardRef(function CameraView(
                       onAutoDart &&
                       !(
                         pSig === lastParentSigRef.current &&
-                        pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS
+                        pNow - lastParentSigAtRef.current <
+                          AUTO_COMMIT_COOLDOWN_MS
                       )
                     ) {
                       onAutoDart(candidate.value, candidate.ring, {
@@ -5041,55 +5070,117 @@ export default forwardRef(function CameraView(
 
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="col-span-1">
-                    <div className="font-semibold text-sm mb-1">Last detection</div>
+                    <div className="font-semibold text-sm mb-1">
+                      Last detection
+                    </div>
                     {lastDetection ? (
                       <div className="flex items-center gap-2">
                         {lastDetection.frame ? (
-                          <img src={lastDetection.frame} alt="last-detect" className="w-20 h-12 object-cover rounded" />
+                          <img
+                            src={lastDetection.frame}
+                            alt="last-detect"
+                            className="w-20 h-12 object-cover rounded"
+                          />
                         ) : (
                           <div className="w-20 h-12 bg-slate-800 rounded" />
                         )}
                         <div className="text-xs">
-                          <div className="font-semibold">{lastDetection.value}</div>
-                          <div className="text-slate-400">{lastDetection.ring} • {lastDetection.confidence.toFixed(2)}</div>
+                          <div className="font-semibold">
+                            {lastDetection.value}
+                          </div>
+                          <div className="text-slate-400">
+                            {lastDetection.ring} •{" "}
+                            {lastDetection.confidence.toFixed(2)}
+                          </div>
                           <div className="mt-1 flex gap-2">
-                            <button className="btn btn--ghost px-2 py-1 text-xs" onClick={() => {
-                              try {
-                                addDart(lastDetection.value, `${lastDetection.value}`, lastDetection.ring, { calibrationValid: true, pBoard: lastDetection.pCal ?? null, source: 'camera' });
-                              } catch (e) {}
-                            }}>Commit</button>
+                            <button
+                              className="btn btn--ghost px-2 py-1 text-xs"
+                              onClick={() => {
+                                try {
+                                  addDart(
+                                    lastDetection.value,
+                                    `${lastDetection.value}`,
+                                    lastDetection.ring,
+                                    {
+                                      calibrationValid: true,
+                                      pBoard: lastDetection.pCal ?? null,
+                                      source: "camera",
+                                    },
+                                  );
+                                } catch (e) {}
+                              }}
+                            >
+                              Commit
+                            </button>
                           </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-xs text-slate-400">No detections yet.</div>
+                      <div className="text-xs text-slate-400">
+                        No detections yet.
+                      </div>
                     )}
                   </div>
 
                   <div className="col-span-1">
-                    <div className="font-semibold text-sm mb-1">Last commit</div>
+                    <div className="font-semibold text-sm mb-1">
+                      Last commit
+                    </div>
                     {lastCommit ? (
                       <div className="flex items-center gap-2">
                         {lastCommit.frame ? (
-                          <img src={lastCommit.frame} alt="last-commit" className="w-20 h-12 object-cover rounded" />
+                          <img
+                            src={lastCommit.frame}
+                            alt="last-commit"
+                            className="w-20 h-12 object-cover rounded"
+                          />
                         ) : (
                           <div className="w-20 h-12 bg-slate-800 rounded" />
                         )}
                         <div className="text-xs">
-                          <div className="font-semibold">{lastCommit.score}</div>
-                          <div className="text-slate-400">{lastCommit.darts} darts • {new Date(lastCommit.ts).toLocaleTimeString()}</div>
+                          <div className="font-semibold">
+                            {lastCommit.score}
+                          </div>
+                          <div className="text-slate-400">
+                            {lastCommit.darts} darts •{" "}
+                            {new Date(lastCommit.ts).toLocaleTimeString()}
+                          </div>
                         </div>
                       </div>
                     ) : (
-                      <div className="text-xs text-slate-400">No commits yet.</div>
+                      <div className="text-xs text-slate-400">
+                        No commits yet.
+                      </div>
                     )}
                   </div>
 
                   <div className="col-span-1">
                     <div className="font-semibold text-sm mb-1">Tests</div>
                     <div className="flex flex-col gap-2">
-                      <button className="btn btn--ghost px-3 py-1 text-xs" onClick={() => { try { if (tickRef.current) tickRef.current(); } catch (e) {} }}>Run detection test</button>
-                      <button className="btn btn--ghost px-3 py-1 text-xs" onClick={() => { try { addDart(60, '60', 'TRIPLE', { calibrationValid: true, pBoard: null, source: 'manual' }); } catch (e) {} }}>Simulate 60 (T20)</button>
+                      <button
+                        className="btn btn--ghost px-3 py-1 text-xs"
+                        onClick={() => {
+                          try {
+                            if (tickRef.current) tickRef.current();
+                          } catch (e) {}
+                        }}
+                      >
+                        Run detection test
+                      </button>
+                      <button
+                        className="btn btn--ghost px-3 py-1 text-xs"
+                        onClick={() => {
+                          try {
+                            addDart(60, "60", "TRIPLE", {
+                              calibrationValid: true,
+                              pBoard: null,
+                              source: "manual",
+                            });
+                          } catch (e) {}
+                        }}
+                      >
+                        Simulate 60 (T20)
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -5168,7 +5259,9 @@ export default forwardRef(function CameraView(
                           className="truncate flex-1"
                           title={`Value ${entry.value} ${entry.ring}`}
                         >
-                          {cameraShowLabels ? entry.label.padEnd(6, " ") : `${entry.value}`}
+                          {cameraShowLabels
+                            ? entry.label.padEnd(6, " ")
+                            : `${entry.value}`}
                         </span>
                         <span className="text-slate-400">
                           {entry.confidence.toFixed(2)}

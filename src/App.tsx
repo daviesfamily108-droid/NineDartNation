@@ -5,7 +5,7 @@
   useState,
   Suspense,
 } from "react";
-import { Sidebar, TabKey, getTabs, buildTabList } from "./components/Sidebar";
+import { Sidebar, TabKey, buildTabList } from "./components/Sidebar";
 import { useIsAdmin } from "./utils/admin";
 const Home = React.lazy(() => import("./components/Home"));
 import ScrollFade from "./components/ScrollFade";
@@ -102,7 +102,7 @@ export default function App() {
   const [allTimeAvg, setAllTimeAvg] = useState<number>(0);
   const [avgDelta, setAvgDelta] = useState<number>(0);
   const { avgMode } = useUserSettings();
-  const cameraEnabled = useUserSettings((s) => s.cameraEnabled);
+  const _cameraEnabled = useUserSettings((s) => s.cameraEnabled);
   const matchInProgress = useMatch((s) => s.inProgress);
   const isCompact = matchInProgress && tab !== "score";
   const {
@@ -553,24 +553,29 @@ export default function App() {
           // Compute the right edge of the left brand pill (if present) and
           // nudge the CSS var so the hamburger sits just to its right.
           try {
-            const brand = document.querySelector('.ndn-mobile-brand') as HTMLElement | null;
+            const brand = document.querySelector(
+              ".ndn-mobile-brand",
+            ) as HTMLElement | null;
             if (brand && window?.getComputedStyle) {
               const rect = brand.getBoundingClientRect();
               const leftPx = Math.max(8, Math.round(rect.right + 8));
               document.documentElement.style.setProperty(
-                '--ndn-mobile-menu-left',
+                "--ndn-mobile-menu-left",
                 `${leftPx}px`,
               );
             }
             // Also set a small per-tab section gap variable so specific pages
             // can have precise spacing below the header on mobile.
             const tabGapMap: Record<string, string> = {
-              online: '8mm',
-              tournaments: '10mm',
-              calibrate: '12mm',
+              online: "8mm",
+              tournaments: "10mm",
+              calibrate: "12mm",
             };
-            const gap = tabGapMap[tab] || '0px';
-            document.documentElement.style.setProperty('--ndn-section-gap', gap);
+            const gap = tabGapMap[tab] || "0px";
+            document.documentElement.style.setProperty(
+              "--ndn-section-gap",
+              gap,
+            );
           } catch (err) {
             // best-effort only
             // console.warn('Could not reposition mobile hamburger', err);
@@ -823,11 +828,6 @@ export default function App() {
   const matchInviteNotifs = siteNotifications.filter((n) =>
     /(match|invite)/i.test(notificationText(n)),
   ).length;
-  const unreadSiteCount = siteNotifications.filter((n) => !n.read).length;
-  const totalBadgeCount = Math.min(
-    99,
-    unreadSiteCount + friendRequestCount + unreadMessageCount,
-  );
   const notificationPanelItems = [
     {
       key: "tournaments",
@@ -893,8 +893,8 @@ export default function App() {
                 id="ndn-header"
                 data-testid="ndn-header"
                 className={`header glass flex items-center justify-between gap-2 sm:gap-4 transition-all duration-200 ${
-                    isCompact ? "py-1 px-2" : "py-2 px-4"
-                  }`}
+                  isCompact ? "py-1 px-2" : "py-2 px-4"
+                }`}
                 style={{ willChange: "transform" }}
               >
                 {isMobile && (
@@ -947,7 +947,10 @@ export default function App() {
                           </div>
                         )}
                         <span className="truncate text-xs text-white/70 ndn-greeting-welcome">
-                          Welcome, <span className="font-bold text-white">{user.username}</span>
+                          Welcome,{" "}
+                          <span className="font-bold text-white">
+                            {user.username}
+                          </span>
                         </span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0 text-[11px] sm:text-xs text-white/60 ndn-greeting-avg">
@@ -960,7 +963,9 @@ export default function App() {
                         {normalizedDelta !== 0 && (
                           <span
                             className={`flex items-center gap-1 text-[11px] sm:text-xs font-semibold ${
-                              normalizedDelta > 0 ? "text-emerald-300" : "text-rose-300"
+                              normalizedDelta > 0
+                                ? "text-emerald-300"
+                                : "text-rose-300"
                             }`}
                           >
                             {normalizedDelta > 0 ? (
@@ -991,7 +996,9 @@ export default function App() {
                         title={"Go Home"}
                       >
                         <span className="xs:hidden">NDN 🎯</span>
-                        <span className="hidden xs:inline">NINE-DART-NATION 🎯</span>
+                        <span className="hidden xs:inline">
+                          NINE-DART-NATION 🎯
+                        </span>
                       </button>
                     </h1>
                   </div>
@@ -1063,12 +1070,7 @@ export default function App() {
               {/* A fixed, visible slot that marks the hamburger's dedicated spot on mobile.
                   It is rendered just under the header so it remains visible across pages
                   and gives the hamburger a consistent "box" to sit in. */}
-              {isMobile && (
-                <div
-                  aria-hidden
-                  className="ndn-mobile-menu-slot"
-                />
-              )}
+              {isMobile && <div aria-hidden className="ndn-mobile-menu-slot" />}
             </div>
             {/* Mobile drawer navigation */}
             {isMobile && (
@@ -1495,7 +1497,10 @@ function MobileNav({
     >
       <div className="mt-0 h-full overflow-y-auto">
         {/* Quick tabs fallback: render a compact grid so tabs are always visible in the drawer */}
-        <nav className="mb-3 px-2 sm:hidden ndn-drawer" aria-label="Drawer tabs">
+        <nav
+          className="mb-3 px-2 sm:hidden ndn-drawer"
+          aria-label="Drawer tabs"
+        >
           <div className="mobile-tab-list">
             {(() => {
               const isAdmin = useIsAdmin(user?.email);
@@ -1520,7 +1525,12 @@ function MobileNav({
                 .filter(Boolean) as typeof tabs;
 
               const stripEmoji = (l: string) =>
-                l.replace(/[\p{Emoji}\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu, "").trim();
+                l
+                  .replace(
+                    /[\p{Emoji}\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu,
+                    "",
+                  )
+                  .trim();
 
               return ordered.map((t) => (
                 <button

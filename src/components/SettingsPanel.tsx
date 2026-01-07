@@ -46,8 +46,8 @@ export default function SettingsPanel({ user }: { user?: any }) {
     autoscoreDetectorRequireStableN,
     harshLightingMode,
     enhanceBigTrebles,
-  cameraRecordDarts,
-  cameraShowLabels,
+    cameraRecordDarts,
+    cameraShowLabels,
     calibrationGuide: _calibrationGuide,
     preferredCameraId: _preferredCameraId,
     preferredCameraLabel: _preferredCameraLabel,
@@ -79,12 +79,12 @@ export default function SettingsPanel({ user }: { user?: any }) {
     setAutoscoreDetectorRequireStableN,
     setHarshLightingMode,
     setEnhanceBigTrebles,
-  setCameraRecordDarts,
-  setCameraShowLabels,
-  cameraLowLatency,
-  setCameraLowLatency,
-  cameraProcessingFps,
-  setCameraProcessingFps,
+    setCameraRecordDarts,
+    setCameraShowLabels,
+    cameraLowLatency,
+    setCameraLowLatency,
+    cameraProcessingFps,
+    setCameraProcessingFps,
     setCalibrationGuide: _setCalibrationGuide,
     preserveCalibrationOverlay,
     setPreserveCalibrationOverlay,
@@ -1006,34 +1006,45 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         </div>
                         <div className="mt-3 flex flex-col gap-2">
                           <div className="flex items-center gap-3">
-                              <input
-                                type="checkbox"
-                                id="cameraRecordDarts"
-                                checked={!!cameraRecordDarts}
-                                onChange={(e) => setCameraRecordDarts(e.target.checked)}
-                                className="w-4 h-4"
-                              />
-                              <label htmlFor="cameraRecordDarts" className="text-sm">
-                                Save detection thumbnails (no continuous video)
-                              </label>
+                            <input
+                              type="checkbox"
+                              id="cameraRecordDarts"
+                              checked={!!cameraRecordDarts}
+                              onChange={(e) =>
+                                setCameraRecordDarts(e.target.checked)
+                              }
+                              className="w-4 h-4"
+                            />
+                            <label
+                              htmlFor="cameraRecordDarts"
+                              className="text-sm"
+                            >
+                              Save detection thumbnails (no continuous video)
+                            </label>
                           </div>
                           <div className="flex items-center gap-3">
                             <input
                               type="checkbox"
                               id="cameraShowLabels"
                               checked={!!cameraShowLabels}
-                              onChange={(e) => setCameraShowLabels(e.target.checked)}
+                              onChange={(e) =>
+                                setCameraShowLabels(e.target.checked)
+                              }
                               className="w-4 h-4"
                             />
-                              <label htmlFor="cameraShowLabels" className="text-sm">
-                                Show segment labels (e.g., T20)
-                              </label>
+                            <label
+                              htmlFor="cameraShowLabels"
+                              className="text-sm"
+                            >
+                              Show segment labels (e.g., T20)
+                            </label>
                           </div>
-                          </div>
-                          <p className="text-xs opacity-70 mt-1">
-                            When enabled, small thumbnails of detections and commits are saved
-                            for review. This does not record continuous video or audio.
-                          </p>
+                        </div>
+                        <p className="text-xs opacity-70 mt-1">
+                          When enabled, small thumbnails of detections and
+                          commits are saved for review. This does not record
+                          continuous video or audio.
+                        </p>
 
                         <div className="flex items-center gap-3">
                           <input
@@ -1106,7 +1117,9 @@ export default function SettingsPanel({ user }: { user?: any }) {
                             type="checkbox"
                             id="cameraLowLatency"
                             checked={!!cameraLowLatency}
-                            onChange={(e) => setCameraLowLatency(e.target.checked)}
+                            onChange={(e) =>
+                              setCameraLowLatency(e.target.checked)
+                            }
                             className="w-4 h-4"
                           />
                           <label htmlFor="cameraLowLatency" className="text-sm">
@@ -1119,10 +1132,14 @@ export default function SettingsPanel({ user }: { user?: any }) {
                         </p>
 
                         <div className="mt-2">
-                          <label className="text-sm block mb-1">Detection FPS</label>
+                          <label className="text-sm block mb-1">
+                            Detection FPS
+                          </label>
                           <select
                             value={cameraProcessingFps}
-                            onChange={(e) => setCameraProcessingFps(Number(e.target.value))}
+                            onChange={(e) =>
+                              setCameraProcessingFps(Number(e.target.value))
+                            }
                             className="text-sm"
                           >
                             <option value={10}>10 fps (very low)</option>
@@ -1130,7 +1147,10 @@ export default function SettingsPanel({ user }: { user?: any }) {
                             <option value={20}>20 fps (smooth)</option>
                             <option value={30}>30 fps (high)</option>
                           </select>
-                          <p className="text-xs opacity-70 mt-1">Lower FPS reduces CPU usage and improves stability on laggy feeds.</p>
+                          <p className="text-xs opacity-70 mt-1">
+                            Lower FPS reduces CPU usage and improves stability
+                            on laggy feeds.
+                          </p>
                         </div>
                       </div>
                       <div>

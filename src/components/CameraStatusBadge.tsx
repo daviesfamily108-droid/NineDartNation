@@ -32,10 +32,16 @@ export default function CameraStatusBadge() {
       type="button"
       onClick={onClick}
       className="relative inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 hover:bg-white/10 transition-colors shadow-sm px-3 py-1 text-xs"
-      title={streaming ? "Camera connected ✅ – click to toggle overlay" : "Camera not connected ❌"}
+      title={
+        streaming
+          ? "Camera connected ✅ – click to toggle overlay"
+          : "Camera not connected ❌"
+      }
     >
       <span className="font-mono text-[0.75rem]">{sym("camera")}</span>
-      <span className="hidden xs:inline text-slate-100 select-none">{statusLabel}</span>
+      <span className="hidden xs:inline text-slate-100 select-none">
+        {statusLabel}
+      </span>
       <span
         className={`ml-2 w-2 h-2 rounded-full shrink-0 ${streaming ? "bg-emerald-400" : "bg-rose-400"}`}
         aria-hidden

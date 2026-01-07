@@ -244,7 +244,8 @@ class ScoringAccuracyValidator {
       // bias the value when multiple validation calls happen for the same
       // physical dart during frame processing.
       const prevTotal = this.metrics.totalDetections - 1;
-      const confidences = this.metrics.averageConfidence * Math.max(0, prevTotal);
+      const confidences =
+        this.metrics.averageConfidence * Math.max(0, prevTotal);
       this.metrics.averageConfidence =
         (confidences + detectVal.confidence) / this.metrics.totalDetections;
 
@@ -262,7 +263,8 @@ class ScoringAccuracyValidator {
       // validation attempts that resulted in accepted scores (more
       // representative when multiple validation calls occur for a single
       // physical dart).
-      this.metrics.totalDartsScored = this.metrics.acceptedCount + this.metrics.rejectedCount;
+      this.metrics.totalDartsScored =
+        this.metrics.acceptedCount + this.metrics.rejectedCount;
       this.metrics.successRate =
         this.metrics.totalDetections > 0
           ? this.metrics.acceptedCount / this.metrics.totalDetections
@@ -357,9 +359,10 @@ class ScoringAccuracyValidator {
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Total Detections (attempts): ${m.totalDetections}
 Total Darts Scored (unique): ${m.totalDartsScored}
-Accepted:                    ${m.acceptedCount} ✅ (${(
-  (m.totalDetections > 0 ? (m.acceptedCount / m.totalDetections) * 100 : 0)
-).toFixed(1)}% of attempts)
+Accepted:                    ${m.acceptedCount} ✅ (${(m.totalDetections > 0
+      ? (m.acceptedCount / m.totalDetections) * 100
+      : 0
+    ).toFixed(1)}% of attempts)
 Rejected:                    ${m.rejectedCount} ❌
 Success Rate (accepts/attempts): ${(m.successRate * 100).toFixed(1)}%
 Average Confidence:          ${(m.averageConfidence * 100).toFixed(1)}%

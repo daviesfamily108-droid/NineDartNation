@@ -23,15 +23,13 @@ export default function WSConnectionDot({ className, title }: Props) {
     <span
       aria-label={`Server connection: ${baseTitle}`}
       title={title || baseTitle}
-      className={
-        [
-          "inline-flex items-center justify-center",
-          "w-3 h-3 rounded-full",
-          connected ? "bg-emerald-400" : "bg-red-500",
-          "ring-2 ring-black/20",
-          className || "",
-        ].join(" ")
-      }
+      className={[
+        "inline-flex items-center justify-center",
+        "w-3 h-3 rounded-full",
+        connected ? "bg-emerald-400" : "bg-red-500",
+        "ring-2 ring-black/20",
+        className || "",
+      ].join(" ")}
     />
   );
 }

@@ -219,13 +219,13 @@ function load(): Pick<
         reducedMotion: false,
         compactHeader: false,
         allowSpectate: true,
-  cameraScale: 1.0,
-  cameraAspect: "wide",
-  cameraFitMode: "fit",
-  cameraRecordDarts: false,
-  cameraShowLabels: false,
-  cameraLowLatency: false,
-  cameraProcessingFps: 15,
+        cameraScale: 1.0,
+        cameraAspect: "wide",
+        cameraFitMode: "fit",
+        cameraRecordDarts: false,
+        cameraShowLabels: false,
+        cameraLowLatency: false,
+        cameraProcessingFps: 15,
         calibrationGuide: true,
         preferredCameraId: undefined,
         preferredCameraLabel: undefined,
@@ -367,7 +367,7 @@ function load(): Pick<
       cameraEnabled:
         typeof j.cameraEnabled === "boolean" ? j.cameraEnabled : true,
       hideCameraOverlay:
-  typeof j.cameraRecordDarts === "boolean" ? j.cameraRecordDarts : true,
+        typeof j.cameraRecordDarts === "boolean" ? j.cameraRecordDarts : true,
       offlineLayout: j.offlineLayout === "classic" ? "classic" : "modern",
       hideInGameSidebar:
         typeof j.hideInGameSidebar === "boolean" ? j.hideInGameSidebar : true,
@@ -387,7 +387,8 @@ function load(): Pick<
           ? Math.max(3, Math.min(60, j.dartTimerSeconds))
           : 10,
       x01DoubleIn: typeof j.x01DoubleIn === "boolean" ? j.x01DoubleIn : false,
-      cameraRecordDarts: typeof j.cameraRecordDarts === "boolean" ? j.cameraRecordDarts : false,
+      cameraRecordDarts:
+        typeof j.cameraRecordDarts === "boolean" ? j.cameraRecordDarts : false,
       cameraShowLabels:
         typeof j.cameraShowLabels === "boolean" ? j.cameraShowLabels : false,
     };

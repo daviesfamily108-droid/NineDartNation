@@ -23,6 +23,7 @@ import {
   type Homography,
   type Point,
 } from "./vision";
+import { getGlobalCalibrationConfidence } from "./gameCalibrationRequirements";
 import { useUserSettings } from "../store/userSettings";
 
 const isFinitePoint = (p: Point | undefined): p is Point =>
@@ -824,37 +825,17 @@ export function detectBoard(
         errorPx = rmsError(homography, canonicalSrc, calibrationPoints);
       }
 
-      // BALANCED: confidence calculation focusing on accuracy within realistic bounds
-      // v2.6: High-precision confidence mapping to reach 99.5% for low errors
-      let errorConfidence: number;
-      const errPx = errorPx ?? 10;
-
-      if (errPx <= 0.25) {
-        errorConfidence = 99.5 + (0.25 - errPx) * 2; // 99.5% to 100%
-      } else if (errPx <= 1) {
-        errorConfidence = 98 + (1 - errPx) * 2; // 98% to 99.5%
-      } else if (errPx <= 2) {
-        errorConfidence = 95 + (2 - errPx) * 3; // 95% to 98%
-      } else if (errPx <= 5) {
-        errorConfidence = 90 + (5 - errPx) * 1.66; // 90% to 95%
-      } else if (errPx <= 8) {
-        errorConfidence = 85 + (8 - errPx) * 1.66; // 85% to 90%
+      // Truth-based confidence: keep all calibration confidence values on the same
+      // scale used throughout the app (errorPx -> 0-100 mapping).
+      // This avoids having multiple competing confidence formulas.
+      const errPx = typeof errorPx === "number" ? errorPx : null;
+      const global = getGlobalCalibrationConfidence(errPx);
+      if (typeof global === "number") {
+        confidence = global;
       } else {
-        errorConfidence = Math.max(0, 85 - (errPx - 8) * 5); // Degrading beyond 8px
+        // If error is unavailable, fall back to detection quality and inlier ratio.
+        confidence = Math.max(inlierRatio * 100, detection.confidence);
       }
-
-      // v2.6: Prioritize error-based confidence for high accuracy
-      if (errPx <= 2) {
-        // Excellent calibration - weight error heavily to show the 99%+ accuracy
-        confidence = detection.confidence * 0.1 + errorConfidence * 0.9;
-      } else {
-        // Standard weighting
-        confidence = detection.confidence * 0.5 + errorConfidence * 0.5;
-      }
-
-      // Remove the artificial 85% floor to be honest about quality,
-      // but keep a reasonable minimum if detection was successful
-      confidence = Math.max(inlierRatio * 100, confidence);
     } catch (err) {
       // Even if error in computation, if we have points, still fairly confident
       confidence = Math.max(65, detection.confidence);

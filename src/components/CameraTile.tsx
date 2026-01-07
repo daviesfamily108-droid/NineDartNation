@@ -65,6 +65,11 @@ type CameraTileProps = {
   tileFitModeOverride?: "fit" | "fill";
 };
 
+const TEST_MODE =
+  process.env.NODE_ENV === "test" ||
+  (typeof import.meta !== "undefined" &&
+    (import.meta as any).env?.MODE === "test");
+
 export default function CameraTile({
   label,
   autoStart,
@@ -146,13 +151,11 @@ export default function CameraTile({
     try {
       const existingStream = cameraSession.getMediaStream();
       if (!existingStream) {
-        console.log(
-          "[CameraTile] attachExistingStream: No existing stream found",
-        );
+        dlog("[CameraTile] attachExistingStream: No existing stream found");
         return false;
       }
       if (!videoRef.current) {
-        console.log("[CameraTile] attachExistingStream: No video ref");
+        dlog("[CameraTile] attachExistingStream: No video ref");
         return false;
       }
       const res = await ensureVideoPlays({
@@ -164,6 +167,50 @@ export default function CameraTile({
       return !!res.played;
     } catch (err) {
       console.warn("[CameraTile] Failed to reuse global camera stream", err);
+      return false;
+    }
+  }, [cameraSession]);
+
+  const requestGlobalLocalStart = useCallback(() => {
+    // CameraTile is preview-only. If we need a preview but the global session
+    // has no stream yet, request that the camera owner (CameraView / Calibrator)
+    // starts it.
+    try {
+      window.dispatchEvent(
+        new CustomEvent("ndn:start-camera", { detail: { mode: "local" } }),
+      );
+    } catch {}
+  }, []);
+
+  const attachFromSession = useCallback(async () => {
+    try {
+      const v = videoRef.current;
+      if (!v) return false;
+
+      // Always ensure the tile video element is registered. This gives the
+      // global camera session a reliable fallback anchor (srcObject) even if the
+      // stream holder is momentarily null during UI transitions.
+      try {
+        const current = cameraSession.getVideoElementRef?.();
+        if (!current || current === v) {
+          cameraSession.setVideoElementRef?.(v);
+        }
+      } catch {}
+
+      const s = cameraSession.getMediaStream?.() || null;
+      const liveTracks = (s?.getVideoTracks?.() || []).filter(
+        (t) => t.readyState === "live",
+      );
+      if (!s || liveTracks.length === 0) return false;
+
+      const res = await ensureVideoPlays({
+        video: v,
+        stream: s,
+        onPlayError: (e) => console.warn("[CameraTile] Play failed:", e),
+      });
+      setStreaming(!!res.played);
+      return !!res.played;
+    } catch {
       return false;
     }
   }, [cameraSession]);
@@ -384,17 +431,15 @@ export default function CameraTile({
   }, [preferredCameraLabel, mode, cameraSession, cameraSession.isStreaming]);
 
   const start = useCallback(async () => {
-    console.log("[CameraTile] start() invoked with mode=", mode);
+    dlog("[CameraTile] start() invoked with mode=", mode);
     if (await attachExistingStream()) {
-      console.log("[CameraTile] Reused calibrated global stream");
+      dlog("[CameraTile] Reused calibrated global stream");
       return;
     }
     if (mode === "wifi") {
       return startWifiConnection();
     }
-    console.log(
-      "[CameraTile] Attempting to attach global stream for phone mode...",
-    );
+    dlog("[CameraTile] Attempting to attach global stream for phone mode...");
 
     // If phone camera is selected and paired, don't try to start local camera
     if (preferredCameraLabel === "Phone Camera" || mode === "phone") {
@@ -457,51 +502,65 @@ export default function CameraTile({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) {
-      console.log("[CameraTile] Failsafe: No video ref");
+      dlog("[CameraTile] Failsafe: No video ref");
       return;
     }
-    const s = cameraSession.getMediaStream?.();
-    const liveTracks = (s?.getVideoTracks?.() || []).filter(
-      (t) => t.readyState === "live",
-    );
-    if (s && liveTracks.length > 0) {
-      try {
-        Promise.resolve(
-          ensureVideoPlays({
-            video: v,
-            stream: s,
-            onPlayError: (e) =>
-              console.warn("[CameraTile] Failsafe play error", e),
-          }),
-        )
-          .then((res) => {
-            if (res.played) {
-              console.log("[CameraTile] Failsafe: Playing");
-              setStreaming(true);
-            }
-          })
-          .catch(() => {});
+    // In unit tests, avoid timers/polling that can keep the process alive.
+    if (TEST_MODE) {
+      void attachFromSession();
+      if (forceAutoStart || autoStart) {
+        // Keep behavior deterministic: request start once, but don't poll.
+        requestGlobalLocalStart();
+      }
+      return;
+    }
+
+    // Try immediately and then poll briefly to catch a late-arriving stream
+    // (e.g. CameraView starts after the overlay mounts).
+    let attempts = 0;
+    let interval: any = null;
+
+    const tick = async () => {
+      attempts += 1;
+      const ok = await attachFromSession();
+      if (ok) {
+        if (interval) clearInterval(interval);
+        interval = null;
         return;
+      }
+
+      // If this surface is asking for a preview but no stream exists yet, ask
+      // the camera owner to start local capture.
+      if ((forceAutoStart || autoStart) && attempts === 1) {
+        requestGlobalLocalStart();
+      }
+
+      if (attempts >= 6) {
+        if (interval) clearInterval(interval);
+        interval = null;
+        // Fall back to existing behavior (may handle phone/wifi modes)
+        if (forceAutoStart || autoStart) {
+          start().catch(() => {});
+        }
+      }
+    };
+
+    void tick();
+    interval = setInterval(tick, 650);
+
+    return () => {
+      try {
+        if (interval) clearInterval(interval);
       } catch {}
-    } else {
-      console.log("[CameraTile] Failsafe: No stream in session");
-    }
-    if (forceAutoStart || autoStart) {
-      console.log(
-        "[CameraTile] Failsafe: Triggering start() (no stream or dead tracks)",
-        {
-          hasStream: !!s,
-          liveTracks: liveTracks.length,
-        },
-      );
-      start().catch(() => {});
-    }
+    };
   }, [
     cameraSession,
     forceAutoStart,
     autoStart,
     start,
     cameraSession.isStreaming,
+    attachFromSession,
+    requestGlobalLocalStart,
   ]);
   const stop = useCallback(() => {
     // Preview-only: do NOT stop tracks here, as the global cameraSession stream

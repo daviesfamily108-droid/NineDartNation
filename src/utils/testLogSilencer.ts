@@ -20,7 +20,8 @@ export function installTestLogSilencer(opts?: {
   // Always suppress these messages.
   deny?: RegExp[];
 }) {
-  if (typeof process === "undefined" || process.env?.NODE_ENV !== "test") return;
+  if (typeof process === "undefined" || process.env?.NODE_ENV !== "test")
+    return;
 
   const {
     silenceConsoleLog = true,
@@ -36,13 +37,19 @@ export function installTestLogSilencer(opts?: {
       /^\[Audit:/i,
       /\(node:\d+\) Warning: `--localstorage-file` was provided without a valid path/i,
       /Failed to fetch notifications:/i,
+      /\[CAMERATILE\]/i,
+      /\[cameraSession\]/i,
+      /\[CAMERA_SESSION\]/i,
+      /^CameraView:/i,
     ],
   } = opts || {};
 
   const original = {
     log: console.log.bind(console),
     info: console.info.bind(console),
-    debug: (console as any).debug ? (console as any).debug.bind(console) : console.log.bind(console),
+    debug: (console as any).debug
+      ? (console as any).debug.bind(console)
+      : console.log.bind(console),
     warn: console.warn.bind(console),
     error: console.error.bind(console),
   };
@@ -54,7 +61,10 @@ export function installTestLogSilencer(opts?: {
     return false;
   };
 
-  const wrap = (name: keyof typeof original, enabled: boolean): ConsoleMethod => {
+  const wrap = (
+    name: keyof typeof original,
+    enabled: boolean,
+  ): ConsoleMethod => {
     const fn = original[name];
     if (!enabled) return fn;
     return (...args: any[]) => {

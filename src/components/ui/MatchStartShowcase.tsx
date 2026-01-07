@@ -494,11 +494,17 @@ export default function MatchStartShowcase({
             ) as HTMLVideoElement | null;
             const ss = cameraSession.getMediaStream?.();
             if (pv) {
-              const res = await ensureVideoPlays({ video: pv, stream: ss }).catch(
-                () => ({ played: false }),
-              );
+              const res = await ensureVideoPlays({
+                video: pv,
+                stream: ss,
+              }).catch(() => ({ played: false }));
               const hasVideoDims = !!pv.videoWidth && !!pv.videoHeight;
-              if (res.played && hasVideoDims && cameraSession.isStreaming && localCalibrationStatus === "verified") {
+              if (
+                res.played &&
+                hasVideoDims &&
+                cameraSession.isStreaming &&
+                localCalibrationStatus === "verified"
+              ) {
                 setPreviewReady(true);
                 setPreviewError(null);
                 stopped = true;
@@ -1027,12 +1033,30 @@ export default function MatchStartShowcase({
                                 <div className="absolute inset-0 flex items-center justify-center">
                                   <div className="text-center px-4 py-3 rounded-md bg-black/60 border border-white/10">
                                     <div className="flex items-center justify-center mb-2">
-                                      <svg className="animate-spin h-5 w-5 mr-2 text-white/80" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                      <svg
+                                        className="animate-spin h-5 w-5 mr-2 text-white/80"
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <circle
+                                          className="opacity-25"
+                                          cx="12"
+                                          cy="12"
+                                          r="10"
+                                          stroke="currentColor"
+                                          strokeWidth="4"
+                                        ></circle>
+                                        <path
+                                          className="opacity-75"
+                                          fill="currentColor"
+                                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                                        ></path>
                                       </svg>
                                       <div className="text-sm font-semibold text-white/90">
-                                        {previewError ? "Failed to link calibrated camera" : "Linking calibrated camera..."}
+                                        {previewError
+                                          ? "Failed to link calibrated camera"
+                                          : "Linking calibrated camera..."}
                                       </div>
                                     </div>
                                     <div className="text-xs text-white/70">
@@ -1051,7 +1075,9 @@ export default function MatchStartShowcase({
                                           Retry
                                         </button>
                                       ) : (
-                                        <span>Preparing video & calibration...</span>
+                                        <span>
+                                          Preparing video & calibration...
+                                        </span>
                                       )}
                                     </div>
                                   </div>

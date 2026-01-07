@@ -87,7 +87,7 @@ const TARGET_COLORS = ["#FF6B6B", "#4ECDC4", "#FFE66D", "#95E1D3", "#C7CEEA"];
 function getSavedCalibrations(): Array<{
   id: string;
   date: string;
-  errorPx: number;
+  errorPx: number | null;
   H: Homography;
   imageSize?: { w: number; h: number };
   overlaySize?: { w: number; h: number };
@@ -113,7 +113,9 @@ function saveCalibrationToHistory(
     const newEntry = {
       id: Date.now().toString(),
       date: new Date().toLocaleString(),
-      errorPx: errorPx ?? 0,
+      // IMPORTANT: keep null as null.
+      // Treating unknown error as 0 makes calibration look "perfect".
+      errorPx: typeof errorPx === "number" ? errorPx : null,
       H,
       ...(imageSize ? { imageSize } : {}),
       ...(overlaySize ? { overlaySize } : {}),
@@ -409,24 +411,23 @@ function calculateConfidence(
   const base = getGlobalCalibrationConfidence(errorPx);
   let percentage = typeof base === "number" ? base : 0;
 
-  // NEW: angle forgiveness – reward precise placement on the rings even if the
-  // camera is skewed. As long as the double/bull clicks are tight, boost the
-  // confidence toward 100% regardless of perspective distortion.
+  // Placement quality can at most NUDGE confidence upward.
+  // It must never force high confidence when perspective/errorPx is poor.
   if (quality.maxBoardMiss != null) {
-    const maxMiss = Math.min(quality.maxBoardMiss, 40);
+    const maxMiss = Math.min(Math.max(0, quality.maxBoardMiss), 40);
     const avgMiss = quality.avgBoardMiss ?? quality.maxBoardMiss;
+    const avgMissClamped =
+      avgMiss != null ? Math.min(Math.max(0, avgMiss), 40) : null;
 
-    const maxCloseness = Math.max(0, 1 - maxMiss / 40); // 0-1
-    const avgCloseness = Math.max(0, 1 - Math.min(avgMiss ?? maxMiss, 25) / 25);
-    const combinedCloseness = Math.max(maxCloseness, avgCloseness);
+    // A tight placement (very low miss distance) earns a small bonus.
+    // 0px miss => +4, 20px miss => +2, 40px miss => +0
+    const maxBonus = 4 * Math.max(0, 1 - maxMiss / 40);
+    const avgBonus =
+      avgMissClamped != null ? 4 * Math.max(0, 1 - avgMissClamped / 40) : 0;
 
-    const forgivenessFloor = 94 + combinedCloseness * 6; // 94-100 range
-    const extraBonus =
-      avgMiss != null ? (1 - Math.min(avgMiss, 15) / 15) * 2 : 0;
-
-    percentage = Math.max(percentage, forgivenessFloor + extraBonus);
-  } else {
-    percentage = Math.max(percentage, 95);
+    // Use the stronger signal but cap the total bonus.
+    const bonus = Math.min(4, Math.max(maxBonus, avgBonus));
+    percentage = percentage + bonus;
   }
 
   percentage = Math.min(100, Number(percentage.toFixed(1)));
@@ -522,6 +523,19 @@ export default function Calibrator() {
     targets.push({ x: 0, y: 0 }); // Bull center
     return targets;
   }, []);
+
+  const lockTargetsToEstimate = (estimate: {
+    cx: number;
+    cy: number;
+    radius: number;
+  }) => {
+    const pxPerMm = estimate.radius / BoardRadii.doubleOuter;
+    const overrides = canonicalTargets.map((target) => ({
+      x: estimate.cx + target.x * pxPerMm,
+      y: estimate.cy + target.y * pxPerMm,
+    }));
+    targetOverridesRef.current = overrides;
+  };
 
   // Initialize camera on mount AND enumerate devices
   useEffect(() => {
@@ -684,8 +698,11 @@ export default function Calibrator() {
 
       setCameraError(null);
 
-      const baseVideo: MediaTrackConstraints = {
+      const baseVideoWithDevice: MediaTrackConstraints = {
         deviceId: cameraId ? { exact: cameraId } : undefined,
+      };
+      const baseVideoNoDevice: MediaTrackConstraints = {
+        facingMode: "environment",
       };
       const q4k: MediaTrackConstraints = {
         width: { ideal: 3840 },
@@ -708,48 +725,84 @@ export default function Calibrator() {
         frameRate: { ideal: 30 },
       };
 
-      const tryGet = async (label: string, hints: MediaTrackConstraints) => {
-        console.log("Requesting camera stream:", label, {
-          ...baseVideo,
-          ...hints,
-        });
+      const cameraLowLatency =
+        useUserSettings.getState?.()?.cameraLowLatency ?? false;
+
+      const isRetryable = (e: any) => {
+        const name = String(e?.name || e?.code || "");
+        return (
+          name === "OverconstrainedError" ||
+          name === "NotFoundError" ||
+          name === "NotReadableError" ||
+          name === "NotSupportedError"
+        );
+      };
+
+      const tryGet = async (
+        label: string,
+        base: MediaTrackConstraints,
+        hints: MediaTrackConstraints,
+      ) => {
+        console.log("Requesting camera stream:", label, { ...base, ...hints });
         return navigator.mediaDevices.getUserMedia({
-          video: { ...baseVideo, ...hints },
+          video: { ...base, ...hints },
           audio: false,
         });
       };
 
-      const cameraLowLatency = useUserSettings((s) => s.cameraLowLatency) ?? false;
+      const getStreamRobust = async (): Promise<MediaStream> => {
+        const hintStack = cameraLowLatency
+          ? [
+              { label: "720p", hints: q720 },
+              { label: "1080p", hints: q1080 },
+              { label: "1440p", hints: q1440 },
+            ]
+          : [
+              { label: "4k", hints: q4k },
+              { label: "1440p", hints: q1440 },
+              { label: "1080p", hints: q1080 },
+              { label: "720p", hints: q720 },
+            ];
 
-      let mediaStream: MediaStream;
-      try {
-        if (cameraLowLatency) {
-          try {
-            mediaStream = await tryGet("720p", q720);
-          } catch (e720) {
-            console.warn("720p failed, falling back to 1080p:", e720);
+        // 1) Try with explicit deviceId (if provided)
+        if (cameraId) {
+          for (const step of hintStack) {
             try {
-              mediaStream = await tryGet("1080p", q1080);
-            } catch (e1080) {
-              console.warn("1080p failed, trying 1440p:", e1080);
-              mediaStream = await tryGet("1440p", q1440);
+              return await tryGet(
+                `${step.label} (device)`,
+                baseVideoWithDevice,
+                step.hints,
+              );
+            } catch (e) {
+              console.warn(`[Calibrator] ${step.label} (device) failed:`, e);
+              if (!isRetryable(e)) throw e;
             }
           }
-        } else {
-          mediaStream = await tryGet("4k", q4k);
         }
-      } catch (e) {
-        // If the preferred chain failed, attempt graceful fallbacks
-        try {
-          mediaStream = await tryGet("1440p", q1440);
-        } catch (e1440) {
+
+        // 2) Fallback without deviceId (use facingMode)
+        for (const step of hintStack) {
           try {
-            mediaStream = await tryGet("1080p", q1080);
-          } catch (e1080) {
-            mediaStream = await tryGet("720p", q720);
+            return await tryGet(
+              `${step.label} (fallback)`,
+              baseVideoNoDevice,
+              step.hints,
+            );
+          } catch (e) {
+            console.warn(`[Calibrator] ${step.label} (fallback) failed:`, e);
+            if (!isRetryable(e)) throw e;
           }
         }
-      }
+
+        // 3) Last resort: plain video: true
+        console.warn("[Calibrator] Falling back to video: true");
+        return navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      };
+
+      const mediaStream = await getStreamRobust();
 
       console.log("Got media stream:", {
         tracks: mediaStream.getTracks().length,
@@ -787,8 +840,10 @@ export default function Calibrator() {
       setCameraReady(true);
       console.log("Camera ready!");
 
-      // Save preference
-      localStorage.setItem("ndn-selected-camera", cameraId);
+      // Save preference (best-effort)
+      try {
+        localStorage.setItem("ndn-selected-camera", cameraId);
+      } catch {}
     } catch (err: any) {
       const errorMsg =
         err.message || "Camera access denied. Check permissions.";
@@ -1541,12 +1596,17 @@ export default function Calibrator() {
                   try {
                     const detection = detectBoard(detectCanvas);
                     if (detection?.success && detection.doubleOuter > 0) {
-                      boardEstimateRef.current = {
+                      const estimate = {
                         cx: detection.cx,
                         cy: detection.cy,
                         radius: detection.doubleOuter,
                         timestamp: now,
                       };
+                      boardEstimateRef.current = estimate;
+                      if (!autoPlacementFrozenRef.current) {
+                        freezeAutoPlacement();
+                        lockTargetsToEstimate(estimate);
+                      }
                     }
                   } catch (err) {
                     console.warn("Board detection failed", err);
@@ -2529,7 +2589,10 @@ export default function Calibrator() {
                             {cal.date}
                           </p>
                           <p className="text-xs text-slate-400 mt-1">
-                            Error: {cal.errorPx.toFixed(2)}px
+                            Error:{" "}
+                            {typeof cal.errorPx === "number"
+                              ? `${cal.errorPx.toFixed(2)}px`
+                              : "Unknown"}
                             {typeof cal.confidence === "number" && (
                               <span className="ml-2">
                                 · Confidence: {cal.confidence.toFixed(1)}%

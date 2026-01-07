@@ -33,7 +33,6 @@ import {
 } from "../store/profileStats";
 import { formatAvg } from "../utils/stats";
 import { apiFetch } from "../utils/api";
-import ThemeToggle from "./ThemeToggle";
 
 // Section component - defined outside to avoid recreation on every render
 const Section = ({

@@ -14,11 +14,26 @@ describe("ScoringAccuracyValidator metrics", () => {
     };
 
     // Two good detections
-    const good = { score: 60, ring: "TRIPLE", confidence: 0.9, boardPoint: { x: 0, y: 0 } } as any;
-    const good2 = { score: 20, ring: "SINGLE", confidence: 0.9, boardPoint: { x: 0, y: 0 } } as any;
+    const good = {
+      score: 60,
+      ring: "TRIPLE",
+      confidence: 0.9,
+      boardPoint: { x: 0, y: 0 },
+    } as any;
+    const good2 = {
+      score: 20,
+      ring: "SINGLE",
+      confidence: 0.9,
+      boardPoint: { x: 0, y: 0 },
+    } as any;
 
     // One bad detection (low confidence)
-    const bad = { score: 0, ring: "MISS", confidence: 0.2, boardPoint: { x: 0, y: 0 } } as any;
+    const bad = {
+      score: 0,
+      ring: "MISS",
+      confidence: 0.2,
+      boardPoint: { x: 0, y: 0 },
+    } as any;
 
     validator.validateScoring(good, calibration);
     validator.validateScoring(good2, calibration);

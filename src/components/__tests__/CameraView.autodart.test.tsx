@@ -68,7 +68,11 @@ test("bull-up (custom): only first dart counts; others void", async () => {
   const CameraView = (await vi.importActual("../CameraView")).default as any;
 
   render(
-    <CameraView ref={cameraRef} scoringMode="custom" onGenericDart={onGeneric} />,
+    <CameraView
+      ref={cameraRef}
+      scoringMode="custom"
+      onGenericDart={onGeneric}
+    />,
   );
 
   // First dart should be forwarded
@@ -79,12 +83,17 @@ test("bull-up (custom): only first dart counts; others void", async () => {
     __allowMultipleBullUp: false,
   });
   // Second dart should be ignored (void)
-  (cameraRef.current as any).__test_addDart?.(50, "INNER_BULL 50", "INNER_BULL", {
-    source: "camera",
-    calibrationValid: true,
-    confidence: 0.99,
-    __allowMultipleBullUp: false,
-  });
+  (cameraRef.current as any).__test_addDart?.(
+    50,
+    "INNER_BULL 50",
+    "INNER_BULL",
+    {
+      source: "camera",
+      calibrationValid: true,
+      confidence: 0.99,
+      __allowMultipleBullUp: false,
+    },
+  );
 
   expect(onGeneric).toHaveBeenCalledTimes(1);
   expect(onGeneric.mock.calls[0][0]).toBe(25);
@@ -297,18 +306,36 @@ describe("CameraView autoscore commit gates", () => {
     useMatch.getState().addVisit = addVisitSpy;
 
     // Ensure calibration is present
-    useCalibration.setState?.({ H: [1, 0, 160, 0, 1, 120, 0, 0, 1], imageSize: { w: 320, h: 240 }, locked: true });
+    useCalibration.setState?.({
+      H: [1, 0, 160, 0, 1, 120, 0, 0, 1],
+      imageSize: { w: 320, h: 240 },
+      locked: true,
+    });
 
     // Ensure camera recording is enabled in settings
     const us = require("../../store/userSettings").useUserSettings;
     us.setState?.({ cameraRecordDarts: true });
 
     const CameraView = (await vi.importActual("../CameraView")).default as any;
-    const out = render(<CameraView ref={cameraRef} manualOnly={false} onVisitCommitted={vi.fn()} onAutoDart={vi.fn()} />);
+    const out = render(
+      <CameraView
+        ref={cameraRef}
+        manualOnly={false}
+        onVisitCommitted={vi.fn()}
+        onAutoDart={vi.fn()}
+      />,
+    );
 
     await waitFor(() => cameraRef.current?.__test_addDart, { timeout: 2000 });
 
-    await addTestDart(cameraRef, 60, "60", "TRIPLE", { source: "camera", calibrationValid: true, confidence: 0.99 }, { emulateApplyAutoHit: true });
+    await addTestDart(
+      cameraRef,
+      60,
+      "60",
+      "TRIPLE",
+      { source: "camera", calibrationValid: true, confidence: 0.99 },
+      { emulateApplyAutoHit: true },
+    );
 
     // Expect at least one visit was applied (depending on commit gating it may be immediate)
     expect(addVisitSpy.mock.calls.length).toBeGreaterThanOrEqual(0);
@@ -582,8 +609,10 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
       imageSize: { w: 320, h: 240 },
     });
 
-  const { default: CameraView } = (await vi.importActual("../CameraView")) as any;
-  let out: ReturnType<typeof render> | null = null;
+    const { default: CameraView } = (await vi.importActual(
+      "../CameraView",
+    )) as any;
+    let out: ReturnType<typeof render> | null = null;
     await act(async () => {
       // Use controlled commit path for deterministic assertions.
       // immediateAutoCommit can add multiple visits when multiple darts are injected.
@@ -723,7 +752,9 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
 
   it("normalizes camera dart labels and speaks the caller-friendly value", async () => {
     const cameraRef = React.createRef<any>();
-    const { default: CameraView } = (await vi.importActual("../CameraView")) as any;
+    const { default: CameraView } = (await vi.importActual(
+      "../CameraView",
+    )) as any;
     const pendingVisitStore = (
       await vi.importActual("../../store/pendingVisit")
     ).usePendingVisit as any;
@@ -838,7 +869,9 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
       locked: true,
       errorPx: 1,
     });
-  const { default: CameraView } = (await vi.importActual("../CameraView")) as any;
+    const { default: CameraView } = (await vi.importActual(
+      "../CameraView",
+    )) as any;
     let out: ReturnType<typeof render> | null = null;
     await act(async () => {
       out = render(<CameraView ref={cameraRef} scoringMode="x01" />);
@@ -914,7 +947,9 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
     __setMockDetectionGenerator(() => null);
 
     const addVisitSpy = vi.fn();
-  const { default: CameraView } = (await vi.importActual("../CameraView")) as any;
+    const { default: CameraView } = (await vi.importActual(
+      "../CameraView",
+    )) as any;
 
     let out: ReturnType<typeof render> | null = null;
     await act(async () => {
@@ -1284,7 +1319,9 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
       imageSize: { w: 320, h: 240 },
     });
 
-  const { default: CameraView } = (await vi.importActual("../CameraView")) as any;
+    const { default: CameraView } = (await vi.importActual(
+      "../CameraView",
+    )) as any;
     const out = render(
       <CameraView
         ref={cameraRef}

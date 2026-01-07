@@ -99,8 +99,8 @@ export default function Drawer({
           setPanelTop(null);
           return;
         }
-  const rect = header.getBoundingClientRect();
-  const top = Math.ceil(rect.bottom) + 10; // 10px breathing room
+        const rect = header.getBoundingClientRect();
+        const top = Math.ceil(rect.bottom) + 10; // 10px breathing room
         setPanelTop(top);
       } catch (e) {
         setPanelTop(null);
@@ -112,7 +112,8 @@ export default function Drawer({
     window.addEventListener("orientationchange", updateTop);
     const obs = new MutationObserver(updateTop);
     const hdr = document.getElementById("ndn-header");
-    if (hdr) obs.observe(hdr, { attributes: true, childList: true, subtree: true });
+    if (hdr)
+      obs.observe(hdr, { attributes: true, childList: true, subtree: true });
     return () => {
       window.removeEventListener("resize", updateTop);
       window.removeEventListener("orientationchange", updateTop);
@@ -148,12 +149,16 @@ export default function Drawer({
         `}
         style={
           panelTop && side !== "bottom"
-            ? { top: `${panelTop}px`, height: `calc(100% - ${panelTop}px)`, width: typeof width === "number" ? `${width}px` : width }
+            ? {
+                top: `${panelTop}px`,
+                height: `calc(100% - ${panelTop}px)`,
+                width: typeof width === "number" ? `${width}px` : width,
+              }
             : side === "bottom"
-            ? { width: typeof width === "number" ? `${width}px` : width }
-            : typeof width === "number"
-            ? { width: `${width}px` }
-            : { width }
+              ? { width: typeof width === "number" ? `${width}px` : width }
+              : typeof width === "number"
+                ? { width: `${width}px` }
+                : { width }
         }
         aria-modal="true"
         onTouchStart={onTouchStart}
