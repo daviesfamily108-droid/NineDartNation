@@ -1035,7 +1035,8 @@ export default function MatchStartShowcase({
                               {/* Preview readiness overlay: show while we attempt to link a playing calibrated feed */}
                               {!previewReady && (
                                 <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="text-center px-4 py-3 rounded-md bg-black/60 border border-white/10">
+                                  <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
+                                  <div className="relative text-center px-4 py-3 rounded-md bg-black/60 border border-white/10">
                                     <div className="flex items-center justify-center mb-2">
                                       <svg
                                         className="animate-spin h-5 w-5 mr-2 text-white/80"
