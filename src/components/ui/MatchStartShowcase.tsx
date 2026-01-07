@@ -352,6 +352,8 @@ export default function MatchStartShowcase({
   const [playerCalibrations, setPlayerCalibrations] = useState<{
     [playerName: string]: any;
   }>({});
+  const [previewReady, setPreviewReady] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
   const startNowRef = useRef<HTMLButtonElement | null>(null);
@@ -474,6 +476,49 @@ export default function MatchStartShowcase({
           }),
         ).catch(() => {});
       }
+
+      // Attempt to ensure the preview is fully linked with a calibrated feed
+      // Poll for a short while and set previewReady when we have a playing video
+      // with dimensions and the calibration status is verified. This helps the
+      // pre-game overlay show a ready calibrated preview instead of a black box.
+      try {
+        let stopped = false;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 12; // ~6s
+        const tryLink = async () => {
+          if (stopped) return;
+          attempts += 1;
+          try {
+            const pv = previewContainerRef.current?.querySelector?.(
+              "video",
+            ) as HTMLVideoElement | null;
+            const ss = cameraSession.getMediaStream?.();
+            if (pv) {
+              const res = await ensureVideoPlays({ video: pv, stream: ss }).catch(
+                () => ({ played: false }),
+              );
+              const hasVideoDims = !!pv.videoWidth && !!pv.videoHeight;
+              if (res.played && hasVideoDims && cameraSession.isStreaming && localCalibrationStatus === "verified") {
+                setPreviewReady(true);
+                setPreviewError(null);
+                stopped = true;
+                return;
+              }
+            }
+          } catch (e) {
+            // ignore and retry
+          }
+          if (attempts >= MAX_ATTEMPTS) {
+            setPreviewReady(false);
+            setPreviewError("timed out");
+            stopped = true;
+            return;
+          }
+          if (!stopped) setTimeout(tryLink, 500);
+        };
+        // start polling
+        tryLink();
+      } catch {}
     } catch {}
 
     try {
@@ -976,6 +1021,42 @@ export default function MatchStartShowcase({
                                 tileFitModeOverride="fit"
                                 scale={1}
                               />
+
+                              {/* Preview readiness overlay: show while we attempt to link a playing calibrated feed */}
+                              {!previewReady && (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="text-center px-4 py-3 rounded-md bg-black/60 border border-white/10">
+                                    <div className="flex items-center justify-center mb-2">
+                                      <svg className="animate-spin h-5 w-5 mr-2 text-white/80" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                                      </svg>
+                                      <div className="text-sm font-semibold text-white/90">
+                                        {previewError ? "Failed to link calibrated camera" : "Linking calibrated camera..."}
+                                      </div>
+                                    </div>
+                                    <div className="text-xs text-white/70">
+                                      {previewError ? (
+                                        <button
+                                          className="btn btn-ghost btn-sm"
+                                          onClick={() => {
+                                            setPreviewError(null);
+                                            setPreviewReady(false);
+                                            // kick off another attempt by toggling camera enabled
+                                            try {
+                                              setCameraEnabled(true);
+                                            } catch {}
+                                          }}
+                                        >
+                                          Retry
+                                        </button>
+                                      ) : (
+                                        <span>Preparing video & calibration...</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
 
                             {DEV && previewDiag && (

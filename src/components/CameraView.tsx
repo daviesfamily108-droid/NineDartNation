@@ -235,6 +235,22 @@ type DetectionLogEntry = {
   ready: boolean;
   accepted: boolean;
   warmup: boolean;
+  // If present, explains why the hit was not accepted/committed.
+  // Useful for diagnosing missed darts.
+  rejectReason?:
+    | "below-confidence"
+    | "calibration-invalid"
+    | "tip-outside-video"
+    | "pCal-outside-image"
+    | "off-board"
+    | "ghost"
+    | "not-settled"
+    | "unstable-tip"
+    | "candidate-hold"
+    | "cooldown"
+    | "warmup"
+    | string
+    | null;
   pCal?: Point;
   tip?: Point;
   frame?: string | null; // small dataURL thumbnail for quick review
@@ -344,6 +360,8 @@ export default forwardRef(function CameraView(
   const cameraAspect = useUserSettings((s) => s.cameraAspect);
   const cameraFitMode = useUserSettings((s) => s.cameraFitMode);
   const cameraScale = useUserSettings((s) => s.cameraScale);
+  const cameraLowLatency = useUserSettings((s) => s.cameraLowLatency) ?? false;
+  const cameraProcessingFps = useUserSettings((s) => s.cameraProcessingFps) ?? 15;
   const autoCommitMode =
     useUserSettings((s) => s.autoCommitMode) ?? "wait-for-clear";
   const confirmUncertainDarts =
@@ -1444,6 +1462,7 @@ export default forwardRef(function CameraView(
   // Built-in CV detector
   const detectorRef = useRef<DartDetector | null>(null);
   const rafRef = useRef<number | null>(null);
+  const lastProcessedRef = useRef<number>(0);
   const lastAutoSigRef = useRef<string | null>(null);
   const lastAutoSigAtRef = useRef<number>(0);
   const lastParentSigRef = useRef<string | null>(null);
@@ -1859,6 +1878,11 @@ export default forwardRef(function CameraView(
         height: { ideal: 1080 },
         frameRate: { ideal: 30 },
       };
+      const qualityHints720p: MediaTrackConstraints = {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 },
+      };
       const baseVideo: MediaTrackConstraints = preferredCameraId
         ? { deviceId: { exact: preferredCameraId } }
         : { facingMode: "environment" };
@@ -1877,18 +1901,33 @@ export default forwardRef(function CameraView(
 
       let stream: MediaStream;
       try {
-        try {
-          stream = await tryGetStream(qualityHints4k, "4k");
-        } catch (err4k: any) {
-          console.warn("[CAMERA] 4K request failed, trying 1440p:", err4k);
+  // If user prefers low-latency, attempt 720p first to reduce CPU/bandwidth
+  if (cameraLowLatency) {
           try {
-            stream = await tryGetStream(qualityHints1440p, "1440p");
-          } catch (err1440: any) {
-            console.warn(
-              "[CAMERA] 1440p request failed, trying 1080p:",
-              err1440,
-            );
-            stream = await tryGetStream(qualityHints1080p, "1080p");
+            stream = await tryGetStream(qualityHints720p, "720p");
+          } catch (e720: any) {
+            console.warn("[CAMERA] 720p request failed, falling back:", e720);
+            try {
+              stream = await tryGetStream(qualityHints1080p, "1080p");
+            } catch (err1080: any) {
+              console.warn("[CAMERA] 1080p failed, trying 1440p:", err1080);
+              stream = await tryGetStream(qualityHints1440p, "1440p");
+            }
+          }
+        } else {
+          try {
+            stream = await tryGetStream(qualityHints4k, "4k");
+          } catch (err4k: any) {
+            console.warn("[CAMERA] 4K request failed, trying 1440p:", err4k);
+            try {
+              stream = await tryGetStream(qualityHints1440p, "1440p");
+            } catch (err1440: any) {
+              console.warn(
+                "[CAMERA] 1440p request failed, trying 1080p:",
+                err1440,
+              );
+              stream = await tryGetStream(qualityHints1080p, "1080p");
+            }
           }
         }
         dlog("[CAMERA] Got stream:", !!stream);
@@ -2773,6 +2812,17 @@ export default forwardRef(function CameraView(
     }
 
     const tick = () => {
+      // throttle detection processing to configured FPS to reduce CPU usage
+      try {
+        const now = performance.now();
+        const interval = 1000 / (cameraProcessingFps || 15);
+        if (now - lastProcessedRef.current < interval) {
+          rafRef.current = requestAnimationFrame(tick);
+          tickRef.current = tick;
+          return;
+        }
+        lastProcessedRef.current = now;
+      } catch (e) {}
       let didApplyHitThisTick = false;
       if (process.env.NODE_ENV === "test") {
         try {
@@ -3035,6 +3085,7 @@ export default forwardRef(function CameraView(
                 ready: false,
                 accepted: false,
                 warmup: false,
+                rejectReason: "below-confidence",
                 pCal,
                 tip: tipRefined,
               });
@@ -3059,6 +3110,10 @@ export default forwardRef(function CameraView(
             let value = 0;
             let ring: Ring = "MISS" as Ring;
             let shouldAccept = false;
+
+            // Track why we *didn't* accept/commit a detection so users can debug
+            // missed darts quickly.
+            let rejectReason: string | null = null;
 
             // Track tip stability (low jitter across frames).
             // We do this in video pixel space for simplicity.
@@ -3385,167 +3440,46 @@ export default forwardRef(function CameraView(
                   pulseTimeoutRef.current = null;
                 }, 1500);
                 try {
-                  // If a parent provided an onAutoDart handler, prefer notifying it
-                  // and let the parent decide whether to apply the dart (to avoid
-                  // double-commits when both CameraView and parent add the dart).
-                  if (cameraAutoCommit === "camera") {
-                    // Camera is authoritative: commit locally unless the parent explicitly
-                    // ACKs ownership by returning true from onAutoDart. We'll prefer the
-                    // parent's ack if provided to avoid double-commits.
-                    let parentAck = false;
-                    if (onAutoDart) {
-                      try {
-                        const pSig = sig;
-                        const pNow = performance.now();
-                        if (
-                          !(
-                            pSig === lastParentSigRef.current &&
-                            pNow - lastParentSigAtRef.current <
-                              AUTO_COMMIT_COOLDOWN_MS
-                          )
-                        ) {
-                          const result = await Promise.resolve(
-                            onAutoDart(candidate.value, candidate.ring, {
-                              sector: candidate.sector,
-                              mult: candidate.mult,
-                              calibrationValid: true,
-                              pBoard,
-                            }),
-                          );
-                          if (result) {
-                            parentAck = true;
-                            lastParentSigRef.current = pSig;
-                            lastParentSigAtRef.current = pNow;
-                          }
-                        }
-                      } catch (e) {}
+                  // Option A: Camera is the single authoritative committer.
+                  // We always commit locally (exactly once) and treat onAutoDart as
+                  // telemetry/UI only. This guarantees a stable, deterministic
+                  // dart counting sequence and avoids double-commit races.
+                  try {
+                    dlog(
+                      "CameraView: committing locally (camera authoritative)",
+                      candidate.value,
+                      candidate.label,
+                      candidate.ring,
+                    );
+                    addDart(candidate.value, candidate.label, candidate.ring, {
+                      calibrationValid: true,
+                      pBoard,
+                      source: "camera",
+                    });
+                  } catch (e) {}
+
+                  // Best-effort notify parent for UI/telemetry, but never allow it
+                  // to ACK ownership or influence commits.
+                  try {
+                    const pSig = sig;
+                    const pNow = performance.now();
+                    if (
+                      onAutoDart &&
+                      !(
+                        pSig === lastParentSigRef.current &&
+                        pNow - lastParentSigAtRef.current < AUTO_COMMIT_COOLDOWN_MS
+                      )
+                    ) {
+                      onAutoDart(candidate.value, candidate.ring, {
+                        sector: candidate.sector,
+                        mult: candidate.mult,
+                        calibrationValid: true,
+                        pBoard,
+                      });
+                      lastParentSigRef.current = pSig;
+                      lastParentSigAtRef.current = pNow;
                     }
-                    if (!parentAck) {
-                      try {
-                        dlog(
-                          "CameraView: cameraAutoCommit committing locally",
-                          candidate.value,
-                          candidate.label,
-                          candidate.ring,
-                        );
-                        // Always add dart to the pending visit; cameraRecordDarts only
-                        // controls whether we save preview thumbnails or forward the
-                        // preview, not whether autoscore commits occur.
-                        addDart(
-                          candidate.value,
-                          candidate.label,
-                          candidate.ring,
-                          {
-                            calibrationValid: true,
-                            pBoard,
-                            source: "camera",
-                          },
-                        );
-                      } catch (e) {}
-                    }
-                    // Camera auto-commit MUST NOT force immediate visit commits.
-                    // We always route through the normal visit pipeline (pending darts +
-                    // wait-for-clear) unless the explicit immediate flags are enabled.
-                    // still optionally notify parent for telemetry (but parent should not commit)
-                    try {
-                      const pSig = sig;
-                      const pNow = performance.now();
-                      if (
-                        !onAutoDart ||
-                        (pSig === lastParentSigRef.current &&
-                          pNow - lastParentSigAtRef.current <
-                            AUTO_COMMIT_COOLDOWN_MS)
-                      ) {
-                        // skip
-                      } else {
-                        if (onAutoDart)
-                          onAutoDart(candidate.value, candidate.ring, {
-                            sector: candidate.sector,
-                            mult: candidate.mult,
-                            calibrationValid: true,
-                            pBoard,
-                          });
-                        lastParentSigRef.current = pSig;
-                        lastParentSigAtRef.current = pNow;
-                      }
-                    } catch (e) {}
-                  } else if (cameraAutoCommit === "parent") {
-                    let ack = false;
-                    if (onAutoDart) {
-                      try {
-                        const pSig = sig;
-                        const pNow = performance.now();
-                        if (
-                          !(
-                            pSig === lastParentSigRef.current &&
-                            pNow - lastParentSigAtRef.current <
-                              AUTO_COMMIT_COOLDOWN_MS
-                          )
-                        ) {
-                          ack = Boolean(
-                            await Promise.resolve(
-                              onAutoDart(candidate.value, candidate.ring, {
-                                sector: candidate.sector,
-                                mult: candidate.mult,
-                                calibrationValid: true,
-                                pBoard,
-                              }),
-                            ),
-                          );
-                          if (ack) {
-                            lastParentSigRef.current = pSig;
-                            lastParentSigAtRef.current = pNow;
-                          }
-                        }
-                      } catch (e) {}
-                    }
-                    if (!ack) {
-                      // Parent did not ACK; commit locally
-                      addDart(
-                        candidate.value,
-                        candidate.label,
-                        candidate.ring,
-                        { calibrationValid: true, pBoard, source: "camera" },
-                      );
-                    }
-                    // if we got an ack from parent, record that we notified the parent so we don't spam
-                    if (ack) {
-                      lastParentSigRef.current = sig;
-                      lastParentSigAtRef.current = performance.now();
-                    }
-                  } /* both */ else {
-                    // Commit both (dedupe will avoid double commit) and notify parent
-                    try {
-                      addDart(
-                        candidate.value,
-                        candidate.label,
-                        candidate.ring,
-                        { calibrationValid: true, pBoard, source: "camera" },
-                      );
-                    } catch (e) {}
-                    try {
-                      const pSig = sig;
-                      const pNow = performance.now();
-                      if (
-                        !onAutoDart ||
-                        (pSig === lastParentSigRef.current &&
-                          pNow - lastParentSigAtRef.current <
-                            AUTO_COMMIT_COOLDOWN_MS)
-                      ) {
-                        // skip
-                      } else {
-                        if (onAutoDart)
-                          onAutoDart(candidate.value, candidate.ring, {
-                            sector: candidate.sector,
-                            mult: candidate.mult,
-                            calibrationValid: true,
-                            pBoard,
-                          });
-                        lastParentSigRef.current = pSig;
-                        lastParentSigAtRef.current = pNow;
-                      }
-                    } catch (e) {}
-                  }
+                  } catch (e) {}
                 } catch (e) {}
               } else {
                 setHadRecentAuto(false);
@@ -3577,6 +3511,15 @@ export default forwardRef(function CameraView(
                 autoCandidateRef.current = null;
                 setHadRecentAuto(false);
                 shouldAccept = false;
+                rejectReason = !calibrationGood
+                  ? "calibration-invalid"
+                  : !tipInVideo
+                    ? "tip-outside-video"
+                    : !pCalInImage
+                      ? "pCal-outside-image"
+                      : !_onBoard
+                        ? "off-board"
+                        : "ghost";
                 // Still publish to parent so UI can show the detection log but skip commits
                 try {
                   if (onAutoDart)
@@ -3598,6 +3541,7 @@ export default forwardRef(function CameraView(
                   ready: false,
                   accepted: false,
                   warmup: warmupActive,
+                  rejectReason,
                 });
               } else {
                 // Reliability hard gate: require settle + stability for *non-miss* candidates.
@@ -3622,6 +3566,11 @@ export default forwardRef(function CameraView(
                   // the auto-commit candidate count.
                   if (!allowCommitCandidate) {
                     shouldAccept = false;
+                    rejectReason = !settled
+                      ? "not-settled"
+                      : !tipStable
+                        ? "unstable-tip"
+                        : "not-ready";
                     captureDetectionLog({
                       ts: nowPerf,
                       label,
@@ -3633,6 +3582,7 @@ export default forwardRef(function CameraView(
                       ready: false,
                       accepted: false,
                       warmup: warmupActive,
+                      rejectReason,
                     });
                   } else {
                     const existing = autoCandidateRef.current;
@@ -3677,6 +3627,14 @@ export default forwardRef(function CameraView(
                       autoCandidateRef.current = null;
                       lastAutoCommitRef.current = nowPerf;
                       shouldAccept = true;
+                      rejectReason = null;
+                    } else {
+                      // Still tracking candidate; annotate why we didn't commit yet.
+                      rejectReason = !ready
+                        ? "candidate-hold"
+                        : !cooled
+                          ? "cooldown"
+                          : null;
                     }
                   }
                 }
@@ -3684,6 +3642,7 @@ export default forwardRef(function CameraView(
             } else {
               autoCandidateRef.current = null;
               shouldAccept = true;
+              rejectReason = "warmup";
             }
 
             captureDetectionLog({
@@ -3697,6 +3656,7 @@ export default forwardRef(function CameraView(
               ready: shouldAccept,
               accepted: shouldAccept && value > 0 && ring !== "MISS",
               warmup: warmupActive,
+              rejectReason,
             });
             if (process.env.NODE_ENV === "test") {
               try {
@@ -3707,6 +3667,7 @@ export default forwardRef(function CameraView(
                   didApplyHitThisTick,
                   warmupActive,
                   autoCandidate: autoCandidateRef.current,
+                  rejectReason,
                 });
               } catch (e) {}
             }
@@ -3771,65 +3732,9 @@ export default forwardRef(function CameraView(
 
             if (shouldAccept && !didApplyHitThisTick) {
               detector.accept(frame, det);
-              // Strictly prefer camera committing when set to 'camera'. If parent has an onAutoDart
-              // handler we allow an ack to prevent duplicate commits; otherwise camera will assume commit.
-              try {
-                // If parent provided an onAutoDart handler that synchronously ACKs, prefer it
-                // and skip local commit to avoid double insertion. This keeps the API
-                // deterministic for callers that immediately accept ownership of a hit.
-                let skipLocalCommit = false;
-                if (onAutoDart) {
-                  try {
-                    const pSig = `${value}|${ring}|${mult}`;
-                    const pNow = performance.now();
-                    if (
-                      !(
-                        pSig === lastParentSigRef.current &&
-                        pNow - lastParentSigAtRef.current <
-                          AUTO_COMMIT_COOLDOWN_MS
-                      )
-                    ) {
-                      const maybe = onAutoDart(value, ring, {
-                        sector,
-                        mult,
-                        calibrationValid: Boolean(calibrationGood),
-                        pBoard: calibrationGood ? pBoard : null,
-                      });
-                      // If the handler returns a boolean true synchronously, treat as ACK.
-                      if (maybe === true) {
-                        lastParentSigRef.current = pSig;
-                        lastParentSigAtRef.current = pNow;
-                        // Skip local commit
-                        skipLocalCommit = true;
-                      }
-                    }
-                  } catch (e) {}
-                }
-                if (process.env.NODE_ENV === "test") {
-                  try {
-                    dlog("CameraView: pre-applyAutoHit", {
-                      value,
-                      ring,
-                      shouldAccept,
-                      didApplyHitThisTick,
-                      lastAutoCommitRef: lastAutoCommitRef.current,
-                      lastAutoSig: lastAutoSigRef.current,
-                    });
-                  } catch (e) {}
-                }
-                // Do not await here; applyAutoHit handles async ack internally.
-                if (!skipLocalCommit) {
-                  void applyAutoHit({
-                    value,
-                    ring,
-                    label,
-                    sector,
-                    mult,
-                    firstTs: nowPerf,
-                    frames: 1,
-                  });
-                }
-              } catch (e) {}
+              // Important: auto-commit must happen only through the candidate
+              // ready/cooled gate above. Calling applyAutoHit here can cause
+              // duplicates and ordering glitches during jittery detections.
             }
           } else {
             if (
@@ -3873,6 +3778,7 @@ export default forwardRef(function CameraView(
     captureDetectionLog,
     videoReady, // Re-run when video becomes ready
     isDocumentVisible,
+    cameraProcessingFps,
   ]);
 
   const handleUseLocalCamera = useCallback(async () => {

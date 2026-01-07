@@ -62,6 +62,10 @@ type SettingsState = {
   hideCameraOverlay: boolean;
   // Show segment labels (e.g., 'T20') in UI/detection logs. Some users prefer numeric-only.
   cameraShowLabels?: boolean;
+  // Reduce resolution + processing for lower-latency preview (good for slow devices)
+  cameraLowLatency?: boolean;
+  // Processing FPS used by the detection loop (frames/sec). Lower reduces CPU and latency.
+  cameraProcessingFps?: number;
   // When true, allow the camera detector to add/record darts automatically.
   // Some users prefer to use the camera for detection/counting only without
   // committing darts to visits automatically.
@@ -107,6 +111,8 @@ type SettingsState = {
   setCameraEnabled: (v: boolean) => void;
   setHideCameraOverlay: (v: boolean) => void;
   setCameraShowLabels: (v: boolean) => void;
+  setCameraLowLatency: (v: boolean) => void;
+  setCameraProcessingFps: (n: number) => void;
   setCameraRecordDarts: (v: boolean) => void;
   setIgnorePreferredCameraSync: (v: boolean) => void;
   setOfflineLayout: (mode: "classic" | "modern") => void;
@@ -159,6 +165,8 @@ function load(): Pick<
   | "cameraFitMode"
   | "cameraRecordDarts"
   | "cameraShowLabels"
+  | "cameraLowLatency"
+  | "cameraProcessingFps"
   | "calibrationGuide"
   | "calibrationUseRansac"
   | "preserveCalibrationOverlay"
@@ -211,11 +219,13 @@ function load(): Pick<
         reducedMotion: false,
         compactHeader: false,
         allowSpectate: true,
-    cameraScale: 1.0,
-    cameraAspect: "wide",
-    cameraFitMode: "fit",
-    cameraRecordDarts: false,
-    cameraShowLabels: false,
+  cameraScale: 1.0,
+  cameraAspect: "wide",
+  cameraFitMode: "fit",
+  cameraRecordDarts: false,
+  cameraShowLabels: false,
+  cameraLowLatency: false,
+  cameraProcessingFps: 15,
         calibrationGuide: true,
         preferredCameraId: undefined,
         preferredCameraLabel: undefined,
@@ -650,6 +660,16 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     const next = !!v;
     save({ cameraRecordDarts: next } as any);
     set({ cameraRecordDarts: next } as any);
+  },
+  setCameraLowLatency: (v: boolean) => {
+    const next = !!v;
+    save({ cameraLowLatency: next } as any);
+    set({ cameraLowLatency: next } as any);
+  },
+  setCameraProcessingFps: (n: number) => {
+    const s = Math.max(5, Math.min(30, Math.round(n)));
+    save({ cameraProcessingFps: s } as any);
+    set({ cameraProcessingFps: s } as any);
   },
   setOfflineLayout: (mode) => {
     save({ offlineLayout: mode });

@@ -5,7 +5,7 @@ const fallbackRemoteEnv =
   ((import.meta as any)?.env?.VITE_REMOTE_API_FALLBACK as string | undefined) ||
   "";
 const REMOTE_API_FALLBACK = (
-  fallbackRemoteEnv.trim() || "https://ninedartnation.onrender.com"
+  fallbackRemoteEnv.trim() || "https://ninedartnation-1.onrender.com"
 ).replace(/\/$/, "");
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
 
@@ -37,12 +37,12 @@ function computeApiBase(): string {
     ) {
       cachedBaseUrl = sameOrigin.replace(/\/$/, "");
     } else {
-      cachedBaseUrl = "https://ninedartnation.onrender.com";
+      cachedBaseUrl = REMOTE_API_FALLBACK;
     }
     return cachedBaseUrl;
   }
   // Fallback for build/test environments without window
-  cachedBaseUrl = "https://ninedartnation.onrender.com";
+  cachedBaseUrl = REMOTE_API_FALLBACK;
   return cachedBaseUrl;
 }
 

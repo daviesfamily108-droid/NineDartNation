@@ -81,6 +81,10 @@ export default function SettingsPanel({ user }: { user?: any }) {
     setEnhanceBigTrebles,
   setCameraRecordDarts,
   setCameraShowLabels,
+  cameraLowLatency,
+  setCameraLowLatency,
+  cameraProcessingFps,
+  setCameraProcessingFps,
     setCalibrationGuide: _setCalibrationGuide,
     preserveCalibrationOverlay,
     setPreserveCalibrationOverlay,
@@ -1095,6 +1099,39 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           }
                           className="w-full"
                         />
+                      </div>
+                      <div className="mt-3">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            id="cameraLowLatency"
+                            checked={!!cameraLowLatency}
+                            onChange={(e) => setCameraLowLatency(e.target.checked)}
+                            className="w-4 h-4"
+                          />
+                          <label htmlFor="cameraLowLatency" className="text-sm">
+                            Low-latency camera (prefer 720p & lower CPU)
+                          </label>
+                        </div>
+                        <p className="text-xs opacity-70 mt-1">
+                          Reduces preview resolution and throttles detection to
+                          improve responsiveness on slower devices.
+                        </p>
+
+                        <div className="mt-2">
+                          <label className="text-sm block mb-1">Detection FPS</label>
+                          <select
+                            value={cameraProcessingFps}
+                            onChange={(e) => setCameraProcessingFps(Number(e.target.value))}
+                            className="text-sm"
+                          >
+                            <option value={10}>10 fps (very low)</option>
+                            <option value={15}>15 fps (balanced)</option>
+                            <option value={20}>20 fps (smooth)</option>
+                            <option value={30}>30 fps (high)</option>
+                          </select>
+                          <p className="text-xs opacity-70 mt-1">Lower FPS reduces CPU usage and improves stability on laggy feeds.</p>
+                        </div>
                       </div>
                       <div>
                         <label

@@ -15,8 +15,9 @@
     "e2e:calibrate": "node scripts/e2e_calibration.cjs",
     "e2e:ui-smoke": "node scripts/e2e_ui_smoke.cjs",
     "test:redis": "node scripts/test_redis.cjs",
-    "test:unit": "vitest run",
-    "test:integration": "cross-env NDN_RUNINTEGRATION=1 vitest run src/server/__tests__/autocommit.integration.test.ts",
+    "test:unit": "cross-env NODE_NO_WARNINGS=1 vitest run",
+  "test:unit:quiet": "cross-env NODE_NO_WARNINGS=1 vitest run --reporter=dot",
+    "test:integration": "cross-env NODE_NO_WARNINGS=1 NDN_RUNINTEGRATION=1 vitest run src/server/__tests__/autocommit.integration.test.ts",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "generate:icons": "node scripts/generate-icons.cjs"

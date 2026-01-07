@@ -692,6 +692,11 @@ export default function Calibrator() {
         height: { ideal: 2160 },
         frameRate: { ideal: 30 },
       };
+      const q720: MediaTrackConstraints = {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 },
+      };
       const q1440: MediaTrackConstraints = {
         width: { ideal: 2560 },
         height: { ideal: 1440 },
@@ -714,16 +719,35 @@ export default function Calibrator() {
         });
       };
 
+      const cameraLowLatency = useUserSettings((s) => s.cameraLowLatency) ?? false;
+
       let mediaStream: MediaStream;
       try {
-        mediaStream = await tryGet("4k", q4k);
-      } catch (e4k) {
-        console.warn("4K calibration request failed; trying 1440p", e4k);
+        if (cameraLowLatency) {
+          try {
+            mediaStream = await tryGet("720p", q720);
+          } catch (e720) {
+            console.warn("720p failed, falling back to 1080p:", e720);
+            try {
+              mediaStream = await tryGet("1080p", q1080);
+            } catch (e1080) {
+              console.warn("1080p failed, trying 1440p:", e1080);
+              mediaStream = await tryGet("1440p", q1440);
+            }
+          }
+        } else {
+          mediaStream = await tryGet("4k", q4k);
+        }
+      } catch (e) {
+        // If the preferred chain failed, attempt graceful fallbacks
         try {
           mediaStream = await tryGet("1440p", q1440);
         } catch (e1440) {
-          console.warn("1440p calibration request failed; trying 1080p", e1440);
-          mediaStream = await tryGet("1080p", q1080);
+          try {
+            mediaStream = await tryGet("1080p", q1080);
+          } catch (e1080) {
+            mediaStream = await tryGet("720p", q720);
+          }
         }
       }
 

@@ -38,6 +38,10 @@ import "@testing-library/jest-dom";
 import React from "react";
 import { vi } from "vitest";
 import { afterEach } from "vitest";
+import { installTestLogSilencer } from "./utils/testLogSilencer";
+
+// Keep unit test output small/stable (prevents chat/terminal crashes due to massive logs)
+installTestLogSilencer();
 
 // Provide a small helper to globally silence noisy, known harmless warnings if desired
 // (OPTIONAL) You can add additional filters or transforms here in the future.

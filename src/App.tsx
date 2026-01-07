@@ -57,6 +57,7 @@ import AutoPauseManager from "./components/AutoPauseManager";
 import MatchPage from "./components/MatchPage";
 import { useToast } from "./store/toast";
 import { NDN_OPEN_NOTIFICATIONS_EVENT } from "./utils/events";
+import WSConnectionDot from "./components/WSConnectionDot";
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -998,6 +999,7 @@ export default function App() {
 
                 {/* Right: Status + Actions */}
                 <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                  <WSConnectionDot className="mr-1" />
                   {/* Calibration Status (Desktop) */}
                   {!isMobile && calibrationStatus !== "none" && (
                     <button

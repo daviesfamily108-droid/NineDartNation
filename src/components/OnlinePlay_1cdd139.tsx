@@ -40,9 +40,9 @@ import GameScoreboard from './scoreboards/GameScoreboard'
 import { makeOnlineAddVisitAdapter } from './matchControlAdapters'
 import { applyVisitCommit } from '../logic/applyVisitCommit'
 import { useOnlineGameStats } from './scoreboards/useGameStats'
+import { getWsCandidates } from '../utils/ws'
 
 export default function OnlinePlay({ user }: { user?: any }) {
-  const API_URL = (import.meta as any).env?.VITE_API_URL || ''
   const toast = useToast();
   const match = useMatch();
   const wsGlobal = useWS();
@@ -540,13 +540,19 @@ export default function OnlinePlay({ user }: { user?: any }) {
       return
     }
     // Avoid duplicate sockets
-    try { if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) return } catch {}
-  const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined
-  const proto = (window.location.protocol === 'https:' ? 'wss' : 'ws')
-  const host = window.location.hostname
-  const fallback = `${proto}://${host}${window.location.port ? '' : ':8787'}`
-  const url = envUrl && typeof envUrl === 'string' && envUrl.length > 0 ? envUrl : fallback
-  const ws = new WebSocket(url)
+    try {
+      if (
+        wsRef.current &&
+        (wsRef.current.readyState === WebSocket.OPEN ||
+          wsRef.current.readyState === WebSocket.CONNECTING)
+      )
+        return
+    } catch {}
+
+    // Centralized endpoint selection: respects VITE_WS_URL and safe remote fallbacks
+    const candidates = getWsCandidates()
+    const url = candidates[0]
+    const ws = new WebSocket(url)
     wsRef.current = ws
     ws.onopen = () => {
       setConnected(true)

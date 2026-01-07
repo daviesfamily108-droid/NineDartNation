@@ -2,7 +2,7 @@ const fallbackRemoteEnv =
   ((import.meta as any)?.env?.VITE_REMOTE_WS_FALLBACK as string | undefined) ||
   "";
 
-const DEFAULT_REMOTE_WS = "wss://ninedartnation.onrender.com/ws";
+const DEFAULT_REMOTE_WS = "wss://ninedartnation-1.onrender.com/ws";
 const REMOTE_WS_FALLBACK = normalizeWsUrl(
   fallbackRemoteEnv.trim() || DEFAULT_REMOTE_WS,
 );

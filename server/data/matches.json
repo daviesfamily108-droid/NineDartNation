@@ -394,5 +394,89 @@
     "game": "X01",
     "requireCalibration": false,
     "createdAt": 1766947070328
+  },
+  {
+    "id": "J8lyUIU0NQ",
+    "creatorId": "zZyfCoa0",
+    "creatorName": "Alice-ctkbvyg",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1767720491970
+  },
+  {
+    "id": "oN4wUa8lVA",
+    "creatorId": "GWN_93G2",
+    "creatorName": "Alice-vtr3kdd",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1767721195852
+  },
+  {
+    "id": "BQ79MdqKtC",
+    "creatorId": "jEIlkXqH",
+    "creatorName": "Alice-gnr32a8",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1767722008960
+  },
+  {
+    "id": "h_4tQEOlo_",
+    "creatorId": "SO91Pm11",
+    "creatorName": "Alice-leory29",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1767724492002
+  },
+  {
+    "id": "GC0hvJ2rEp",
+    "creatorId": "Si7K2BeY",
+    "creatorName": "Alice-cqu4irk",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1767724706493
+  },
+  {
+    "id": "rsFBYjSOuW",
+    "creatorId": "994mIkqY",
+    "creatorName": "Alice-tnpkot1",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1767734813762
+  },
+  {
+    "id": "JqXZvEnbPI",
+    "creatorId": "a3mPbzgC",
+    "creatorName": "Alice-xdnlw1d",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1767734828062
   }
 ]

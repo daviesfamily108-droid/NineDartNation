@@ -2,6 +2,14 @@ import { spawn } from 'child_process'
 import WebSocket from 'ws'
 import { describe, test, expect } from 'vitest'
 
+// Keep integration tests quiet by default. Enable debug logs with:
+//   NDN_TEST_DEBUG=1 npm run test:integration
+const tdebug = (...args: any[]) => {
+  try {
+    if (process.env.NDN_TEST_DEBUG === '1') console.log(...args)
+  } catch {}
+}
+
 const SERVER_CMD = 'node'
 const SERVER_ARGS = ['server/server.cjs']
 const BASE_URL = 'http://127.0.0.1:8787'
@@ -86,11 +94,11 @@ describe('server autocommit integration', () => {
       await new Promise(r => setTimeout(r, 100))
     }
   expect(matchId).toBeTruthy()
-  // Print details for debugging ownership
+  // Print details for debugging ownership (only when NDN_TEST_DEBUG=1)
   const tmpMatch = hostMessages.find((x:any) => x.type === 'matches')?.matches?.find((mm:any) => mm.id === matchId)
   const hostJoinedId = hostMessages.find((x:any) => x.type === 'joined' && x.roomId === roomId)?.id
-  console.log('[DEBUG] chosen match id', matchId, 'match', tmpMatch)
-  console.log('[DEBUG] hostJoinedId', hostJoinedId)
+  tdebug('[DEBUG] chosen match id', matchId, 'match', tmpMatch)
+  tdebug('[DEBUG] hostJoinedId', hostJoinedId)
     const roomId = matchId as string
 
     // Both join the room
@@ -119,19 +127,19 @@ describe('server autocommit integration', () => {
   if (tmpMatch2 && hostJoinedIdAfter && tmpMatch2.creatorId !== hostJoinedIdAfter) {
     const hostOwned = hostMessages.find((x:any) => x.type === 'matches')?.matches?.find((mm:any) => mm.creatorId === hostJoinedIdAfter)
     if (hostOwned && hostOwned.id) {
-      console.log('[DEBUG] replacing matchId with host-owned match', hostOwned.id)
+      tdebug('[DEBUG] replacing matchId with host-owned match', hostOwned.id)
       matchId = hostOwned.id
     }
   }
-  console.log('[DEBUG] chosen match id', matchId, 'match', tmpMatch2)
-  console.log('[DEBUG] hostJoinedIdAfter', hostJoinedIdAfter)
+  tdebug('[DEBUG] chosen match id', matchId, 'match', tmpMatch2)
+  tdebug('[DEBUG] hostJoinedIdAfter', hostJoinedIdAfter)
   // Host toggles autocommit allowed true
-  console.log('[DEBUG] hostWs.readyState before send', hostWs.readyState)
+  tdebug('[DEBUG] hostWs.readyState before send', hostWs.readyState)
   try {
     hostWs.send(JSON.stringify({ type: 'set-match-autocommit', roomId, allow: true }))
   } catch (e) {
-    console.log('[DEBUG] host send error', String(e))
-    console.log('[DEBUG] serverStdout', serverStdout)
+    tdebug('[DEBUG] host send error', String(e))
+    tdebug('[DEBUG] serverStdout', serverStdout)
     throw e
   }
 
@@ -145,16 +153,16 @@ describe('server autocommit integration', () => {
     }
     // If no update seen, print messages for debugging
     if (!sawAutocommitUpdate) {
-      console.log('[DEBUG] hostMessages', JSON.stringify(hostMessages.slice(-50), null, 2))
-      console.log('[DEBUG] guestMessages', JSON.stringify(guestMessages.slice(-50), null, 2))
-      console.log('[DEBUG] serverStdout', serverStdout.slice(-1000))
+      tdebug('[DEBUG] hostMessages', JSON.stringify(hostMessages.slice(-50), null, 2))
+      tdebug('[DEBUG] guestMessages', JSON.stringify(guestMessages.slice(-50), null, 2))
+      tdebug('[DEBUG] serverStdout', serverStdout.slice(-1000))
     }
     if (!sawAutocommitUpdate) {
       console.warn('[WARN] match-autocommit-updated broadcast not observed; proceeding to verify behavior via auto-visit acceptance')
     }
 
   // First: Creator (host) attempts to send an auto-visit - creators should always be allowed
-  console.log('[DEBUG] hostWs.readyState before host auto-visit', hostWs.readyState)
+  tdebug('[DEBUG] hostWs.readyState before host auto-visit', hostWs.readyState)
   hostWs.send(JSON.stringify({ type: 'auto-visit', roomId, value: 60, darts: 3, ring: 'TRIPLE', sector: 20, pBoard: { x: 0, y: -103 }, calibrationValid: true }))
   let sawCreatorVisitCommit = false
   const deadlineCreator = Date.now() + 10000
@@ -165,9 +173,9 @@ describe('server autocommit integration', () => {
   }
   if (!sawCreatorVisitCommit) {
     console.warn('[WARN] creator auto-visit not observed; continuing to guest test')
-    console.log('[DEBUG] hostMessages (pre-auto-visit)', JSON.stringify(hostMessages.slice(-100), null, 2))
-    console.log('[DEBUG] guestMessages (pre-auto-visit)', JSON.stringify(guestMessages.slice(-100), null, 2))
-    console.log('[DEBUG] serverStdout (pre-auto-visit)', serverStdout.slice(-2000))
+    tdebug('[DEBUG] hostMessages (pre-auto-visit)', JSON.stringify(hostMessages.slice(-100), null, 2))
+    tdebug('[DEBUG] guestMessages (pre-auto-visit)', JSON.stringify(guestMessages.slice(-100), null, 2))
+    tdebug('[DEBUG] serverStdout (pre-auto-visit)', serverStdout.slice(-2000))
   }
 
   // Now guest attempts to send an auto-visit (should be accepted since room autocommit enabled by host)
@@ -184,9 +192,9 @@ describe('server autocommit integration', () => {
       await new Promise(r => setTimeout(r, 100))
     }
     if (!sawVisitCommit) {
-      console.log('[DEBUG] hostMessages', JSON.stringify(hostMessages.slice(-200), null, 2))
-      console.log('[DEBUG] guestMessages', JSON.stringify(guestMessages.slice(-200), null, 2))
-      console.log('[DEBUG] serverStdout', serverStdout.slice(0, 5000))
+      tdebug('[DEBUG] hostMessages', JSON.stringify(hostMessages.slice(-200), null, 2))
+      tdebug('[DEBUG] guestMessages', JSON.stringify(guestMessages.slice(-200), null, 2))
+      tdebug('[DEBUG] serverStdout', serverStdout.slice(0, 5000))
     }
     expect(sawVisitCommit).toBeTruthy()
 
@@ -212,9 +220,9 @@ describe('server autocommit integration', () => {
   const newMsgs = newHostMsgs.concat(newGuestMsgs)
   const sawInvalidVisitCommit = newMsgs.some(m => m.type === 'visit-commit' && m.roomId === roomId && m.visit && m.visit.pBoard && Number(m.visit.pBoard.x) === 9999 && Number(m.visit.pBoard.y) === 9999)
   if (sawInvalidVisitCommit) {
-    console.log('[DEBUG] hostMessages after mismatched pBoard', JSON.stringify(newHostMsgs.slice(-200), null, 2))
-    console.log('[DEBUG] guestMessages after mismatched pBoard', JSON.stringify(newGuestMsgs.slice(-200), null, 2))
-    console.log('[DEBUG] serverStdout after mismatched pBoard', serverStdout.slice(0, 10000))
+    tdebug('[DEBUG] hostMessages after mismatched pBoard', JSON.stringify(newHostMsgs.slice(-200), null, 2))
+    tdebug('[DEBUG] guestMessages after mismatched pBoard', JSON.stringify(newGuestMsgs.slice(-200), null, 2))
+    tdebug('[DEBUG] serverStdout after mismatched pBoard', serverStdout.slice(0, 10000))
   }
   expect(sawInvalidVisitCommit).toBeFalsy()
 
