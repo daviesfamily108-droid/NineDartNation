@@ -846,25 +846,61 @@ export default function MatchStartShowcase({
                     <div className="flex items-center gap-2">
                       <div className="relative">
                         {DEV && (
-                          <div className="absolute top-2 right-2 z-40 w-72 max-h-[60vh] overflow-auto p-2 bg-black/70 border border-white/10 rounded-md text-xs text-white/80"> 
+                          <div className="absolute top-2 right-2 z-40 w-72 max-h-[60vh] overflow-auto p-2 bg-black/70 border border-white/10 rounded-md text-xs text-white/80">
                             <div className="flex items-center justify-between mb-1">
-                              <strong className="text-sm">DEV: Camera Debug</strong>
+                              <strong className="text-sm">
+                                DEV: Camera Debug
+                              </strong>
                             </div>
                             <div className="text-[11px] leading-snug">
-                              <div><span className="text-white/60">session.isStreaming:</span> {(cameraSession as any).isStreaming ? 'true' : 'false'}</div>
-                              <div><span className="text-white/60">session.mode:</span> {(cameraSession as any).mode}</div>
-                              <div><span className="text-white/60">session.showOverlay:</span> {(cameraSession as any).showOverlay ? 'true' : 'false'}</div>
+                              <div>
+                                <span className="text-white/60">
+                                  session.isStreaming:
+                                </span>{" "}
+                                {(cameraSession as any).isStreaming
+                                  ? "true"
+                                  : "false"}
+                              </div>
+                              <div>
+                                <span className="text-white/60">
+                                  session.mode:
+                                </span>{" "}
+                                {(cameraSession as any).mode}
+                              </div>
+                              <div>
+                                <span className="text-white/60">
+                                  session.showOverlay:
+                                </span>{" "}
+                                {(cameraSession as any).showOverlay
+                                  ? "true"
+                                  : "false"}
+                              </div>
                               <div className="mt-1 text-white/60">Stream:</div>
-                              <pre className="whitespace-pre-wrap text-[11px] bg-transparent p-0 m-0">{(() => {
-                                try {
-                                  const s = cameraSession.getMediaStream?.();
-                                  if (!s) return 'no stream';
-                                  const vt = (s.getVideoTracks?.() || []).map((t:any)=>`[id:${t.id} readyState:${t.readyState} enabled:${t.enabled} muted:${(t as any).muted}]`).join('\n');
-                                  return `id:${s.id}\nvideoTracks:${(s.getVideoTracks?.()||[]).length}\n${vt}`;
-                                } catch (e) { return String(e); }
-                              })()}</pre>
-                              <div className="mt-1 text-white/60">previewDiag:</div>
-                              <pre className="whitespace-pre-wrap text-[11px] bg-transparent p-0 m-0">{previewDiag ? JSON.stringify(previewDiag, null, 2) : 'no previewDiag'}</pre>
+                              <pre className="whitespace-pre-wrap text-[11px] bg-transparent p-0 m-0">
+                                {(() => {
+                                  try {
+                                    const s = cameraSession.getMediaStream?.();
+                                    if (!s) return "no stream";
+                                    const vt = (s.getVideoTracks?.() || [])
+                                      .map(
+                                        (t: any) =>
+                                          `[id:${t.id} readyState:${t.readyState} enabled:${t.enabled} muted:${(t as any).muted}]`,
+                                      )
+                                      .join("\n");
+                                    return `id:${s.id}\nvideoTracks:${(s.getVideoTracks?.() || []).length}\n${vt}`;
+                                  } catch (e) {
+                                    return String(e);
+                                  }
+                                })()}
+                              </pre>
+                              <div className="mt-1 text-white/60">
+                                previewDiag:
+                              </div>
+                              <pre className="whitespace-pre-wrap text-[11px] bg-transparent p-0 m-0">
+                                {previewDiag
+                                  ? JSON.stringify(previewDiag, null, 2)
+                                  : "no previewDiag"}
+                              </pre>
                             </div>
                           </div>
                         )}

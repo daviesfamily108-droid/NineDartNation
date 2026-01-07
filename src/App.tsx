@@ -721,10 +721,42 @@ export default function App() {
   }, [refreshNotifications, user?.email]);
 
   useEffect(() => {
+    // Only poll friend/message counts when the app/tab is focused to avoid
+    // background network requests (which can trigger noisy 404s when no API)
     if (!user?.email) return;
-    refreshFriendCounts();
-    const interval = setInterval(refreshFriendCounts, 30000);
-    return () => clearInterval(interval);
+    let mounted = true;
+
+    const runIfFocused = async () => {
+      try {
+        if (!mounted) return;
+        if (typeof document !== "undefined" && !document.hasFocus()) return;
+        await refreshFriendCounts();
+      } catch {}
+    };
+
+    // Run immediately if the tab is focused
+    runIfFocused();
+
+    const onFocus = () => {
+      try {
+        runIfFocused();
+      } catch {}
+    };
+
+    window.addEventListener("focus", onFocus);
+
+    // Periodic poll but only execute when focused
+    const interval = setInterval(() => {
+      try {
+        runIfFocused();
+      } catch {}
+    }, 30000);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("focus", onFocus);
+      clearInterval(interval);
+    };
   }, [refreshFriendCounts, user?.email]);
 
   useEffect(() => {

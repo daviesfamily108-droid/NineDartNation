@@ -98,24 +98,40 @@ export default function CameraTile({
   // This is especially important for the pre-game overlay where we want the
   // already-running calibrated stream to appear immediately.
   useEffect(() => {
+    // Debounced/guarded registration to avoid rapidly swapping the global
+    // video ref which can interrupt play() calls and produce AbortError.
+    let timer: any = null;
+    let cancelled = false;
     try {
       const v = videoRef.current;
-      if (v) {
-        const current = cameraSession.getVideoElementRef?.();
-        // Avoid thrashing the global ref when multiple tiles mount.
-        // Only claim it if nobody has one yet or we're already the active ref.
-        if (!current || current === v) {
-          cameraSession.setVideoElementRef?.(v);
-        }
+      if (!v) return;
+      const trySet = () => {
+        try {
+          const current = cameraSession.getVideoElementRef?.();
+          // Only claim if nobody has one, or we are already the active ref.
+          if (!current || current === v) {
+            cameraSession.setVideoElementRef?.(v);
+          }
+        } catch {}
+      };
+
+      // If there's no current ref, set immediately. Otherwise debounce the claim
+      // slightly so short remounts or re-renders don't thrash the global ref.
+      const current = cameraSession.getVideoElementRef?.();
+      if (!current) {
+        trySet();
+      } else if (current !== v) {
+        timer = setTimeout(() => {
+          if (!cancelled) trySet();
+        }, 200);
       }
     } catch {}
     return () => {
+      cancelled = true;
       try {
-        // IMPORTANT: don't clear the global ref automatically.
-        // Other UI surfaces (MatchStartShowcase overlay, CameraView) rely on it.
-        // Clearing here can cause the pre-game preview to go black if another tile
-        // hasn't re-registered yet.
+        if (timer) clearTimeout(timer);
       } catch {}
+      // IMPORTANT: don't clear the global ref automatically here.
     };
   }, [cameraSession]);
   const registerStream = useCallback(
