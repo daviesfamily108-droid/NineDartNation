@@ -417,6 +417,31 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const { H: calibH } = useCalibration()
   const myAvg = user?.username ? getAllTimeAvg(user.username) : 0
   const unread = useMessages(s => s.unread)
+  const containsIntegrationMarker = (value: unknown) => {
+    if (typeof value === "string") {
+      return value.toLowerCase().includes("integration");
+    }
+    if (typeof value === "number") {
+      return value.toString().toLowerCase().includes("integration");
+    }
+    return false;
+  };
+
+  const isIntegrationLobbyEntry = (entry: any) => {
+    if (!entry) return false;
+    const candidates = [
+      entry.title,
+      entry.name,
+      entry.game,
+      entry.mode,
+      entry.createdBy,
+      entry.creator,
+      entry.creatorName,
+      entry.id,
+    ];
+    return candidates.some((value) => containsIntegrationMarker(value));
+  };
+
   const filteredLobby = (lobby || []).filter((m:any) => {
     if (filterMode !== 'all' && m.mode !== filterMode) return false
     if (filterStart !== 'all' && Number(m.startingScore) !== Number(filterStart)) return false
@@ -426,6 +451,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       const diff = Math.abs(Number(m.creatorAvg) - Number(myAvg))
       if (diff > avgTolerance) return false
     }
+    if (isIntegrationLobbyEntry(m)) return false
     return true
   })
 

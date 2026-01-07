@@ -37,6 +37,22 @@ type Tournament = {
   creatorName?: string;
 };
 
+const containsIntegrationMarker = (value: unknown) => {
+  if (typeof value === "string") {
+    return value.toLowerCase().includes("integration");
+  }
+  if (typeof value === "number") {
+    return value.toString().toLowerCase().includes("integration");
+  }
+  return false;
+};
+
+const isIntegrationTournament = (t: Tournament) => {
+  if (!t) return false;
+  const candidates = [t.title, t.description, t.creatorName, t.creatorEmail];
+  return candidates.some((value) => containsIntegrationMarker(value));
+};
+
 const isTouch =
   typeof window !== "undefined" &&
   ("ontouchstart" in window || navigator.maxTouchPoints > 0);
@@ -579,11 +595,22 @@ export default function Tournaments({ user }: { user: any }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [showCreate]);
 
-  const official = useMemo(() => list.filter((t) => t.official), [list]);
-  const community = useMemo(() => list.filter((t) => !t.official), [list]);
-  const created = useMemo(
-    () => list.filter((t) => t.status === "scheduled" && !t.official),
+  const visibleTournaments = useMemo(
+    () => list.filter((t) => !isIntegrationTournament(t)),
     [list],
+  );
+  const official = useMemo(
+    () => visibleTournaments.filter((t) => t.official),
+    [visibleTournaments],
+  );
+  const community = useMemo(
+    () => visibleTournaments.filter((t) => !t.official),
+    [visibleTournaments],
+  );
+  const created = useMemo(
+    () =>
+      visibleTournaments.filter((t) => t.status === "scheduled" && !t.official),
+    [visibleTournaments],
   );
 
   // Pagination for Created Game Lobby
