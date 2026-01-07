@@ -105,12 +105,21 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const firstConnectDoneRef = useRef(false)
   const msgs = useMessages()
   const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale, cameraFitMode = 'fill', setCameraFitMode, cameraEnabled, textSize, boxSize, autoscoreProvider, matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName, x01DoubleIn: defaultX01DoubleIn } = useUserSettings()
+  const setCameraEnabled = useUserSettings.getState().setCameraEnabled
   const manualScoring = autoscoreProvider === 'manual'
   useEffect(() => {
     if (cameraFitMode !== 'fit') {
       setCameraFitMode('fit')
     }
   }, [cameraFitMode, setCameraFitMode])
+
+  useEffect(() => {
+    try {
+      setCameraEnabled(true)
+    } catch (err) {
+      console.error('[OnlinePlay] Failed to force-enable camera:', err)
+    }
+  }, [setCameraEnabled])
 
   // Button size classes for toolbar buttons
   const getButtonSizeClasses = (size: string) => {
@@ -1543,6 +1552,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
               )}
               <CameraView
                 cameraAutoCommit="parent"
+                forceAutoStart
                 immediateAutoCommit={useUserSettings.getState().autoCommitMode === "immediate" && useUserSettings.getState().allowAutocommitInOnline}
                 onAddVisit={makeOnlineAddVisitAdapter(submitVisitManual)}
                 onAutoDart={(value: number, ring: any, info: any) => {
