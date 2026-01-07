@@ -499,13 +499,17 @@ export default function MatchStartShowcase({
                 stream: ss,
               }).catch(() => ({ played: false }));
               const hasVideoDims = !!pv.videoWidth && !!pv.videoHeight;
-              if (
+              const hasStreamingPreview =
                 res.played &&
-                hasVideoDims &&
                 cameraSession.isStreaming &&
+                (hasVideoDims || attempts >= 3);
+              if (hasStreamingPreview) {
+                setPreviewReady(true);
+              }
+              if (
+                hasStreamingPreview &&
                 localCalibrationStatus === "verified"
               ) {
-                setPreviewReady(true);
                 setPreviewError(null);
                 stopped = true;
                 return;
@@ -850,7 +854,7 @@ export default function MatchStartShowcase({
                             stroke={6}
                             color={seconds > 5 ? "emerald" : "amber"}
                           />
-                          <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <span className="text-xl font-black text-white tabular-nums">
                               {seconds}
                             </span>
