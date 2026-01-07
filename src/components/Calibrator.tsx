@@ -81,7 +81,7 @@ const TARGET_LABELS = [
   "📍 D11 (Center of double ring)",
   "📍 Bull (Center)",
 ];
-const TARGET_COLORS = ["#FF6B6B", "#4ECDC4", "#FFE66D", "#95E1D3", "#C7CEEA"];
+const TARGET_COLORS = ["#c62828", "#00796b", "#ff8f00", "#2e7d32", "#512da8"];
 
 // Storage for calibration history
 function getSavedCalibrations(): Array<{

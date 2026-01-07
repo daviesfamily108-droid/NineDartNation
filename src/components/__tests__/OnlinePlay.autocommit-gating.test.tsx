@@ -39,7 +39,7 @@ vi.mock("../../store/userSettings", () => {
     cameraFitMode: "fit",
     setCameraFitMode: vi.fn(),
     cameraEnabled: true,
-  setCameraEnabled: vi.fn(),
+    setCameraEnabled: vi.fn(),
     textSize: "medium",
     boxSize: "medium",
     autoscoreProvider: "built-in",
