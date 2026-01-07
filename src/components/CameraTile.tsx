@@ -81,8 +81,13 @@ export default function CameraTile({
   const [streaming, setStreaming] = useState(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [pairCode, setPairCode] = useState<string | null>(null);
+  const pairCodeRef = useRef<string | null>(null);
   const [pc, setPc] = useState<RTCPeerConnection | null>(null);
   const lastRegisteredModeRef = useRef<CameraStreamMode | null>(null);
+
+  useEffect(() => {
+    pairCodeRef.current = pairCode;
+  }, [pairCode]);
 
   // Always register the current <video> element with the global camera session.
   // This is especially important for the pre-game overlay where we want the
@@ -772,6 +777,7 @@ export default function CameraTile({
       const data = JSON.parse(ev.data);
       if (data.type === "cam-code") {
         setPairCode(data.code);
+        pairCodeRef.current = data.code;
         if (data.expiresAt) setExpiresAt(data.expiresAt);
       } else if (data.type === "cam-peer-joined") {
         setPaired(true);
@@ -781,11 +787,12 @@ export default function CameraTile({
         });
         setPc(peer);
         peer.onicecandidate = (e) => {
-          if (e.candidate && pairCode)
+          const code = pairCodeRef.current;
+          if (e.candidate && code)
             socket.send(
               JSON.stringify({
                 type: "cam-ice",
-                code: pairCode,
+                code,
                 payload: e.candidate,
               }),
             );
@@ -812,11 +819,12 @@ export default function CameraTile({
           offerToReceiveVideo: true,
         });
         await peer.setLocalDescription(offer);
-        if (pairCode)
+        const code = pairCodeRef.current;
+        if (code)
           socket.send(
             JSON.stringify({
               type: "cam-offer",
-              code: pairCode,
+              code,
               payload: offer,
             }),
           );
