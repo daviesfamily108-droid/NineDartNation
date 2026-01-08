@@ -484,9 +484,16 @@ export default function OnlinePlay({ user }: { user?: any }) {
   useEffect(() => {
     const email = String(user?.email || '').toLowerCase()
     if (!email) return
-    apiFetch(`/api/friends/messages?email=${encodeURIComponent(email)}`).then(r=>r.json()).then(d=>{
-      if (d?.ok && Array.isArray(d.messages)) msgs.load(d.messages)
-    }).catch(()=>{})
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/friends/messages?email=${encodeURIComponent(email)}`);
+        if (!res || !res.ok) return;
+        const d = await res.json();
+        if (d?.ok && Array.isArray(d.messages)) msgs.load(d.messages)
+      } catch (e) {
+        // Swallow errors - apiFetch now short-circuits on repeated failures
+      }
+    })();
   }, [user?.email])
 
   // Demo: open a populated Online Match view with fake data (local-only)
