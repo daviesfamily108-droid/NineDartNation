@@ -134,12 +134,9 @@ export default function App() {
         // @ts-ignore - ev.reason exists on modern browsers
         console.warn("Unhandled promise rejection (suppressed):", ev.reason);
         ev.preventDefault?.();
-      } catch (e) {
-        // In case preventDefault isn't supported, still swallow so console
-        // doesn't fill up with repeated messages.
-        try {
-          console.warn("Unhandled promise rejection (suppressed)");
-        } catch {}
+      } catch (err) {
+        console.error("Failed to refresh friend notifications:", err);
+        return false;
       }
     };
     window.addEventListener("unhandledrejection", onUnhandled as any);
@@ -686,11 +683,9 @@ export default function App() {
       );
     } catch (err) {
       console.error("Failed to refresh friend notifications:", err);
-    }
-    } catch (err) {
-      console.error("Failed to refresh friend notifications:", err);
       return false;
     }
+    return true;
   }, [user?.email]);
 
   // Track consecutive failures and temporarily disable polling to avoid
