@@ -666,8 +666,8 @@ export default function CameraTile({
 
       const stream = await connectToNetworkDevice(device);
       if (stream && videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+  videoRef.current.srcObject = stream;
+  await Promise.resolve(videoRef.current.play()).catch(() => {});
         setStreaming(true);
         registerStream(stream, "wifi");
         setWifiDevices((devices) =>
@@ -726,8 +726,8 @@ export default function CameraTile({
       );
       const stream = await connectToUSBDevice(device);
       if (stream && videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+  videoRef.current.srcObject = stream;
+  await Promise.resolve(videoRef.current.play()).catch(() => {});
         setStreaming(true);
         setMode("wifi"); // Using wifi mode for USB devices too
         registerStream(stream, "wifi");

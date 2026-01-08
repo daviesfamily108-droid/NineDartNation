@@ -19,6 +19,10 @@ let wsRefHolder: WebSocket | null = null;
 // Prevent UI transitions (like the pre-game overlay mounting/unmounting) from
 // accidentally tearing down the shared stream.
 let keepAliveCount = 0;
+// Debounce/lock helpers to avoid rapid swaps of the global video element ref
+let pendingVideoRef: HTMLVideoElement | null = null;
+let pendingVideoRefTimer: number | null = null;
+const VIDEO_REF_DEBOUNCE_MS = 200;
 
 type CameraSessionState = {
   // Stream state - persists across navigation (ONLY serializable data)
@@ -123,18 +127,65 @@ export const useCameraSession = create<CameraSessionState>()(
         return ref;
       },
       setVideoElementRef: (ref) => {
-        if (ref) {
-          dlog(
-            "[cameraSession] ✓ setVideoElementRef called - storing HTMLVideoElement",
-            {
-              tagName: ref.tagName,
-              hasStream: !!ref.srcObject,
-            },
-          );
-        } else {
-          dlog("[cameraSession] 🛑 setVideoElementRef called - clearing ref");
+        try {
+          // Immediate clear requests should take effect synchronously so
+          // components unmounting don't lose their cleanup window.
+          if (ref === null) {
+            if (pendingVideoRefTimer) {
+              clearTimeout(pendingVideoRefTimer);
+              pendingVideoRefTimer = null;
+              pendingVideoRef = null;
+            }
+            dlog("[cameraSession] 🛑 setVideoElementRef called - clearing ref");
+            videoElementRefHolder = null;
+            return;
+          }
+
+          // If there is no current holder, claim immediately.
+          if (!videoElementRefHolder) {
+            dlog(
+              "[cameraSession] ✓ setVideoElementRef called - storing HTMLVideoElement",
+              {
+                tagName: ref.tagName,
+                hasStream: !!ref.srcObject,
+              },
+            );
+            videoElementRefHolder = ref;
+            return;
+          }
+
+          // If the same element is being set again, do nothing.
+          if (videoElementRefHolder === ref) return;
+
+          // Another surface currently holds the global ref. Defer the set by a
+          // small debounce window; if the holder is released soon after, the
+          // pending ref will be applied. This avoids rapid toggles that cause
+          // video.play() AbortError races.
+          if (pendingVideoRefTimer) {
+            clearTimeout(pendingVideoRefTimer);
+            pendingVideoRefTimer = null;
+          }
+          pendingVideoRef = ref;
+          pendingVideoRefTimer = window.setTimeout(() => {
+            try {
+              dlog(
+                "[cameraSession] (deferred) setVideoElementRef applying pending ref",
+                {
+                  tagName: pendingVideoRef?.tagName,
+                  hasStream: !!pendingVideoRef?.srcObject,
+                },
+              );
+              videoElementRefHolder = pendingVideoRef;
+            } catch (e) {
+              dlog("[cameraSession] Failed to apply pending video ref:", e);
+            } finally {
+              pendingVideoRef = null;
+              pendingVideoRefTimer = null;
+            }
+          }, VIDEO_REF_DEBOUNCE_MS as any) as any;
+        } catch (e) {
+          dlog("[cameraSession] setVideoElementRef error:", e);
         }
-        videoElementRefHolder = ref;
       },
 
       acquireKeepAlive: (_reason?: string) => {
