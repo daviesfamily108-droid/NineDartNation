@@ -1,7 +1,7 @@
 [build]
   # Build the Vite app from the repository root
-  # Use npm install (no lockfile present) to avoid npm ci EUSAGE on Netlify
-  command = "npm install && npm run build"
+  # Use npm ci to install exactly what's in package-lock.json for deterministic builds
+  command = "npm ci && npm run build"
   publish = "dist"
 
 [build.environment]
