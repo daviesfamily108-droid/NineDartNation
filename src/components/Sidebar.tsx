@@ -184,9 +184,19 @@ export function Sidebar({
   // Fetch notification counts
   useEffect(() => {
     if (!user?.email) return;
+    // Track failures and short-circuit polling if the remote API is known
+    // to be unavailable (helps avoid repeated 404s and network noise).
+    let mounted = true;
+    const failures = { count: 0 } as { count: number };
+    let disabledUntil: number | null = null;
 
     const fetchNotifications = async () => {
       try {
+        if (!mounted) return;
+        const anyWin = window as any;
+        if (anyWin.__ndnApiDisabled) return;
+        if (disabledUntil && Date.now() < disabledUntil) return;
+
         const [requestsRes, messagesRes] = await Promise.all([
           apiFetch(
             `/api/friends/requests?email=${encodeURIComponent(user.email)}`,
@@ -196,31 +206,42 @@ export function Sidebar({
           ),
         ]);
 
-        const requests = requestsRes.ok
+        const requests = requestsRes && (requestsRes as any).ok
           ? await requestsRes.json()
           : { requests: [] };
-        const messages = messagesRes.ok
+        const messages = messagesRes && (messagesRes as any).ok
           ? await messagesRes.json()
           : { messages: [] };
 
-        // Count unread messages (messages without read status, assuming all are unread for now)
+        // Count unread messages
         const unreadMessages =
           messages.messages?.filter((m: any) => !m.read).length || 0;
 
         setNotifications({
           friendRequests: requests.requests?.length || 0,
           messages: unreadMessages,
-          tournaments: 0, // TODO: Add tournament notifications
+          tournaments: 0,
         });
+
+        // Success -> reset failures
+        failures.count = 0;
+        disabledUntil = null;
       } catch (err) {
         console.error("Failed to fetch notifications:", err);
+        failures.count += 1;
+        if (failures.count >= 3) {
+          disabledUntil = Date.now() + 5 * 60 * 1000; // 5 minutes
+          console.warn("Sidebar notifications polling paused for 5m due to repeated failures");
+        }
       }
     };
 
     fetchNotifications();
-    // Refresh every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, [user?.email]);
 
   useEffect(() => {

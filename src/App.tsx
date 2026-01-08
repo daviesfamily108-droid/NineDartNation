@@ -122,6 +122,30 @@ export default function App() {
   const normalizedDelta = Math.abs(avgDelta) >= 0.05 ? avgDelta : 0;
   const API_URL = getApiBaseUrl();
 
+  // Globally catch unhandled promise rejections and surface as warnings so the
+  // devtools console is less noisy. We still log the reason so developers can
+  // inspect real issues, but avoid uncaught exceptions flooding the console.
+  useEffect(() => {
+    const onUnhandled = (ev: PromiseRejectionEvent) => {
+      try {
+        // Some rejections are expected (e.g., media play AbortError during
+        // transient UI swaps). Log as a warn and prevent default reporting.
+        // Keep the logged payload small to avoid huge dumps.
+        // @ts-ignore - ev.reason exists on modern browsers
+        console.warn("Unhandled promise rejection (suppressed):", ev.reason);
+        ev.preventDefault?.();
+      } catch (e) {
+        // In case preventDefault isn't supported, still swallow so console
+        // doesn't fill up with repeated messages.
+        try {
+          console.warn("Unhandled promise rejection (suppressed)");
+        } catch {}
+      }
+    };
+    window.addEventListener("unhandledrejection", onUnhandled as any);
+    return () => window.removeEventListener("unhandledrejection", onUnhandled as any);
+  }, []);
+
   useEffect(() => {
     const isVerified = calibrationStatus === "verified";
     // Notify if calibration is lost (transition from verified to not-verified)
@@ -315,7 +339,7 @@ export default function App() {
       }
     };
 
-    // Check localStorage every 2 seconds as a fallback
+    // Check localStorage periodically as a fallback (less frequent to reduce work)
     const checkAvatarInterval = setInterval(() => {
       if (user?.username) {
         const storedAvatar = localStorage.getItem(
@@ -325,7 +349,7 @@ export default function App() {
           setAvatar(storedAvatar);
         }
       }
-    }, 2000);
+    }, 10000); // every 10s
 
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener(
@@ -663,7 +687,16 @@ export default function App() {
     } catch (err) {
       console.error("Failed to refresh friend notifications:", err);
     }
+    } catch (err) {
+      console.error("Failed to refresh friend notifications:", err);
+      return false;
+    }
   }, [user?.email]);
+
+  // Track consecutive failures and temporarily disable polling to avoid
+  // hammering a dead remote API (improves performance and reduces noise).
+  const friendPollFailuresRef = useRef<number>(0);
+  const friendPollDisabledUntilRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!user?.subscription) {
@@ -721,10 +754,61 @@ export default function App() {
   }, [refreshNotifications, user?.email]);
 
   useEffect(() => {
+    // Only poll friend/message counts when the app/tab is focused to avoid
+    // background network requests (which can trigger noisy 404s when no API).
+    // Use a small failure counter and short backoff so a downed API doesn't
+    // get hammered.
     if (!user?.email) return;
-    refreshFriendCounts();
-    const interval = setInterval(refreshFriendCounts, 30000);
-    return () => clearInterval(interval);
+    let mounted = true;
+
+    const runIfFocused = async () => {
+      try {
+        if (!mounted) return;
+        if (typeof document !== "undefined" && !document.hasFocus()) return;
+
+        const disabledUntil = friendPollDisabledUntilRef.current;
+        if (disabledUntil && Date.now() < disabledUntil) return;
+
+        const ok = await refreshFriendCounts();
+        if (ok) {
+          friendPollFailuresRef.current = 0;
+          friendPollDisabledUntilRef.current = null;
+        } else {
+          friendPollFailuresRef.current = (friendPollFailuresRef.current || 0) + 1;
+          if (friendPollFailuresRef.current >= 3) {
+            // Back off for 5 minutes after 3 consecutive failures
+            friendPollDisabledUntilRef.current = Date.now() + 5 * 60 * 1000;
+            console.warn(
+              "Friend/message polling disabled for 5 minutes due to repeated failures",
+            );
+          }
+        }
+      } catch {}
+    };
+
+    // Run immediately if the tab is focused
+    runIfFocused();
+
+    const onFocus = () => {
+      try {
+        runIfFocused();
+      } catch {}
+    };
+
+    window.addEventListener("focus", onFocus);
+
+    // Periodic poll but only execute when focused
+    const interval = setInterval(() => {
+      try {
+        runIfFocused();
+      } catch {}
+    }, 30000);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("focus", onFocus);
+      clearInterval(interval);
+    };
   }, [refreshFriendCounts, user?.email]);
 
   useEffect(() => {

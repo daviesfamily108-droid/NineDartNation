@@ -352,7 +352,7 @@ export default function MatchStartShowcase({
   const [playerCalibrations, setPlayerCalibrations] = useState<{
     [playerName: string]: any;
   }>({});
-  const [previewReady, setPreviewReady] = useState(false);
+  const [_previewReady, setPreviewReady] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -845,6 +845,65 @@ export default function MatchStartShowcase({
                   <div className="flex items-center gap-3">
                     <div className="flex items-center gap-2">
                       <div className="relative">
+                        {DEV && (
+                          <div className="absolute top-2 right-2 z-40 w-72 max-h-[60vh] overflow-auto p-2 bg-black/70 border border-white/10 rounded-md text-xs text-white/80">
+                            <div className="flex items-center justify-between mb-1">
+                              <strong className="text-sm">
+                                DEV: Camera Debug
+                              </strong>
+                            </div>
+                            <div className="text-[11px] leading-snug">
+                              <div>
+                                <span className="text-white/60">
+                                  session.isStreaming:
+                                </span>{" "}
+                                {(cameraSession as any).isStreaming
+                                  ? "true"
+                                  : "false"}
+                              </div>
+                              <div>
+                                <span className="text-white/60">
+                                  session.mode:
+                                </span>{" "}
+                                {(cameraSession as any).mode}
+                              </div>
+                              <div>
+                                <span className="text-white/60">
+                                  session.showOverlay:
+                                </span>{" "}
+                                {(cameraSession as any).showOverlay
+                                  ? "true"
+                                  : "false"}
+                              </div>
+                              <div className="mt-1 text-white/60">Stream:</div>
+                              <pre className="whitespace-pre-wrap text-[11px] bg-transparent p-0 m-0">
+                                {(() => {
+                                  try {
+                                    const s = cameraSession.getMediaStream?.();
+                                    if (!s) return "no stream";
+                                    const vt = (s.getVideoTracks?.() || [])
+                                      .map(
+                                        (t: any) =>
+                                          `[id:${t.id} readyState:${t.readyState} enabled:${t.enabled} muted:${(t as any).muted}]`,
+                                      )
+                                      .join("\n");
+                                    return `id:${s.id}\nvideoTracks:${(s.getVideoTracks?.() || []).length}\n${vt}`;
+                                  } catch (e) {
+                                    return String(e);
+                                  }
+                                })()}
+                              </pre>
+                              <div className="mt-1 text-white/60">
+                                previewDiag:
+                              </div>
+                              <pre className="whitespace-pre-wrap text-[11px] bg-transparent p-0 m-0">
+                                {previewDiag
+                                  ? JSON.stringify(previewDiag, null, 2)
+                                  : "no previewDiag"}
+                              </pre>
+                            </div>
+                          </div>
+                        )}
                         <div className="absolute inset-0 bg-emerald-500/70 blur-[4rem] rounded-full animate-pulse"></div>
                         <div className="relative">
                           <ProgressRing
@@ -1032,58 +1091,33 @@ export default function MatchStartShowcase({
                                 scale={1}
                               />
 
-                              {/* Preview readiness overlay: show while we attempt to link a playing calibrated feed */}
-                              {!previewReady && (
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                  <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
+                              {/* Preview readiness overlay: only show when there's an error. While linking is in-progress
+                                  we no longer fully obscure the preview so the CameraTile can attempt to attach and show
+                                  whatever frames it can. This avoids a completely black blocked area when the link is
+                                  still attempting to establish. */}
+                              {previewError && (
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                  <div className="absolute inset-0 bg-black/10 backdrop-blur-sm" />
                                   <div className="relative text-center px-4 py-3 rounded-md bg-black/60 border border-white/10">
                                     <div className="flex items-center justify-center mb-2">
-                                      <svg
-                                        className="animate-spin h-5 w-5 mr-2 text-white/80"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <circle
-                                          className="opacity-25"
-                                          cx="12"
-                                          cy="12"
-                                          r="10"
-                                          stroke="currentColor"
-                                          strokeWidth="4"
-                                        ></circle>
-                                        <path
-                                          className="opacity-75"
-                                          fill="currentColor"
-                                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                                        ></path>
-                                      </svg>
                                       <div className="text-sm font-semibold text-white/90">
-                                        {previewError
-                                          ? "Failed to link calibrated camera"
-                                          : "Linking calibrated camera..."}
+                                        Failed to link calibrated camera
                                       </div>
                                     </div>
                                     <div className="text-xs text-white/70">
-                                      {previewError ? (
-                                        <button
-                                          className="btn btn-ghost btn-sm"
-                                          onClick={() => {
-                                            setPreviewError(null);
-                                            setPreviewReady(false);
-                                            // kick off another attempt by toggling camera enabled
-                                            try {
-                                              setCameraEnabled(true);
-                                            } catch {}
-                                          }}
-                                        >
-                                          Retry
-                                        </button>
-                                      ) : (
-                                        <span>
-                                          Preparing video & calibration...
-                                        </span>
-                                      )}
+                                      <button
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => {
+                                          setPreviewError(null);
+                                          setPreviewReady(false);
+                                          // kick off another attempt by toggling camera enabled
+                                          try {
+                                            setCameraEnabled(true);
+                                          } catch {}
+                                        }}
+                                      >
+                                        Retry
+                                      </button>
                                     </div>
                                   </div>
                                 </div>

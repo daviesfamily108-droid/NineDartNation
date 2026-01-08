@@ -2031,21 +2031,21 @@ export default forwardRef(function CameraView(
         videoRef.current.addEventListener("error", (e) =>
           console.error("[CAMERA] Video error:", e),
         );
-        try {
-          videoRef.current.play();
-          dlog("[CAMERA] Play called successfully");
-        } catch (playErr) {
-          console.error("[CAMERA] Video play failed:", playErr);
-          // Try again after a short delay
-          setTimeout(() => {
-            try {
-              videoRef.current?.play();
-              dlog("[CAMERA] Retry play called");
-            } catch (retryErr) {
-              console.error("[CAMERA] Retry play failed:", retryErr);
-            }
-          }, 100);
-        }
+        // Call play() and explicitly handle promise rejection to avoid
+        // unhandled promise rejections (AbortError when a new load interrupts
+        // play()). Use Promise.resolve(...).catch(...) so synchronous
+        // try/catch doesn't miss async rejections.
+        Promise.resolve(videoRef.current.play())
+          .then(() => dlog("[CAMERA] Play called successfully"))
+          .catch((playErr) => {
+            console.error("[CAMERA] Video play failed:", playErr);
+            // Try again after a short delay
+            setTimeout(() => {
+              Promise.resolve(videoRef.current?.play()).catch((retryErr) => {
+                console.error("[CAMERA] Retry play failed:", retryErr);
+              });
+            }, 100);
+          });
         try {
           cameraSession.setVideoElementRef?.(videoRef.current);
           cameraSession.setMediaStream?.(stream);
@@ -2141,8 +2141,9 @@ export default forwardRef(function CameraView(
     }
     videoEl.muted = true;
     (videoEl as any).playsInline = true;
+    // Ensure any returned play() promise is handled to avoid unhandled rejections
     try {
-      videoEl.play?.();
+      Promise.resolve(videoEl.play()).catch(() => {});
     } catch (e) {}
     if (!streaming) setStreaming(true);
   }, [cameraSession.mode, cameraSession.isStreaming, streaming, cameraSession]);
