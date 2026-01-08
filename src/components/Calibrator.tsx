@@ -37,6 +37,7 @@ import {
 import { useUserSettings } from "../store/userSettings";
 import { useCameraSession } from "../store/cameraSession";
 import { getGlobalCalibrationConfidence } from "../utils/gameCalibrationRequirements";
+import { dlog } from "../utils/logger";
 
 interface CameraDevice {
   deviceId: string;
@@ -256,7 +257,7 @@ function evaluateClickQuality(
 
           isValid = inDoubleRing && closeToTarget;
 
-          console.log(
+          dlog(
             `[evaluateClickQuality] Point ${targetIndex} (D${[20, 6, 3, 11][targetIndex]}):` +
               ` boardCoords=${JSON.stringify({ x: boardPoint.x.toFixed(1), y: boardPoint.y.toFixed(1) })}` +
               ` radius=${r.toFixed(1)}mm (need ${DOUBLE_INNER}-${DOUBLE_OUTER})` +
@@ -268,7 +269,7 @@ function evaluateClickQuality(
           const BULL_OUTER = BoardRadii.bullOuter + 2; // 17.9mm
           isValid = r <= BULL_OUTER;
 
-          console.log(
+          dlog(
             `[evaluateClickQuality] Bull:` +
               ` boardCoords=${JSON.stringify({ x: boardPoint.x.toFixed(1), y: boardPoint.y.toFixed(1) })}` +
               ` radius=${r.toFixed(1)}mm (need ≤${BULL_OUTER})` +
@@ -290,9 +291,7 @@ function evaluateClickQuality(
     distance = 0;
     isValid = true; // Marks click was made - board validation happens after H is computed
 
-    console.log(
-      `[evaluateClickQuality] Click ${targetIndex} made (H not yet available)`,
-    );
+    dlog(`[evaluateClickQuality] Click ${targetIndex} made (H not yet available)`);
   }
 
   let quality: "Excellent" | "Good" | "Fair" | "Poor";
@@ -511,9 +510,9 @@ export default function Calibrator() {
 
   // Log component lifecycle
   useEffect(() => {
-    console.log("Calibrator component mounted");
+  dlog("Calibrator component mounted");
     return () => {
-      console.log("Calibrator component unmounting");
+  dlog("Calibrator component unmounting");
     };
   }, []);
 
@@ -645,7 +644,7 @@ export default function Calibrator() {
     const video = videoRef.current;
 
     const handleLoadedMetadata = () => {
-      console.log("Video metadata loaded - dimensions:", {
+      dlog("Video metadata loaded - dimensions:", {
         width: video.videoWidth,
         height: video.videoHeight,
       });
@@ -654,7 +653,7 @@ export default function Calibrator() {
       if (canvasRef.current) {
         canvasRef.current.width = video.videoWidth || 640;
         canvasRef.current.height = video.videoHeight || 480;
-        console.log("Canvas updated to:", {
+        dlog("Canvas updated to:", {
           width: canvasRef.current.width,
           height: canvasRef.current.height,
         });
@@ -662,11 +661,11 @@ export default function Calibrator() {
     };
 
     const handlePlay = () => {
-      console.log("Video play event fired");
+      dlog("Video play event fired");
     };
 
     const handlePlaying = () => {
-      console.log("Video playing event fired (frames available)");
+      dlog("Video playing event fired (frames available)");
     };
 
     const handleError = (e: Event) => {
@@ -689,7 +688,7 @@ export default function Calibrator() {
   // Helper function to start a specific camera
   const startCamera = async (cameraId: string) => {
     try {
-      console.log("Starting camera with ID:", cameraId);
+  dlog("Starting camera with ID:", cameraId);
 
       // Stop any existing stream
       stream?.getTracks().forEach((track) => {
@@ -743,7 +742,7 @@ export default function Calibrator() {
         base: MediaTrackConstraints,
         hints: MediaTrackConstraints,
       ) => {
-        console.log("Requesting camera stream:", label, { ...base, ...hints });
+  dlog("Requesting camera stream:", label, { ...base, ...hints });
         return navigator.mediaDevices.getUserMedia({
           video: { ...base, ...hints },
           audio: false,
@@ -804,7 +803,7 @@ export default function Calibrator() {
 
       const mediaStream = await getStreamRobust();
 
-      console.log("Got media stream:", {
+  dlog("Got media stream:", {
         tracks: mediaStream.getTracks().length,
       });
 
@@ -825,7 +824,7 @@ export default function Calibrator() {
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        console.log("Set video srcObject, attempting to play");
+  dlog("Set video srcObject, attempting to play");
 
         // Ensure video plays (autoPlay attribute may not be enough)
         // Add small delay to ensure browser has attached the stream
@@ -838,7 +837,7 @@ export default function Calibrator() {
         }, 100);
       }
       setCameraReady(true);
-      console.log("Camera ready!");
+  dlog("Camera ready!");
 
       // Save preference (best-effort)
       try {
@@ -956,7 +955,7 @@ export default function Calibrator() {
     // This makes manual calibration much more precise and "snappy"
     const refinedPoint = refinePointSobel(canvas, { x: imageX, y: imageY }, 10);
 
-    console.log("[Calibrator] Click mapping with zoom & snap:", {
+  dlog("[Calibrator] Click mapping with zoom & snap:", {
       display: { x: displayX, y: displayY },
       canvas: { x: canvasX, y: canvasY },
       zoom,
@@ -1024,7 +1023,7 @@ export default function Calibrator() {
         }); // Not locked yet
 
         // Debug: show where each click mapped to (use imageToBoard for image->board mapping)
-        console.log("[Calibrator] Homography computed:", {
+  dlog("[Calibrator] Homography computed:", {
           H,
           errorPx: error,
           pointMappings: newPoints.map((pt, i) => ({
@@ -1227,7 +1226,7 @@ export default function Calibrator() {
         setSectorOffset(0);
         setShowAngleAdjust(true);
 
-        console.log("[Auto-Calibrate] Success:", {
+  dlog("[Auto-Calibrate] Success:", {
           confidence: refined.confidence,
           errorPx: refined.errorPx,
           theta: detectedTheta,

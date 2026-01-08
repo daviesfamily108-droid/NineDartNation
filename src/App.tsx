@@ -339,7 +339,7 @@ export default function App() {
       }
     };
 
-    // Check localStorage every 2 seconds as a fallback
+    // Check localStorage periodically as a fallback (less frequent to reduce work)
     const checkAvatarInterval = setInterval(() => {
       if (user?.username) {
         const storedAvatar = localStorage.getItem(
@@ -349,7 +349,7 @@ export default function App() {
           setAvatar(storedAvatar);
         }
       }
-    }, 2000);
+    }, 10000); // every 10s
 
     window.addEventListener("storage", handleStorageChange);
     window.addEventListener(
