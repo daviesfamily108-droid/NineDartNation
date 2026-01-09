@@ -518,12 +518,10 @@ export default function MatchStartShowcase({
                 cameraSession.isStreaming &&
                 (hasVideoDims || attempts >= 3);
               if (hasStreamingPreview) {
+                // If we have a playing preview (video frames are visible),
+                // consider the preview linked even if calibration hasn't been
+                // verified yet. Clear any preview error and stop polling.
                 setPreviewReady(true);
-              }
-              if (
-                hasStreamingPreview &&
-                localCalibrationStatus === "verified"
-              ) {
                 setPreviewError(null);
                 stopped = true;
                 return;
