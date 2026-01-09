@@ -370,6 +370,36 @@ export default function MatchStartShowcase({
   const [previewDiag, setPreviewDiag] = useState<any>(null);
   const lastPlayErrorRef = useRef<string | null>(null);
 
+  // Retry pump: when overlay is visible but preview isn't linked, attempt to
+  // request the app to start the camera a few times with backoff. This helps
+  // when CameraView didn't start fast enough or permission prompts blocked the
+  // initial attempt.
+  const retryStartAttemptsRef = useRef(0);
+  useEffect(() => {
+    if (!visible) {
+      retryStartAttemptsRef.current = 0;
+      return;
+    }
+    // If previewReady is true we don't need to retry
+    if (previewReady) return;
+    let stopped = false;
+    const attempt = (n: number) => {
+      if (stopped) return;
+      try {
+        window.dispatchEvent(new CustomEvent("ndn:start-camera", { detail: { mode: "local" } }));
+      } catch {}
+      retryStartAttemptsRef.current = n;
+      if (n >= 3) return;
+      const delay = 700 * (n + 1);
+      setTimeout(() => attempt(n + 1), delay);
+    };
+    // Kick off first attempt if we haven't tried yet
+    if (!retryStartAttemptsRef.current) attempt(1);
+    return () => {
+      stopped = true;
+    };
+  }, [visible, previewReady]);
+
   useEffect(() => {
     // mark mounted after first paint to ensure early key events don't trigger a close mid-render
     mountedRef.current = true;
@@ -1225,6 +1255,26 @@ export default function MatchStartShowcase({
                                 ) : null}
                               </div>
                             )}
+                            {/* Non-DEV diagnostics: small panel to help surface camera session state
+                                for debugging when the preview doesn't appear. */}
+                            <div className="absolute top-2 right-2 z-30 w-64 max-h-44 overflow-auto p-2 bg-black/50 border border-white/10 rounded text-[11px] text-white/80">
+                              <div className="text-xs font-bold mb-1">Preview Diagnostics</div>
+                              <div className="text-[10px] leading-snug">
+                                <div>
+                                  <strong>session.isStreaming:</strong> {(cameraSession as any).isStreaming ? 'true' : 'false'}
+                                </div>
+                                <div>
+                                  <strong>session.mode:</strong> {(cameraSession as any).mode}
+                                </div>
+                                <div>
+                                  <strong>previewReady:</strong> {String(previewReady)}
+                                </div>
+                                <div className="mt-1">
+                                  <strong>previewDiag:</strong>
+                                  <pre className="whitespace-pre-wrap text-[10px] bg-transparent p-0 m-0">{previewDiag ? JSON.stringify(previewDiag, null, 2) : 'no previewDiag'}</pre>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       )}
