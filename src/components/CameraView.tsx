@@ -18,6 +18,7 @@ import {
 } from "react";
 import type { MutableRefObject } from "react";
 import { dlog } from "../utils/logger";
+import { ensureVideoPlays } from "../utils/ensureVideoPlays";
 import { useUserSettings } from "../store/userSettings";
 import { useCalibration } from "../store/calibration";
 import { useMatch } from "../store/match";
@@ -2018,56 +2019,64 @@ export default forwardRef(function CameraView(
           await applyAntiGlare(track);
         } catch {}
 
+        // Register the video element with the global camera session first so
+        // any play attempts are serialized with other preview tiles.
         try {
-          await videoRef.current.play();
-        } catch (e) {}
+          cameraSession.setVideoElementRef?.(videoRef.current);
+        } catch {}
+
+        // Add event listeners for debugging
+        try {
+          videoRef.current.addEventListener("loadeddata", () =>
+            dlog("[CAMERA] Video loadeddata"),
+          );
+          videoRef.current.addEventListener("loadedmetadata", () => {
+            dlog("[CAMERA] Video loadedmetadata - dimensions available");
+            // Set videoReady when we have dimensions
+            if (videoRef.current?.videoWidth && videoRef.current?.videoHeight) {
+              setVideoReady(true);
+            }
+          });
+          videoRef.current.addEventListener("canplay", () => {
+            dlog("[CAMERA] Video canplay");
+            // Also set videoReady here as a fallback
+            if (videoRef.current?.videoWidth && videoRef.current?.videoHeight) {
+              setVideoReady(true);
+            }
+          });
+          videoRef.current.addEventListener("play", () =>
+            dlog("[CAMERA] Video started playing"),
+          );
+          videoRef.current.addEventListener("error", (e) =>
+            console.error("[CAMERA] Video error:", e),
+          );
+        } catch {}
+
+        // Use ensureVideoPlays which serializes play attempts and retries on
+        // AbortError. This reduces races when multiple UI surfaces try to
+        // attach/play the same stream.
+        try {
+          const res = await ensureVideoPlays({
+            video: videoRef.current,
+            stream,
+            onPlayError: (e) => console.error("[CAMERA] Video play failed:", e),
+          });
+          if (res.played) {
+            dlog("[CAMERA] Video play ensured");
+          } else {
+            console.warn("[CAMERA] ensureVideoPlays did not confirm playback:", res.reason);
+          }
+        } catch (err) {
+          console.error("[CAMERA] ensureVideoPlays failed:", err);
+        }
+
         dlog(
           "[CAMERA] Stream tracks:",
           stream.getTracks().length,
           "video tracks:",
           stream.getVideoTracks().length,
         );
-        // Add event listeners for debugging
-        videoRef.current.addEventListener("loadeddata", () =>
-          dlog("[CAMERA] Video loadeddata"),
-        );
-        videoRef.current.addEventListener("loadedmetadata", () => {
-          dlog("[CAMERA] Video loadedmetadata - dimensions available");
-          // Set videoReady when we have dimensions
-          if (videoRef.current?.videoWidth && videoRef.current?.videoHeight) {
-            setVideoReady(true);
-          }
-        });
-        videoRef.current.addEventListener("canplay", () => {
-          dlog("[CAMERA] Video canplay");
-          // Also set videoReady here as a fallback
-          if (videoRef.current?.videoWidth && videoRef.current?.videoHeight) {
-            setVideoReady(true);
-          }
-        });
-        videoRef.current.addEventListener("play", () =>
-          dlog("[CAMERA] Video started playing"),
-        );
-        videoRef.current.addEventListener("error", (e) =>
-          console.error("[CAMERA] Video error:", e),
-        );
-        // Call play() and explicitly handle promise rejection to avoid
-        // unhandled promise rejections (AbortError when a new load interrupts
-        // play()). Use Promise.resolve(...).catch(...) so synchronous
-        // try/catch doesn't miss async rejections.
-        Promise.resolve(videoRef.current.play())
-          .then(() => dlog("[CAMERA] Play called successfully"))
-          .catch((playErr) => {
-            console.error("[CAMERA] Video play failed:", playErr);
-            // Try again after a short delay
-            setTimeout(() => {
-              Promise.resolve(videoRef.current?.play()).catch((retryErr) => {
-                console.error("[CAMERA] Retry play failed:", retryErr);
-              });
-            }, 100);
-          });
         try {
-          cameraSession.setVideoElementRef?.(videoRef.current);
           cameraSession.setMediaStream?.(stream);
           cameraSession.setMode?.("local");
           cameraSession.setStreaming?.(true);
