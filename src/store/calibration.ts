@@ -1,6 +1,7 @@
 ﻿import { create } from "zustand";
 import { useUserSettings } from "./userSettings";
 import type { Homography, Point } from "../utils/vision";
+import { getGlobalCalibrationConfidence } from "../utils/gameCalibrationRequirements";
 
 type CalibrationState = {
   H: Homography | null; // board->image
@@ -61,7 +62,18 @@ export const useCalibration = create<CalibrationState>()((set, _get) => ({
           return s;
         }
       } catch {}
-      return { ...s, ...c };
+      // If caller supplied an errorPx but not a confidence, compute a
+      // reasonable confidence so the UI doesn't show stale values.
+      const next = { ...s, ...c } as any;
+      if (
+        typeof c.errorPx === "number" &&
+        (typeof c.confidence !== "number" || c.confidence == null)
+      ) {
+        try {
+          next.confidence = getGlobalCalibrationConfidence(c.errorPx);
+        } catch {}
+      }
+      return next;
     }),
   reset: () =>
     set({

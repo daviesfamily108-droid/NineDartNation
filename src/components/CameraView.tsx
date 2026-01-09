@@ -669,6 +669,10 @@ export default forwardRef(function CameraView(
         errorPxVal <= ERROR_PX_MAX &&
         calibrationConfidence != null &&
         calibrationConfidence >= CALIBRATION_MIN_CONFIDENCE));
+  // Developer override removed/disabled: do NOT allow forcing calibration to
+  // be treated as valid via localStorage. This ensures the app always uses
+  // measured calibration quality.
+  const calibrationValidEffective = calibrationValid;
   useEffect(() => {
     if (preferredCameraLocked && !hideCameraOverlay) {
       setHideCameraOverlay(true);
@@ -837,6 +841,19 @@ export default forwardRef(function CameraView(
     confidence: number;
     meta?: any;
   }>(null);
+
+  // When a dart is registered (auto or manual), show a short-lived marker on
+  // the overlay so the user can visually confirm where the system counted it.
+  const [registeredTip, setRegisteredTip] = useState<
+    | { x: number; y: number; expires: number }
+    | null
+  >(null);
+  // When a visit is committed, show a short transient flash on the overlay
+  // so the operator can confirm the visit was forwarded to scoring.
+  const [commitFlash, setCommitFlash] = useState<
+    | { score: number; darts: number; expires: number }
+    | null
+  >(null);
 
   const maybeHoldForConfirmation = useCallback(
     (payload: {
@@ -1439,6 +1456,9 @@ export default forwardRef(function CameraView(
   const callAddVisit = (score: number, darts: number, meta?: any) => {
     try {
       dlog("CameraView: callAddVisit", score, darts, meta);
+      try {
+        setCommitFlash({ score, darts, expires: Date.now() + 2000 });
+      } catch (e) {}
       if (onAddVisit) onAddVisit(score, darts, meta);
       else addVisit(score, darts, meta);
       try {
@@ -2605,6 +2625,63 @@ export default forwardRef(function CameraView(
         );
       }
 
+      // Draw the registered-tip marker (if any). This indicates where the
+      // system counted the dart. Coordinates are provided in video pixel
+      // space; map to overlay canvas size.
+      try {
+        if (registeredTip) {
+          const now = Date.now();
+          if (now > registeredTip.expires) {
+            try {
+              setRegisteredTip(null);
+            } catch (e) {}
+          } else {
+            const videoIntrinsicW =
+              v.videoWidth && v.videoWidth > 0 ? v.videoWidth : imageSize.w;
+            const videoIntrinsicH =
+              v.videoHeight && v.videoHeight > 0 ? v.videoHeight : imageSize.h;
+            const ox = (registeredTip.x / (videoIntrinsicW || 1)) * o.width;
+            const oy = (registeredTip.y / (videoIntrinsicH || 1)) * o.height;
+            ctx.save();
+            ctx.beginPath();
+            ctx.fillStyle = "rgba(34,197,94,0.95)"; // green-ish
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth = 2;
+            ctx.arc(ox, oy, Math.max(6, Math.min(16, Math.round((o.width + o.height) / 150))), 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+          }
+        }
+      } catch (e) {}
+
+      // Draw commit flash text when a visit was just committed.
+      try {
+        if (commitFlash) {
+          const now = Date.now();
+          if (now > commitFlash.expires) {
+            try {
+              setCommitFlash(null);
+            } catch (e) {}
+          } else {
+            ctx.save();
+            ctx.fillStyle = "rgba(0,0,0,0.6)";
+            ctx.strokeStyle = "rgba(255,255,255,0.9)";
+            ctx.lineWidth = 2;
+            ctx.font = `bold ${Math.max(12, Math.round(o.width / 32))}px sans-serif`;
+            const text = `Committed: ${commitFlash.score} (${commitFlash.darts})`;
+            const metrics = ctx.measureText(text);
+            const tx = o.width / 2 - metrics.width / 2;
+            const ty = Math.max(24, Math.round(o.height * 0.08));
+            // background
+            ctx.fillRect(tx - 8, ty - parseInt(ctx.font, 10) - 6, metrics.width + 16, parseInt(ctx.font, 10) + 10);
+            ctx.fillStyle = "#fff";
+            ctx.fillText(text, tx, ty);
+            ctx.restore();
+          }
+        }
+      } catch (e) {}
+
       // Draw on top of rings.
       if (enhanceBigTrebles) {
         try {
@@ -2635,6 +2712,8 @@ export default forwardRef(function CameraView(
     preferredCameraLocked,
     hideCameraOverlay,
     isDocumentVisible,
+    registeredTip,
+    commitFlash,
   ]);
 
   // Built-in autoscore loop (offline/local CV)
@@ -3092,7 +3171,7 @@ export default forwardRef(function CameraView(
                 label = `${ring} ${value > 0 ? value : ""}`.trim();
               }
               const hasCalibration = !!H && !!imageSize;
-              const calibrationGood = hasCalibration && calibrationValid;
+              const calibrationGood = hasCalibration && calibrationValidEffective;
 
               setPendingConfirm({
                 label,
@@ -3103,6 +3182,9 @@ export default forwardRef(function CameraView(
                   calibrationValid: calibrationGood,
                   pBoard,
                   source: "camera",
+                  // Include the refined tip in video pixel coordinates so
+                  // the accept/reject flow (and addDart) can show a marker.
+                  __tipVideoPx: tipRefined,
                 },
               });
               captureDetectionLog({
@@ -3228,7 +3310,7 @@ export default forwardRef(function CameraView(
             // IMPORTANT: errorPx should reflect real calibration quality.
             // Treat missing errorPx as *unknown* (not zero) unless calibration is locked.
             // This prevents the UI from implying "0.0px" and reduces false-positive scoring.
-            const calibrationGood = hasCalibration && calibrationValid;
+            const calibrationGood = hasCalibration && calibrationValidEffective;
             const tipInVideo =
               tipRefined.x >= -TIP_MARGIN_PX &&
               tipRefined.x <= vw + TIP_MARGIN_PX &&
@@ -3484,6 +3566,9 @@ export default forwardRef(function CameraView(
                       calibrationValid: true,
                       pBoard,
                       source: "camera",
+                      // Pass video-space refined tip to help display a marker
+                      // on the overlay when the dart is registered.
+                      __tipVideoPx: tipRefined,
                     });
                   } catch (e) {}
 
@@ -4524,6 +4609,17 @@ export default forwardRef(function CameraView(
         usePendingVisit.getState().reset();
       } catch (e) {}
     }
+    // When a dart is added, show a short-lived overlay marker so users can
+    // visually confirm the counted location. Prefer an explicit tip from meta
+    // (auto/confirm flows may add __tipVideoPx). Otherwise fall back to the
+    // best-effort diagnostics lastTip (video pixel coords).
+    try {
+      let tipPx: Point | undefined | null = (meta as any)?.__tipVideoPx ?? null;
+      if (!tipPx) tipPx = diagnosticsRef.current.lastTip ?? null;
+      if (tipPx && typeof tipPx.x === "number" && typeof tipPx.y === "number") {
+        setRegisteredTip({ x: tipPx.x, y: tipPx.y, expires: Date.now() + 2000 });
+      }
+    } catch (e) {}
   }
 
   function onAddAutoDart() {
@@ -5067,6 +5163,15 @@ export default forwardRef(function CameraView(
                       ? "(n/a)"
                       : `${Math.round(calibrationConfidence)}%`}
                   </span>
+                  <span className="text-slate-300">force-cal:</span>
+                  <span className="text-slate-400">OFF</span>
+                  <button
+                    className="btn btn--ghost px-2 py-0.5 text-xs opacity-50 cursor-not-allowed"
+                    disabled
+                    title="Developer calibration override disabled"
+                  >
+                    Disabled
+                  </button>
                 </div>
 
                 <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -5705,7 +5810,7 @@ export default forwardRef(function CameraView(
       {/* Confirm uncertain dart (low confidence) */}
       {pendingConfirm && (
         <div
-          className="fixed inset-0 bg-black/70 z-[120]"
+          className="fixed inset-0 bg-black/70 z-[99999]"
           role="dialog"
           aria-modal="true"
         >

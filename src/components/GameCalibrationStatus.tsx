@@ -29,10 +29,15 @@ export default function GameCalibrationStatus({
   const recommendation = getRecalibrationRecommendation(gameMode);
   const requirement = GAME_CALIBRATION_REQUIREMENTS[gameMode];
 
+  // Prefer a live computation from the current errorPx when available so the
+  // UI reflects the most recent measurement. Falling back to a stored
+  // confidence is useful when errorPx is missing (legacy/persisted state).
   const baseConfidence =
-    typeof storedConfidence === "number"
+    typeof errorPx === "number" && !Number.isNaN(errorPx)
+      ? getGlobalCalibrationConfidence(errorPx)
+      : typeof storedConfidence === "number"
       ? storedConfidence
-      : getGlobalCalibrationConfidence(errorPx);
+      : null;
 
   const showConfidenceNote =
     typeof baseConfidence === "number" &&

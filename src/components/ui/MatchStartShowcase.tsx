@@ -802,23 +802,17 @@ export default function MatchStartShowcase({
           <FocusLock returnFocus={true}>
             <div ref={hostRef} className="relative">
               {shouldWarmupCamera && (
-                <div
-                  aria-hidden
-                  style={{
-                    position: "absolute",
-                    left: -9999,
-                    width: 320,
-                    height: 240,
-                    overflow: "hidden",
-                    pointerEvents: "none",
-                    opacity: 0,
-                  }}
-                >
+                // Visible pre-match camera preview: show a small, muted camera
+                // tile so players can confirm their feed is active before the
+                // match starts. Previously this was rendered off-screen which
+                // some browsers treated as non-visible and prevented autoplay.
+                <div className="absolute top-6 left-6 z-30 w-80 h-56 rounded-md overflow-hidden bg-black/60 border border-white/10 shadow-lg">
                   <CameraView
                     showToolbar={false}
                     hideInlinePanels
                     scoringMode="custom"
                     immediateAutoCommit={false}
+                    className="w-full h-full"
                   />
                 </div>
               )}
