@@ -813,7 +813,11 @@ export default function MatchStartShowcase({
                 // tile so players can confirm their feed is active before the
                 // match starts. Previously this was rendered off-screen which
                 // some browsers treated as non-visible and prevented autoplay.
-                <div className="absolute top-6 left-6 z-30 w-80 h-56 rounded-md overflow-hidden bg-black/60 border border-white/10 shadow-lg">
+                <div
+                  className="absolute z-30 w-80 h-56 rounded-md overflow-hidden bg-black/60 border border-white/10 shadow-lg"
+                  // Shift down ~37mm and right ~7mm to match requested placement
+                  style={{ top: "calc(1.5rem + 37mm)", left: "calc(1.5rem + 7mm)" }}
+                >
                   <CameraView
                     showToolbar={false}
                     hideInlinePanels
