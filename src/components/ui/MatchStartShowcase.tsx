@@ -352,7 +352,7 @@ export default function MatchStartShowcase({
   const [playerCalibrations, setPlayerCalibrations] = useState<{
     [playerName: string]: any;
   }>({});
-  const [_previewReady, setPreviewReady] = useState(false);
+  const [previewReady, setPreviewReady] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
