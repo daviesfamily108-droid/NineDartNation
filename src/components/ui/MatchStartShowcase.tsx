@@ -477,6 +477,15 @@ export default function MatchStartShowcase({
         "video",
       ) as HTMLVideoElement | null;
       if (previewVideo) {
+        // Ensure the preview tile's video element is registered with the global
+        // camera session. In some cases the session may be anchored to another
+        // video element (hidden or removed) which prevents the preview tile
+        // from receiving frames even when a stream exists. Registering the
+        // preview video here ensures the preview becomes the active anchor
+        // while the pre-match overlay is visible.
+        try {
+          cameraSession.setVideoElementRef?.(previewVideo);
+        } catch {}
         Promise.resolve(
           ensureVideoPlays({
             video: previewVideo,
@@ -499,7 +508,7 @@ export default function MatchStartShowcase({
         let stopped = false;
         let attempts = 0;
         const MAX_ATTEMPTS = 12; // ~6s
-        const tryLink = async () => {
+              const tryLink = async () => {
           if (stopped) return;
           attempts += 1;
           try {
@@ -508,10 +517,19 @@ export default function MatchStartShowcase({
             ) as HTMLVideoElement | null;
             const ss = cameraSession.getMediaStream?.();
             if (pv) {
-              const res = await ensureVideoPlays({
-                video: pv,
-                stream: ss,
-              }).catch(() => ({ played: false }));
+                    // Re-register the preview video element on each attempt so
+                    // it becomes the active anchor for the global camera session.
+                    // This helps when other views temporarily held the session
+                    // video ref or when the global ref pointed at a hidden
+                    // element, which can prevent frames showing in this tile.
+                    try {
+                      cameraSession.setVideoElementRef?.(pv);
+                    } catch {}
+
+                    const res = await ensureVideoPlays({
+                      video: pv,
+                      stream: ss,
+                    }).catch(() => ({ played: false }));
               const hasVideoDims = !!pv.videoWidth && !!pv.videoHeight;
               const hasStreamingPreview =
                 res.played &&
@@ -538,8 +556,8 @@ export default function MatchStartShowcase({
           }
           if (!stopped) setTimeout(tryLink, 500);
         };
-        // start polling
-        tryLink();
+    // start polling
+  tryLink();
       } catch {}
     } catch {}
 
@@ -1088,7 +1106,10 @@ export default function MatchStartShowcase({
                                 forceAutoStart
                                 fill
                                 aspect="free"
-                                tileFitModeOverride="fit"
+                                // Use "fill" so the video covers the rounded preview
+                                // container on all devices (phone/tablet/desktop)
+                                // avoiding letterboxing and black bars.
+                                tileFitModeOverride="fill"
                                 scale={1}
                               />
 
