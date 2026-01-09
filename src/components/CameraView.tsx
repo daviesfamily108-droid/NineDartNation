@@ -618,6 +618,29 @@ export default forwardRef(function CameraView(
     };
   }, [showVideoDiagnostics, collectVideoDiagnostics]);
 
+  // Expose a small debug helper on window for manual inspection from the
+  // browser console. This avoids requiring the user to paste a lot of tiny
+  // snippets; they can instead run `window.__ndn_camera_debug.collect()`.
+  useEffect(() => {
+    try {
+      (window as any).__ndn_camera_debug = (window as any).__ndn_camera_debug || {};
+      (window as any).__ndn_camera_debug.collect = () => {
+        try {
+          return collectVideoDiagnostics({ error: cameraAccessError });
+        } catch (e) {
+          return { error: String(e) };
+        }
+      };
+      (window as any).__ndn_camera_debug.videoEl = () => videoRef.current || null;
+      (window as any).__ndn_camera_debug.stream = () => cameraSession.getMediaStream?.() || null;
+    } catch (e) {}
+    return () => {
+      try {
+        if ((window as any).__ndn_camera_debug) delete (window as any).__ndn_camera_debug.collect;
+      } catch {}
+    };
+  }, [collectVideoDiagnostics, cameraAccessError, cameraSession]);
+
   // Match window / pop-out helper: always try to start the camera when requested
   useEffect(() => {
     if (TEST_MODE) return;
