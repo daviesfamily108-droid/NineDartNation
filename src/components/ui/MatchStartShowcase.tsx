@@ -814,9 +814,14 @@ export default function MatchStartShowcase({
                 // match starts. Previously this was rendered off-screen which
                 // some browsers treated as non-visible and prevented autoplay.
                 <div
-                  className="absolute z-30 w-80 h-56 rounded-md overflow-hidden bg-black/60 border border-white/10 shadow-lg"
-                  // Shift down ~37mm and right ~7mm to match requested placement
-                  style={{ top: "calc(1.5rem + 37mm)", left: "calc(1.5rem + 7mm)" }}
+                  className="absolute z-30 h-56 rounded-md overflow-hidden bg-black/60 border border-white/10 shadow-lg"
+                  // Shift down an additional 56mm (total +93mm) and right ~7mm,
+                  // and stretch width by +5mm as requested.
+                  style={{
+                    top: "calc(1.5rem + 93mm)",
+                    left: "calc(1.5rem + 7mm)",
+                    width: "calc(20rem + 5mm)",
+                  }}
                 >
                   <CameraView
                     showToolbar={false}
