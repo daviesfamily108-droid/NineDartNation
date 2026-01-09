@@ -822,30 +822,9 @@ export default function MatchStartShowcase({
         >
           <FocusLock returnFocus={true}>
             <div ref={hostRef} className="relative">
-              {shouldWarmupCamera && (
-                // Visible pre-match camera preview: show a small, muted camera
-                // tile so players can confirm their feed is active before the
-                // match starts. Previously this was rendered off-screen which
-                // some browsers treated as non-visible and prevented autoplay.
-                <div
-                  className="absolute z-30 h-56 rounded-md overflow-hidden bg-black/60 border border-white/10 shadow-lg"
-                  // Shift down an additional 56mm (total +93mm) and right ~7mm,
-                  // and stretch width by +5mm as requested.
-                  style={{
-                    top: "calc(1.5rem + 123mm)",
-                    left: "calc(1.5rem + 7mm)",
-                    width: "calc(20rem + 18mm)",
-                  }}
-                >
-                  <CameraView
-                    showToolbar={false}
-                    hideInlinePanels
-                    scoringMode="custom"
-                    immediateAutoCommit={false}
-                    className="w-full h-full"
-                  />
-                </div>
-              )}
+              {/* Warmup CameraView removed: use the CameraTile inside the preview box so the feed
+                  matches the grey rounded container. If no stream exists we request startup
+                  elsewhere in this component (ndn:start-camera). */}
               {/* Decorative background glow */}
               <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 rounded-[3rem] blur-3xl -z-10 opacity-50 animate-pulse" />
 
