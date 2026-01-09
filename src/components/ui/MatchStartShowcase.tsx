@@ -7,7 +7,7 @@
   useCallback,
 } from "react";
 import { createPortal } from "react-dom";
-import { getCalibrationStatus } from "../../utils/gameCalibrationRequirements";
+import { getCalibrationStatus, getGlobalCalibrationConfidence } from "../../utils/gameCalibrationRequirements";
 import {
   getAllTimeAvg,
   getAllTimeFirstNineAvg,
@@ -760,6 +760,13 @@ export default function MatchStartShowcase({
   }, []);
 
   const calibrationConfidencePercent = useMemo(() => {
+    // Prefer a live computation from the current errorPx when available so the
+    // pre-match banner reflects the latest measured quality. Fall back to the
+    // stored confidence if errorPx is missing.
+    if (typeof calibrationErrorPx === "number" && !Number.isNaN(calibrationErrorPx)) {
+      const live = getGlobalCalibrationConfidence(calibrationErrorPx as number);
+      if (typeof live === "number") return live;
+    }
     const confidence = localCalibration.confidence as
       | number
       | null
@@ -773,7 +780,7 @@ export default function MatchStartShowcase({
       return confidence.percentage;
     }
     return null;
-  }, [localCalibration.confidence]);
+  }, [localCalibration.confidence, calibrationErrorPx]);
 
   const calibrationStatusText = calibratedCameraLinked
     ? typeof calibrationConfidencePercent === "number"
