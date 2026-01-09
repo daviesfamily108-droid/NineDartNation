@@ -107,35 +107,76 @@ export async function ensureVideoPlays(opts: {
       return { attached: false, played: false, reason: "attach failed" };
     }
   }
+  // Serialize concurrent play attempts for the same <video> element to avoid
+  // AbortError races where a new load/play replaces a pending one.
+  // Use a WeakMap so entries don't leak when elements are removed.
+  const playAttemptMap: WeakMap<
+    HTMLVideoElement,
+    Promise<EnsureVideoPlaysResult>
+  > = (ensureVideoPlays as any)._playAttemptMap || new WeakMap();
+  (ensureVideoPlays as any)._playAttemptMap = playAttemptMap;
 
-  // Attempt play() with small backoff.
-  for (let i = 0; i < maxAttempts; i++) {
+  // If another caller is already trying to play this video, wait for it to
+  // complete first so we don't overlap load/play operations.
+  const existing = playAttemptMap.get(video);
+  if (existing) {
     try {
-      await waitForMetadata(video, metadataTimeoutMs);
-    } catch {}
-
-    try {
-      // Some browsers require a fresh play nudge even if already playing.
-      const p = video.play();
-      if (p && typeof (p as any).then === "function") await p;
-
-      // If we have frames coming through, we are good.
-      if ((video.videoWidth ?? 0) > 0 && (video.videoHeight ?? 0) > 0) {
-        return { attached, played: true };
-      }
-
-      // Even if dimensions aren't populated yet, if not paused we likely succeeded.
-      if (video.paused === false) {
-        return { attached, played: true };
-      }
-    } catch (err) {
-      try {
-        onPlayError?.(err);
-      } catch {}
+      const r = await existing;
+      return r;
+    } catch {
+      // fallthrough and attempt ourselves
     }
-
-    await sleep(120 + i * 150);
   }
 
-  return { attached, played: false, reason: "play retries exhausted" };
+  const attemptPromise = (async (): Promise<EnsureVideoPlaysResult> => {
+    for (let i = 0; i < maxAttempts; i++) {
+      try {
+        await waitForMetadata(video, metadataTimeoutMs);
+      } catch {}
+
+      try {
+        // Some browsers require a fresh play nudge even if already playing.
+        const p = video.play();
+        if (p && typeof (p as any).then === "function") await p;
+
+        // If we have frames coming through, we are good.
+        if ((video.videoWidth ?? 0) > 0 && (video.videoHeight ?? 0) > 0) {
+          return { attached, played: true };
+        }
+
+        // Even if dimensions aren't populated yet, if not paused we likely succeeded.
+        if (video.paused === false) {
+          return { attached, played: true };
+        }
+      } catch (err: any) {
+        // Treat AbortError specially: commonly caused by concurrent load/play
+        // events. Wait a short backoff and retry. Still report the error to
+        // the provided hook for diagnostics.
+        try {
+          onPlayError?.(err);
+        } catch {}
+        if (err && err.name === "AbortError") {
+          // small backoff before retrying
+          await sleep(120 + i * 150);
+          continue;
+        }
+      }
+
+      await sleep(120 + i * 150);
+    }
+
+    return { attached, played: false, reason: "play retries exhausted" };
+  })();
+
+  // store and await
+  playAttemptMap.set(video, attemptPromise);
+  try {
+    const res = await attemptPromise;
+    return res;
+  } finally {
+    // cleanup
+    try {
+      playAttemptMap.delete(video);
+    } catch {}
+  }
 }
