@@ -514,20 +514,27 @@ export default function MatchStartShowcase({
         // preview video here ensures the preview becomes the active anchor
         // while the pre-match overlay is visible.
         try {
-          cameraSession.setVideoElementRef?.(previewVideo);
-        } catch {}
-        Promise.resolve(
-          ensureVideoPlays({
-            video: previewVideo,
-            stream: s,
-            onPlayError: (e) => {
+          // Don't claim the global video ref until playback is confirmed.
+          // Publishing the stream is enough for tiles to detect it; claiming
+          // the video element prematurely can provoke play() races.
+          // We still attempt to ensure playback for the preview element here.
+          Promise.resolve(
+            ensureVideoPlays({
+              video: previewVideo,
+              stream: s,
+              onPlayError: (e) => {
+                try {
+                  lastPlayErrorRef.current =
+                    (e && (e as any).name) || (e as any)?.message || String(e);
+                } catch {}
+              },
+            }).then((res) => {
               try {
-                lastPlayErrorRef.current =
-                  (e && (e as any).name) || (e as any)?.message || String(e);
+                if (res && res.played) cameraSession.setVideoElementRef?.(previewVideo);
               } catch {}
-            },
-          }),
-        ).catch(() => {});
+            }),
+          ).catch(() => {});
+        } catch {}
       }
 
       // Attempt to ensure the preview is fully linked with a calibrated feed
@@ -553,13 +560,18 @@ export default function MatchStartShowcase({
                     // video ref or when the global ref pointed at a hidden
                     // element, which can prevent frames showing in this tile.
                     try {
-                      cameraSession.setVideoElementRef?.(pv);
+                      // Avoid immediately setting the global video ref here to
+                      // reduce cross-surface play() races. Attempt playback and
+                      // claim the ref only after ensureVideoPlays reports success.
                     } catch {}
 
                     const res = await ensureVideoPlays({
                       video: pv,
                       stream: ss,
                     }).catch(() => ({ played: false }));
+                    try {
+                      if (res.played) cameraSession.setVideoElementRef?.(pv);
+                    } catch {}
               const hasVideoDims = !!pv.videoWidth && !!pv.videoHeight;
               const hasStreamingPreview =
                 res.played &&

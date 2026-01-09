@@ -430,11 +430,11 @@ export default forwardRef(function CameraView(
     (el: HTMLVideoElement | null) => {
       (videoRef as unknown as { current: HTMLVideoElement | null }).current =
         el;
-      try {
-        cameraSession.setVideoElementRef?.(el);
-      } catch (e) {
-        // Ignore when session store isn't available (should not happen)
-      }
+      // Intentionally do NOT claim the global video element ref here. We
+      // prefer to claim the global ref only after playback has been
+      // confirmed (see ensureVideoPlays usage in startCamera). Claiming too
+      // early can cause multiple surfaces to race calling play() and produce
+      // AbortError interruptions.
     },
     [cameraSession],
   );
@@ -2042,11 +2042,22 @@ export default forwardRef(function CameraView(
           await applyAntiGlare(track);
         } catch {}
 
-        // Register the video element with the global camera session first so
-        // any play attempts are serialized with other preview tiles.
+        // Publish the MediaStream into the global camera session immediately so
+        // preview tiles can detect and attempt to attach the stream. We avoid
+        // claiming the global video element ref here to reduce play() races —
+        // we'll set the element ref only after playback is confirmed below.
         try {
-          cameraSession.setVideoElementRef?.(videoRef.current);
-        } catch {}
+          cameraSession.setMediaStream?.(stream);
+          cameraSession.setMode?.("local");
+          // Let other components know a stream exists; don't mark fully
+          // streaming until playback is confirmed.
+          cameraSession.setStreaming?.(true);
+        } catch (err) {
+          console.warn(
+            "[CAMERA] Failed to sync camera session with local stream:",
+            err,
+          );
+        }
 
         // Add event listeners for debugging
         try {
@@ -2078,16 +2089,29 @@ export default forwardRef(function CameraView(
         // Use ensureVideoPlays which serializes play attempts and retries on
         // AbortError. This reduces races when multiple UI surfaces try to
         // attach/play the same stream.
+        let playResult: any = null;
         try {
-          const res = await ensureVideoPlays({
+          playResult = await ensureVideoPlays({
             video: videoRef.current,
             stream,
             onPlayError: (e) => console.error("[CAMERA] Video play failed:", e),
           });
-          if (res.played) {
+          if (playResult.played) {
             dlog("[CAMERA] Video play ensured");
+            // Only claim the global video element ref once playback succeeds.
+            try {
+              const current = cameraSession.getVideoElementRef?.();
+              if (!current || current === videoRef.current) {
+                cameraSession.setVideoElementRef?.(videoRef.current);
+              }
+            } catch (e) {
+              // non-fatal
+            }
           } else {
-            console.warn("[CAMERA] ensureVideoPlays did not confirm playback:", res.reason);
+            console.warn(
+              "[CAMERA] ensureVideoPlays did not confirm playback:",
+              playResult?.reason,
+            );
           }
         } catch (err) {
           console.error("[CAMERA] ensureVideoPlays failed:", err);
@@ -2099,16 +2123,6 @@ export default forwardRef(function CameraView(
           "video tracks:",
           stream.getVideoTracks().length,
         );
-        try {
-          cameraSession.setMediaStream?.(stream);
-          cameraSession.setMode?.("local");
-          cameraSession.setStreaming?.(true);
-        } catch (err) {
-          console.warn(
-            "[CAMERA] Failed to sync camera session with local stream:",
-            err,
-          );
-        }
 
         // If phone camera is selected but we're falling back to local camera,
         // ensure the global session also sees the stream so the rest of the
@@ -2116,7 +2130,9 @@ export default forwardRef(function CameraView(
         if (isPhoneCamera) {
           try {
             cameraSession.setMediaStream?.(stream);
-            cameraSession.setVideoElementRef?.(videoRef.current);
+            if (playResult?.played) {
+              cameraSession.setVideoElementRef?.(videoRef.current);
+            }
           } catch (e) {}
         }
       } else {

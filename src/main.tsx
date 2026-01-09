@@ -22,6 +22,107 @@ installApiInterceptor();
 setupInstallPromptHooks();
 installQuietConsole();
 
+// Temporary global error collector (diagnostic only).
+// Purpose: capture initialization/runtime errors (like the reported "Cannot access 'Ns' before initialization")
+// and make it easy for a developer or QA to copy the full stack to clipboard.
+// Remove this block once diagnostics are complete.
+try {
+  let __ndn_last_error: any = null;
+
+  function __ndn_capture_and_clip(errInfo: any) {
+    try {
+      __ndn_last_error = errInfo;
+      // Log clearly so it's easy to find in console output
+      console.error("[NDN ErrorCollector] Captured error:", errInfo);
+      // Try to copy to clipboard for fast paste into issues. Not guaranteed
+      // to succeed (clipboard permissions), but we attempt it.
+      if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        try {
+          const text = typeof errInfo === "string" ? errInfo : JSON.stringify(errInfo, null, 2);
+          navigator.clipboard.writeText(text).then(
+            () => console.info("[NDN ErrorCollector] Error copied to clipboard"),
+            () => console.info("[NDN ErrorCollector] Could not copy to clipboard")
+          );
+        } catch {
+          // ignore clipboard errors
+        }
+      }
+    } catch (e) {
+      try {
+        console.error("[NDN ErrorCollector] capture failed", e);
+      } catch {}
+    }
+  }
+
+  window.addEventListener(
+    "error",
+    (ev: any) => {
+      try {
+        const info = {
+          message: ev?.message || (ev?.error && ev.error.message) || String(ev),
+          filename: ev?.filename || null,
+          lineno: ev?.lineno || null,
+          colno: ev?.colno || null,
+          stack: ev?.error?.stack || (ev?.error && String(ev.error)) || null,
+          type: "error",
+        };
+        __ndn_capture_and_clip(info);
+      } catch (e) {
+        try {
+          console.error("[NDN ErrorCollector] error handler failed", e);
+        } catch {}
+      }
+    },
+    true,
+  );
+
+  window.addEventListener("unhandledrejection", (ev: any) => {
+    try {
+      const reason = ev?.reason;
+      const info = {
+        message: reason?.message || String(reason) || "UnhandledRejection",
+        stack: reason?.stack || null,
+        type: "unhandledrejection",
+      };
+      __ndn_capture_and_clip(info);
+    } catch (e) {
+      try {
+        console.error("[NDN ErrorCollector] unhandledrejection handler failed", e);
+      } catch {}
+    }
+  });
+
+  // Expose a helper to collect the last error programmatically from the console
+  ;(window as any).__ndn_error_collector = {
+    collect: async () => {
+      try {
+        if (!__ndn_last_error) return null;
+        // Try to copy the last error again on demand
+        if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(JSON.stringify(__ndn_last_error, null, 2));
+            console.info("[NDN ErrorCollector] Last error copied to clipboard");
+          } catch {
+            console.info("[NDN ErrorCollector] Could not copy last error to clipboard");
+          }
+        }
+        return __ndn_last_error;
+      } catch (e) {
+        try {
+          console.error("[NDN ErrorCollector] collect failed", e);
+        } catch {}
+        return null;
+      }
+    },
+    last: () => __ndn_last_error,
+  };
+} catch (e) {
+  // best-effort; do not break app startup if this diagnostic install fails
+  try {
+    console.warn("[NDN ErrorCollector] install failed", e);
+  } catch {}
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>

@@ -94,46 +94,12 @@ export default function CameraTile({
     pairCodeRef.current = pairCode;
   }, [pairCode]);
 
-  // Always register the current <video> element with the global camera session.
-  // This is especially important for the pre-game overlay where we want the
-  // already-running calibrated stream to appear immediately.
-  useEffect(() => {
-    // Debounced/guarded registration to avoid rapidly swapping the global
-    // video ref which can interrupt play() calls and produce AbortError.
-    let timer: any = null;
-    let cancelled = false;
-    try {
-      const v = videoRef.current;
-      if (!v) return;
-      const trySet = () => {
-        try {
-          const current = cameraSession.getVideoElementRef?.();
-          // Only claim if nobody has one, or we are already the active ref.
-          if (!current || current === v) {
-            cameraSession.setVideoElementRef?.(v);
-          }
-        } catch {}
-      };
-
-      // If there's no current ref, set immediately. Otherwise debounce the claim
-      // slightly so short remounts or re-renders don't thrash the global ref.
-      const current = cameraSession.getVideoElementRef?.();
-      if (!current) {
-        trySet();
-      } else if (current !== v) {
-        timer = setTimeout(() => {
-          if (!cancelled) trySet();
-        }, 200);
-      }
-    } catch {}
-    return () => {
-      cancelled = true;
-      try {
-        if (timer) clearTimeout(timer);
-      } catch {}
-      // IMPORTANT: don't clear the global ref automatically here.
-    };
-  }, [cameraSession]);
+  // NOTE: we intentionally avoid claiming the global video element ref here
+  // before playback succeeds. Previously we would register this <video>
+  // immediately which could cause multiple surfaces to race to claim the
+  // global ref and trigger overlapping video.play() calls (AbortError).
+  // Instead, callers below will set the global ref only after
+  // ensureVideoPlays confirms playback.
   const registerStream = useCallback(
     (stream: MediaStream | null, modeOverride: CameraStreamMode = "local") => {
       try {
@@ -202,17 +168,6 @@ export default function CameraTile({
     try {
       const v = videoRef.current;
       if (!v) return false;
-
-      // Always ensure the tile video element is registered. This gives the
-      // global camera session a reliable fallback anchor (srcObject) even if the
-      // stream holder is momentarily null during UI transitions.
-      try {
-        const current = cameraSession.getVideoElementRef?.();
-        if (!current || current === v) {
-          cameraSession.setVideoElementRef?.(v);
-        }
-      } catch {}
-
       const s = cameraSession.getMediaStream?.() || null;
       const liveTracks = (s?.getVideoTracks?.() || []).filter(
         (t) => t.readyState === "live",
@@ -225,6 +180,17 @@ export default function CameraTile({
         onPlayError: (e) => console.warn("[CameraTile] Play failed:", e),
       });
       setStreaming(!!res.played);
+      // Only claim the global video element ref once playback is actually
+      // happening. This avoids racing with other surfaces that may also be
+      // trying to start playback at the same time.
+      if (res.played) {
+        try {
+          const current = cameraSession.getVideoElementRef?.();
+          if (!current || current === v) {
+            cameraSession.setVideoElementRef?.(v);
+          }
+        } catch {}
+      }
       return !!res.played;
     } catch {
       return false;
@@ -412,6 +378,14 @@ export default function CameraTile({
         try {
           const res = await ensureVideoPlays({ video: v, stream: s });
           setStreaming(!!res.played);
+          if (res.played) {
+            try {
+              const current = cameraSession.getVideoElementRef?.();
+              if (!current || current === v) {
+                cameraSession.setVideoElementRef?.(v);
+              }
+            } catch {}
+          }
         } catch {
           setStreaming(true);
         }
