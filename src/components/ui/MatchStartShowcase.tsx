@@ -841,6 +841,33 @@ export default function MatchStartShowcase({
               {/* Warmup CameraView removed: use the CameraTile inside the preview box so the feed
                   matches the grey rounded container. If no stream exists we request startup
                   elsewhere in this component (ndn:start-camera). */}
+              {/* Offscreen warmup CameraView: mount a hidden CameraView while the
+                  pre-match overlay is visible so the CameraView becomes the owner
+                  of the getUserMedia stream. This guarantees a global stream is
+                  available for the preview `CameraTile` to attach to, reducing
+                  race conditions where the preview appears black. Mirrors the
+                  offscreen warmup used in `App.tsx`. */}
+              {shouldWarmupCamera && (
+                <div
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    left: -9999,
+                    width: 320,
+                    height: 240,
+                    overflow: "hidden",
+                    pointerEvents: "none",
+                    opacity: 0,
+                  }}
+                >
+                  <CameraView
+                    showToolbar={false}
+                    hideInlinePanels
+                    scoringMode="custom"
+                    immediateAutoCommit={false}
+                  />
+                </div>
+              )}
               {/* Decorative background glow */}
               <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 rounded-[3rem] blur-3xl -z-10 opacity-50 animate-pulse" />
 
