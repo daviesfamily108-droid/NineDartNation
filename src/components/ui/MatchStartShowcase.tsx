@@ -818,9 +818,9 @@ export default function MatchStartShowcase({
                   // Shift down an additional 56mm (total +93mm) and right ~7mm,
                   // and stretch width by +5mm as requested.
                   style={{
-                    top: "calc(1.5rem + 93mm)",
+                    top: "calc(1.5rem + 123mm)",
                     left: "calc(1.5rem + 7mm)",
-                    width: "calc(20rem + 5mm)",
+                    width: "calc(20rem + 18mm)",
                   }}
                 >
                   <CameraView
