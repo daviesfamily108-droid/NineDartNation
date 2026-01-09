@@ -399,6 +399,20 @@ export default function MatchStartShowcase({
     try {
       setCameraEnabled(true);
     } catch {}
+    // If no global stream is present, request the app to start the local camera.
+    try {
+      const s = cameraSession.getMediaStream?.();
+      const hasLive = (s?.getVideoTracks?.() || []).some(
+        (t: any) => t && t.readyState === "live",
+      );
+      if (!s || !hasLive) {
+        try {
+          window.dispatchEvent(
+            new CustomEvent("ndn:start-camera", { detail: { mode: "local" } }),
+          );
+        } catch {}
+      }
+    } catch {}
     // DEV: poll current stream + video element state so we can debug black previews.
     // This is intentionally lightweight and only runs while the overlay is visible.
     let diagTimer: number | null = null;
