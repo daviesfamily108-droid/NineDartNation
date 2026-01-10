@@ -21,10 +21,10 @@ import {
   BoardRadii,
   type Homography,
   detectBoardOrientation,
-  thetaToDegrees,
   ransacHomography,
   refinePointSobel,
 } from "../utils/vision";
+import { thetaRadToDeg } from "../utils/math";
 import {
   buildDiagnosticBundle,
   downloadDiagnostic,
@@ -2352,7 +2352,7 @@ export default function Calibrator() {
                   Board Rotation
                 </label>
                 <span className="text-sm font-bold text-cyan-400">
-                  {thetaToDegrees(theta).toFixed(1)}°
+                  {thetaRadToDeg(theta).toFixed(1)}°
                 </span>
               </div>
               <input
@@ -2360,16 +2360,16 @@ export default function Calibrator() {
                 min="-180"
                 max="180"
                 step="1"
-                value={-thetaToDegrees(theta)}
+                value={-thetaRadToDeg(theta)}
                 onChange={(e) =>
                   setTheta(-((parseFloat(e.target.value) * Math.PI) / 180))
                 }
                 className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
               />
               <p className="text-xs text-slate-400 mt-1">
-                {Math.abs(thetaToDegrees(theta)) < 1
+                {Math.abs(thetaRadToDeg(theta)) < 1
                   ? "✅ Camera is front-facing"
-                  : `Camera is rotated ${Math.abs(thetaToDegrees(theta)).toFixed(1)}° ${thetaToDegrees(theta) > 0 ? "clockwise" : "counter-clockwise"}`}
+                  : `Camera is rotated ${Math.abs(thetaRadToDeg(theta)).toFixed(1)}° ${thetaRadToDeg(theta) > 0 ? "clockwise" : "counter-clockwise"}`}
               </p>
             </div>
 
@@ -2495,7 +2495,7 @@ export default function Calibrator() {
                     {autoDetectResult.theta !== undefined && (
                       <p>
                         ✅ Camera angle:{" "}
-                        {thetaToDegrees(autoDetectResult.theta).toFixed(1)}°
+                        {thetaRadToDeg(autoDetectResult.theta).toFixed(1)}°
                       </p>
                     )}
                   </div>
