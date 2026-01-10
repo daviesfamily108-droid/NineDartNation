@@ -1536,16 +1536,25 @@ export default function App() {
           access on first visit (browser permission prompt). If the user denies permission
           the camera will remain inactive. */}
       {user && (
+        // Keep the warmup CameraView mounted and rendered by the browser
+        // compositor while remaining invisible to the user. Avoid using
+        // `display:none` or moving the element far offscreen (left:-9999)
+        // because some browsers will stop painting video frames for such
+        // elements. Using a visible layout rectangle with `opacity:0` keeps
+        // frames flowing while remaining non-interactive.
         <div
           aria-hidden
           style={{
             position: "absolute",
-            left: -9999,
+            right: 8,
+            bottom: 8,
             width: 320,
             height: 240,
             overflow: "hidden",
             pointerEvents: "none",
             opacity: 0,
+            // Keep behind other UI but still rendered
+            zIndex: -1,
           }}
         >
           <Suspense fallback={null}>
