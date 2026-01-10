@@ -2337,6 +2337,20 @@ export default forwardRef(function CameraView(
   let sampleHandle: number | null = null;
     const pc = previewCanvasRef.current;
     const v = videoRef.current;
+    const [previewDiag, setPreviewDiag] = (() => {
+      // lightweight local state via closure: we expose a runPreviewDiag function
+      // below that will call the outer setPreviewDiag if mounted. To avoid
+      // React state here (large file), we implement a small closure store.
+      let diag: any = null;
+      const set = (d: any) => {
+        try {
+          diag = d;
+          // eslint-disable-next-line no-console
+          console.info("CameraView diag:", d);
+        } catch {}
+      };
+      return [diag, set] as any;
+    })();
     function stopLoop() {
       if (rafId != null) {
         cancelAnimationFrame(rafId);
@@ -2453,6 +2467,48 @@ export default forwardRef(function CameraView(
           }
         }, 300);
       } catch (e) {}
+    };
+    // runPreviewDiag: expose quick diagnostics (console and small return)
+    const runPreviewDiag = () => {
+      try {
+        const vv = videoRef.current;
+        const cc = previewCanvasRef.current;
+        const comp = vv ? getComputedStyle(vv) : null;
+        const canvasComp = cc ? getComputedStyle(cc) : null;
+        let brightness: number | null = null;
+        if (vv && cc) {
+          try {
+            const tmp = document.createElement("canvas");
+            const TW = 32;
+            const TH = 32;
+            tmp.width = TW;
+            tmp.height = TH;
+            const tctx = tmp.getContext("2d");
+            if (tctx) {
+              tctx.drawImage(vv, 0, 0, TW, TH);
+              const d = tctx.getImageData(0, 0, TW, TH).data;
+              let s = 0;
+              for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+              brightness = s / (TW * TH * 255);
+            }
+          } catch (e) {
+            brightness = null;
+          }
+        }
+        const payload = {
+          video: vv ? { readyState: vv.readyState, videoWidth: vv.videoWidth, videoHeight: vv.videoHeight, paused: vv.paused } : null,
+          canvas: cc ? { width: cc.width, height: cc.height, visibility: cc.style.visibility } : null,
+          videoStyle: comp ? { display: comp.display, visibility: comp.visibility, opacity: comp.opacity, zIndex: comp.zIndex, transform: comp.transform } : null,
+          canvasStyle: canvasComp ? { display: canvasComp.display, visibility: canvasComp.visibility, opacity: canvasComp.opacity, zIndex: canvasComp.zIndex, transform: canvasComp.transform } : null,
+          brightness,
+          ts: Date.now(),
+        };
+        try { console.info("CameraView preview diag:", payload); } catch {}
+        return payload;
+      } catch (e) {
+        try { console.warn("preview diag failed", e); } catch {}
+        return { error: String(e) };
+      }
     };
 
     startSampler();

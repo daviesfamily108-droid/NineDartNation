@@ -83,6 +83,7 @@ export default function CameraTile({
 }: CameraTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [previewDiag, setPreviewDiag] = useState<any>(null);
   const cameraSession = useCameraSession();
   const [streaming, setStreaming] = useState(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
@@ -1332,6 +1333,54 @@ function CameraFrame(props: any) {
     );
   })();
 
+
+  // Diagnostic helper (toggle via localStorage key 'ndn:enablePreviewDiag' = '1')
+  const runPreviewDiag = useCallback(async () => {
+    try {
+      const v = videoRef.current;
+      const c = previewCanvasRef.current;
+      const win = typeof window !== "undefined" ? (window as any) : undefined;
+      const comp = v ? getComputedStyle(v) : null;
+      const canvasComp = c ? getComputedStyle(c) : null;
+      let brightness: number | null = null;
+      if (v && c) {
+        try {
+          const tmp = document.createElement("canvas");
+          const TW = 32;
+          const TH = 32;
+          tmp.width = TW;
+          tmp.height = TH;
+          const tctx = tmp.getContext("2d");
+          if (tctx) {
+            tctx.drawImage(v, 0, 0, TW, TH);
+            const d = tctx.getImageData(0, 0, TW, TH).data;
+            let s = 0;
+            for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            brightness = s / (TW * TH * 255);
+          }
+        } catch (e) {
+          brightness = null;
+        }
+      }
+      setPreviewDiag({
+        video: v
+          ? { readyState: v.readyState, videoWidth: v.videoWidth, videoHeight: v.videoHeight, paused: v.paused }
+          : null,
+        canvas: c ? { width: c.width, height: c.height, visibility: c.style.visibility } : null,
+        videoStyle: comp
+          ? { display: comp.display, visibility: comp.visibility, opacity: comp.opacity, zIndex: comp.zIndex, transform: comp.transform }
+          : null,
+        canvasStyle: canvasComp
+          ? { display: canvasComp.display, visibility: canvasComp.visibility, opacity: canvasComp.opacity, zIndex: canvasComp.zIndex, transform: canvasComp.transform }
+          : null,
+        localStorage: win ? { forceCanvas: win.localStorage.getItem("ndn:forceCanvasFallback"), enableDiag: win.localStorage.getItem("ndn:enablePreviewDiag") } : null,
+        brightness,
+        ts: Date.now(),
+      });
+    } catch (e) {
+      setPreviewDiag({ error: String(e), ts: Date.now() });
+    }
+  }, [videoRef, previewCanvasRef]);
   async function copyValue(
     value: string | null | undefined,
     type: "link" | "code",
@@ -1374,6 +1423,51 @@ function CameraFrame(props: any) {
           className="absolute inset-0 w-full h-full pointer-events-none"
           style={{ ...(commonVideoProps.style as any), imageRendering: "auto", visibility: "hidden" }}
         />
+        {/* Diagnostic overlay (toggle with localStorage key 'ndn:enablePreviewDiag' = '1') */}
+        {typeof window !== "undefined" && window.localStorage.getItem("ndn:enablePreviewDiag") === "1" ? (
+          <div className="absolute bottom-2 left-2 z-30 p-2 text-xs bg-black/70 text-white rounded max-w-xs">
+            <div className="flex gap-2 mb-1">
+              <button
+                className="px-2 py-1 bg-emerald-600 rounded"
+                onClick={() => {
+                  try {
+                    runPreviewDiag();
+                  } catch {}
+                }}
+              >
+                Run diag
+              </button>
+              <button
+                className="px-2 py-1 bg-slate-600 rounded"
+                onClick={() => {
+                  try {
+                    // force a single immediate draw into canvas
+                    const v = videoRef.current;
+                    const c = previewCanvasRef.current;
+                    if (v && c) {
+                      try {
+                        const rect = c.getBoundingClientRect();
+                        c.width = Math.max(1, Math.round(rect.width));
+                        c.height = Math.max(1, Math.round(rect.height));
+                        const ctx = c.getContext("2d");
+                        if (ctx) {
+                          ctx.clearRect(0, 0, c.width, c.height);
+                          ctx.drawImage(v, 0, 0, c.width, c.height);
+                          c.style.visibility = "visible";
+                        }
+                      } catch (e) {}
+                    }
+                  } catch (e) {}
+                }}
+              >
+                Force draw
+              </button>
+            </div>
+            <div className="break-words text-[11px] max-h-40 overflow-auto">
+              <pre className="whitespace-pre-wrap">{JSON.stringify(previewDiag, null, 2)}</pre>
+            </div>
+          </div>
+        ) : null}
         {cameraSession.isStreaming && mode === "phone" && (
           <div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/70 backdrop-blur border border-rose-500/60 text-xs text-rose-200 font-semibold shadow-lg">
             <span className="inline-block w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
