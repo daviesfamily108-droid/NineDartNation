@@ -2333,6 +2333,8 @@ export default forwardRef(function CameraView(
     let rafId: number | null = null;
     let mounted = true;
     let activated = false;
+  let sampleBlankCount = 0;
+  let sampleHandle: number | null = null;
     const pc = previewCanvasRef.current;
     const v = videoRef.current;
     function stopLoop() {
@@ -2412,12 +2414,58 @@ export default forwardRef(function CameraView(
       }
     };
 
+    // Sampling heuristic: detect very dark/blank frames and enable fallback
+    const startSampler = () => {
+      try {
+        if (typeof document === "undefined") return;
+        const sampler = document.createElement("canvas");
+        const SW = 32;
+        const SH = 32;
+        sampler.width = SW;
+        sampler.height = SH;
+        const sctx = sampler.getContext("2d");
+        if (!sctx) return;
+        sampleHandle = window.setInterval(() => {
+          try {
+            const vv = videoRef.current;
+            if (!vv || vv.videoWidth === 0 || vv.videoHeight === 0) {
+              sampleBlankCount = 0;
+              return;
+            }
+            sctx.clearRect(0, 0, SW, SH);
+            sctx.drawImage(vv, 0, 0, SW, SH);
+            const data = sctx.getImageData(0, 0, SW, SH).data;
+            let sum = 0;
+            for (let i = 0; i < data.length; i += 4) {
+              sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            }
+            const avg = sum / (SW * SH * 255);
+            if (avg < 0.02) sampleBlankCount += 1;
+            else sampleBlankCount = 0;
+            if (sampleBlankCount >= 3) {
+              try { console.info("CameraView: video surface appears blank; enabling canvas fallback"); } catch {}
+              sampleBlankCount = 0;
+              stopLoop();
+              rafId = requestAnimationFrame(drawLoop);
+            }
+          } catch (e) {
+            /* ignore */
+          }
+        }, 300);
+      } catch (e) {}
+    };
+
+    startSampler();
+
     startIfNeeded();
     const poll = setInterval(() => startIfNeeded(), 400);
     return () => {
       mounted = false;
       stopLoop();
       clearInterval(poll);
+      try {
+        if (sampleHandle) clearInterval(sampleHandle);
+      } catch {}
     };
   }, [videoRef, previewCanvasRef]);
 

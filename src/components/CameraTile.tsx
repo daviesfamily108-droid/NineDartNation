@@ -429,6 +429,8 @@ export default function CameraTile({
     let raf = 0 as number;
     let running = true;
     let activated = false;
+    let sampleBlankCount = 0;
+    let sampleHandle: number | null = null;
 
     function shouldUseFallback(v: HTMLVideoElement | null) {
       if (!v) return false;
@@ -515,6 +517,58 @@ export default function CameraTile({
       }
     }, 500);
 
+    // Sampling heuristic: occasionally sample a small downscaled frame and
+    // check average brightness. If several consecutive samples are very dark
+    // we consider the video surface blank and enable the canvas fallback.
+    const startSampler = () => {
+      try {
+        if (typeof document === "undefined") return;
+        const sampler = document.createElement("canvas");
+        const SW = 32;
+        const SH = 32;
+        sampler.width = SW;
+        sampler.height = SH;
+        const sctx = sampler.getContext("2d");
+        if (!sctx) return;
+        sampleHandle = window.setInterval(() => {
+          try {
+            const v = videoRef.current;
+            if (!v || v.videoWidth === 0 || v.videoHeight === 0) {
+              sampleBlankCount = 0;
+              return;
+            }
+            sctx.clearRect(0, 0, SW, SH);
+            sctx.drawImage(v, 0, 0, SW, SH);
+            const data = sctx.getImageData(0, 0, SW, SH).data;
+            let sum = 0;
+            for (let i = 0; i < data.length; i += 4) {
+              // luminance approximation (rec. 601)
+              sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            }
+            const avg = sum / (SW * SH * 255);
+            // If average brightness below 0.02 (very dark), increment blank counter
+            if (avg < 0.02) {
+              sampleBlankCount += 1;
+            } else {
+              sampleBlankCount = 0;
+            }
+            // If we see 3 consecutive blank samples, force the fallback
+            if (sampleBlankCount >= 3) {
+              try {
+                console.info("CameraTile: video surface appears blank; enabling canvas fallback");
+              } catch {}
+              sampleBlankCount = 0;
+              running = true;
+              raf = requestAnimationFrame(drawLoop);
+            }
+          } catch (e) {
+            /* ignore sampling errors */
+          }
+        }, 300);
+      } catch (e) {}
+    };
+    startSampler();
+
     return () => {
       running = false;
       try {
@@ -522,6 +576,9 @@ export default function CameraTile({
       } catch {}
       try {
         clearInterval(poll);
+      } catch {}
+      try {
+        if (sampleHandle) clearInterval(sampleHandle);
       } catch {}
     };
   }, [videoRef]);
