@@ -450,6 +450,14 @@ export default forwardRef(function CameraView(
     streaming || sessionStreaming || process.env.NODE_ENV === "test";
 
   const [cameraStarting, setCameraStarting] = useState(false);
+  const retryCountRef = useRef(0);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Track whether the tab/window is visible so we can pause heavy camera work
   // (overlay drawing + CV detection) when in the background.
@@ -2098,6 +2106,10 @@ export default forwardRef(function CameraView(
           });
           if (playResult.played) {
             dlog("[CAMERA] Video play ensured");
+            // Reset retry counter on success
+            try {
+              retryCountRef.current = 0;
+            } catch {}
             // Only claim the global video element ref once playback succeeds.
             try {
               const current = cameraSession.getVideoElementRef?.();
@@ -2115,6 +2127,35 @@ export default forwardRef(function CameraView(
           }
         } catch (err) {
           console.error("[CAMERA] ensureVideoPlays failed:", err);
+        }
+
+        // If playback didn't start, schedule a few retry attempts to recover.
+        try {
+          const played = !!(playResult && playResult.played);
+          if (!played) {
+            const MAX_CAMERA_RETRIES = 3;
+            const currentRetry = retryCountRef.current ?? 0;
+            if (currentRetry < MAX_CAMERA_RETRIES && isMountedRef.current) {
+              retryCountRef.current = currentRetry + 1;
+              const backoff = 700 * Math.pow(2, currentRetry); // 700ms, 1400ms, 2800ms
+              dlog("[CAMERA] Scheduling camera restart retry", retryCountRef.current, "in", backoff, "ms");
+              setTimeout(async () => {
+                try {
+                  if (!isMountedRef.current) return;
+                  // Stop current tracks and re-attempt start
+                  stopCamera();
+                  await new Promise((r) => setTimeout(r, 120));
+                  await startCamera();
+                } catch (e) {
+                  dlog("[CAMERA] Retry attempt failed:", e);
+                }
+              }, backoff);
+            } else {
+              dlog("[CAMERA] Max camera retries reached or unmounted; not retrying");
+            }
+          }
+        } catch (e) {
+          // ignore
         }
 
         dlog(

@@ -369,6 +369,27 @@ export default function MatchStartShowcase({
       (import.meta as any).env.MODE === "development");
   const [previewDiag, setPreviewDiag] = useState<any>(null);
   const lastPlayErrorRef = useRef<string | null>(null);
+  const [diagCopied, setDiagCopied] = useState(false);
+
+  const collectDiagnostics = async () => {
+    try {
+      const cam = await (window as any).__ndn_camera_debug?.collect?.();
+      const err = await (window as any).__ndn_error_collector?.collect?.();
+      const payload = { camera: cam || null, error: err || null, previewDiag: previewDiag || null, ts: Date.now() };
+      try {
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+          setDiagCopied(true);
+          setTimeout(() => setDiagCopied(false), 2000);
+        }
+      } catch {}
+      console.log("[NDN Diagnostics]", payload);
+      return payload;
+    } catch (e) {
+      console.warn("Collect diagnostics failed", e);
+      return null;
+    }
+  };
 
   // Retry pump: when overlay is visible but preview isn't linked, attempt to
   // request the app to start the camera a few times with backoff. This helps
@@ -1280,6 +1301,17 @@ export default function MatchStartShowcase({
                                 </div>
                                 <div>
                                   <strong>previewReady:</strong> {String(previewReady)}
+                                </div>
+                                <div className="mt-2">
+                                  <button
+                                    className="btn btn--small px-2 py-1 mr-2"
+                                    onClick={async () => {
+                                      await collectDiagnostics();
+                                    }}
+                                  >
+                                    Collect diagnostics
+                                  </button>
+                                  <span className="text-xs ml-1">{diagCopied ? 'Copied!' : ''}</span>
                                 </div>
                                 <div className="mt-1">
                                   <strong>previewDiag:</strong>
