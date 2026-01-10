@@ -419,6 +419,7 @@ export default forwardRef(function CameraView(
     [],
   );
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const [streaming, setStreaming] = useState(false);
   const [videoReady, setVideoReady] = useState(false); // Track when video has dimensions
@@ -2326,6 +2327,72 @@ export default forwardRef(function CameraView(
     } catch {}
   }, [showVideoDiagnostics, cameraAccessError, collectVideoDiagnostics]);
 
+  // Preview fallback: copy video frames into a canvas when the native
+  // <video> element has dimensions but isn't being painted (readyState low).
+  useEffect(() => {
+    let rafId: number | null = null;
+    let mounted = true;
+    const pc = previewCanvasRef.current;
+    const v = videoRef.current;
+    function stopLoop() {
+      if (rafId != null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+    }
+    function drawLoop() {
+      try {
+        const vv = videoRef.current;
+        const cc = previewCanvasRef.current;
+        if (!mounted || !vv || !cc) return stopLoop();
+        const vw = vv.videoWidth || 0;
+        const vh = vv.videoHeight || 0;
+        if (vw <= 0 || vh <= 0) {
+          rafId = requestAnimationFrame(drawLoop);
+          return;
+        }
+        const rect = cc.getBoundingClientRect();
+        const cw = Math.max(1, Math.round(rect.width));
+        const ch = Math.max(1, Math.round(rect.height));
+        if (cc.width !== cw || cc.height !== ch) {
+          cc.width = cw;
+          cc.height = ch;
+        }
+        const ctx = cc.getContext("2d");
+        if (!ctx) return stopLoop();
+        try {
+          ctx.clearRect(0, 0, cc.width, cc.height);
+          ctx.drawImage(vv, 0, 0, cc.width, cc.height);
+        } catch (e) {
+          // drawImage may throw if frames aren't available yet; ignore
+        }
+        rafId = requestAnimationFrame(drawLoop);
+      } catch (e) {
+        stopLoop();
+      }
+    }
+
+    const startIfNeeded = () => {
+      const vv = videoRef.current;
+      const cc = previewCanvasRef.current;
+      if (!vv || !cc) return;
+      const hasDims = !!(vv.videoWidth && vv.videoHeight);
+      const notPainting = vv.readyState === 0 || vv.readyState < 2;
+      if (hasDims && notPainting) {
+        stopLoop();
+        rafId = requestAnimationFrame(drawLoop);
+      }
+    };
+
+    startIfNeeded();
+    const poll = setInterval(() => startIfNeeded(), 400);
+    return () => {
+      mounted = false;
+      stopLoop();
+      clearInterval(poll);
+    };
+  }, [videoRef, previewCanvasRef]);
+
   // Inline device refresh (does NOT request permission).
   async function refreshCameraDeviceList() {
     try {
@@ -4109,6 +4176,16 @@ export default forwardRef(function CameraView(
             playsInline
             muted
             autoPlay
+          />
+          {/* Preview fallback canvas: used to copy video frames when the
+              native <video> element doesn't paint frames (readyState 0) but
+              dimensions are available. This canvas sits above the video and
+              below the overlay so it provides a visual preview without
+              interfering with overlay drawing. */}
+          <canvas
+            ref={previewCanvasRef}
+            className="absolute inset-0 w-full h-full"
+            style={{ pointerEvents: "none" }}
           />
           <canvas
             ref={overlayRef}
