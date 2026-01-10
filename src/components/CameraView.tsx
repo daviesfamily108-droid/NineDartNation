@@ -2332,6 +2332,7 @@ export default forwardRef(function CameraView(
   useEffect(() => {
     let rafId: number | null = null;
     let mounted = true;
+    let activated = false;
     const pc = previewCanvasRef.current;
     const v = videoRef.current;
     function stopLoop() {
@@ -2351,6 +2352,16 @@ export default forwardRef(function CameraView(
           rafId = requestAnimationFrame(drawLoop);
           return;
         }
+        // Ensure preview canvas is visible while drawing
+        try {
+          if (!activated) {
+            try {
+              console.info("CameraView: preview-canvas fallback activated");
+            } catch {}
+            activated = true;
+          }
+          if (cc.style.visibility !== "visible") cc.style.visibility = "visible";
+        } catch {}
         const rect = cc.getBoundingClientRect();
         const cw = Math.max(1, Math.round(rect.width));
         const ch = Math.max(1, Math.round(rect.height));
@@ -2378,9 +2389,26 @@ export default forwardRef(function CameraView(
       if (!vv || !cc) return;
       const hasDims = !!(vv.videoWidth && vv.videoHeight);
       const notPainting = vv.readyState === 0 || vv.readyState < 2;
+      // QA override to force drawing
+      try {
+        if (typeof window !== "undefined") {
+          const q = window.localStorage.getItem("ndn:forceCanvasFallback");
+          if (q === "1" || q === "true") {
+            try { console.info("CameraView: forced canvas fallback via localStorage"); } catch {}
+            stopLoop();
+            rafId = requestAnimationFrame(drawLoop);
+            return;
+          }
+        }
+      } catch {}
       if (hasDims && notPainting) {
         stopLoop();
         rafId = requestAnimationFrame(drawLoop);
+      } else {
+        // Hide canvas when not needed
+        try {
+          if (previewCanvasRef.current) previewCanvasRef.current.style.visibility = "hidden";
+        } catch {}
       }
     };
 

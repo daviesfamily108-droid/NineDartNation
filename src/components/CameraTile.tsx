@@ -82,6 +82,7 @@ export default function CameraTile({
   tileFitModeOverride: tileFitModeOverrideProp,
 }: CameraTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const cameraSession = useCameraSession();
   const [streaming, setStreaming] = useState(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
@@ -419,6 +420,111 @@ export default function CameraTile({
       } catch {}
     };
   }, [preferredCameraLabel, mode, cameraSession, cameraSession.isStreaming]);
+
+  // Draw frames into the preview canvas when the video has dimensions but
+  // doesn't appear to be painting (readyState is low). This is a lightweight
+  // fallback for browsers / virtual cameras that report a live stream but the
+  // <video> surface remains blank.
+  useEffect(() => {
+    let raf = 0 as number;
+    let running = true;
+    let activated = false;
+
+    function shouldUseFallback(v: HTMLVideoElement | null) {
+      if (!v) return false;
+      const w = v.videoWidth || 0;
+      const h = v.videoHeight || 0;
+      // If we have dimensions but readyState indicates no frames painted,
+      // enable the fallback drawing loop.
+      // Allow QA override via localStorage to force the canvas fallback
+      try {
+        if (typeof window !== "undefined") {
+          const q = window.localStorage.getItem("ndn:forceCanvasFallback");
+          if (q === "1" || q === "true") {
+            try { console.info("CameraTile: forced canvas fallback via localStorage"); } catch {}
+            return true;
+          }
+        }
+      } catch {}
+      return w > 0 && h > 0 && v.readyState < 2;
+    }
+
+    const drawLoop = () => {
+      if (!running) return;
+      const v = videoRef.current;
+      const c = previewCanvasRef.current;
+      if (shouldUseFallback(v) && c && v) {
+        try {
+          // Ensure canvas is visible when we start drawing
+          try {
+            if (!activated) {
+              // One-time activation log for QA/telemetry
+              try {
+                console.info("CameraTile: preview-canvas fallback activated");
+              } catch {}
+              activated = true;
+            }
+            if (c.style.visibility !== "visible") c.style.visibility = "visible";
+          } catch {}
+
+          const w = v.videoWidth;
+          const h = v.videoHeight;
+          if (c.width !== w || c.height !== h) {
+            c.width = w;
+            c.height = h;
+          }
+          const ctx = c.getContext("2d");
+          if (ctx) {
+            // Clear then draw; drawing may throw if no current frame is available
+            ctx.clearRect(0, 0, c.width, c.height);
+            ctx.drawImage(v, 0, 0, c.width, c.height);
+          }
+        } catch (err) {
+          // ignore drawing errors — we'll retry on the next frame
+        }
+      }
+      // Stop drawing when fallback no longer needed
+      if (!shouldUseFallback(videoRef.current)) {
+        // clear the canvas to avoid showing stale data and hide it
+        try {
+          const c = previewCanvasRef.current;
+          if (c) {
+            const ctx = c.getContext("2d");
+            if (ctx) ctx.clearRect(0, 0, c.width, c.height);
+            try {
+              c.style.visibility = "hidden";
+            } catch {}
+          }
+        } catch {}
+        running = false;
+        return;
+      }
+      raf = requestAnimationFrame(drawLoop);
+    };
+
+    // Kick off the loop if fallback condition is true at mount or when video updates
+    if (shouldUseFallback(videoRef.current)) {
+      raf = requestAnimationFrame(drawLoop);
+    }
+
+    // Also watch for transitions: poll briefly to start drawing if needed.
+    const poll = setInterval(() => {
+      if (!running && shouldUseFallback(videoRef.current)) {
+        running = true;
+        raf = requestAnimationFrame(drawLoop);
+      }
+    }, 500);
+
+    return () => {
+      running = false;
+      try {
+        if (raf) cancelAnimationFrame(raf);
+      } catch {}
+      try {
+        clearInterval(poll);
+      } catch {}
+    };
+  }, [videoRef]);
 
   const start = useCallback(async () => {
     dlog("[CameraTile] start() invoked with mode=", mode);
@@ -1095,6 +1201,11 @@ function CameraFrame(props: any) {
     style: { transform: `scale(${scale})`, transformOrigin: "center" as const },
   };
 
+  // Canvas fallback to draw video frames when the native <video> element
+  // appears to have a live stream but isn't painting into the surface.
+  // This helps in cases where readyState is low but videoWidth/Height exist.
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
   const usbActive =
     mode === "wifi" && usbDevices.some((d: USBDevice) => d.status === "online");
 
@@ -1199,6 +1310,13 @@ function CameraFrame(props: any) {
     <div className={containerClass} style={containerStyle}>
       <div className={viewportClass}>
         {videoElement}
+        {/* Preview canvas fallback: positioned over the video. Hidden by default
+            and used only when the video has dimensions but isn't painting. */}
+        <canvas
+          ref={previewCanvasRef}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          style={{ ...(commonVideoProps.style as any), imageRendering: "auto", visibility: "hidden" }}
+        />
         {cameraSession.isStreaming && mode === "phone" && (
           <div className="absolute top-4 left-4 z-10 flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/70 backdrop-blur border border-rose-500/60 text-xs text-rose-200 font-semibold shadow-lg">
             <span className="inline-block w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
