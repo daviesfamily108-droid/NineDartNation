@@ -2124,6 +2124,60 @@ export default forwardRef(function CameraView(
             } catch (e) {
               // non-fatal
             }
+            // Some browsers/virtual cams report played but the <video> may still
+            // have no dimensions (videoWidth/videoHeight === 0) because frames
+            // aren't being painted. Attempt a small reattach/play loop to force
+            // the element to receive frames before giving up.
+            try {
+              const ensureReady = async () => {
+                const MAX_ATTACH_RETRIES = 3;
+                for (let i = 0; i < MAX_ATTACH_RETRIES; i++) {
+                  try {
+                    // If dimensions are present, we're done
+                    if (
+                      videoRef.current?.videoWidth &&
+                      videoRef.current?.videoHeight
+                    ) {
+                      setVideoReady(true);
+                      return true;
+                    }
+                    dlog(
+                      `[CAMERA] play succeeded but no dimensions yet, reattach attempt ${i + 1}`,
+                    );
+                    // Force a reattach: clear srcObject briefly then reassign
+                    try {
+                      if (videoRef.current) videoRef.current.srcObject = null;
+                    } catch {}
+                    await new Promise((r) => setTimeout(r, 120 + i * 80));
+                    try {
+                      if (videoRef.current) videoRef.current.srcObject = stream;
+                    } catch {}
+                    // Try playing again via ensureVideoPlays to re-prime playback
+                    try {
+                      const r = await ensureVideoPlays({
+                        video: videoRef.current,
+                        stream,
+                        onPlayError: (e) =>
+                          console.error("[CAMERA] reattach play failed:", e),
+                      });
+                      if (r.played) dlog("[CAMERA] reattach play confirmed");
+                    } catch (e) {
+                      dlog("[CAMERA] reattach ensureVideoPlays threw:", e);
+                    }
+                    // Short wait for loadedmetadata/canplay to fire
+                    await new Promise((r) => setTimeout(r, 220 + i * 60));
+                  } catch (e) {
+                    dlog("[CAMERA] attach retry error:", e);
+                  }
+                }
+                return false;
+              };
+              void ensureReady().then((ok) => {
+                if (!ok) dlog("[CAMERA] attach/replay retries exhausted");
+              });
+            } catch (e) {
+              // swallow - non-fatal
+            }
           } else {
             console.warn(
               "[CAMERA] ensureVideoPlays did not confirm playback:",
