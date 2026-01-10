@@ -455,10 +455,12 @@ export default function CameraTile({
     let lastDraw = 0;
     const TARGET_FPS = 18; // limit draw to ~18fps to save CPU during heavy UI events
     const drawLoop = () => {
-      if (!isVisible) {
-        raf = requestAnimationFrame(drawLoop);
-        return;
-      }
+        try {
+          if (!isContainerVisible()) {
+            raf = requestAnimationFrame(drawLoop);
+            return;
+          }
+        } catch {}
       if (!running) return;
       try {
         const now = (performance && performance.now && performance.now()) || Date.now();
@@ -527,7 +529,9 @@ export default function CameraTile({
 
     // Also watch for transitions: poll briefly to start drawing if needed.
     const poll = setInterval(() => {
-          if (!isVisible) return;
+          try {
+            if (!isContainerVisible()) return;
+          } catch {}
           if (!running && shouldUseFallback(videoRef.current)) {
             running = true;
             raf = requestAnimationFrame(drawLoop);
@@ -550,10 +554,12 @@ export default function CameraTile({
         sampleHandle = window.setInterval(() => {
           try {
             const v = videoRef.current;
-            if (!isVisible) {
-              sampleBlankCount = 0;
-              return;
-            }
+            try {
+              if (!isContainerVisible()) {
+                sampleBlankCount = 0;
+                return;
+              }
+            } catch {}
             if (!v || v.videoWidth === 0 || v.videoHeight === 0) {
               sampleBlankCount = 0;
               return;
@@ -1272,6 +1278,20 @@ function CameraFrame(props: any) {
   const containerStyle: CSSProperties = { ...(style || {}) };
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isVisible, setIsVisible] = useState<boolean>(true);
+  const isContainerVisible = useCallback(() => {
+    try {
+      const el = containerRef.current;
+      if (!el) return true;
+      const style = getComputedStyle(el);
+      if (style && (style.display === "none" || style.visibility === "hidden" || style.opacity === "0")) return false;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) return false;
+      if (r.bottom < 0 || r.top > (window.innerHeight || document.documentElement.clientHeight)) return false;
+      return true;
+    } catch {
+      return true;
+    }
+  }, [containerRef]);
   useEffect(() => {
     try {
       const el = containerRef.current;
