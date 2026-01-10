@@ -176,9 +176,46 @@ if (
 } else if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
   // Safety: if a previous deployment had registered a SW, unregister it so updates always flow.
   // This prevents stale SW caches from masking new UI behavior.
+  // We also provide a one-time opt-in force-reload mechanism via localStorage key
+  // `NDN_FORCE_SW_RELOAD = "1"` for situations where a stale worker still controls the page.
   try {
     navigator.serviceWorker.getRegistrations().then((regs) => {
-      regs.forEach((r) => r.unregister());
+      if (!regs || regs.length === 0) return;
+      try {
+        console.info("[ServiceWorker] Found", regs.length, "registrations — unregistering to avoid stale caches");
+      } catch {}
+      let anyActive = false;
+      regs.forEach((r) => {
+        try {
+          if (r.active) anyActive = true;
+        } catch {}
+        try {
+          r.unregister();
+        } catch (e) {
+          try {
+            console.warn("[ServiceWorker] unregister failed:", e);
+          } catch {}
+        }
+      });
+
+      // If an active worker was present and the developer/user has set the force-reload flag,
+      // reload once to ensure the browser requests the fresh HTML/JS from the server.
+      try {
+        const forceReload = (typeof localStorage !== 'undefined' && localStorage.getItem('NDN_FORCE_SW_RELOAD') === '1');
+        if (anyActive && forceReload) {
+          try {
+            console.info('[ServiceWorker] Active worker removed; forcing page reload to fetch latest assets');
+            // Clear the flag so this only happens once
+            localStorage.removeItem('NDN_FORCE_SW_RELOAD');
+            // reload immediately — modern browsers will fetch fresh assets
+            window.location.reload();
+          } catch (e) {
+            /* ignore reload errors */
+          }
+        }
+      } catch (e) {
+        /* ignore */
+      }
     });
   } catch {
     // ignore
