@@ -10,7 +10,11 @@ import { useIsAdmin } from "./utils/admin";
 const Home = React.lazy(() => import("./components/Home"));
 import ScrollFade from "./components/ScrollFade";
 import Calibrator from "./components/Calibrator";
-import CameraView from "./components/CameraView";
+// Lazy-load CameraView to avoid importing a large camera module at app
+// bootstrap time. This prevents the component module from executing during
+// initial module evaluation which can avoid TDZ issues when other modules
+// import shared stores during startup.
+const CameraView = React.lazy(() => import("./components/CameraView"));
 const OfflinePlay = React.lazy(() => import("./components/OfflinePlay"));
 const Friends = React.lazy(() => import("./components/Friends"));
 import Toaster from "./components/Toaster";
@@ -577,7 +581,11 @@ export default function App() {
             const brand = document.querySelector(
               ".ndn-mobile-brand",
             ) as HTMLElement | null;
-            if (brand && window?.getComputedStyle) {
+            if (
+              brand &&
+              typeof window !== "undefined" &&
+              typeof window.getComputedStyle === "function"
+            ) {
               const rect = brand.getBoundingClientRect();
               const leftPx = Math.max(8, Math.round(rect.right + 8));
               document.documentElement.style.setProperty(
@@ -1540,12 +1548,14 @@ export default function App() {
             opacity: 0,
           }}
         >
-          <CameraView
-            showToolbar={false}
-            hideInlinePanels
-            scoringMode="custom"
-            immediateAutoCommit={false}
-          />
+          <Suspense fallback={null}>
+            <CameraView
+              showToolbar={false}
+              hideInlinePanels
+              scoringMode="custom"
+              immediateAutoCommit={false}
+            />
+          </Suspense>
         </div>
       )}
     </ThemeProvider>

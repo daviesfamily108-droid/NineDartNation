@@ -425,6 +425,11 @@ export default forwardRef(function CameraView(
   const [showVideoDiagnostics, setShowVideoDiagnostics] = useState(false);
   const [videoDiagnostics, setVideoDiagnostics] =
     useState<VideoDiagnostics | null>(null);
+  // Track camera access problems so we can show an inline UI instead of repeatedly
+  // calling getUserMedia (which can re-trigger the browser permission prompt).
+  const [cameraAccessError, setCameraAccessError] = useState<
+    null | "permission-denied" | "not-found" | "not-supported" | "unknown"
+  >(null);
   const cameraSession = useCameraSession();
   const handleVideoRef = useCallback(
     (el: HTMLVideoElement | null) => {
@@ -2256,12 +2261,6 @@ export default forwardRef(function CameraView(
     } catch (e) {}
     if (!streaming) setStreaming(true);
   }, [cameraSession.mode, cameraSession.isStreaming, streaming, cameraSession]);
-
-  // Track camera access problems so we can show an inline UI instead of repeatedly
-  // calling getUserMedia (which can re-trigger the browser permission prompt).
-  const [cameraAccessError, setCameraAccessError] = useState<
-    null | "permission-denied" | "not-found" | "not-supported" | "unknown"
-  >(null);
 
   // Keep diagnostics in sync with the latest access error.
   useEffect(() => {
