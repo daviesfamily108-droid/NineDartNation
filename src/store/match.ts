@@ -1,7 +1,9 @@
 ﻿import { create } from "zustand";
 import { useAudit } from "./audit";
 import { broadcastMessage } from "../utils/broadcast";
-import { addMatchToAllTime } from "./profileStats";
+// Use a dynamic import for profileStats to avoid circular import / TDZ during
+// module initialization. Calling addMatchToAllTime is only needed when a
+// match ends, so lazy-loading is safe and avoids import cycles.
 
 export type ThrowVisit = {
   darts: number;
@@ -349,7 +351,12 @@ export const useMatch = create<MatchState & Actions>((set) => ({
       try {
         // Persist all-time stats without adding another time-series entry;
         // per-visit samples (from CameraView) already feed rolling averages.
-        addMatchToAllTime(newPlayers, { recordSeries: false });
+        // Use dynamic import to avoid circular import / TDZ issues at module init.
+        import("./profileStats").then((m) => {
+          try {
+            m.addMatchToAllTime(newPlayers, { recordSeries: false });
+          } catch {}
+        });
       } catch {}
       try {
         broadcastMessage({ type: "endGame", ts: Date.now() });
