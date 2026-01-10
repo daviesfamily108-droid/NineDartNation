@@ -18,6 +18,7 @@
     "test:unit": "cross-env NODE_NO_WARNINGS=1 vitest run",
   "test:unit:quiet": "cross-env NODE_NO_WARNINGS=1 vitest run --reporter=dot",
     "test:integration": "cross-env NODE_NO_WARNINGS=1 NDN_RUNINTEGRATION=1 vitest run src/server/__tests__/autocommit.integration.test.ts",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint src --ext .ts,.tsx",
     "lint:fix": "eslint src --ext .ts,.tsx --fix",
     "generate:icons": "node scripts/generate-icons.cjs"
@@ -54,6 +55,8 @@
     "@vitejs/plugin-react": "^4.3.1"
   },
   "devDependencies": {
+    "husky": "^8.0.3",
+    "lint-staged": "^14.3.0",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^14.0.0",
     "@types/qrcode": "^1.5.5",
@@ -79,5 +82,12 @@
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.2",
     "vitest": "^4.0.5"
+  }
+  ,
+  "lint-staged": {
+    "src/**/*.{ts,tsx}": [
+      "npm run lint:fix --",
+      "git add"
+    ]
   }
 }

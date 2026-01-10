@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Run lint-staged (will run eslint --fix on staged TS/TSX files)
+npx --no-install lint-staged
