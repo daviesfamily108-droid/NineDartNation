@@ -2335,6 +2335,8 @@ export default forwardRef(function CameraView(
     let activated = false;
   let sampleBlankCount = 0;
   let sampleHandle: number | null = null;
+  let lastDraw = 0;
+  const TARGET_FPS = 18;
     const pc = previewCanvasRef.current;
     const v = videoRef.current;
     const [previewDiag, setPreviewDiag] = (() => {
@@ -2358,6 +2360,15 @@ export default forwardRef(function CameraView(
       }
     }
     function drawLoop() {
+      try {
+        const now = (performance && performance.now && performance.now()) || Date.now();
+        const minDt = 1000 / TARGET_FPS;
+        if (now - lastDraw < minDt) {
+          rafId = requestAnimationFrame(drawLoop);
+          return;
+        }
+        lastDraw = now;
+      } catch {}
       try {
         const vv = videoRef.current;
         const cc = previewCanvasRef.current;

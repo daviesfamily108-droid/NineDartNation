@@ -452,8 +452,23 @@ export default function CameraTile({
       return w > 0 && h > 0 && v.readyState < 2;
     }
 
+    let lastDraw = 0;
+    const TARGET_FPS = 18; // limit draw to ~18fps to save CPU during heavy UI events
     const drawLoop = () => {
+      if (!isVisible) {
+        raf = requestAnimationFrame(drawLoop);
+        return;
+      }
       if (!running) return;
+      try {
+        const now = (performance && performance.now && performance.now()) || Date.now();
+        const minDt = 1000 / TARGET_FPS;
+        if (now - lastDraw < minDt) {
+          raf = requestAnimationFrame(drawLoop);
+          return;
+        }
+        lastDraw = now;
+      } catch {}
       const v = videoRef.current;
       const c = previewCanvasRef.current;
       if (shouldUseFallback(v) && c && v) {
@@ -512,10 +527,11 @@ export default function CameraTile({
 
     // Also watch for transitions: poll briefly to start drawing if needed.
     const poll = setInterval(() => {
-      if (!running && shouldUseFallback(videoRef.current)) {
-        running = true;
-        raf = requestAnimationFrame(drawLoop);
-      }
+          if (!isVisible) return;
+          if (!running && shouldUseFallback(videoRef.current)) {
+            running = true;
+            raf = requestAnimationFrame(drawLoop);
+          }
     }, 500);
 
     // Sampling heuristic: occasionally sample a small downscaled frame and
@@ -534,6 +550,10 @@ export default function CameraTile({
         sampleHandle = window.setInterval(() => {
           try {
             const v = videoRef.current;
+            if (!isVisible) {
+              sampleBlankCount = 0;
+              return;
+            }
             if (!v || v.videoWidth === 0 || v.videoHeight === 0) {
               sampleBlankCount = 0;
               return;
@@ -1250,6 +1270,30 @@ function CameraFrame(props: any) {
     .join(" ")
     .trim();
   const containerStyle: CSSProperties = { ...(style || {}) };
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [isVisible, setIsVisible] = useState<boolean>(true);
+  useEffect(() => {
+    try {
+      const el = containerRef.current;
+      if (!el || typeof IntersectionObserver === "undefined") return;
+      const io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            try {
+              setIsVisible(entry.isIntersecting && entry.intersectionRatio > 0);
+            } catch {}
+          });
+        },
+        { threshold: 0.01 },
+      );
+      io.observe(el);
+      return () => {
+        try {
+          io.disconnect();
+        } catch {}
+      };
+    } catch {}
+  }, [containerRef]);
 
   const viewportClass = fill
     ? "relative flex-1 min-h-0 bg-black"
@@ -1413,7 +1457,7 @@ function CameraFrame(props: any) {
   }
 
   return (
-    <div className={containerClass} style={containerStyle}>
+    <div ref={containerRef} className={containerClass} style={containerStyle}>
       <div className={viewportClass}>
         {videoElement}
         {/* Preview canvas fallback: positioned over the video. Hidden by default
