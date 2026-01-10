@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.cjs",
+    "prepare": "husky install",
     "build": "vite build",
     "build:server": "node ./scripts/build-server.cjs",
     "build:all": "npm run build && npm run build:server",
