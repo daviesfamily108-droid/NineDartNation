@@ -4099,9 +4099,13 @@ export default forwardRef(function CameraView(
                   rejectReason,
                 });
               } else {
-                // Reliability hard gate: require settle + stability for *non-miss* candidates.
+                // Reliability gate (tuned for real-world webcams):
+                // Originally this required BOTH `settled` AND `tipStable`, which can
+                // prevent *any* commit when there's mild jitter or continuous micro-motion.
+                // We now allow candidate tracking when either condition is met, and we
+                // rely on the existing hold/frames + cooldown logic to prevent ghosts.
                 // Misses are allowed through for UI diagnostics but won't be committed.
-                const allowCommitCandidate = settled && tipStable;
+                const allowCommitCandidate = settled || tipStable;
 
                 if (ring === "MISS" || value <= 0) {
                   autoCandidateRef.current = null;
