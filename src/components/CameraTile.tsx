@@ -295,7 +295,7 @@ function CameraFrame(props: any) {
       : aspectChoice === 'classic'
       ? 'aspect-[4/3]'
       : aspectChoice === 'free'
-      ? ''
+      ? 'h-full'
       : 'aspect-video';
 
   useEffect(() => {
