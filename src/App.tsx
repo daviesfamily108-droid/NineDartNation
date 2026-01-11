@@ -1540,21 +1540,22 @@ export default function App() {
         // compositor while remaining invisible to the user. Avoid using
         // `display:none` or moving the element far offscreen (left:-9999)
         // because some browsers will stop painting video frames for such
-        // elements. Using a visible layout rectangle with `opacity:0` keeps
-        // frames flowing while remaining non-interactive.
+        // elements. Using a visible layout rectangle with a tiny opacity
+        // and transform keeps frames flowing while remaining non-interactive.
         <div
           aria-hidden
           style={{
-            position: "absolute",
-            right: 8,
-            bottom: 8,
-            width: 320,
-            height: 240,
+            position: "fixed",
+            right: 0,
+            bottom: 0,
+            width: "4px",
+            height: "4px",
             overflow: "hidden",
             pointerEvents: "none",
-            opacity: 0,
+            opacity: 0.001,
             // Keep behind other UI but still rendered
-            zIndex: -1,
+            zIndex: -100,
+            transform: "translateZ(0)",
           }}
         >
           <Suspense fallback={null}>

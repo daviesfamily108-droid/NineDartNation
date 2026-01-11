@@ -1884,6 +1884,9 @@ export default forwardRef(function CameraView(
       if (phoneActive) {
         dlog("[CAMERA] Phone camera stream active - leaving local camera idle");
         setCameraStarting(false);
+        try {
+          cameraSession.setStarting?.(false);
+        } catch {}
         return;
       }
       // If flagged active but no live tracks, fall back to local camera startup
@@ -1893,6 +1896,9 @@ export default forwardRef(function CameraView(
     }
 
     setCameraStarting(true);
+    try {
+      cameraSession.setStarting?.(true);
+    } catch {}
     dlog("[CAMERA] Starting camera...");
     try {
       setCameraAccessError(null);
@@ -2066,6 +2072,7 @@ export default forwardRef(function CameraView(
           // Let other components know a stream exists; don't mark fully
           // streaming until playback is confirmed.
           cameraSession.setStreaming?.(true);
+          cameraSession.setStarting?.(false);
         } catch (err) {
           console.warn(
             "[CAMERA] Failed to sync camera session with local stream:",
@@ -2266,8 +2273,15 @@ export default forwardRef(function CameraView(
       } else {
         setCameraAccessError("unknown");
       }
+      setCameraStarting(false);
+      try {
+        cameraSession.setStarting?.(false);
+      } catch {}
     } finally {
       setCameraStarting(false);
+      try {
+        cameraSession.setStarting?.(false);
+      } catch {}
     }
   }
 

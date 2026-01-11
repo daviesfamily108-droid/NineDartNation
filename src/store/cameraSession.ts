@@ -34,9 +34,12 @@ type CameraSessionState = {
   mobileUrl: string | null;
   // UI: whether the floating phone overlay is visible
   showOverlay: boolean;
+  // Whether camera is currently in a starting state
+  isStarting: boolean;
 
   // Actions
   setStreaming: (streaming: boolean) => void;
+  setStarting: (starting: boolean) => void;
   setMode: (mode: CameraStreamMode) => void;
   setPairingCode: (code: string | null) => void;
   setExpiresAt: (time: number | null) => void;
@@ -74,10 +77,17 @@ export const useCameraSession = create<CameraSessionState>()(
       isPaired: false,
       mobileUrl: null,
       showOverlay: true,
+      isStarting: false,
 
       setStreaming: (streaming) => {
         dlog("[CAMERA_SESSION] setStreaming:", streaming);
         set({ isStreaming: streaming });
+        // If we finished streaming, we are definitely not starting anymore
+        if (streaming) set({ isStarting: false });
+      },
+      setStarting: (starting) => {
+        dlog("[CAMERA_SESSION] setStarting:", starting);
+        set({ isStarting: starting });
       },
       setMode: (mode) => {
         dlog("[CAMERA_SESSION] setMode:", mode);

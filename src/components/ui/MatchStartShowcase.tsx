@@ -942,19 +942,19 @@ export default function MatchStartShowcase({
                 <div
                   aria-hidden
                   style={{
-                    position: "absolute",
-                    // place inside the overlay so it remains in-layout
-                    top: 8,
-                    left: 8,
-                    width: 320,
-                    height: 240,
+                    position: "fixed",
+                    // Guaranteed to stay in layout and paint by being fixed
+                    bottom: 8,
+                    right: 8,
+                    width: 4,
+                    height: 4,
                     overflow: "hidden",
                     pointerEvents: "none",
-                    opacity: 0,
+                    opacity: 0.001,
                     transform: "translateZ(0)",
                     willChange: "transform, opacity",
                     // keep it on a low z so it doesn't interfere with focus
-                    zIndex: -1,
+                    zIndex: -100,
                   }}
                 >
                   <CameraView
@@ -962,6 +962,7 @@ export default function MatchStartShowcase({
                     hideInlinePanels
                     scoringMode="custom"
                     immediateAutoCommit={false}
+                    forceAutoStart={true}
                   />
                 </div>
               )}
