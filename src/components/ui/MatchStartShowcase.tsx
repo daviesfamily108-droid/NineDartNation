@@ -249,17 +249,6 @@ const ProgressRing = memo(function ProgressRing({
         transform={`rotate(-90 ${size / 2} ${size / 2})`}
         style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))" }}
       />
-      <text
-        x="50%"
-        y="50%"
-        fill="white"
-        fontSize={size * 0.28}
-        fontWeight={900}
-        dominantBaseline="middle"
-        textAnchor="middle"
-      >
-        {secondsLeft > 0 ? secondsLeft : "GO"}
-      </text>
     </svg>
   );
 });
@@ -297,10 +286,10 @@ export default function MatchStartShowcase({
   // from another surface.
   useEffect(() => {
     if (!visible) return;
-    // Reset countdown to the initial seconds whenever the overlay becomes visible
-    try {
+    // Reset countdown if we aren't yet counting down
+    if (!allPlayersSkipped) {
       setSeconds(initialSeconds || 15);
-    } catch {}
+    }
     try {
       cameraSession.acquireKeepAlive?.("MatchStartShowcase");
     } catch {}
@@ -588,39 +577,34 @@ export default function MatchStartShowcase({
       if (appRoot) appRoot.setAttribute("aria-hidden", "true");
     } catch {}
     // Countdown interval:
-    // - create only when needed
-    // - stop at 0 to avoid going negative (which causes useless re-renders)
-      // Use a timestamp-anchored countdown to avoid setInterval drift when the
-      // main thread is busy (canvas draws, rendering work, etc.). We compute
-      // remaining seconds from a fixed end time and drive updates via
-      // requestAnimationFrame for accuracy and responsiveness.
-      const endTimeRef = { current: null as number | null } as { current: number | null };
-      let rafId: number | null = null;
-      let lastSecondsSent = -1;
-      if (allPlayersSkipped) {
-        // Establish the end timestamp from the configured initialSeconds so
-        // the countdown always represents real elapsed time relative to the
-        // overlay start (avoids resuming from stale `seconds` values).
-        endTimeRef.current = Date.now() + (initialSeconds || 15) * 1000;
+    // We use requestAnimationFrame and a stable end-timestamp to ensure 
+    // smooth 1-second updates even if the main thread is occasionally busy.
+    let rafId: number | null = null;
+    let lastSecondsSent = -1;
 
-        const tick = () => {
-          try {
-            const end = endTimeRef.current;
-            if (!end) return;
-            const remaining = Math.max(0, Math.ceil((end - Date.now()) / 1000));
-            // Only update state if the second has actually changed
-            if (remaining !== lastSecondsSent) {
-              lastSecondsSent = remaining;
-              setSeconds(remaining);
-            }
-            if (remaining <= 0) return;
-            rafId = window.requestAnimationFrame(tick);
-          } catch (e) {
-            // Swallow and stop ticking on unexpected errors
+    if (visible && allPlayersSkipped) {
+      const duration = (initialSeconds || 15) * 1000;
+      const endTimestamp = Date.now() + duration;
+
+      const tick = () => {
+        try {
+          const now = Date.now();
+          const remaining = Math.max(0, Math.ceil((endTimestamp - now) / 1000));
+          
+          if (remaining !== lastSecondsSent) {
+            lastSecondsSent = remaining;
+            setSeconds(remaining);
           }
-        };
-        rafId = window.requestAnimationFrame(tick);
-      }
+          
+          if (remaining > 0) {
+            rafId = window.requestAnimationFrame(tick);
+          }
+        } catch (e) {}
+      };
+      
+      rafId = window.requestAnimationFrame(tick);
+    }
+
     const onKey = (e: KeyboardEvent) => {
       if (!mountedRef.current) return;
       if (!disableEscClose && (e.key === "Escape" || e.key === "Esc")) {
@@ -696,30 +680,19 @@ export default function MatchStartShowcase({
       };
       fetchCalibrations();
     }
-    // Only start countdown when all players have skipped calibration
-    if (allPlayersSkipped) {
-      if (seconds <= 0) {
-        // countdown reached 0, scheduling close
-        // Done; small delay to let the "Game On" message show
-        setTimeout(() => {
-          // Do not set local visible state here when controlled; delegate close to parent via onRequestClose/onDone
-          // calling onDone/onRequestClose
-          try {
-            onDone?.();
-          } catch {}
-          try {
-            setTimeout(() => {
-              try {
-                onRequestClose?.();
-              } catch {}
-            }, 0);
-          } catch {}
-          // Return focus to previous element
-          try {
-            prevActiveElement.current?.focus();
-          } catch {}
-        }, 1000);
-      }
+    // Only start completion logic when all players have skipped calibration
+    if (allPlayersSkipped && seconds <= 0) {
+      // Small delay at 0 to let the "GO" or "0" show
+      const timer = setTimeout(() => {
+        try {
+          onDone?.();
+          onRequestClose?.();
+        } catch {}
+        try {
+          prevActiveElement.current?.focus();
+        } catch {}
+      }, 800);
+      return () => clearTimeout(timer);
     }
   }, [
     seconds,
@@ -729,6 +702,8 @@ export default function MatchStartShowcase({
     allPlayersSkipped,
     players,
     user,
+    initialSeconds,
+    onRequestClose,
   ]);
 
   const stats = useMemo(
@@ -880,7 +855,7 @@ export default function MatchStartShowcase({
                     </div>
                     <div
                       id="match-start-heading"
-                      className="text-2xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/10 tracking-tighter"
+                      className="text-2xl md:text-4xl font-black text-white tracking-tighter"
                     >
                       Match Starting Soon 🎯
                     </div>
@@ -958,8 +933,8 @@ export default function MatchStartShowcase({
                             color={seconds > 5 ? "emerald" : "amber"}
                           />
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <span className="text-xl font-black text-white tabular-nums">
-                              {seconds}
+                            <span className="text-3xl font-black text-white tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] tracking-tighter">
+                              {seconds > 0 ? seconds : "GO"}
                             </span>
                           </div>
                         </div>
