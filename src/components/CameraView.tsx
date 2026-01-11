@@ -735,6 +735,12 @@ export default forwardRef(function CameraView(
     locked,
     errorPx,
   } = useCalibration();
+
+  // 'matchState' hook: declare early to satisfy hook order and be available for gate checks.
+  // NOTE: Some earlier logic depends on whether we're in an online match.
+  const matchState = useMatch((s) => s);
+  const isOnlineMatch = !!(matchState && (matchState as any).roomId);
+
   const ERROR_PX_MAX = 12;
   const CALIBRATION_MIN_CONFIDENCE = 90; // stricter than game-mode minimum; goal is �perfect� autoscore
   // Calibration quality gate: if errorPx is missing, treat it as unknown (not zero).
@@ -802,12 +808,9 @@ export default forwardRef(function CameraView(
     }[]
   >([]);
 
-  // 'matchState' hook: declare early to satisfy hook order and be available for gate checks
-  const matchState = useMatch((s) => s);
   const [showQuitPause, setShowQuitPause] = useState(false);
   const [forwarding, setForwarding] = useState(false);
   // Gate manual commits in online matches: if any pending entry came from camera and is not calibration-validated, block commit
-  const isOnlineMatch = !!(matchState && (matchState as any).roomId);
   const commitBlocked =
     isOnlineMatch &&
     (pendingEntries as any[]).some(
