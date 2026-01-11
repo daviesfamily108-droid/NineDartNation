@@ -503,6 +503,27 @@ export default function Calibrator() {
   );
   const autoPlacementFrozenRef = useRef(false);
 
+  // Persistence for target overrides (guide circles)
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ndn:cal:target-overrides");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === 5) {
+          targetOverridesRef.current = parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load target overrides", e);
+    }
+  }, []);
+
+  const saveTargetOverrides = useCallback((overrides: (Point | null)[]) => {
+    try {
+      localStorage.setItem("ndn:cal:target-overrides", JSON.stringify(overrides));
+    } catch (e) {}
+  }, []);
+
   useEffect(() => {
     // Ensure target screen positions reset on mount so stale refs don't linger
     targetScreenPositionsRef.current = new Array(5).fill(null);
@@ -951,9 +972,48 @@ export default function Calibrator() {
     const imageX = cropX + (canvasX / canvas.width) * cropW;
     const imageY = cropY + (canvasY / canvas.height) * cropH;
 
+    // NEW: Check if clicked near an uncaptured guide circle (target Screen Positions)
+    // This allows the user to just "click the circles" to accept them.
+    let finalClickPoint = { x: imageX, y: imageY };
+    const nextTargetIdx = calibrationPoints.length;
+    if (nextTargetIdx < 5) {
+      const guidePos = targetScreenPositionsRef.current[nextTargetIdx];
+      if (guidePos) {
+        const dx = canvasX - guidePos.x;
+        const dy = canvasY - guidePos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        // If clicked within 40px of the guide circle, snap exactly to its image-space position
+        if (dist < 40) {
+          const override = targetOverridesRef.current[nextTargetIdx];
+          if (override) {
+            finalClickPoint = override;
+          } else {
+            // Calculate what the image-space position would be for the fallback
+            const targetPoint = canonicalTargets[nextTargetIdx];
+            const fallbackScale = Math.min(canvas.width, canvas.height) / 360;
+            const fallbackCanvasX = canvas.width / 2 + targetPoint.x * fallbackScale;
+            const fallbackCanvasY = canvas.height / 2 + targetPoint.y * fallbackScale;
+            
+            // Map that fallback canvas pos back to image space
+            finalClickPoint = {
+              x: cropX + (fallbackCanvasX / canvas.width) * cropW,
+              y: cropY + (fallbackCanvasY / canvas.height) * cropH
+            };
+          }
+ dlog("[Calibrator] Snapped click to guide circle", { index: nextTargetIdx, finalClickPoint });
+        }
+      }
+    }
+
     // NEW: Click Snap - refine the click point to the nearest strong edge (ring boundary)
-    // This makes manual calibration much more precise and "snappy"
-    const refinedPoint = refinePointSobel(canvas, { x: imageX, y: imageY }, 10);
+    // Only refine if we didn't already snap to a guide circle
+    const wasSnappedToGuide = finalClickPoint !== (undefined as any) && (finalClickPoint.x !== imageX || finalClickPoint.y !== imageY);
+    const refinedPoint = wasSnappedToGuide
+      ? finalClickPoint
+      : refinePointSobel(canvas, finalClickPoint, 10);
+
+    // Store the refined image-space point for homography computation
+    const clickPointInImageSpace = refinedPoint;
 
   dlog("[Calibrator] Click mapping with zoom & snap:", {
       display: { x: displayX, y: displayY },
@@ -964,9 +1024,6 @@ export default function Calibrator() {
       snapped: refinedPoint,
       videoSize: { w: vw, h: vh },
     });
-
-    // Store the refined image-space point for homography computation
-    const clickPointInImageSpace = refinedPoint;
 
     const newPoints = [...calibrationPoints, clickPointInImageSpace];
     setCalibrationPoints(newPoints);
@@ -1361,6 +1418,7 @@ export default function Calibrator() {
   const resetTargetOverrides = () => {
     targetOverridesRef.current = new Array(5).fill(null);
     targetScreenPositionsRef.current = new Array(5).fill(null);
+    localStorage.removeItem("ndn:cal:target-overrides");
   };
 
   const freezeAutoPlacement = () => {
@@ -1478,6 +1536,7 @@ export default function Calibrator() {
       canvasRef.current.releasePointerCapture(activePointerId);
     }
     dragStateRef.current = null;
+    saveTargetOverrides(targetOverridesRef.current);
     if (canvasRef.current && !locked) {
       canvasRef.current.style.cursor = "crosshair";
     }
@@ -1654,7 +1713,7 @@ export default function Calibrator() {
               drawX = mapped.x;
               drawY = mapped.y;
             } else {
-              const fallbackScale = Math.min(canvas.width, canvas.height) / 390;
+              const fallbackScale = Math.min(canvas.width, canvas.height) / 360;
               drawX = canvas.width / 2 + targetPoint.x * fallbackScale;
               drawY = canvas.height / 2 + targetPoint.y * fallbackScale;
             }
