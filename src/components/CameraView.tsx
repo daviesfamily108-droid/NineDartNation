@@ -3857,7 +3857,7 @@ export default forwardRef(function CameraView(
                 lastLabel: label ?? null,
                 lastValue: value ?? null,
                 lastRing: ring ?? null,
-                lastReject: !calibrationGood
+                lastReject: !calibrationValidEffective
                   ? "calibration-invalid"
                   : !tipInVideo
                     ? "tip-outside-video"
@@ -3905,11 +3905,13 @@ export default forwardRef(function CameraView(
                 candidate.sector,
               );
 
-              // Hard gate: never count/commit autoscore darts unless calibration is good.
-              // (We still let detection logging + ghost paths run for UI diagnostics.)
-              if (!calibrationGood) {
+              // Commit gate:
+              // - Online: require strict calibration quality (calibrationValid)
+              // - Offline/local: allow commits as long as we have any mapping (H + imageSize)
+              // NOTE: We still surface diagnostics if quality is low.
+              if (!calibrationValidEffective) {
                 dlog(
-                  "CameraView: applyAutoHit blocked (calibrationGood=false)",
+                  "CameraView: applyAutoHit blocked (calibrationValidEffective=false)",
                   candidate.value,
                   candidate.ring,
                 );
@@ -3925,7 +3927,9 @@ export default forwardRef(function CameraView(
                       ]?.confidence ??
                       null,
                     lastPboard: null,
-                    lastReject: "calibration-invalid",
+                    lastReject: isOnlineMatch
+                      ? "calibration-invalid"
+                      : "calibration-mapping-missing",
                   });
                 } catch {}
                 try {
