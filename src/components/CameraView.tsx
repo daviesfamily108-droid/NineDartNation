@@ -749,10 +749,13 @@ export default forwardRef(function CameraView(
         errorPxVal <= ERROR_PX_MAX &&
         calibrationConfidence != null &&
         calibrationConfidence >= CALIBRATION_MIN_CONFIDENCE));
-  // Developer override removed/disabled: do NOT allow forcing calibration to
-  // be treated as valid via localStorage. This ensures the app always uses
-  // measured calibration quality.
-  const calibrationValidEffective = calibrationValid;
+  // Calibration effective gate:
+  // - Online: stay strict (must be valid) to avoid disputes/desync.
+  // - Offline/local: allow scoring as long as we have a mapping (H + imageSize).
+  //   This matches the UX expectation: "if it sees the dart on a clearly visible board,
+  //   it should count". We still surface diagnostics if quality is low.
+  const hasCalibration = !!H && !!imageSize;
+  const calibrationValidEffective = isOnlineMatch ? calibrationValid : hasCalibration;
   useEffect(() => {
     if (preferredCameraLocked && !hideCameraOverlay) {
       setHideCameraOverlay(true);
