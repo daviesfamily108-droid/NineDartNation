@@ -911,16 +911,28 @@ export default function MatchStartShowcase({
                   race conditions where the preview appears black. Mirrors the
                   offscreen warmup used in `App.tsx`. */}
               {shouldWarmupCamera && (
+                // Keep an offscreen but painted CameraView mounted while the
+                // overlay is visible so the CameraView becomes the active
+                // owner of the MediaStream. Using `left: -9999px` or
+                // `display:none` can allow the browser to skip painting the
+                // element; prefer opacity:0 + transform to ensure the element
+                // is composited and continues to receive frames.
                 <div
                   aria-hidden
                   style={{
                     position: "absolute",
-                    left: -9999,
+                    // place inside the overlay so it remains in-layout
+                    top: 8,
+                    left: 8,
                     width: 320,
                     height: 240,
                     overflow: "hidden",
                     pointerEvents: "none",
                     opacity: 0,
+                    transform: "translateZ(0)",
+                    willChange: "transform, opacity",
+                    // keep it on a low z so it doesn't interfere with focus
+                    zIndex: -1,
                   }}
                 >
                   <CameraView
