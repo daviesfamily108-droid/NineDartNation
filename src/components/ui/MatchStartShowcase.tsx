@@ -669,7 +669,7 @@ export default function MatchStartShowcase({
             const end = endTimeRef.current;
             if (!end) return;
             const remaining = Math.max(0, Math.ceil((end - Date.now()) / 1000));
-            setSeconds((prev) => (prev === remaining ? prev : remaining));
+            setSeconds(remaining); // Instant immediate update
             if (remaining <= 0) return;
             rafId = window.requestAnimationFrame(tick);
           } catch (e) {
@@ -1323,37 +1323,33 @@ export default function MatchStartShowcase({
                                 ) : null}
                               </div>
                             )}
-                            {/* Non-DEV diagnostics: small panel to help surface camera session state
-                                for debugging when the preview doesn't appear. */}
-                            <div className="absolute top-2 right-2 z-30 w-64 max-h-44 overflow-auto p-2 bg-black/50 border border-white/10 rounded text-[11px] text-white/80">
-                              <div className="text-xs font-bold mb-1">Preview Diagnostics</div>
-                              <div className="text-[10px] leading-snug">
-                                <div>
-                                  <strong>session.isStreaming:</strong> {(cameraSession as any).isStreaming ? 'true' : 'false'}
-                                </div>
-                                <div>
-                                  <strong>session.mode:</strong> {(cameraSession as any).mode}
-                                </div>
-                                <div>
-                                  <strong>previewReady:</strong> {String(previewReady)}
-                                </div>
-                                <div className="mt-2">
-                                  <button
-                                    className="btn btn--small px-2 py-1 mr-2"
-                                    onClick={async () => {
-                                      await collectDiagnostics();
-                                    }}
-                                  >
-                                    Collect diagnostics
-                                  </button>
-                                  <span className="text-xs ml-1">{diagCopied ? 'Copied!' : ''}</span>
-                                </div>
-                                <div className="mt-1">
-                                  <strong>previewDiag:</strong>
-                                  <pre className="whitespace-pre-wrap text-[10px] bg-transparent p-0 m-0">{previewDiag ? JSON.stringify(previewDiag, null, 2) : 'no previewDiag'}</pre>
+                            {/* Non-DEV diagnostics: DISABLED - removed to provide full board view */}
+                            {false && (
+                              <div className="absolute top-2 right-2 z-30 w-64 max-h-44 overflow-auto p-2 bg-black/50 border border-white/10 rounded text-[11px] text-white/80">
+                                <div className="text-xs font-bold mb-1">Preview Diagnostics</div>
+                                <div className="text-[10px] leading-snug">
+                                  <div>
+                                    <strong>session.isStreaming:</strong> {(cameraSession as any).isStreaming ? 'true' : 'false'}
+                                  </div>
+                                  <div>
+                                    <strong>session.mode:</strong> {(cameraSession as any).mode}
+                                  </div>
+                                  <div>
+                                    <strong>previewReady:</strong> {String(previewReady)}
+                                  </div>
+                                  <div className="mt-2 text-center">
+                                    <button
+                                      className="btn btn--small px-2 py-1"
+                                      onClick={async () => {
+                                        await collectDiagnostics();
+                                      }}
+                                    >
+                                      Collect diagnostics
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
+                            )}
                           </div>
                         </div>
                       )}
