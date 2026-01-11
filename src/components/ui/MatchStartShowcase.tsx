@@ -356,7 +356,10 @@ export default function MatchStartShowcase({
   const [playerCalibrations, setPlayerCalibrations] = useState<{
     [playerName: string]: any;
   }>({});
-  const [previewReady, setPreviewReady] = useState(false);
+
+  // Optimized: previewReady is now derived from the global camera session state.
+  // This avoids redundant polling loops and state synchronization races.
+  const previewReady = !!(cameraSession.isStreaming && cameraSession.getMediaStream?.());
   const [previewError, setPreviewError] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -561,71 +564,6 @@ export default function MatchStartShowcase({
           ).catch(() => {});
         } catch {}
       }
-
-      // Attempt to ensure the preview is fully linked with a calibrated feed
-      // Poll for a short while and set previewReady when we have a playing video
-      // with dimensions and the calibration status is verified. This helps the
-      // pre-game overlay show a ready calibrated preview instead of a black box.
-      try {
-        let stopped = false;
-        let attempts = 0;
-        const MAX_ATTEMPTS = 12; // ~6s
-              const tryLink = async () => {
-          if (stopped) return;
-          attempts += 1;
-          try {
-            const pv = previewContainerRef.current?.querySelector?.(
-              "video",
-            ) as HTMLVideoElement | null;
-            const ss = cameraSession.getMediaStream?.();
-            if (pv) {
-                    // Re-register the preview video element on each attempt so
-                    // it becomes the active anchor for the global camera session.
-                    // This helps when other views temporarily held the session
-                    // video ref or when the global ref pointed at a hidden
-                    // element, which can prevent frames showing in this tile.
-                    try {
-                      // Avoid immediately setting the global video ref here to
-                      // reduce cross-surface play() races. Attempt playback and
-                      // claim the ref only after ensureVideoPlays reports success.
-                    } catch {}
-
-                    const res = await ensureVideoPlays({
-                      video: pv,
-                      stream: ss,
-                    }).catch(() => ({ played: false }));
-                    try {
-                      if (res.played) cameraSession.setVideoElementRef?.(pv);
-                    } catch {}
-              const hasVideoDims = !!pv.videoWidth && !!pv.videoHeight;
-              const hasStreamingPreview =
-                res.played &&
-                cameraSession.isStreaming &&
-                (hasVideoDims || attempts >= 3);
-              if (hasStreamingPreview) {
-                // If we have a playing preview (video frames are visible),
-                // consider the preview linked even if calibration hasn't been
-                // verified yet. Clear any preview error and stop polling.
-                setPreviewReady(true);
-                setPreviewError(null);
-                stopped = true;
-                return;
-              }
-            }
-          } catch (e) {
-            // ignore and retry
-          }
-          if (attempts >= MAX_ATTEMPTS) {
-            setPreviewReady(false);
-            setPreviewError("timed out");
-            stopped = true;
-            return;
-          }
-          if (!stopped) setTimeout(tryLink, 500);
-        };
-    // start polling
-  tryLink();
-      } catch {}
     } catch {}
 
     try {
@@ -1214,18 +1152,18 @@ export default function MatchStartShowcase({
 
                       {/* Pre-match live camera preview (uses the global camera session) */}
                       {idx === 0 && (
-                        <div className="w-full mt-2">
+                        <div className="w-full mt-3 flex-1 flex flex-col min-h-0">
                           <div
                             ref={previewContainerRef}
-                            className="rounded-lg overflow-hidden border border-white/10 bg-black/30 relative"
+                            className="rounded-2xl overflow-hidden border border-white/10 bg-black/30 relative flex-1 flex flex-col min-h-0 min-h-[300px] sm:min-h-[460px]"
                           >
                             <div
-                              className={`absolute top-3 left-3 px-3 py-1 rounded-full text-[0.6rem] font-bold tracking-wide uppercase shadow-lg ${calibratedCameraLinked ? "bg-emerald-500/90 text-emerald-50" : "bg-rose-500/80 text-white"}`}
+                              className={`absolute top-4 left-4 z-10 px-3 py-1 rounded-full text-[0.6rem] font-bold tracking-wide uppercase shadow-lg ${calibratedCameraLinked ? "bg-emerald-500/90 text-emerald-50" : "bg-rose-500/80 text-white"}`}
                             >
                               {calibrationStatusText}
                             </div>
                             {/* Show the full board (no crop) */}
-                            <div className="w-full h-[240px] sm:h-[300px] md:h-[360px] flex flex-col">
+                            <div className="w-full flex-1 flex flex-col items-stretch">
                               <CameraTile
                                 autoStart
                                 forceAutoStart
@@ -1245,25 +1183,27 @@ export default function MatchStartShowcase({
                               {previewError && (
                                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                                   <div className="absolute inset-0 bg-black/10 backdrop-blur-sm" />
-                                  <div className="relative text-center px-4 py-3 rounded-md bg-black/60 border border-white/10">
-                                    <div className="flex items-center justify-center mb-2">
-                                      <div className="text-sm font-semibold text-white/90">
-                                        Failed to link calibrated camera
+                                  <div className="relative text-center px-6 py-4 rounded-2xl bg-black/80 backdrop-blur-md border border-white/10 shadow-2xl">
+                                    <div className="flex items-center justify-center mb-3">
+                                      <div className="text-base font-bold text-white/90">
+                                        Camera Link Delayed
                                       </div>
                                     </div>
-                                    <div className="text-xs text-white/70">
+                                    <div className="text-xs text-white/60 mb-4 px-2">
+                                      The camera is still warming up or permissions are pending.
+                                    </div>
+                                    <div className="flex justify-center">
                                       <button
-                                        className="btn btn-ghost btn-sm"
+                                        className="px-4 py-2 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold transition-colors shadow-lg"
                                         onClick={() => {
                                           setPreviewError(null);
-                                          setPreviewReady(false);
                                           // kick off another attempt by toggling camera enabled
                                           try {
                                             setCameraEnabled(true);
                                           } catch {}
                                         }}
                                       >
-                                        Retry
+                                        Try Again 🔄
                                       </button>
                                     </div>
                                   </div>
@@ -1324,32 +1264,7 @@ export default function MatchStartShowcase({
                               </div>
                             )}
                             {/* Non-DEV diagnostics: DISABLED - removed to provide full board view */}
-                            {false && (
-                              <div className="absolute top-2 right-2 z-30 w-64 max-h-44 overflow-auto p-2 bg-black/50 border border-white/10 rounded text-[11px] text-white/80">
-                                <div className="text-xs font-bold mb-1">Preview Diagnostics</div>
-                                <div className="text-[10px] leading-snug">
-                                  <div>
-                                    <strong>session.isStreaming:</strong> {(cameraSession as any).isStreaming ? 'true' : 'false'}
-                                  </div>
-                                  <div>
-                                    <strong>session.mode:</strong> {(cameraSession as any).mode}
-                                  </div>
-                                  <div>
-                                    <strong>previewReady:</strong> {String(previewReady)}
-                                  </div>
-                                  <div className="mt-2 text-center">
-                                    <button
-                                      className="btn btn--small px-2 py-1"
-                                      onClick={async () => {
-                                        await collectDiagnostics();
-                                      }}
-                                    >
-                                      Collect diagnostics
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
+                            {/* Debug info removed per user request */}
                           </div>
                         </div>
                       )}

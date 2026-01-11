@@ -230,6 +230,33 @@ export default function CameraTile(props: CameraTileProps) {
     }
   }, [autoStart, forceAutoStart, mode, startLocal, startPhonePairing]);
 
+  // Reactive attachment: if the global session starts streaming, or the stream object 
+  // itself changes, we attempt to attach it immediately to our local video element.
+  const sessionStreaming = cameraSession.isStreaming;
+  const sessionStream = cameraSession.getMediaStream?.();
+
+  useEffect(() => {
+    if (sessionStreaming && sessionStream) {
+      // Optimized: Immediate synchronous assignment of srcObject to the video 
+      // element avoids waiting for the React effect/callback chain to resolve 
+      // async promises. This ensures the browser starts painting frames 
+      // the literal millisecond the session stream is detected.
+      try {
+        const v = videoRef.current;
+        if (v && v.srcObject !== sessionStream) {
+          v.srcObject = sessionStream;
+          v.play().catch(() => {});
+          // Immediately set internal streaming flag so UI badges appear 
+          // without waiting for the async attachFromSession result.
+          setStreaming(true);
+        }
+      } catch {}
+      
+      // Still call attachFromSession for robust recovery/mute/metadata handling
+      attachFromSession();
+    }
+  }, [sessionStreaming, sessionStream, attachFromSession]);
+
   return (
     <CameraFrame
       {...props}

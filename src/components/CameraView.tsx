@@ -655,33 +655,71 @@ export default forwardRef(function CameraView(
     };
   }, [collectVideoDiagnostics, cameraAccessError, cameraSession]);
 
-  // Match window / pop-out helper: always try to start the camera when requested
-  useEffect(() => {
+  // Match window / pop-out helper: always try to start the camera as soon as possible
+  // Use useLayoutEffect for forceAutoStart to trigger the hardware request 
+  // before the first paint, shaving off at least one frame of black screen.
+  React.useLayoutEffect(() => {
     if (TEST_MODE) return;
     if (!forceAutoStart) return;
+    
+    // Ensure camera is enabled in state so startCamera doesn't bail
     try {
-      setCameraEnabled(true);
+      useUserSettings.getState().setCameraEnabled(true);
     } catch {}
-    if (!streaming && !cameraStarting) {
+
+    const hasAnyStream = !!(cameraSession.getMediaStream?.() || null);
+    if (!hasAnyStream && !streaming && !cameraStarting) {
+      void startCamera();
+    }
+  }, [forceAutoStart]);
+
+  // Safety net / Auto-start local camera when enabled
+  useEffect(() => {
+    if (TEST_MODE) return;
+    if (!cameraEnabled || forceAutoStart) return;
+    if (isPhoneCamera && phoneFeedActive) return;
+    const hasAnyStream = !!(cameraSession.getMediaStream?.() || null);
+    // If there's no stream at all, start it.
+    if (!hasAnyStream && !streaming && !cameraStarting) {
       try {
         void startCamera();
       } catch (e) {}
     }
-  }, [forceAutoStart, streaming, cameraStarting, setCameraEnabled]);
-
-  // Safety net: if the camera is enabled but not yet streaming, attempt to start it.
-  // This covers cases where UI shows "calibrated camera linked" but the feed stays black.
-  useEffect(() => {
-    if (TEST_MODE) return;
-    try {
-      setCameraEnabled(true);
-    } catch {}
-    if (!streaming && !cameraStarting) {
+    // If a stale streaming flag exists but no media tracks, reset and retry
+    if (cameraSession.isStreaming && !hasAnyStream && !cameraStarting) {
+      try {
+        cameraSession.setStreaming(false);
+      } catch {}
       try {
         void startCamera();
-      } catch {}
+      } catch (e) {}
     }
+  }, [
+    cameraEnabled,
+    isPhoneCamera,
+    phoneFeedActive,
+    streaming,
+    cameraStarting,
+    preferredCameraId,
+    forceAutoStart
+  ]);
+  // Listen for global and window-local "ndn:start-camera" events to allow 
+  // nested UI components (like the pre-match overlay) to force-trigger 
+  // camera initialization if they detect the stream is missing.
+  useEffect(() => {
+    const handler = (ev: any) => {
+      dlog("[CAMERA] Received ndn:start-camera event", ev.detail);
+      try {
+        setCameraEnabled(true);
+      } catch {}
+      if (!streaming && !cameraStarting) {
+        void startCamera();
+      }
+    };
+    window.addEventListener("ndn:start-camera" as any, handler);
+    return () => window.removeEventListener("ndn:start-camera" as any, handler);
   }, [streaming, cameraStarting, setCameraEnabled]);
+
   const {
     H,
     imageSize,
@@ -1991,34 +2029,26 @@ export default forwardRef(function CameraView(
 
       let stream: MediaStream;
       try {
-        // If user prefers low-latency, attempt 720p first to reduce CPU/bandwidth
-        if (cameraLowLatency) {
-          try {
-            stream = await tryGetStream(qualityHints720p, "720p");
-          } catch (e720: any) {
-            console.warn("[CAMERA] 720p request failed, falling back:", e720);
-            try {
-              stream = await tryGetStream(qualityHints1080p, "1080p");
-            } catch (err1080: any) {
-              console.warn("[CAMERA] 1080p failed, trying 1440p:", err1080);
-              stream = await tryGetStream(qualityHints1440p, "1440p");
+        // Optimized: Instead of a serial waterfall (4k -> 1440 -> 1080) which causes multi-second 
+        // startup delays on lower-end hardware, we provide a wide range of 'ideal' values 
+        // in a single request. The browser's native matching logic is significantly faster.
+        const dynamicHints: MediaTrackConstraints = cameraLowLatency 
+          ? {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 60 }
             }
-          }
-        } else {
-          try {
-            stream = await tryGetStream(qualityHints4k, "4k");
-          } catch (err4k: any) {
-            console.warn("[CAMERA] 4K request failed, trying 1440p:", err4k);
-            try {
-              stream = await tryGetStream(qualityHints1440p, "1440p");
-            } catch (err1440: any) {
-              console.warn(
-                "[CAMERA] 1440p request failed, trying 1080p:",
-                err1440,
-              );
-              stream = await tryGetStream(qualityHints1080p, "1080p");
-            }
-          }
+          : {
+              width: { ideal: 3840 },
+              height: { ideal: 2160 },
+              frameRate: { ideal: 30 }
+            };
+
+        try {
+          stream = await tryGetStream(dynamicHints, "dynamic-best-effort");
+        } catch (errDynamic: any) {
+          dlog("[CAMERA] Dynamic hints failed, trying basic 1080p fallback:", errDynamic);
+          stream = await tryGetStream(qualityHints1080p, "1080p-fallback");
         }
         dlog("[CAMERA] Got stream:", !!stream);
       } catch (err: any) {
@@ -2054,12 +2084,12 @@ export default forwardRef(function CameraView(
         dlog("[CAMERA] Setting stream to video element");
         videoRef.current.srcObject = stream;
 
-        // Apply anti-glare hints after we have the actual track.
-        // This is particularly helpful at 1080p where glare can blow out ring edges.
-        // NOTE: in tests, the MediaStream mock may not implement getVideoTracks.
+        // Optimized: Perform track constraint adjustments (anti-glare) in the background 
+        // to avoid blocking the main stream-initialization promise. We want the stream 
+        // reported to session as soon as 'srcObject' is set.
         try {
           const track = (stream as any)?.getVideoTracks?.()?.[0];
-          await applyAntiGlare(track);
+          void applyAntiGlare(track);
         } catch {}
 
         // Publish the MediaStream into the global camera session immediately so
