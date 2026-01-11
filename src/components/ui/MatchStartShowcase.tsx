@@ -297,6 +297,10 @@ export default function MatchStartShowcase({
   // from another surface.
   useEffect(() => {
     if (!visible) return;
+    // Reset countdown to the initial seconds whenever the overlay becomes visible
+    try {
+      setSeconds(initialSeconds || 15);
+    } catch {}
     try {
       cameraSession.acquireKeepAlive?.("MatchStartShowcase");
     } catch {}
@@ -648,16 +652,32 @@ export default function MatchStartShowcase({
     // Countdown interval:
     // - create only when needed
     // - stop at 0 to avoid going negative (which causes useless re-renders)
-    const t = allPlayersSkipped
-      ? setInterval(
-          () =>
-            setSeconds((s) => {
-              if (s <= 0) return 0;
-              return s - 1;
-            }),
-          1000,
-        )
-      : null;
+      // Use a timestamp-anchored countdown to avoid setInterval drift when the
+      // main thread is busy (canvas draws, rendering work, etc.). We compute
+      // remaining seconds from a fixed end time and drive updates via
+      // requestAnimationFrame for accuracy and responsiveness.
+      const endTimeRef = { current: null as number | null } as { current: number | null };
+      let rafId: number | null = null;
+      if (allPlayersSkipped) {
+        // Establish the end timestamp from the configured initialSeconds so
+        // the countdown always represents real elapsed time relative to the
+        // overlay start (avoids resuming from stale `seconds` values).
+        endTimeRef.current = Date.now() + (initialSeconds || 15) * 1000;
+
+        const tick = () => {
+          try {
+            const end = endTimeRef.current;
+            if (!end) return;
+            const remaining = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+            setSeconds((prev) => (prev === remaining ? prev : remaining));
+            if (remaining <= 0) return;
+            rafId = window.requestAnimationFrame(tick);
+          } catch (e) {
+            // Swallow and stop ticking on unexpected errors
+          }
+        };
+        rafId = window.requestAnimationFrame(tick);
+      }
     const onKey = (e: KeyboardEvent) => {
       if (!mountedRef.current) return;
       if (!disableEscClose && (e.key === "Escape" || e.key === "Esc")) {
@@ -687,7 +707,9 @@ export default function MatchStartShowcase({
           appRoot.removeAttribute("aria-hidden");
         }
       } catch {}
-      if (t) clearInterval(t);
+      try {
+        if (rafId != null) window.cancelAnimationFrame(rafId);
+      } catch {}
       document.removeEventListener("keydown", onKey);
     };
   }, [visible, disableEscClose, onRequestClose, allPlayersSkipped, DEV]);
