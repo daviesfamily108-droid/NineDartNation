@@ -280,6 +280,7 @@ type CameraDartMeta = {
   source?: "camera" | "manual";
   // Optional testing/advanced flags
   __allowMultipleBullUp?: boolean;
+  __tipVideoPx?: Point;
 };
 
 export type CameraViewHandle = {
@@ -312,6 +313,7 @@ export default forwardRef(function CameraView(
     onEndLeg,
     cameraAutoCommit: _cameraAutoCommit = "camera",
     forceAutoStart = false,
+    disableDetection = false,
   }: {
     onVisitCommitted?: (
       score: number,
@@ -357,6 +359,7 @@ export default forwardRef(function CameraView(
     cameraAutoCommit?: "camera" | "parent" | "both";
     // Force the camera to auto-start even if the global toggle was off (useful for match window popouts)
     forceAutoStart?: boolean;
+    disableDetection?: boolean;
   },
   ref: any,
 ) {
@@ -415,7 +418,7 @@ export default forwardRef(function CameraView(
   const preserveCalibrationOverlay = useUserSettings(
     (s) => s.preserveCalibrationOverlay,
   );
-  const manualOnly = autoscoreProvider === "manual";
+  const manualOnly = autoscoreProvider === "manual" || disableDetection;
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>(
     [],
   );

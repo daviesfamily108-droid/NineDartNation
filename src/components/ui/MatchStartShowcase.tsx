@@ -596,6 +596,7 @@ export default function MatchStartShowcase({
       // requestAnimationFrame for accuracy and responsiveness.
       const endTimeRef = { current: null as number | null } as { current: number | null };
       let rafId: number | null = null;
+      let lastSecondsSent = -1;
       if (allPlayersSkipped) {
         // Establish the end timestamp from the configured initialSeconds so
         // the countdown always represents real elapsed time relative to the
@@ -607,7 +608,11 @@ export default function MatchStartShowcase({
             const end = endTimeRef.current;
             if (!end) return;
             const remaining = Math.max(0, Math.ceil((end - Date.now()) / 1000));
-            setSeconds(remaining); // Instant immediate update
+            // Only update state if the second has actually changed
+            if (remaining !== lastSecondsSent) {
+              lastSecondsSent = remaining;
+              setSeconds(remaining);
+            }
             if (remaining <= 0) return;
             rafId = window.requestAnimationFrame(tick);
           } catch (e) {
@@ -861,49 +866,6 @@ export default function MatchStartShowcase({
         >
           <FocusLock returnFocus={true}>
             <div ref={hostRef} className="relative">
-              {/* Warmup CameraView removed: use the CameraTile inside the preview box so the feed
-                  matches the grey rounded container. If no stream exists we request startup
-                  elsewhere in this component (ndn:start-camera). */}
-              {/* Offscreen warmup CameraView: mount a hidden CameraView while the
-                  pre-match overlay is visible so the CameraView becomes the owner
-                  of the getUserMedia stream. This guarantees a global stream is
-                  available for the preview `CameraTile` to attach to, reducing
-                  race conditions where the preview appears black. Mirrors the
-                  offscreen warmup used in `App.tsx`. */}
-              {shouldWarmupCamera && (
-                // Keep an offscreen but painted CameraView mounted while the
-                // overlay is visible so the CameraView becomes the active
-                // owner of the MediaStream. Using `left: -9999px` or
-                // `display:none` can allow the browser to skip painting the
-                // element; prefer opacity:0 + transform to ensure the element
-                // is composited and continues to receive frames.
-                <div
-                  aria-hidden
-                  style={{
-                    position: "fixed",
-                    // Guaranteed to stay in layout and paint by being fixed
-                    bottom: 8,
-                    right: 8,
-                    width: 4,
-                    height: 4,
-                    overflow: "hidden",
-                    pointerEvents: "none",
-                    opacity: 0.001,
-                    transform: "translateZ(0)",
-                    willChange: "transform, opacity",
-                    // keep it on a low z so it doesn't interfere with focus
-                    zIndex: -100,
-                  }}
-                >
-                  <CameraView
-                    showToolbar={false}
-                    hideInlinePanels
-                    scoringMode="custom"
-                    immediateAutoCommit={false}
-                    forceAutoStart={true}
-                  />
-                </div>
-              )}
               {/* Decorative background glow */}
               <div className="absolute -inset-4 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-emerald-500/20 rounded-[3rem] blur-3xl -z-10 opacity-50 animate-pulse" />
 

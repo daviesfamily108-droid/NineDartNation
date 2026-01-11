@@ -13,16 +13,6 @@ import MatchControls from "./MatchControls";
 import { parseManualDart } from "../game/types";
 import MatchStartShowcase from "./ui/MatchStartShowcase";
 
-// Optimized: Warmup component that starts the camera as soon as the JS module is evaluated
-// rather than waiting for the main MatchPage component to mount/render its children.
-function CameraWarmer() {
-  return (
-    <div className="pointer-events-none fixed -left-[9999px] -top-[9999px] h-1 w-1 opacity-[0.001]">
-      <CameraView hideInlinePanels={true} forceAutoStart={true} />
-    </div>
-  );
-}
-
 export default function MatchPage() {
   const match = useMatch();
   useUserSettings((s) => s.hideInGameSidebar ?? true);
@@ -409,8 +399,6 @@ export default function MatchPage() {
           "calc(var(--ndn-bottomnav-h, 0px) + env(safe-area-inset-bottom, 0px) + 16px)",
       }}
     >
-      <CameraWarmer />
-
       {showStartShowcase && (
         <MatchStartShowcase
           open={showStartShowcase}
@@ -697,6 +685,12 @@ export default function MatchPage() {
                 <CameraView
                   hideInlinePanels={true}
                   forceAutoStart={true}
+                  onAddVisit={commitVisit}
+                  onEndLeg={(score) => {
+                    try {
+                      match.endLeg(score ?? 0);
+                    } catch {}
+                  }}
                   onVisitCommitted={(_score, _darts, finished, meta) => {
                     if (!finished) return;
                     const frame = meta?.frame ?? remoteFrame ?? null;

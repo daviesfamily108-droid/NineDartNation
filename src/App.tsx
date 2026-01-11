@@ -1564,6 +1564,7 @@ export default function App() {
               hideInlinePanels
               scoringMode="custom"
               immediateAutoCommit={false}
+              disableDetection={true}
             />
           </Suspense>
         </div>
