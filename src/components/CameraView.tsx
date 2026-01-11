@@ -1,4 +1,4 @@
-﻿import {
+import {
   BoardRadii,
   drawPolyline,
   sampleRing,
@@ -736,7 +736,7 @@ export default forwardRef(function CameraView(
     errorPx,
   } = useCalibration();
   const ERROR_PX_MAX = 12;
-  const CALIBRATION_MIN_CONFIDENCE = 90; // stricter than game-mode minimum; goal is “perfect” autoscore
+  const CALIBRATION_MIN_CONFIDENCE = 90; // stricter than game-mode minimum; goal is �perfect� autoscore
   // Calibration quality gate: if errorPx is missing, treat it as unknown (not zero).
   // Only allow scoring without errorPx if calibration is explicitly locked.
   const errorPxVal = typeof errorPx === "number" ? errorPx : null;
@@ -928,6 +928,12 @@ export default forwardRef(function CameraView(
     | { x: number; y: number; expires: number }
     | null
   >(null);
+
+  // Persistent markers for the current visit (sticky ?? emojis)
+  const [visitMarkers, setVisitMarkers] = useState<
+    Array<{ x: number; y: number; label: string }>
+  >([]);
+
   // When a visit is committed, show a short transient flash on the overlay
   // so the operator can confirm the visit was forwarded to scoring.
   const [commitFlash, setCommitFlash] = useState<
@@ -1296,6 +1302,7 @@ export default forwardRef(function CameraView(
       pendingCommitRef.current = null;
       clearPendingCommitTimer();
       setAwaitingClear(false);
+      setVisitMarkers([]);
 
       // Voice announcements happen at the commit boundary (never per-dart).
       // 1) Speak the latest bull distance (mm) for this visit, if available.
@@ -1308,9 +1315,7 @@ export default forwardRef(function CameraView(
           maybeEntries?.[maybeEntries.length - 1]?.meta?.bullDistanceMm;
         sayBullDistanceMm(lastBull);
       } catch {}
-      try {
-        sayVisitTotal(pending.score);
-      } catch {}
+      /* sayVisitTotal called immediately in addDart for snappy feedback */
 
       if (onVisitCommitted) {
         try {
@@ -1407,7 +1412,7 @@ export default forwardRef(function CameraView(
     setPendingDarts(0);
     pendingDartsRef.current = 0;
     setPendingScore(0);
-    setPendingEntries([]);
+    setPendingEntries([]); setVisitMarkers([]);
     setPendingPreOpenDarts(0);
     setPendingDartsAtDouble(0);
     setHadRecentAuto(false);
@@ -1639,7 +1644,7 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]);
+      setPendingEntries([]); setVisitMarkers([]);
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
       setHadRecentAuto(false);
@@ -2098,7 +2103,7 @@ export default forwardRef(function CameraView(
 
         // Publish the MediaStream into the global camera session immediately so
         // preview tiles can detect and attempt to attach the stream. We avoid
-        // claiming the global video element ref here to reduce play() races —
+        // claiming the global video element ref here to reduce play() races �
         // we'll set the element ref only after playback is confirmed below.
         try {
           cameraSession.setMediaStream?.(stream);
@@ -2820,7 +2825,7 @@ export default forwardRef(function CameraView(
 
               <div className="opacity-70">dimensions</div>
               <div>
-                {videoDiagnostics?.video?.videoWidth ?? 0}×
+                {videoDiagnostics?.video?.videoWidth ?? 0}�
                 {videoDiagnostics?.video?.videoHeight ?? 0}
               </div>
 
@@ -2854,7 +2859,7 @@ export default forwardRef(function CameraView(
             ) : null}
 
             <div className="mt-2 text-xxs opacity-60">
-              If dims stay 0×0 but tracks&gt;0, the video element isn't
+              If dims stay 0�0 but tracks&gt;0, the video element isn't
               receiving frames (often a virtual cam / autoplay / stream
               ownership issue). If tracks=0, getUserMedia succeeded but no video
               track is being delivered.
@@ -3052,6 +3057,31 @@ export default forwardRef(function CameraView(
             ctx.stroke();
             ctx.restore();
           }
+        }
+      } catch (e) {}
+
+      // Draw persistent ?? markers for the current visit
+      try {
+        if (visitMarkers.length > 0) {
+          const videoIntrinsicW =
+            v.videoWidth && v.videoWidth > 0 ? v.videoWidth : imageSize.w;
+          const videoIntrinsicH =
+            v.videoHeight && v.videoHeight > 0 ? v.videoHeight : imageSize.h;
+          ctx.save();
+          // Use a font size based on the overlay dimensions
+          ctx.font = `${Math.max(
+            16,
+            Math.min(32, Math.round((o.width + o.height) / 80)),
+          )}px sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+
+          for (const m of visitMarkers) {
+            const ox = (m.x / (videoIntrinsicW || 1)) * o.width;
+            const oy = (m.y / (videoIntrinsicH || 1)) * o.height;
+            ctx.fillText("??", ox, oy);
+          }
+          ctx.restore();
         }
       } catch (e) {}
 
@@ -3263,7 +3293,7 @@ export default forwardRef(function CameraView(
     }
 
     cameraVerboseLog(
-      "[DETECTION] ✅ All conditions met, starting detection loop!",
+      "[DETECTION] ? All conditions met, starting detection loop!",
     );
 
     let canceled = false;
@@ -3303,7 +3333,7 @@ export default forwardRef(function CameraView(
 
       // At higher resolutions, the PCA-based angle estimation can be noisy (more
       // pixels of glare/feathering), which can cause the "Rejected - angle too large"
-      // spam you’re seeing. Loosen the gate a bit so we don’t throw away real darts.
+      // spam you�re seeing. Loosen the gate a bit so we don�t throw away real darts.
       if (initVw > 0 && initVh > 0 && px >= 1920 * 1080) {
         angMaxDeg = 82;
         requireStableN = Math.max(requireStableN, 2);
@@ -3365,7 +3395,7 @@ export default forwardRef(function CameraView(
           (typeof window !== "undefined" &&
             window.localStorage?.getItem("ndn.glareClamp") === "1");
         if (glareClampEnabled) {
-          // Tuned defaults for bright 360° ring lights.
+          // Tuned defaults for bright 360� ring lights.
           glareClampFrameInPlace(frame, { knee: 212, strength: 0.72 });
         }
 
@@ -4713,6 +4743,30 @@ export default forwardRef(function CameraView(
     } catch {}
   }
 
+  function saySingleDartScore(label: string) {
+    if (!callerEnabled) return;
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) return;
+      const msg = new SpeechSynthesisUtterance();
+      let text = label.split(" ")[0]; // Take "T20" from "T20 60"
+      if (text.startsWith("D")) text = "Double " + text.substring(1);
+      else if (text.startsWith("T")) text = "Treble " + text.substring(1);
+      else if (text === "BULL") text = "Bullseye";
+      else if (text === "25") text = "Twenty five";
+
+      msg.text = text;
+      msg.rate = 1.05;
+      msg.pitch = 1.0;
+      if (callerVoice) {
+        const v = synth.getVoices().find((v) => v.name === callerVoice);
+        if (v) msg.voice = v;
+      }
+      msg.volume = typeof callerVolume === "number" ? callerVolume : 1;
+      synth.speak(msg);
+    } catch {}
+  }
+
   function addDart(
     value: number,
     label: string,
@@ -4908,7 +4962,7 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]);
+      setPendingEntries([]); setVisitMarkers([]);
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
       enqueueVisitCommit({ score: 0, darts: newDarts, finished: false });
@@ -4936,9 +4990,33 @@ export default forwardRef(function CameraView(
       } catch (e) {}
       return next;
     });
+
+    // Persistent visual markers
+    try {
+      let tipPx: Point | undefined | null = (meta as any)?.__tipVideoPx ?? null;
+      if (!tipPx) tipPx = diagnosticsRef.current.lastTip ?? null;
+      if (tipPx && typeof tipPx.x === "number" && typeof tipPx.y === "number") {
+        setVisitMarkers((prev) => [
+          ...prev,
+          { x: tipPx!.x, y: tipPx!.y, label },
+        ]);
+        setRegisteredTip({ x: tipPx.x, y: tipPx.y, expires: Date.now() + 2000 });
+      }
+    } catch (e) {}
+
     try {
       if (entryMeta.source === "camera") playBell();
     } catch (e) {}
+
+    // Voice callouts
+    if (isFinish) {
+      sayVisitTotal(newScore);
+    } else if (newDarts === 3) {
+      sayVisitTotal(newScore);
+    } else if (newDarts < 3) {
+      saySingleDartScore(label);
+    }
+
     if (
       x01DoubleIn &&
       !isOpened &&
@@ -4973,7 +5051,7 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]);
+      setPendingEntries([]); setVisitMarkers([]);
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
       enqueueVisitCommit({
@@ -5011,7 +5089,7 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]);
+      setPendingEntries([]); setVisitMarkers([]);
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: false });
@@ -5023,13 +5101,7 @@ export default forwardRef(function CameraView(
     // visually confirm the counted location. Prefer an explicit tip from meta
     // (auto/confirm flows may add __tipVideoPx). Otherwise fall back to the
     // best-effort diagnostics lastTip (video pixel coords).
-    try {
-      let tipPx: Point | undefined | null = (meta as any)?.__tipVideoPx ?? null;
-      if (!tipPx) tipPx = diagnosticsRef.current.lastTip ?? null;
-      if (tipPx && typeof tipPx.x === "number" && typeof tipPx.y === "number") {
-        setRegisteredTip({ x: tipPx.x, y: tipPx.y, expires: Date.now() + 2000 });
-      }
-    } catch (e) {}
+    // (Handled above for persistent markers)
   }
 
   function onAddAutoDart() {
@@ -5141,7 +5213,7 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]);
+      setPendingEntries([]); setVisitMarkers([]);
       enqueueVisitCommit({ score: 0, darts: newDarts, finished: false });
       setManualScore("");
       setHadRecentAuto(false);
@@ -5156,6 +5228,13 @@ export default forwardRef(function CameraView(
       { label: parsed.label, value: parsed.value, ring: parsed.ring },
     ]);
 
+    // Snappy voice call for the replacement
+    if (isFinish || newDarts === 3) {
+      sayVisitTotal(newScore);
+    } else {
+      saySingleDartScore(parsed.label);
+    }
+
     if (isFinish) {
       callAddVisit(newScore, newDarts);
       callEndLeg(newScore);
@@ -5166,7 +5245,7 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]);
+      setPendingEntries([]); setVisitMarkers([]);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: true });
       setManualScore("");
       setHadRecentAuto(false);
@@ -5182,7 +5261,7 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]);
+      setPendingEntries([]); setVisitMarkers([]);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: false });
     }
     setManualScore("");
@@ -5268,7 +5347,7 @@ export default forwardRef(function CameraView(
       pendingDartsRef.current = 0;
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]);
+      setPendingEntries([]); setVisitMarkers([]);
       return;
     }
     const visitScore = pendingScore;
@@ -5285,7 +5364,7 @@ export default forwardRef(function CameraView(
     setPendingDarts(0);
     pendingDartsRef.current = 0;
     setPendingScore(0);
-    setPendingEntries([]);
+    setPendingEntries([]); setVisitMarkers([]);
     enqueueVisitCommit({
       score: visitScore,
       darts: visitDarts,
@@ -5492,7 +5571,7 @@ export default forwardRef(function CameraView(
                 onClick={() => adjustCameraScale(-0.05)}
                 title="Decrease camera zoom"
               >
-                −
+                -
               </button>
               <span className="w-10 text-center font-semibold text-white">
                 {Math.round((cameraScale ?? 1) * 100)}%
@@ -5605,7 +5684,7 @@ export default forwardRef(function CameraView(
                             {lastDetection.value}
                           </div>
                           <div className="text-slate-400">
-                            {lastDetection.ring} •{" "}
+                            {lastDetection.ring} �{" "}
                             {lastDetection.confidence.toFixed(2)}
                           </div>
                           <div className="mt-1 flex gap-2">
@@ -5658,7 +5737,7 @@ export default forwardRef(function CameraView(
                             {lastCommit.score}
                           </div>
                           <div className="text-slate-400">
-                            {lastCommit.darts} darts •{" "}
+                            {lastCommit.darts} darts �{" "}
                             {new Date(lastCommit.ts).toLocaleTimeString()}
                           </div>
                         </div>
@@ -6039,7 +6118,7 @@ export default forwardRef(function CameraView(
               setShowManualModal(true);
             }}
           >
-            ✍️
+            ??
           </button>
         </div>
       ) : null}
@@ -6112,7 +6191,7 @@ export default forwardRef(function CameraView(
               </div>
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <span className="font-semibold">Last auto:</span>
-                <span>{lastAutoScore || "—"}</span>
+                <span>{lastAutoScore || "�"}</span>
                 <button
                   className="btn"
                   onClick={onAddAutoDart}
@@ -6332,7 +6411,7 @@ export default forwardRef(function CameraView(
                     </div>
                     <div className="flex items-center gap-2 mb-2">
                       <span className="font-semibold">Last auto:</span>
-                      <span>{lastAutoScore || "—"}</span>
+                      <span>{lastAutoScore || "�"}</span>
                       <button
                         className="btn"
                         onClick={onAddAutoDart}
@@ -6374,7 +6453,7 @@ export default forwardRef(function CameraView(
                       </button>
                     </div>
                     <div className="text-xs opacity-70 mb-4">
-                      Press Enter to Add · Shift+Enter to Replace Last
+                      Press Enter to Add � Shift+Enter to Replace Last
                     </div>
                     {/* Numeric keypad for quick manual numeric entry */}
                     <div className="mb-4">
@@ -6412,7 +6491,7 @@ export default forwardRef(function CameraView(
                             setManualScore((ms) => (ms || "").slice(0, -1))
                           }
                         >
-                          ⌫
+                          ?
                         </button>
                         <button
                           className="btn bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -6677,8 +6756,8 @@ export default forwardRef(function CameraView(
                           className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? "bg-emerald-500/10 border-emerald-400/40 text-emerald-100" : "bg-amber-500/10 border-amber-400/40 text-amber-100"}`}
                         >
                           {phoneFeedActive
-                            ? "📱 Phone camera stream active"
-                            : "📱 Waiting for phone camera stream"}
+                            ? "?? Phone camera stream active"
+                            : "?? Waiting for phone camera stream"}
                         </div>
                         <button
                           className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm"
