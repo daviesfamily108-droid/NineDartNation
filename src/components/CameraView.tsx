@@ -3561,12 +3561,12 @@ export default forwardRef(function CameraView(
               if (ring === "MISS") {
                 label = "MISS";
               } else if (ring === "BULL") {
-                label = "BULL 25";
+                label = "25";
               } else if (ring === "INNER_BULL") {
-                label = "INNER_BULL 50";
+                label = "BULL 50";
               } else if (sector != null) {
-                const prefix = mult === 3 ? "T" : mult === 2 ? "D" : "S";
-                label = `${prefix}${sector} ${value}`;
+                const prefix = mult === 3 ? "T" : mult === 2 ? "D" : "";
+                label = `${prefix}${sector}`;
               } else {
                 label = `${ring} ${value > 0 ? value : ""}`.trim();
               }
@@ -3695,12 +3695,12 @@ export default forwardRef(function CameraView(
             if (ring === "MISS") {
               label = "MISS";
             } else if (ring === "BULL") {
-              label = "BULL 25";
+              label = "25";
             } else if (ring === "INNER_BULL") {
-              label = "INNER_BULL 50";
+              label = "BULL 50";
             } else if (sector != null) {
-              const prefix = mult === 3 ? "T" : mult === 2 ? "D" : "S";
-              label = `${prefix}${sector} ${value}`;
+              const prefix = mult === 3 ? "T" : mult === 2 ? "D" : "";
+              label = `${prefix}${sector}`;
             } else {
               label = `${ring} ${value > 0 ? value : ""}`.trim();
             }
@@ -4529,12 +4529,12 @@ export default forwardRef(function CameraView(
       if (ring === "MISS") {
         label = "MISS";
       } else if (ring === "BULL") {
-        label = "BULL 25";
+        label = "25";
       } else if (ring === "INNER_BULL") {
-        label = "INNER_BULL 50";
+        label = "BULL 50";
       } else if (sector != null) {
-        const prefix = mult === 3 ? "T" : mult === 2 ? "D" : "S";
-        label = `${prefix}${sector} ${value}`;
+        const prefix = mult === 3 ? "T" : mult === 2 ? "D" : "";
+        label = `${prefix}${sector}`;
       } else {
         label = `${ring} ${value > 0 ? value : ""}`.trim();
       }

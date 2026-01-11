@@ -252,6 +252,31 @@ const ProgressRing = memo(function ProgressRing({
     </svg>
   );
 });
+const MatchCountdownDisplay = memo(function MatchCountdownDisplay({
+  seconds,
+  initialSeconds,
+}: {
+  seconds: number;
+  initialSeconds: number;
+}) {
+  return (
+    <div className="relative">
+      <ProgressRing
+        secondsLeft={seconds}
+        totalSeconds={initialSeconds || 15}
+        size={60}
+        stroke={6}
+        color={seconds > 5 ? "emerald" : "amber"}
+      />
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <span className="text-3xl font-black text-white tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] tracking-tighter">
+          {seconds > 0 ? seconds : "GO"}
+        </span>
+      </div>
+    </div>
+  );
+});
+
 export default function MatchStartShowcase({
   open = true,
   players,
@@ -923,21 +948,11 @@ export default function MatchStartShowcase({
                             </div>
                           </div>
                         )}
-                        <div className="absolute inset-0 bg-emerald-500/70 blur-[4rem] rounded-full animate-pulse"></div>
-                        <div className="relative">
-                          <ProgressRing
-                            secondsLeft={seconds}
-                            totalSeconds={initialSeconds || 15}
-                            size={60}
-                            stroke={6}
-                            color={seconds > 5 ? "emerald" : "amber"}
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <span className="text-3xl font-black text-white tabular-nums drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] tracking-tighter">
-                              {seconds > 0 ? seconds : "GO"}
-                            </span>
-                          </div>
-                        </div>
+                        {/* Optimized Countdown Timer */}
+                        <MatchCountdownDisplay 
+                          seconds={seconds} 
+                          initialSeconds={initialSeconds} 
+                        />
                       </div>
                     </div>
 
