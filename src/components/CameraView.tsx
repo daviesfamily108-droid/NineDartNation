@@ -8,9 +8,10 @@
   refinePointSobel,
   imageToBoard,
 } from "../utils/vision";
-import {
+import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   forwardRef,
@@ -658,7 +659,7 @@ export default forwardRef(function CameraView(
   // Match window / pop-out helper: always try to start the camera as soon as possible
   // Use useLayoutEffect for forceAutoStart to trigger the hardware request 
   // before the first paint, shaving off at least one frame of black screen.
-  React.useLayoutEffect(() => {
+  useLayoutEffect(() => {
     if (TEST_MODE) return;
     if (!forceAutoStart) return;
     
