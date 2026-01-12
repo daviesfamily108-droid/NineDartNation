@@ -94,6 +94,9 @@ const AUTO_COMMIT_COOLDOWN_MS = process.env.NODE_ENV === "test" ? 150 : 400;
 const AUTO_STREAM_IGNORE_MS = process.env.NODE_ENV === "test" ? 0 : 800;
 const DETECTION_ARM_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 1500;
 const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 10;
+// Immediately after calibration, lighting/ROI/camera stabilization can be slightly noisy.
+// Give the detector a short grace window with relaxed gates so the first darts count.
+const POST_CALIBRATION_GRACE_MS = process.env.NODE_ENV === "test" ? 0 : 8000;
 // Raise confidence threshold slightly to further reduce ghost detections
 // Slightly raise confidence and stability requirements to clamp false positives
 const AUTO_COMMIT_CONFIDENCE = 0.85;
@@ -735,6 +738,10 @@ export default forwardRef(function CameraView(
     locked,
     errorPx,
   } = useCalibration();
+
+  // Track calibration changes so we can temporarily relax detector gates right after a new
+  // calibration is applied/locked.
+  const lastCalibrationSigRef = useRef<string>("none");
 
   // 'matchState' hook: declare early to satisfy hook order and be available for gate checks.
   // NOTE: Some earlier logic depends on whether we're in an online match.
@@ -3354,6 +3361,30 @@ export default forwardRef(function CameraView(
       detectorSizeRef.w = initVw;
       detectorSizeRef.h = initVh;
     }
+
+    // If calibration just changed, apply a short grace window to the detector.
+    try {
+      const sig = `${locked ? 1 : 0}|${imageSize?.w ?? 0}x${imageSize?.h ?? 0}|${
+        (H as any)?.[0]?.[0] ?? (H as any)?.a ?? "H"
+      }`;
+      if (sig !== lastCalibrationSigRef.current) {
+        lastCalibrationSigRef.current = sig;
+        const det = detectorRef.current as any;
+        if (det && typeof det.setTemporaryOverrides === "function") {
+          // Relax angle gate and allow single-frame stability briefly.
+          det.setTemporaryOverrides(
+            {
+              requireStableN: 1,
+              angMaxDeg: 90,
+            },
+            POST_CALIBRATION_GRACE_MS,
+          );
+          cameraVerboseLog("[DETECTION] Applied post-calibration grace window", {
+            ms: POST_CALIBRATION_GRACE_MS,
+          });
+        }
+      }
+    } catch {}
 
     const tick = () => {
       // throttle detection processing to configured FPS to reduce CPU usage

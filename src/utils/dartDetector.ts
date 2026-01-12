@@ -39,6 +39,15 @@ export class DartDetector {
   private stableCount = 0;
   private requireStableN = 2;
 
+  // Optional temporary tuning overrides (used for short "grace windows")
+  private tempOverrides: {
+    untilTs: number;
+    requireStableN?: number;
+    angMaxDeg?: number;
+    thresh?: number;
+    minArea?: number;
+  } | null = null;
+
   constructor(cfg?: {
     thresh?: number;
     minArea?: number;
@@ -52,6 +61,55 @@ export class DartDetector {
     if (cfg?.requireStableN !== undefined)
       this.requireStableN = cfg.requireStableN;
     if (cfg?.angMaxDeg !== undefined) this.angMaxDeg = cfg.angMaxDeg;
+  }
+
+  /**
+   * Temporarily relax/tighten detector gates for a short period.
+   * Useful immediately after calibration when lighting/ROI can shift slightly.
+   */
+  setTemporaryOverrides(
+    overrides: {
+      requireStableN?: number;
+      angMaxDeg?: number;
+      thresh?: number;
+      minArea?: number;
+    },
+    durationMs: number,
+  ) {
+    const ms = Math.max(0, Number(durationMs) || 0);
+    if (ms <= 0) {
+      this.tempOverrides = null;
+      return;
+    }
+    this.tempOverrides = {
+      ...overrides,
+      untilTs: Date.now() + ms,
+    };
+  }
+
+  private _effectiveTuning() {
+    const now = Date.now();
+    const o = this.tempOverrides;
+    if (!o || now >= o.untilTs) {
+      // expire
+      if (o && now >= o.untilTs) this.tempOverrides = null;
+      return {
+        thresh: this.thresh,
+        minArea: this.minArea,
+        maxArea: this.maxArea,
+        requireStableN: this.requireStableN,
+        angMaxDeg: this.angMaxDeg,
+        inGrace: false,
+      };
+    }
+    return {
+      thresh: o.thresh ?? this.thresh,
+      minArea: o.minArea ?? this.minArea,
+      maxArea: this.maxArea,
+      requireStableN: o.requireStableN ?? this.requireStableN,
+      angMaxDeg: o.angMaxDeg ?? this.angMaxDeg,
+      inGrace: true,
+    };
   }
 
   setROI(cx: number, cy: number, radius: number) {
@@ -98,6 +156,7 @@ export class DartDetector {
   detect(frame: ImageData): DartDetection | null {
     const now = Date.now();
     const recent = now - this.lastAcceptTs < this.cooldownMs;
+    const tuning = this._effectiveTuning();
     const { width: w, height: h, data } = frame;
     if (!this.bg || w !== this.width || h !== this.height) this.reset(w, h);
     const bg = this.bg!;
@@ -139,7 +198,7 @@ export class DartDetector {
     const mu = cnt ? sum / cnt : 0;
     const var_ = cnt ? Math.max(0, sum2 / cnt - mu * mu) : 0;
     const sigma = Math.sqrt(var_);
-    const dynamicThresh = Math.max(this.thresh, mu + 1.2 * sigma);
+  const dynamicThresh = Math.max(tuning.thresh, mu + 1.2 * sigma);
     // Rebuild mask using dynamic threshold and ignoring highlights
     for (let i = 0; i < n; i++) {
       if (isHighlight[i]) {
@@ -194,16 +253,17 @@ export class DartDetector {
       }
     }
 
-    if (!bestIdxs || bestArea < this.minArea || bestArea > this.maxArea) {
+    if (!bestIdxs || bestArea < tuning.minArea || bestArea > tuning.maxArea) {
       // Slowly update background when no valid detection to adapt lighting
       if (!recent) this.updateBackground(frame, 0.02);
       // Log occasionally to show why rejection happens
       if (Math.random() < 0.02) {
         console.log("[DETECTOR] No valid blob:", {
           bestArea,
-          minArea: this.minArea,
-          maxArea: this.maxArea,
+          minArea: tuning.minArea,
+          maxArea: tuning.maxArea,
           hasBlob: !!bestIdxs,
+          inGrace: tuning.inGrace,
         });
       }
       return null;
@@ -276,12 +336,13 @@ export class DartDetector {
       const ry = dyc / rlen;
       const cosAng = Math.max(-1, Math.min(1, Math.abs(vx * rx + vy * ry)));
       const angDeg = (Math.acos(cosAng) * 180) / Math.PI;
-      if (angDeg > this.angMaxDeg) {
+      if (angDeg > tuning.angMaxDeg) {
         // likely glare or non-radial artifact
         if (!recent) this.updateBackground(frame, 0.02);
         console.log("[DETECTOR] Rejected - angle too large:", {
           angDeg,
-          maxAllowed: this.angMaxDeg,
+          maxAllowed: tuning.angMaxDeg,
+          inGrace: tuning.inGrace,
         });
         return null;
       }
@@ -328,11 +389,16 @@ export class DartDetector {
     // Optionally, we can inpaint the blob into background upon acceptance by caller
 
     // Temporal stabilization: require 2+ consistent frames for the same dart
-    const stable = this._isStable({ x: tipX + 0.5, y: tipY + 0.5 }, bestArea);
+    const stable = this._isStable(
+      { x: tipX + 0.5, y: tipY + 0.5 },
+      bestArea,
+      tuning.requireStableN,
+    );
     if (!stable) {
       console.log("[DETECTOR] Waiting for stability:", {
         stableCount: this.stableCount,
-        needFrames: this.requireStableN,
+        needFrames: tuning.requireStableN,
+        inGrace: tuning.inGrace,
       });
       return null;
     }
@@ -389,7 +455,7 @@ export class DartDetector {
   }
 
   // --- helpers ---
-  private _isStable(tip: Point, area: number): boolean {
+  private _isStable(tip: Point, area: number, requireN?: number): boolean {
     const close = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y) <= 6;
     if (!this.prevTip) {
       this.prevTip = { ...tip };
@@ -410,7 +476,8 @@ export class DartDetector {
       this.stableCount = 1;
       return false;
     }
-    return this.stableCount >= this.requireStableN;
+    const n = Math.max(1, requireN ?? this.requireStableN);
+    return this.stableCount >= n;
   }
 
   private _dilate(mask: Uint8Array, w: number, h: number) {
