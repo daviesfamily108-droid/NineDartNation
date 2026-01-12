@@ -2489,6 +2489,41 @@ app.get('/api/friends/suggested', (req, res) => {
   res.json({ ok: true, suggestions })
 })
 
+// Friend requests (incoming/outgoing)
+// Stored in `friendRequests` array and persisted to FRIEND_REQUESTS_FILE.
+// Shape: { from: string, to: string, ts: number, status?: 'pending'|'accepted'|'declined'|'cancelled' }
+app.get('/api/friends/requests', (req, res) => {
+  const email = String(req.query.email || '').toLowerCase()
+  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+
+  const incoming = (friendRequests || [])
+    .filter((r) => r && String(r.to || '').toLowerCase() === email && String(r.status || 'pending') === 'pending')
+    .map((r) => {
+      const from = String(r.from || '').toLowerCase()
+      const u = users.get(from) || { email: from, username: from, status: 'offline' }
+      return { ...r, from, to: email, fromName: u.username }
+    })
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+
+  res.json({ ok: true, requests: incoming })
+})
+
+app.get('/api/friends/outgoing', (req, res) => {
+  const email = String(req.query.email || '').toLowerCase()
+  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+
+  const outgoing = (friendRequests || [])
+    .filter((r) => r && String(r.from || '').toLowerCase() === email && String(r.status || 'pending') === 'pending')
+    .map((r) => {
+      const to = String(r.to || '').toLowerCase()
+      const u = users.get(to) || { email: to, username: to, status: 'offline' }
+      return { ...r, from: email, to, toName: u.username }
+    })
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+
+  res.json({ ok: true, requests: outgoing })
+})
+
 app.post('/api/friends/add', (req, res) => {
   const { email, friend } = req.body || {}
   const me = String(email || '').toLowerCase()
