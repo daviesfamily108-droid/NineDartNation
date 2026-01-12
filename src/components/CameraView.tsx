@@ -799,6 +799,21 @@ export default forwardRef(function CameraView(
     lastBullDistanceMm: null,
     lastTipVideoPx: null,
   });
+
+  // Offline fallback commit:
+  // In some real-world lighting/camera setups we can see a real dart with very
+  // high confidence, but the tip jitter + motion-settle logic prevents the
+  // normal AUTO_COMMIT_MIN_FRAMES/HOLD_MS gate from ever completing.
+  //
+  // For OFFLINE play only, we track repeated detections of the same scored
+  // result in (roughly) the same place and commit after a short window.
+  const offlineFallbackRef = useRef<{
+    sig: string | null;
+    firstTs: number;
+    lastTs: number;
+    frames: number;
+    lastTip: Point | null;
+  }>({ sig: null, firstTs: 0, lastTs: 0, frames: 0, lastTip: null });
   const [pendingDarts, setPendingDarts] = useState<number>(0);
   const pendingDartsRef = useRef<number>(0);
   const [pendingScore, setPendingScore] = useState<number>(0);
@@ -4137,6 +4152,18 @@ export default forwardRef(function CameraView(
 
             if (!warmupActive) {
               if (isGhost) {
+                try {
+                  console.debug("[AUTOSCORE DROP] ghost", {
+                    label,
+                    value,
+                    ring,
+                    calibrationGood,
+                    tipInVideo,
+                    pCalInImage,
+                    onBoard: _onBoard,
+                    warmupActive,
+                  });
+                } catch {}
                 dlog(
                   "CameraView: ignoring ghost detection (calibrationGood:",
                   calibrationGood,
@@ -4217,6 +4244,89 @@ export default forwardRef(function CameraView(
                       : !tipStable
                         ? "unstable-tip"
                         : "not-ready";
+
+                    try {
+                      console.debug("[AUTOSCORE DROP] gate", {
+                        reason: rejectReason,
+                        label,
+                        value,
+                        ring,
+                        settled,
+                        tipStable,
+                        tipStableFrames: tipStabilityRef.current.stableFrames,
+                      });
+                    } catch {}
+
+                    // Offline fallback: if we keep seeing the same scored result
+                    // near the same tip location at high confidence, commit after
+                    // a short window even if settle/stability never completes.
+                    try {
+                      if (!isOnlineMatch) {
+                        const sig = `${value}|${ring}|${mult}`;
+                        const prev = offlineFallbackRef.current;
+                        const tip = tipRefined;
+                        const dist = prev.lastTip
+                          ? Math.hypot(tip.x - prev.lastTip.x, tip.y - prev.lastTip.y)
+                          : 0;
+                        const same = prev.sig === sig && dist <= 18;
+                        if (!same) {
+                          offlineFallbackRef.current = {
+                            sig,
+                            firstTs: nowPerf,
+                            lastTs: nowPerf,
+                            frames: 1,
+                            lastTip: { ...tip },
+                          };
+                        } else {
+                          offlineFallbackRef.current = {
+                            ...prev,
+                            lastTs: nowPerf,
+                            frames: prev.frames + 1,
+                            lastTip: { ...tip },
+                          };
+                        }
+
+                        const fb = offlineFallbackRef.current;
+                        const ageMs = nowPerf - fb.firstTs;
+                        // Tuned to be "fast enough to feel responsive" but still
+                        // resistant to single-frame ghosts.
+                        const FALLBACK_MIN_FRAMES = 8;
+                        const FALLBACK_MIN_MS = 650;
+                        if (
+                          fb.sig === sig &&
+                          (fb.frames >= FALLBACK_MIN_FRAMES || ageMs >= FALLBACK_MIN_MS)
+                        ) {
+                          console.info("[AUTOSCORE] offline fallback commit", {
+                            sig,
+                            frames: fb.frames,
+                            ageMs,
+                            reason: rejectReason,
+                          });
+                          applyAutoHit({
+                            value,
+                            ring,
+                            label,
+                            sector,
+                            mult,
+                            firstTs: fb.firstTs,
+                            frames: fb.frames,
+                          });
+                          didApplyHitThisTick = true;
+                          autoCandidateRef.current = null;
+                          lastAutoCommitRef.current = nowPerf;
+                          offlineFallbackRef.current = {
+                            sig: null,
+                            firstTs: 0,
+                            lastTs: 0,
+                            frames: 0,
+                            lastTip: null,
+                          };
+                          shouldAccept = true;
+                          rejectReason = null;
+                        }
+                      }
+                    } catch {}
+
                     captureDetectionLog({
                       ts: nowPerf,
                       label,
@@ -4281,6 +4391,17 @@ export default forwardRef(function CameraView(
                         : !cooled
                           ? "cooldown"
                           : null;
+
+                      try {
+                        console.debug("[AUTOSCORE DROP] tracking", {
+                          reason: rejectReason,
+                          value,
+                          ring,
+                          frames: current.frames,
+                          holdMs,
+                          cooled,
+                        });
+                      } catch {}
                     }
                   }
                 }
@@ -4289,6 +4410,14 @@ export default forwardRef(function CameraView(
               autoCandidateRef.current = null;
               shouldAccept = true;
               rejectReason = "warmup";
+
+              try {
+                console.debug("[AUTOSCORE DROP] warmup", {
+                  label,
+                  value,
+                  ring,
+                });
+              } catch {}
             }
 
             captureDetectionLog({
