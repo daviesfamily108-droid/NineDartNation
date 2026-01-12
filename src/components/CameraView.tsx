@@ -3963,12 +3963,21 @@ export default forwardRef(function CameraView(
               );
 
               // Commit gate:
-              // - Online: require strict calibration quality (calibrationValid)
-              // - Offline/local: allow commits as long as we have any mapping (H + imageSize)
-              // NOTE: We still surface diagnostics if quality is low.
-              if (!calibrationValidEffective) {
+              // We require a mapping (H + imageSize) and that the candidate was
+              // classified as non-ghost earlier.
+              //
+              // IMPORTANT: `calibrationValidEffective` can be false even when the
+              // mapping is correct (e.g., errorPx missing/unknown, transient state).
+              // Previously this hard-blocked *all* auto scoring, which matches the
+              // reported symptom: detector says "✅ DART FOUND!" but nothing counts.
+              //
+              // Strategy:
+              // - If we have *any* mapping, allow local commits.
+              // - Still surface diagnostics so users know calibration quality.
+              const hasCalibrationMapping = !!H && !!imageSize;
+              if (!hasCalibrationMapping) {
                 dlog(
-                  "CameraView: applyAutoHit blocked (calibrationValidEffective=false)",
+                  "CameraView: applyAutoHit blocked (no H/imageSize mapping)",
                   candidate.value,
                   candidate.ring,
                 );
@@ -3984,9 +3993,7 @@ export default forwardRef(function CameraView(
                       ]?.confidence ??
                       null,
                     lastPboard: null,
-                    lastReject: isOnlineMatch
-                      ? "calibration-invalid"
-                      : "calibration-mapping-missing",
+                    lastReject: "calibration-mapping-missing",
                   });
                 } catch {}
                 try {
@@ -4000,6 +4007,15 @@ export default forwardRef(function CameraView(
                     });
                 } catch (e) {}
                 return;
+              }
+
+              if (!calibrationValidEffective) {
+                // Soft warning only; still allow commit.
+                try {
+                  updateDiagnostics({
+                    lastReject: "calibration-low-quality",
+                  });
+                } catch {}
               }
 
               const now = performance.now();
