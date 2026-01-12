@@ -917,7 +917,17 @@ export default forwardRef(function CameraView(
         // Lightweight re-render when overlay is open.
         if (showDiagnosticsOverlay) setDiagnosticsTick((n) => (n + 1) % 100000);
         try {
-          (window as any).ndnAutoscoreDiagnostics = diagnosticsRef.current;
+          // Attach a lightweight build/runtime fingerprint so we can confirm
+          // which Netlify deploy is actually running when debugging.
+          (window as any).ndnAutoscoreDiagnostics = {
+            ...diagnosticsRef.current,
+            __build: {
+              // Note: Netlify doesn't automatically inject commit SHA into the
+              // browser bundle unless explicitly configured; keep this stable.
+              clientVersion: "autoscore-debug/v1",
+              builtAt: new Date().toISOString(),
+            },
+          };
         } catch {}
       } catch {}
     },
