@@ -891,6 +891,19 @@ export default forwardRef(function CameraView(
     lastValue?: number | null;
     lastRing?: Ring | null;
     lastReject?: string | null;
+
+    // High-signal gating state
+    detectionArmed?: boolean;
+    paused?: boolean;
+    pendingDarts?: number;
+    frameCount?: number;
+    minFrames?: number;
+    warmupActive?: boolean;
+    settled?: boolean;
+    tipStable?: boolean;
+    tipStableFrames?: number;
+    shouldDeferCommit?: boolean;
+    calibrationValidEffective?: boolean;
   }>({ lastTs: 0 });
   const [, setDiagnosticsTick] = useState(0);
   const updateDiagnostics = useCallback(
@@ -3899,6 +3912,19 @@ export default forwardRef(function CameraView(
                         : warmupActive
                           ? "warmup"
                           : null,
+
+                // Gating state snapshot
+                detectionArmed: detectionArmedRef.current,
+                paused: !!paused,
+                pendingDarts,
+                frameCount: frameCountRef.current,
+                minFrames: DETECTION_MIN_FRAMES,
+                warmupActive,
+                settled,
+                tipStable,
+                tipStableFrames: tipStabilityRef.current.stableFrames,
+                shouldDeferCommit,
+                calibrationValidEffective,
               });
             } catch {}
             setLastAutoScore(label);
@@ -4136,7 +4162,11 @@ export default forwardRef(function CameraView(
                 // We now allow candidate tracking when either condition is met, and we
                 // rely on the existing hold/frames + cooldown logic to prevent ghosts.
                 // Misses are allowed through for UI diagnostics but won't be committed.
-                const allowCommitCandidate = settled || tipStable;
+                // Further relax: if we have a confident, on-board, calibration-valid,
+                // non-ghost detection, allow the candidate to start tracking immediately.
+                // We still require AUTO_COMMIT_MIN_FRAMES/AUTO_COMMIT_HOLD_MS AND cooldown
+                // before committing, which keeps ghost risk low.
+                const allowCommitCandidate = settled || tipStable || (!isGhost && calibrationGood);
 
                 if (ring === "MISS" || value <= 0) {
                   autoCandidateRef.current = null;
@@ -5876,6 +5906,39 @@ export default forwardRef(function CameraView(
                     <div className="text-slate-500 mt-1">
                       tipStableFrames: {tipStabilityRef.current.stableFrames}
                     </div>
+                  </div>
+                </div>
+
+                <div className="mt-2 rounded-xl border border-white/10 bg-black/30 p-2">
+                  <div className="text-slate-300 mb-1">Gates</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1">
+                    <div className="text-slate-400">
+                      armed: <span className="text-white">{diagnosticsRef.current.detectionArmed ? "yes" : "no"}</span>
+                    </div>
+                    <div className="text-slate-400">
+                      paused: <span className="text-white">{diagnosticsRef.current.paused ? "yes" : "no"}</span>
+                    </div>
+                    <div className="text-slate-400">
+                      pending: <span className="text-white">{diagnosticsRef.current.pendingDarts ?? "?"}</span>
+                    </div>
+                    <div className="text-slate-400">
+                      frame: <span className="text-white">{diagnosticsRef.current.frameCount ?? "?"}/{diagnosticsRef.current.minFrames ?? "?"}</span>
+                    </div>
+                    <div className="text-slate-400">
+                      warmup: <span className="text-white">{diagnosticsRef.current.warmupActive ? "yes" : "no"}</span>
+                    </div>
+                    <div className="text-slate-400">
+                      settled: <span className="text-white">{diagnosticsRef.current.settled ? "yes" : "no"}</span>
+                    </div>
+                    <div className="text-slate-400">
+                      tipStable: <span className="text-white">{diagnosticsRef.current.tipStable ? "yes" : "no"}</span>
+                    </div>
+                    <div className="text-slate-400">
+                      calEff: <span className="text-white">{diagnosticsRef.current.calibrationValidEffective ? "yes" : "no"}</span>
+                    </div>
+                  </div>
+                  <div className="text-slate-500 mt-1">
+                    policy: {diagnosticsRef.current.shouldDeferCommit ? "wait-for-clear" : "immediate"}
                   </div>
                 </div>
               </div>
