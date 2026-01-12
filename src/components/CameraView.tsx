@@ -93,6 +93,11 @@ const AUTO_COMMIT_HOLD_MS = 250;
 const AUTO_COMMIT_COOLDOWN_MS = process.env.NODE_ENV === "test" ? 150 : 400;
 const AUTO_STREAM_IGNORE_MS = process.env.NODE_ENV === "test" ? 0 : 800;
 const DETECTION_ARM_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 1500;
+
+// Anti-false-positive: in offline play, only allow commits shortly after a
+// throw-like motion event. This prevents static board artifacts (e.g. sisal
+// fibers/protrusions) from continuously triggering candidate/commit logic.
+const OFFLINE_THROW_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 4500;
 const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 10;
 // Immediately after calibration, lighting/ROI/camera stabilization can be slightly noisy.
 // Give the detector a short grace window with relaxed gates so the first darts count.
@@ -871,6 +876,7 @@ export default forwardRef(function CameraView(
   const detectionArmedRef = useRef<boolean>(false);
   const detectionArmTimerRef = useRef<number | null>(null);
   const lastMotionLikeEventAtRef = useRef<number>(0);
+  const lastOfflineThrowAtRef = useRef<number>(0);
   const tipStabilityRef = useRef<{
     lastTip: Point | null;
     stableFrames: number;
@@ -914,6 +920,7 @@ export default forwardRef(function CameraView(
     frameCount?: number;
     minFrames?: number;
     warmupActive?: boolean;
+    inOfflineThrowWindow?: boolean;
     settled?: boolean;
     tipStable?: boolean;
     tipStableFrames?: number;
@@ -3599,6 +3606,10 @@ export default forwardRef(function CameraView(
             const hasNow = !!det;
             if (hasNow !== hadStable) {
               lastMotionLikeEventAtRef.current = nowPerf;
+              // Treat any motion-like event as a "throw window" opener in offline.
+              // This is intentionally permissive: we only use it to suppress
+              // pre-throw false positives, not to block real throws.
+              if (!isOnlineMatch) lastOfflineThrowAtRef.current = nowPerf;
             }
           } catch (e) {}
 
@@ -3757,6 +3768,7 @@ export default forwardRef(function CameraView(
                     stableFrames: 1,
                   };
                   lastMotionLikeEventAtRef.current = nowPerf;
+                  if (!isOnlineMatch) lastOfflineThrowAtRef.current = nowPerf;
                 }
               }
             } catch (e) {}
@@ -3765,6 +3777,12 @@ export default forwardRef(function CameraView(
               nowPerf - lastMotionLikeEventAtRef.current >= DETECTION_SETTLE_MS;
             const tipStable =
               tipStabilityRef.current.stableFrames >= TIP_STABLE_MIN_FRAMES;
+
+            // Offline anti-false-positive: only allow commits shortly after a
+            // throw-like motion event.
+            const inOfflineThrowWindow = isOnlineMatch
+              ? true
+              : nowPerf - lastOfflineThrowAtRef.current <= OFFLINE_THROW_WINDOW_MS;
 
             // NOTE: settled/tipStable are enforced further down the pipeline
             // (in the non-ghost accept/commit path) so we don't prematurely
@@ -3950,6 +3968,8 @@ export default forwardRef(function CameraView(
                 tipStableFrames: tipStabilityRef.current.stableFrames,
                 shouldDeferCommit,
                 calibrationValidEffective,
+                // Offline false-positive protection
+                inOfflineThrowWindow,
               });
             } catch {}
             setLastAutoScore(label);
@@ -4219,7 +4239,9 @@ export default forwardRef(function CameraView(
                 // non-ghost detection, allow the candidate to start tracking immediately.
                 // We still require AUTO_COMMIT_MIN_FRAMES/AUTO_COMMIT_HOLD_MS AND cooldown
                 // before committing, which keeps ghost risk low.
-                const allowCommitCandidate = settled || tipStable || (!isGhost && calibrationGood);
+                const allowCommitCandidate =
+                  inOfflineThrowWindow &&
+                  (settled || tipStable || (!isGhost && calibrationGood));
 
                 if (ring === "MISS" || value <= 0) {
                   autoCandidateRef.current = null;
@@ -4239,11 +4261,13 @@ export default forwardRef(function CameraView(
                   // the auto-commit candidate count.
                   if (!allowCommitCandidate) {
                     shouldAccept = false;
-                    rejectReason = !settled
-                      ? "not-settled"
-                      : !tipStable
-                        ? "unstable-tip"
-                        : "not-ready";
+                    rejectReason = !inOfflineThrowWindow
+                      ? "no-throw-window"
+                      : !settled
+                        ? "not-settled"
+                        : !tipStable
+                          ? "unstable-tip"
+                          : "not-ready";
 
                     try {
                       console.debug("[AUTOSCORE DROP] gate", {
@@ -4262,6 +4286,18 @@ export default forwardRef(function CameraView(
                     // a short window even if settle/stability never completes.
                     try {
                       if (!isOnlineMatch) {
+                        // IMPORTANT: never allow fallback commits outside the
+                        // post-throw window; this is the main protection against
+                        // phantom commits from static board artifacts.
+                        if (!inOfflineThrowWindow) {
+                          offlineFallbackRef.current = {
+                            sig: null,
+                            firstTs: 0,
+                            lastTs: 0,
+                            frames: 0,
+                            lastTip: null,
+                          };
+                        } else {
                         const sig = `${value}|${ring}|${mult}`;
                         const prev = offlineFallbackRef.current;
                         const tip = tipRefined;
@@ -4323,6 +4359,7 @@ export default forwardRef(function CameraView(
                           };
                           shouldAccept = true;
                           rejectReason = null;
+                        }
                         }
                       }
                     } catch {}
@@ -6094,6 +6131,9 @@ export default forwardRef(function CameraView(
                   </div>
                   <div className="text-slate-500 mt-1">
                     policy: {diagnosticsRef.current.shouldDeferCommit ? "wait-for-clear" : "immediate"}
+                  </div>
+                  <div>
+                    throwWindow: <span className="text-white">{diagnosticsRef.current.inOfflineThrowWindow ? "yes" : "no"}</span>
                   </div>
                 </div>
               </div>
