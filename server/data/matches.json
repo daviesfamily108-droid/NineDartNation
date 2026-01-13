@@ -550,5 +550,17 @@
     "game": "X01",
     "requireCalibration": false,
     "createdAt": 1768305129452
+  },
+  {
+    "id": "kg567mN-f2",
+    "creatorId": "-ykS76U3",
+    "creatorName": "Alice-fth5v4a",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1768306351923
   }
 ]
