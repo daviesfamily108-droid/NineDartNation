@@ -6033,6 +6033,19 @@ export default forwardRef(function CameraView(
                         className="btn btn--ghost px-3 py-1 text-xs"
                         onClick={() => {
                           try {
+                            // Force the offline "throw window" open for testing
+                            lastOfflineThrowAtRef.current = performance.now();
+                            updateDiagnostics({ inOfflineThrowWindow: true });
+                          } catch (e) {}
+                        }}
+                        title="Force throw window (testing)"
+                      >
+                        Force throw window
+                      </button>
+                      <button
+                        className="btn btn--ghost px-3 py-1 text-xs"
+                        onClick={() => {
+                          try {
                             addDart(60, "60", "TRIPLE", {
                               calibrationValid: true,
                               pBoard: null,
