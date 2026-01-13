@@ -250,6 +250,9 @@ type AutoCandidate = {
   mult: 0 | 1 | 2 | 3;
   firstTs: number;
   frames: number;
+  // Video-space tip used to keep tracking the same physical dart even when
+  // segment mapping jitters between frames.
+  lastTip?: { x: number; y: number } | null;
 };
 
 type DetectionLogEntry = {
@@ -4465,29 +4468,20 @@ export default forwardRef(function CameraView(
                   } else {
                     const existing = autoCandidateRef.current;
 
-                    // Candidate tracking needs to be tolerant to tiny mapping jitter.
-                    // In practice, the detector often returns alternating adjacent
-                    // segments (or SINGLE/TRIPLE) across frames even though the dart
-                    // hasn't moved. If we reset on every mismatch, we get infinite
-                    // "candidate-hold" drops with frames=1/holdMs=0.
-                    const sameSig =
-                      !!existing &&
-                      existing.value === value &&
-                      existing.ring === ring;
-
-                    // Allow 1-segment wobble while holding to the same ring.
-                    const nearValueSameRing =
-                      !!existing &&
-                      existing.ring === ring &&
-                      Math.abs(existing.value - value) <= 1;
-
-                    // Allow ring wobble only when the segment is identical.
-                    // (This usually comes from tiny radial calibration jitter.)
-                    const sameValueNearRing =
-                      !!existing &&
-                      existing.value === value &&
-                      existing.ring !== ring &&
-                      (existing.ring === "SINGLE" || ring === "SINGLE");
+                    // Candidate tracking needs to be tolerant to calibration/mapping jitter.
+                    // The *physical* dart stays in the same pixel neighborhood, but the
+                    // computed segment/ring can jump wildly frame-to-frame. If we key
+                    // tracking by value/ring, firstTs resets and we get infinite
+                    // frames=1/holdMs=0 "candidate-hold" drops.
+                    const TIP_TRACK_PX = 18;
+                    const distTip =
+                      existing?.lastTip
+                        ? Math.hypot(
+                            tipRefined.x - existing.lastTip.x,
+                            tipRefined.y - existing.lastTip.y,
+                          )
+                        : Infinity;
+                    const samePhysical = !!existing && distTip <= TIP_TRACK_PX;
 
                     if (!existing) {
                       autoCandidateRef.current = {
@@ -4498,17 +4492,20 @@ export default forwardRef(function CameraView(
                         mult,
                         firstTs: nowPerf,
                         frames: 1,
+                        lastTip: { ...tipRefined },
                       };
-                    } else if (sameSig || nearValueSameRing || sameValueNearRing) {
-                      // Continue the same candidate, but keep the "strongest" reading
-                      // for display/scoring (prefer non-SINGLE rings).
+                    } else if (samePhysical) {
+                      // Same physical dart -> keep accumulating frames/holdMs.
+                      // Prefer stronger/non-single ring and keep a stable value
+                      // (don't let segment flicker reset the candidate).
                       const preferRing: Ring =
                         existing.ring === "SINGLE" && ring !== "SINGLE"
                           ? ring
                           : existing.ring;
-                      const preferValue = sameSig
-                        ? value
-                        : existing.value;
+
+                      // Prefer non-miss, and otherwise keep the existing value to reduce flicker.
+                      const preferValue = existing.value > 0 ? existing.value : value;
+
                       autoCandidateRef.current = {
                         ...existing,
                         value: preferValue,
@@ -4517,9 +4514,10 @@ export default forwardRef(function CameraView(
                         sector,
                         mult,
                         frames: existing.frames + 1,
+                        lastTip: { ...tipRefined },
                       };
                     } else {
-                      // New candidate signature detected; reset hold window.
+                      // New physical location -> new candidate signature.
                       autoCandidateRef.current = {
                         value,
                         ring,
@@ -4528,6 +4526,7 @@ export default forwardRef(function CameraView(
                         mult,
                         firstTs: nowPerf,
                         frames: 1,
+                        lastTip: { ...tipRefined },
                       };
                     }
                     const current = autoCandidateRef.current!;
