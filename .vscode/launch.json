@@ -1,0 +1,21 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "chrome",
+            "request": "launch",
+   can we          "name": "Launch Chrome against Netlify",
+            "url": "https://ninedartnation.netlify.app",
+            "webRoot": "${workspaceFolder}",
+            "sourceMapPathOverrides": {
+                "webpack:///./*": "${webRoot}/*",
+                "webpack:///*": "${webRoot}/*",
+                "vite:///*": "${webRoot}/*",
+                "/*": "${webRoot}/*"
+            }
+        }
+    ]
+}

@@ -478,5 +478,77 @@
     "game": "X01",
     "requireCalibration": false,
     "createdAt": 1767734828062
+  },
+  {
+    "id": "_yDgSqTzFP",
+    "creatorId": "Yw6HUvtI",
+    "creatorName": "Alice-j84gjiy",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1768164323851
+  },
+  {
+    "id": "3dfSUWGSnM",
+    "creatorId": "rWPyyIlX",
+    "creatorName": "Alice-ne8iahr",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1768209856399
+  },
+  {
+    "id": "tloI8msLal",
+    "creatorId": "FW58iNVC",
+    "creatorName": "Alice-035ysta",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1768214565774
+  },
+  {
+    "id": "L4zUAyvwYd",
+    "creatorId": "VdXwBPuE",
+    "creatorName": "Alice-2cfmuu4",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1768237062098
+  },
+  {
+    "id": "ljZExNKka9",
+    "creatorId": "xDFm-Coz",
+    "creatorName": "Alice-y9l2998",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1768239600689
+  },
+  {
+    "id": "31iJM1-xhl",
+    "creatorId": "o6vBgmfn",
+    "creatorName": "Alice-1sb41fy",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1768305129452
   }
 ]
