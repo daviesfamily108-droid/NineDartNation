@@ -4464,11 +4464,32 @@ export default forwardRef(function CameraView(
                     });
                   } else {
                     const existing = autoCandidateRef.current;
-                    if (
-                      !existing ||
-                      existing.value !== value ||
-                      existing.ring !== ring
-                    ) {
+
+                    // Candidate tracking needs to be tolerant to tiny mapping jitter.
+                    // In practice, the detector often returns alternating adjacent
+                    // segments (or SINGLE/TRIPLE) across frames even though the dart
+                    // hasn't moved. If we reset on every mismatch, we get infinite
+                    // "candidate-hold" drops with frames=1/holdMs=0.
+                    const sameSig =
+                      !!existing &&
+                      existing.value === value &&
+                      existing.ring === ring;
+
+                    // Allow 1-segment wobble while holding to the same ring.
+                    const nearValueSameRing =
+                      !!existing &&
+                      existing.ring === ring &&
+                      Math.abs(existing.value - value) <= 1;
+
+                    // Allow ring wobble only when the segment is identical.
+                    // (This usually comes from tiny radial calibration jitter.)
+                    const sameValueNearRing =
+                      !!existing &&
+                      existing.value === value &&
+                      existing.ring !== ring &&
+                      (existing.ring === "SINGLE" || ring === "SINGLE");
+
+                    if (!existing) {
                       autoCandidateRef.current = {
                         value,
                         ring,
@@ -4478,11 +4499,35 @@ export default forwardRef(function CameraView(
                         firstTs: nowPerf,
                         frames: 1,
                       };
-                    } else {
+                    } else if (sameSig || nearValueSameRing || sameValueNearRing) {
+                      // Continue the same candidate, but keep the "strongest" reading
+                      // for display/scoring (prefer non-SINGLE rings).
+                      const preferRing: Ring =
+                        existing.ring === "SINGLE" && ring !== "SINGLE"
+                          ? ring
+                          : existing.ring;
+                      const preferValue = sameSig
+                        ? value
+                        : existing.value;
                       autoCandidateRef.current = {
                         ...existing,
+                        value: preferValue,
+                        ring: preferRing,
                         label,
+                        sector,
+                        mult,
                         frames: existing.frames + 1,
+                      };
+                    } else {
+                      // New candidate signature detected; reset hold window.
+                      autoCandidateRef.current = {
+                        value,
+                        ring,
+                        label,
+                        sector,
+                        mult,
+                        firstTs: nowPerf,
+                        frames: 1,
                       };
                     }
                     const current = autoCandidateRef.current!;
