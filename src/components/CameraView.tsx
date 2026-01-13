@@ -6704,8 +6704,8 @@ export default forwardRef(function CameraView(
           role="dialog"
           aria-modal="true"
         >
-          {/* moved to bottom-center to avoid obscuring main UI controls */}
-          <div className="absolute inset-0 flex items-end justify-center p-6 pb-24">
+          {/* moved to top-center to keep board visible */}
+          <div className="absolute inset-0 flex items-start justify-center p-6 pt-16">
             <div className="card w-full max-w-lg mx-auto">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-lg font-semibold">Confirm detected dart</h3>
