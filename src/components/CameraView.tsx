@@ -98,6 +98,13 @@ const DETECTION_ARM_DELAY_MS = process.env.NODE_ENV === "test" ? 0 : 1500;
 // throw-like motion event. This prevents static board artifacts (e.g. sisal
 // fibers/protrusions) from continuously triggering candidate/commit logic.
 const OFFLINE_THROW_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 4500;
+
+// If a detection is accepted but never becomes "settled/tipStable" (common on
+// real-world webcams with tiny jitter), we can safely commit anyway after a
+// short time IF we're inside the post-throw window. This prevents the
+// frustrating "pending forever" state while preserving anti-ghost protection.
+const SNAP_COMMIT_MIN_MS = process.env.NODE_ENV === "test" ? 0 : 900;
+const SNAP_COMMIT_MIN_TIP_STABLE_FRAMES = 2;
 const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 10;
 // Immediately after calibration, lighting/ROI/camera stabilization can be slightly noisy.
 // Give the detector a short grace window with relaxed gates so the first darts count.
@@ -4360,6 +4367,84 @@ export default forwardRef(function CameraView(
                           shouldAccept = true;
                           rejectReason = null;
                         }
+                        }
+                      }
+                    } catch {}
+
+                    // Universal snap-commit: if we've already accepted a confident,
+                    // on-board, calibration-good detection, but stability never
+                    // resolves, commit after a short delay *only* inside the
+                    // post-throw window.
+                    try {
+                      if (
+                        inOfflineThrowWindow &&
+                        !isGhost &&
+                        calibrationGood &&
+                        det.confidence >= 0.82
+                      ) {
+                        // Track time spent "pending" for this exact scored result.
+                        const sig = `${value}|${ring}|${mult}`;
+                        const prev = offlineFallbackRef.current;
+                        const tip = tipRefined;
+                        const dist = prev.lastTip
+                          ? Math.hypot(
+                              tip.x - prev.lastTip.x,
+                              tip.y - prev.lastTip.y,
+                            )
+                          : 0;
+                        const same = prev.sig === sig && dist <= 18;
+                        if (!same) {
+                          offlineFallbackRef.current = {
+                            sig,
+                            firstTs: nowPerf,
+                            lastTs: nowPerf,
+                            frames: 1,
+                            lastTip: { ...tip },
+                          };
+                        } else {
+                          offlineFallbackRef.current = {
+                            ...prev,
+                            lastTs: nowPerf,
+                            frames: prev.frames + 1,
+                            lastTip: { ...tip },
+                          };
+                        }
+
+                        const fb = offlineFallbackRef.current;
+                        const ageMs = nowPerf - fb.firstTs;
+                        const tipStableFrames = tipStabilityRef.current.stableFrames;
+                        if (
+                          fb.sig === sig &&
+                          ageMs >= SNAP_COMMIT_MIN_MS &&
+                          tipStableFrames >= SNAP_COMMIT_MIN_TIP_STABLE_FRAMES
+                        ) {
+                          console.info("[AUTOSCORE] snap commit", {
+                            sig,
+                            ageMs,
+                            tipStableFrames,
+                            reason: rejectReason,
+                          });
+                          applyAutoHit({
+                            value,
+                            ring,
+                            label,
+                            sector,
+                            mult,
+                            firstTs: fb.firstTs,
+                            frames: fb.frames,
+                          });
+                          didApplyHitThisTick = true;
+                          autoCandidateRef.current = null;
+                          lastAutoCommitRef.current = nowPerf;
+                          offlineFallbackRef.current = {
+                            sig: null,
+                            firstTs: 0,
+                            lastTs: 0,
+                            frames: 0,
+                            lastTip: null,
+                          };
+                          shouldAccept = true;
+                          rejectReason = null;
                         }
                       }
                     } catch {}
