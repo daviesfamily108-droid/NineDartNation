@@ -723,6 +723,16 @@ export default function Calibrator() {
 
       setCameraError(null);
 
+      try {
+        const label =
+          availableCameras.find((cam) => cam.deviceId === cameraId)?.label ||
+          "";
+        userSettings.setPreferredCamera(cameraId || undefined, label, true);
+        if (!userSettings.preferredCameraLocked && cameraId) {
+          userSettings.setPreferredCameraLocked(true);
+        }
+      } catch {}
+
       const baseVideoWithDevice: MediaTrackConstraints = {
         deviceId: cameraId ? { exact: cameraId } : undefined,
       };
