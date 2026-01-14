@@ -29,7 +29,7 @@ installQuietConsole();
 try {
   let __ndn_last_error: any = null;
 
-  function __ndn_capture_and_clip(errInfo: any) {
+  const __ndn_capture_and_clip = (errInfo: any) => {
     try {
       __ndn_last_error = errInfo;
       // Log clearly so it's easy to find in console output
@@ -38,10 +38,15 @@ try {
       // to succeed (clipboard permissions), but we attempt it.
       if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
         try {
-          const text = typeof errInfo === "string" ? errInfo : JSON.stringify(errInfo, null, 2);
+          const text =
+            typeof errInfo === "string"
+              ? errInfo
+              : JSON.stringify(errInfo, null, 2);
           navigator.clipboard.writeText(text).then(
-            () => console.info("[NDN ErrorCollector] Error copied to clipboard"),
-            () => console.info("[NDN ErrorCollector] Could not copy to clipboard")
+            () =>
+              console.info("[NDN ErrorCollector] Error copied to clipboard"),
+            () =>
+              console.info("[NDN ErrorCollector] Could not copy to clipboard"),
           );
         } catch {
           // ignore clipboard errors
@@ -52,7 +57,7 @@ try {
         console.error("[NDN ErrorCollector] capture failed", e);
       } catch {}
     }
-  }
+  };
 
   window.addEventListener(
     "error",
@@ -87,23 +92,33 @@ try {
       __ndn_capture_and_clip(info);
     } catch (e) {
       try {
-        console.error("[NDN ErrorCollector] unhandledrejection handler failed", e);
+        console.error(
+          "[NDN ErrorCollector] unhandledrejection handler failed",
+          e,
+        );
       } catch {}
     }
   });
 
   // Expose a helper to collect the last error programmatically from the console
-  ;(window as any).__ndn_error_collector = {
+  (window as any).__ndn_error_collector = {
     collect: async () => {
       try {
         if (!__ndn_last_error) return null;
         // Try to copy the last error again on demand
-        if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+        if (
+          typeof navigator !== "undefined" &&
+          navigator.clipboard?.writeText
+        ) {
           try {
-            await navigator.clipboard.writeText(JSON.stringify(__ndn_last_error, null, 2));
+            await navigator.clipboard.writeText(
+              JSON.stringify(__ndn_last_error, null, 2),
+            );
             console.info("[NDN ErrorCollector] Last error copied to clipboard");
           } catch {
-            console.info("[NDN ErrorCollector] Could not copy last error to clipboard");
+            console.info(
+              "[NDN ErrorCollector] Could not copy last error to clipboard",
+            );
           }
         }
         return __ndn_last_error;
@@ -182,7 +197,11 @@ if (
     navigator.serviceWorker.getRegistrations().then((regs) => {
       if (!regs || regs.length === 0) return;
       try {
-        console.info("[ServiceWorker] Found", regs.length, "registrations — unregistering to avoid stale caches");
+        console.info(
+          "[ServiceWorker] Found",
+          regs.length,
+          "registrations — unregistering to avoid stale caches",
+        );
       } catch {}
       let anyActive = false;
       regs.forEach((r) => {
@@ -201,12 +220,16 @@ if (
       // If an active worker was present and the developer/user has set the force-reload flag,
       // reload once to ensure the browser requests the fresh HTML/JS from the server.
       try {
-        const forceReload = (typeof localStorage !== 'undefined' && localStorage.getItem('NDN_FORCE_SW_RELOAD') === '1');
+        const forceReload =
+          typeof localStorage !== "undefined" &&
+          localStorage.getItem("NDN_FORCE_SW_RELOAD") === "1";
         if (anyActive && forceReload) {
           try {
-            console.info('[ServiceWorker] Active worker removed; forcing page reload to fetch latest assets');
+            console.info(
+              "[ServiceWorker] Active worker removed; forcing page reload to fetch latest assets",
+            );
             // Clear the flag so this only happens once
-            localStorage.removeItem('NDN_FORCE_SW_RELOAD');
+            localStorage.removeItem("NDN_FORCE_SW_RELOAD");
             // reload immediately — modern browsers will fetch fresh assets
             window.location.reload();
           } catch (e) {

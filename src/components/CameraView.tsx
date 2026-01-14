@@ -659,7 +659,8 @@ export default forwardRef(function CameraView(
   // snippets; they can instead run `window.__ndn_camera_debug.collect()`.
   useEffect(() => {
     try {
-      (window as any).__ndn_camera_debug = (window as any).__ndn_camera_debug || {};
+      (window as any).__ndn_camera_debug =
+        (window as any).__ndn_camera_debug || {};
       (window as any).__ndn_camera_debug.collect = () => {
         try {
           return collectVideoDiagnostics({ error: cameraAccessError });
@@ -667,23 +668,26 @@ export default forwardRef(function CameraView(
           return { error: String(e) };
         }
       };
-      (window as any).__ndn_camera_debug.videoEl = () => videoRef.current || null;
-      (window as any).__ndn_camera_debug.stream = () => cameraSession.getMediaStream?.() || null;
+      (window as any).__ndn_camera_debug.videoEl = () =>
+        videoRef.current || null;
+      (window as any).__ndn_camera_debug.stream = () =>
+        cameraSession.getMediaStream?.() || null;
     } catch (e) {}
     return () => {
       try {
-        if ((window as any).__ndn_camera_debug) delete (window as any).__ndn_camera_debug.collect;
+        if ((window as any).__ndn_camera_debug)
+          delete (window as any).__ndn_camera_debug.collect;
       } catch {}
     };
   }, [collectVideoDiagnostics, cameraAccessError, cameraSession]);
 
   // Match window / pop-out helper: always try to start the camera as soon as possible
-  // Use useLayoutEffect for forceAutoStart to trigger the hardware request 
+  // Use useLayoutEffect for forceAutoStart to trigger the hardware request
   // before the first paint, shaving off at least one frame of black screen.
   useLayoutEffect(() => {
     if (TEST_MODE) return;
     if (!forceAutoStart) return;
-    
+
     // Ensure camera is enabled in state so startCamera doesn't bail
     try {
       useUserSettings.getState().setCameraEnabled(true);
@@ -723,10 +727,10 @@ export default forwardRef(function CameraView(
     streaming,
     cameraStarting,
     preferredCameraId,
-    forceAutoStart
+    forceAutoStart,
   ]);
-  // Listen for global and window-local "ndn:start-camera" events to allow 
-  // nested UI components (like the pre-match overlay) to force-trigger 
+  // Listen for global and window-local "ndn:start-camera" events to allow
+  // nested UI components (like the pre-match overlay) to force-trigger
   // camera initialization if they detect the stream is missing.
   useEffect(() => {
     const handler = (ev: any) => {
@@ -783,7 +787,9 @@ export default forwardRef(function CameraView(
   //   This matches the UX expectation: "if it sees the dart on a clearly visible board,
   //   it should count". We still surface diagnostics if quality is low.
   const hasCalibration = !!H && !!imageSize;
-  const calibrationValidEffective = isOnlineMatch ? calibrationValid : hasCalibration;
+  const calibrationValidEffective = isOnlineMatch
+    ? calibrationValid
+    : hasCalibration;
   useEffect(() => {
     if (preferredCameraLocked && !hideCameraOverlay) {
       setHideCameraOverlay(true);
@@ -936,6 +942,11 @@ export default forwardRef(function CameraView(
     tipStableFrames?: number;
     shouldDeferCommit?: boolean;
     calibrationValidEffective?: boolean;
+
+    // Calibration mapping presence (homography + image size)
+    hasHomography?: boolean;
+    hasImageSize?: boolean;
+    imageSizeStr?: string;
   }>({ lastTs: 0 });
   const [, setDiagnosticsTick] = useState(0);
   const updateDiagnostics = useCallback(
@@ -966,6 +977,30 @@ export default forwardRef(function CameraView(
     [showDiagnosticsOverlay],
   );
 
+  // Keep diagnostics in sync with calibration state so we can answer the
+  // simple question: "does the homography exist right now?" even before any
+  // dart detections happen.
+  useEffect(() => {
+    try {
+      const hasHomographyNow = !!H;
+      const hasImageSizeNow = !!(
+        imageSize &&
+        typeof imageSize.w === "number" &&
+        typeof imageSize.h === "number" &&
+        imageSize.w > 0 &&
+        imageSize.h > 0
+      );
+      const imageSizeStrNow = hasImageSizeNow
+        ? `${Math.round(imageSize!.w)}x${Math.round(imageSize!.h)}`
+        : "(none)";
+      updateDiagnostics({
+        hasHomography: hasHomographyNow,
+        hasImageSize: hasImageSizeNow,
+        imageSizeStr: imageSizeStrNow,
+      });
+    } catch {}
+  }, [H, imageSize, updateDiagnostics]);
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       try {
@@ -992,10 +1027,11 @@ export default forwardRef(function CameraView(
 
   // When a dart is registered (auto or manual), show a short-lived marker on
   // the overlay so the user can visually confirm where the system counted it.
-  const [registeredTip, setRegisteredTip] = useState<
-    | { x: number; y: number; expires: number }
-    | null
-  >(null);
+  const [registeredTip, setRegisteredTip] = useState<{
+    x: number;
+    y: number;
+    expires: number;
+  } | null>(null);
 
   // Persistent markers for the current visit (sticky ?? emojis)
   const [visitMarkers, setVisitMarkers] = useState<
@@ -1004,10 +1040,11 @@ export default forwardRef(function CameraView(
 
   // When a visit is committed, show a short transient flash on the overlay
   // so the operator can confirm the visit was forwarded to scoring.
-  const [commitFlash, setCommitFlash] = useState<
-    | { score: number; darts: number; expires: number }
-    | null
-  >(null);
+  const [commitFlash, setCommitFlash] = useState<{
+    score: number;
+    darts: number;
+    expires: number;
+  } | null>(null);
 
   const maybeHoldForConfirmation = useCallback(
     (payload: {
@@ -1480,7 +1517,8 @@ export default forwardRef(function CameraView(
     setPendingDarts(0);
     pendingDartsRef.current = 0;
     setPendingScore(0);
-    setPendingEntries([]); setVisitMarkers([]);
+    setPendingEntries([]);
+    setVisitMarkers([]);
     setPendingPreOpenDarts(0);
     setPendingDartsAtDouble(0);
     setHadRecentAuto(false);
@@ -1712,7 +1750,8 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]); setVisitMarkers([]);
+      setPendingEntries([]);
+      setVisitMarkers([]);
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
       setHadRecentAuto(false);
@@ -2106,25 +2145,28 @@ export default forwardRef(function CameraView(
 
       let stream: MediaStream;
       try {
-        // Optimized: Instead of a serial waterfall (4k -> 1440 -> 1080) which causes multi-second 
-        // startup delays on lower-end hardware, we provide a wide range of 'ideal' values 
+        // Optimized: Instead of a serial waterfall (4k -> 1440 -> 1080) which causes multi-second
+        // startup delays on lower-end hardware, we provide a wide range of 'ideal' values
         // in a single request. The browser's native matching logic is significantly faster.
-        const dynamicHints: MediaTrackConstraints = cameraLowLatency 
+        const dynamicHints: MediaTrackConstraints = cameraLowLatency
           ? {
               width: { ideal: 1280 },
               height: { ideal: 720 },
-              frameRate: { ideal: 60 }
+              frameRate: { ideal: 60 },
             }
           : {
               width: { ideal: 3840 },
               height: { ideal: 2160 },
-              frameRate: { ideal: 30 }
+              frameRate: { ideal: 30 },
             };
 
         try {
           stream = await tryGetStream(dynamicHints, "dynamic-best-effort");
         } catch (errDynamic: any) {
-          dlog("[CAMERA] Dynamic hints failed, trying basic 1080p fallback:", errDynamic);
+          dlog(
+            "[CAMERA] Dynamic hints failed, trying basic 1080p fallback:",
+            errDynamic,
+          );
           stream = await tryGetStream(qualityHints1080p, "1080p-fallback");
         }
         dlog("[CAMERA] Got stream:", !!stream);
@@ -2161,8 +2203,8 @@ export default forwardRef(function CameraView(
         dlog("[CAMERA] Setting stream to video element");
         videoRef.current.srcObject = stream;
 
-        // Optimized: Perform track constraint adjustments (anti-glare) in the background 
-        // to avoid blocking the main stream-initialization promise. We want the stream 
+        // Optimized: Perform track constraint adjustments (anti-glare) in the background
+        // to avoid blocking the main stream-initialization promise. We want the stream
         // reported to session as soon as 'srcObject' is set.
         try {
           const track = (stream as any)?.getVideoTracks?.()?.[0];
@@ -2312,7 +2354,13 @@ export default forwardRef(function CameraView(
             if (currentRetry < MAX_CAMERA_RETRIES && isMountedRef.current) {
               retryCountRef.current = currentRetry + 1;
               const backoff = 700 * Math.pow(2, currentRetry); // 700ms, 1400ms, 2800ms
-              dlog("[CAMERA] Scheduling camera restart retry", retryCountRef.current, "in", backoff, "ms");
+              dlog(
+                "[CAMERA] Scheduling camera restart retry",
+                retryCountRef.current,
+                "in",
+                backoff,
+                "ms",
+              );
               setTimeout(async () => {
                 try {
                   if (!isMountedRef.current) return;
@@ -2325,7 +2373,9 @@ export default forwardRef(function CameraView(
                 }
               }, backoff);
             } else {
-              dlog("[CAMERA] Max camera retries reached or unmounted; not retrying");
+              dlog(
+                "[CAMERA] Max camera retries reached or unmounted; not retrying",
+              );
             }
           }
         } catch (e) {
@@ -2454,10 +2504,10 @@ export default forwardRef(function CameraView(
     let rafId: number | null = null;
     let mounted = true;
     let activated = false;
-  let sampleBlankCount = 0;
-  let sampleHandle: number | null = null;
-  let lastDraw = 0;
-  const TARGET_FPS = 18;
+    let sampleBlankCount = 0;
+    let sampleHandle: number | null = null;
+    let lastDraw = 0;
+    const TARGET_FPS = 18;
     const pc = previewCanvasRef.current;
     const v = videoRef.current;
     const [previewDiag, setPreviewDiag] = (() => {
@@ -2482,7 +2532,8 @@ export default forwardRef(function CameraView(
     }
     function drawLoop() {
       try {
-        const now = (performance && performance.now && performance.now()) || Date.now();
+        const now =
+          (performance && performance.now && performance.now()) || Date.now();
         const minDt = 1000 / TARGET_FPS;
         if (now - lastDraw < minDt) {
           rafId = requestAnimationFrame(drawLoop);
@@ -2508,7 +2559,8 @@ export default forwardRef(function CameraView(
             } catch {}
             activated = true;
           }
-          if (cc.style.visibility !== "visible") cc.style.visibility = "visible";
+          if (cc.style.visibility !== "visible")
+            cc.style.visibility = "visible";
         } catch {}
         const rect = cc.getBoundingClientRect();
         const cw = Math.max(1, Math.round(rect.width));
@@ -2542,7 +2594,11 @@ export default forwardRef(function CameraView(
         if (typeof window !== "undefined") {
           const q = window.localStorage.getItem("ndn:forceCanvasFallback");
           if (q === "1" || q === "true") {
-            try { console.info("CameraView: forced canvas fallback via localStorage"); } catch {}
+            try {
+              console.info(
+                "CameraView: forced canvas fallback via localStorage",
+              );
+            } catch {}
             stopLoop();
             rafId = requestAnimationFrame(drawLoop);
             return;
@@ -2555,7 +2611,8 @@ export default forwardRef(function CameraView(
       } else {
         // Hide canvas when not needed
         try {
-          if (previewCanvasRef.current) previewCanvasRef.current.style.visibility = "hidden";
+          if (previewCanvasRef.current)
+            previewCanvasRef.current.style.visibility = "hidden";
         } catch {}
       }
     };
@@ -2583,13 +2640,18 @@ export default forwardRef(function CameraView(
             const data = sctx.getImageData(0, 0, SW, SH).data;
             let sum = 0;
             for (let i = 0; i < data.length; i += 4) {
-              sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+              sum +=
+                0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
             }
             const avg = sum / (SW * SH * 255);
             if (avg < 0.02) sampleBlankCount += 1;
             else sampleBlankCount = 0;
             if (sampleBlankCount >= 3) {
-              try { console.info("CameraView: video surface appears blank; enabling canvas fallback"); } catch {}
+              try {
+                console.info(
+                  "CameraView: video surface appears blank; enabling canvas fallback",
+                );
+              } catch {}
               sampleBlankCount = 0;
               stopLoop();
               rafId = requestAnimationFrame(drawLoop);
@@ -2620,7 +2682,8 @@ export default forwardRef(function CameraView(
               tctx.drawImage(vv, 0, 0, TW, TH);
               const d = tctx.getImageData(0, 0, TW, TH).data;
               let s = 0;
-              for (let i = 0; i < d.length; i += 4) s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+              for (let i = 0; i < d.length; i += 4)
+                s += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
               brightness = s / (TW * TH * 255);
             }
           } catch (e) {
@@ -2628,17 +2691,50 @@ export default forwardRef(function CameraView(
           }
         }
         const payload = {
-          video: vv ? { readyState: vv.readyState, videoWidth: vv.videoWidth, videoHeight: vv.videoHeight, paused: vv.paused } : null,
-          canvas: cc ? { width: cc.width, height: cc.height, visibility: cc.style.visibility } : null,
-          videoStyle: comp ? { display: comp.display, visibility: comp.visibility, opacity: comp.opacity, zIndex: comp.zIndex, transform: comp.transform } : null,
-          canvasStyle: canvasComp ? { display: canvasComp.display, visibility: canvasComp.visibility, opacity: canvasComp.opacity, zIndex: canvasComp.zIndex, transform: canvasComp.transform } : null,
+          video: vv
+            ? {
+                readyState: vv.readyState,
+                videoWidth: vv.videoWidth,
+                videoHeight: vv.videoHeight,
+                paused: vv.paused,
+              }
+            : null,
+          canvas: cc
+            ? {
+                width: cc.width,
+                height: cc.height,
+                visibility: cc.style.visibility,
+              }
+            : null,
+          videoStyle: comp
+            ? {
+                display: comp.display,
+                visibility: comp.visibility,
+                opacity: comp.opacity,
+                zIndex: comp.zIndex,
+                transform: comp.transform,
+              }
+            : null,
+          canvasStyle: canvasComp
+            ? {
+                display: canvasComp.display,
+                visibility: canvasComp.visibility,
+                opacity: canvasComp.opacity,
+                zIndex: canvasComp.zIndex,
+                transform: canvasComp.transform,
+              }
+            : null,
           brightness,
           ts: Date.now(),
         };
-        try { console.info("CameraView preview diag:", payload); } catch {}
+        try {
+          console.info("CameraView preview diag:", payload);
+        } catch {}
         return payload;
       } catch (e) {
-        try { console.warn("preview diag failed", e); } catch {}
+        try {
+          console.warn("preview diag failed", e);
+        } catch {}
         return { error: String(e) };
       }
     };
@@ -3120,7 +3216,13 @@ export default forwardRef(function CameraView(
             ctx.fillStyle = "rgba(34,197,94,0.95)"; // green-ish
             ctx.strokeStyle = "rgba(255,255,255,0.9)";
             ctx.lineWidth = 2;
-            ctx.arc(ox, oy, Math.max(6, Math.min(16, Math.round((o.width + o.height) / 150))), 0, Math.PI * 2);
+            ctx.arc(
+              ox,
+              oy,
+              Math.max(6, Math.min(16, Math.round((o.width + o.height) / 150))),
+              0,
+              Math.PI * 2,
+            );
             ctx.fill();
             ctx.stroke();
             ctx.restore();
@@ -3172,7 +3274,12 @@ export default forwardRef(function CameraView(
             const tx = o.width / 2 - metrics.width / 2;
             const ty = Math.max(24, Math.round(o.height * 0.08));
             // background
-            ctx.fillRect(tx - 8, ty - parseInt(ctx.font, 10) - 6, metrics.width + 16, parseInt(ctx.font, 10) + 10);
+            ctx.fillRect(
+              tx - 8,
+              ty - parseInt(ctx.font, 10) - 6,
+              metrics.width + 16,
+              parseInt(ctx.font, 10) + 10,
+            );
             ctx.fillStyle = "#fff";
             ctx.fillText(text, tx, ty);
             ctx.restore();
@@ -3434,9 +3541,12 @@ export default forwardRef(function CameraView(
             },
             POST_CALIBRATION_GRACE_MS,
           );
-          cameraVerboseLog("[DETECTION] Applied post-calibration grace window", {
-            ms: POST_CALIBRATION_GRACE_MS,
-          });
+          cameraVerboseLog(
+            "[DETECTION] Applied post-calibration grace window",
+            {
+              ms: POST_CALIBRATION_GRACE_MS,
+            },
+          );
         }
       }
     } catch {}
@@ -3697,7 +3807,8 @@ export default forwardRef(function CameraView(
                 label = `${ring} ${value > 0 ? value : ""}`.trim();
               }
               const hasCalibration = !!H && !!imageSize;
-              const calibrationGood = hasCalibration && calibrationValidEffective;
+              const calibrationGood =
+                hasCalibration && calibrationValidEffective;
 
               setPendingConfirm({
                 label,
@@ -3792,7 +3903,8 @@ export default forwardRef(function CameraView(
             // throw-like motion event.
             const inOfflineThrowWindow = isOnlineMatch
               ? true
-              : nowPerf - lastOfflineThrowAtRef.current <= OFFLINE_THROW_WINDOW_MS;
+              : nowPerf - lastOfflineThrowAtRef.current <=
+                OFFLINE_THROW_WINDOW_MS;
 
             // NOTE: settled/tipStable are enforced further down the pipeline
             // (in the non-ghost accept/commit path) so we don't prematurely
@@ -4308,68 +4420,75 @@ export default forwardRef(function CameraView(
                             lastTip: null,
                           };
                         } else {
-                        const sig = `${value}|${ring}|${mult}`;
-                        const prev = offlineFallbackRef.current;
-                        const tip = tipRefined;
-                        const dist = prev.lastTip
-                          ? Math.hypot(tip.x - prev.lastTip.x, tip.y - prev.lastTip.y)
-                          : 0;
-                        const same = prev.sig === sig && dist <= 18;
-                        if (!same) {
-                          offlineFallbackRef.current = {
-                            sig,
-                            firstTs: nowPerf,
-                            lastTs: nowPerf,
-                            frames: 1,
-                            lastTip: { ...tip },
-                          };
-                        } else {
-                          offlineFallbackRef.current = {
-                            ...prev,
-                            lastTs: nowPerf,
-                            frames: prev.frames + 1,
-                            lastTip: { ...tip },
-                          };
-                        }
+                          const sig = `${value}|${ring}|${mult}`;
+                          const prev = offlineFallbackRef.current;
+                          const tip = tipRefined;
+                          const dist = prev.lastTip
+                            ? Math.hypot(
+                                tip.x - prev.lastTip.x,
+                                tip.y - prev.lastTip.y,
+                              )
+                            : 0;
+                          const same = prev.sig === sig && dist <= 18;
+                          if (!same) {
+                            offlineFallbackRef.current = {
+                              sig,
+                              firstTs: nowPerf,
+                              lastTs: nowPerf,
+                              frames: 1,
+                              lastTip: { ...tip },
+                            };
+                          } else {
+                            offlineFallbackRef.current = {
+                              ...prev,
+                              lastTs: nowPerf,
+                              frames: prev.frames + 1,
+                              lastTip: { ...tip },
+                            };
+                          }
 
-                        const fb = offlineFallbackRef.current;
-                        const ageMs = nowPerf - fb.firstTs;
-                        // Tuned to be "fast enough to feel responsive" but still
-                        // resistant to single-frame ghosts.
-                        const FALLBACK_MIN_FRAMES = 8;
-                        const FALLBACK_MIN_MS = 650;
-                        if (
-                          fb.sig === sig &&
-                          (fb.frames >= FALLBACK_MIN_FRAMES || ageMs >= FALLBACK_MIN_MS)
-                        ) {
-                          console.info("[AUTOSCORE] offline fallback commit", {
-                            sig,
-                            frames: fb.frames,
-                            ageMs,
-                            reason: rejectReason,
-                          });
-                          applyAutoHit({
-                            value,
-                            ring,
-                            label,
-                            sector,
-                            mult,
-                            firstTs: fb.firstTs,
-                            frames: fb.frames,
-                          });
-                          didApplyHitThisTick = true;
-                          autoCandidateRef.current = null;
-                          lastAutoCommitRef.current = nowPerf;
-                          offlineFallbackRef.current = {
-                            sig: null,
-                            firstTs: 0,
-                            lastTs: 0,
-                            frames: 0,
-                            lastTip: null,
-                          };
-                          shouldAccept = true;
-                          rejectReason = null;
-                        }
+                          const fb = offlineFallbackRef.current;
+                          const ageMs = nowPerf - fb.firstTs;
+                          // Tuned to be "fast enough to feel responsive" but still
+                          // resistant to single-frame ghosts.
+                          const FALLBACK_MIN_FRAMES = 8;
+                          const FALLBACK_MIN_MS = 650;
+                          if (
+                            fb.sig === sig &&
+                            (fb.frames >= FALLBACK_MIN_FRAMES ||
+                              ageMs >= FALLBACK_MIN_MS)
+                          ) {
+                            console.info(
+                              "[AUTOSCORE] offline fallback commit",
+                              {
+                                sig,
+                                frames: fb.frames,
+                                ageMs,
+                                reason: rejectReason,
+                              },
+                            );
+                            applyAutoHit({
+                              value,
+                              ring,
+                              label,
+                              sector,
+                              mult,
+                              firstTs: fb.firstTs,
+                              frames: fb.frames,
+                            });
+                            didApplyHitThisTick = true;
+                            autoCandidateRef.current = null;
+                            lastAutoCommitRef.current = nowPerf;
+                            offlineFallbackRef.current = {
+                              sig: null,
+                              firstTs: 0,
+                              lastTs: 0,
+                              frames: 0,
+                              lastTip: null,
+                            };
+                            shouldAccept = true;
+                            rejectReason = null;
+                          }
                         }
                       }
                     } catch {}
@@ -4415,7 +4534,8 @@ export default forwardRef(function CameraView(
 
                         const fb = offlineFallbackRef.current;
                         const ageMs = nowPerf - fb.firstTs;
-                        const tipStableFrames = tipStabilityRef.current.stableFrames;
+                        const tipStableFrames =
+                          tipStabilityRef.current.stableFrames;
                         if (
                           fb.sig === sig &&
                           ageMs >= SNAP_COMMIT_MIN_MS &&
@@ -4474,13 +4594,12 @@ export default forwardRef(function CameraView(
                     // tracking by value/ring, firstTs resets and we get infinite
                     // frames=1/holdMs=0 "candidate-hold" drops.
                     const TIP_TRACK_PX = 18;
-                    const distTip =
-                      existing?.lastTip
-                        ? Math.hypot(
-                            tipRefined.x - existing.lastTip.x,
-                            tipRefined.y - existing.lastTip.y,
-                          )
-                        : Infinity;
+                    const distTip = existing?.lastTip
+                      ? Math.hypot(
+                          tipRefined.x - existing.lastTip.x,
+                          tipRefined.y - existing.lastTip.y,
+                        )
+                      : Infinity;
                     const samePhysical = !!existing && distTip <= TIP_TRACK_PX;
 
                     if (!existing) {
@@ -4504,7 +4623,8 @@ export default forwardRef(function CameraView(
                           : existing.ring;
 
                       // Prefer non-miss, and otherwise keep the existing value to reduce flicker.
-                      const preferValue = existing.value > 0 ? existing.value : value;
+                      const preferValue =
+                        existing.value > 0 ? existing.value : value;
 
                       autoCandidateRef.current = {
                         ...existing,
@@ -5358,7 +5478,8 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]); setVisitMarkers([]);
+      setPendingEntries([]);
+      setVisitMarkers([]);
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
       enqueueVisitCommit({ score: 0, darts: newDarts, finished: false });
@@ -5396,7 +5517,11 @@ export default forwardRef(function CameraView(
           ...prev,
           { x: tipPx!.x, y: tipPx!.y, label },
         ]);
-        setRegisteredTip({ x: tipPx.x, y: tipPx.y, expires: Date.now() + 2000 });
+        setRegisteredTip({
+          x: tipPx.x,
+          y: tipPx.y,
+          expires: Date.now() + 2000,
+        });
       }
     } catch (e) {}
 
@@ -5447,7 +5572,8 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]); setVisitMarkers([]);
+      setPendingEntries([]);
+      setVisitMarkers([]);
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
       enqueueVisitCommit({
@@ -5485,7 +5611,8 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]); setVisitMarkers([]);
+      setPendingEntries([]);
+      setVisitMarkers([]);
       setPendingPreOpenDarts(0);
       setPendingDartsAtDouble(0);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: false });
@@ -5609,7 +5736,8 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]); setVisitMarkers([]);
+      setPendingEntries([]);
+      setVisitMarkers([]);
       enqueueVisitCommit({ score: 0, darts: newDarts, finished: false });
       setManualScore("");
       setHadRecentAuto(false);
@@ -5641,7 +5769,8 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]); setVisitMarkers([]);
+      setPendingEntries([]);
+      setVisitMarkers([]);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: true });
       setManualScore("");
       setHadRecentAuto(false);
@@ -5657,7 +5786,8 @@ export default forwardRef(function CameraView(
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]); setVisitMarkers([]);
+      setPendingEntries([]);
+      setVisitMarkers([]);
       enqueueVisitCommit({ score: newScore, darts: newDarts, finished: false });
     }
     setManualScore("");
@@ -5743,7 +5873,8 @@ export default forwardRef(function CameraView(
       pendingDartsRef.current = 0;
       pendingDartsRef.current = 0;
       setPendingScore(0);
-      setPendingEntries([]); setVisitMarkers([]);
+      setPendingEntries([]);
+      setVisitMarkers([]);
       return;
     }
     const visitScore = pendingScore;
@@ -5760,7 +5891,8 @@ export default forwardRef(function CameraView(
     setPendingDarts(0);
     pendingDartsRef.current = 0;
     setPendingScore(0);
-    setPendingEntries([]); setVisitMarkers([]);
+    setPendingEntries([]);
+    setVisitMarkers([]);
     enqueueVisitCommit({
       score: visitScore,
       darts: visitDarts,
@@ -6247,35 +6379,82 @@ export default forwardRef(function CameraView(
                   <div className="text-slate-300 mb-1">Gates</div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1">
                     <div className="text-slate-400">
-                      armed: <span className="text-white">{diagnosticsRef.current.detectionArmed ? "yes" : "no"}</span>
+                      H:{" "}
+                      <span className="text-white">
+                        {diagnosticsRef.current.hasHomography ? "yes" : "no"}
+                      </span>
                     </div>
                     <div className="text-slate-400">
-                      paused: <span className="text-white">{diagnosticsRef.current.paused ? "yes" : "no"}</span>
+                      imageSize:{" "}
+                      <span className="text-white">
+                        {diagnosticsRef.current.imageSizeStr ?? "(n/a)"}
+                      </span>
                     </div>
                     <div className="text-slate-400">
-                      pending: <span className="text-white">{diagnosticsRef.current.pendingDarts ?? "?"}</span>
+                      armed:{" "}
+                      <span className="text-white">
+                        {diagnosticsRef.current.detectionArmed ? "yes" : "no"}
+                      </span>
                     </div>
                     <div className="text-slate-400">
-                      frame: <span className="text-white">{diagnosticsRef.current.frameCount ?? "?"}/{diagnosticsRef.current.minFrames ?? "?"}</span>
+                      paused:{" "}
+                      <span className="text-white">
+                        {diagnosticsRef.current.paused ? "yes" : "no"}
+                      </span>
                     </div>
                     <div className="text-slate-400">
-                      warmup: <span className="text-white">{diagnosticsRef.current.warmupActive ? "yes" : "no"}</span>
+                      pending:{" "}
+                      <span className="text-white">
+                        {diagnosticsRef.current.pendingDarts ?? "?"}
+                      </span>
                     </div>
                     <div className="text-slate-400">
-                      settled: <span className="text-white">{diagnosticsRef.current.settled ? "yes" : "no"}</span>
+                      frame:{" "}
+                      <span className="text-white">
+                        {diagnosticsRef.current.frameCount ?? "?"}/
+                        {diagnosticsRef.current.minFrames ?? "?"}
+                      </span>
                     </div>
                     <div className="text-slate-400">
-                      tipStable: <span className="text-white">{diagnosticsRef.current.tipStable ? "yes" : "no"}</span>
+                      warmup:{" "}
+                      <span className="text-white">
+                        {diagnosticsRef.current.warmupActive ? "yes" : "no"}
+                      </span>
                     </div>
                     <div className="text-slate-400">
-                      calEff: <span className="text-white">{diagnosticsRef.current.calibrationValidEffective ? "yes" : "no"}</span>
+                      settled:{" "}
+                      <span className="text-white">
+                        {diagnosticsRef.current.settled ? "yes" : "no"}
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      tipStable:{" "}
+                      <span className="text-white">
+                        {diagnosticsRef.current.tipStable ? "yes" : "no"}
+                      </span>
+                    </div>
+                    <div className="text-slate-400">
+                      calEff:{" "}
+                      <span className="text-white">
+                        {diagnosticsRef.current.calibrationValidEffective
+                          ? "yes"
+                          : "no"}
+                      </span>
                     </div>
                   </div>
                   <div className="text-slate-500 mt-1">
-                    policy: {diagnosticsRef.current.shouldDeferCommit ? "wait-for-clear" : "immediate"}
+                    policy:{" "}
+                    {diagnosticsRef.current.shouldDeferCommit
+                      ? "wait-for-clear"
+                      : "immediate"}
                   </div>
                   <div>
-                    throwWindow: <span className="text-white">{diagnosticsRef.current.inOfflineThrowWindow ? "yes" : "no"}</span>
+                    throwWindow:{" "}
+                    <span className="text-white">
+                      {diagnosticsRef.current.inOfflineThrowWindow
+                        ? "yes"
+                        : "no"}
+                    </span>
                   </div>
                 </div>
               </div>
