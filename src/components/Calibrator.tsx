@@ -291,7 +291,9 @@ function evaluateClickQuality(
     distance = 0;
     isValid = true; // Marks click was made - board validation happens after H is computed
 
-    dlog(`[evaluateClickQuality] Click ${targetIndex} made (H not yet available)`);
+    dlog(
+      `[evaluateClickQuality] Click ${targetIndex} made (H not yet available)`,
+    );
   }
 
   let quality: "Excellent" | "Good" | "Fair" | "Poor";
@@ -520,7 +522,10 @@ export default function Calibrator() {
 
   const saveTargetOverrides = useCallback((overrides: (Point | null)[]) => {
     try {
-      localStorage.setItem("ndn:cal:target-overrides", JSON.stringify(overrides));
+      localStorage.setItem(
+        "ndn:cal:target-overrides",
+        JSON.stringify(overrides),
+      );
     } catch (e) {}
   }, []);
 
@@ -531,9 +536,9 @@ export default function Calibrator() {
 
   // Log component lifecycle
   useEffect(() => {
-  dlog("Calibrator component mounted");
+    dlog("Calibrator component mounted");
     return () => {
-  dlog("Calibrator component unmounting");
+      dlog("Calibrator component unmounting");
     };
   }, []);
 
@@ -709,7 +714,7 @@ export default function Calibrator() {
   // Helper function to start a specific camera
   const startCamera = async (cameraId: string) => {
     try {
-  dlog("Starting camera with ID:", cameraId);
+      dlog("Starting camera with ID:", cameraId);
 
       // Stop any existing stream
       stream?.getTracks().forEach((track) => {
@@ -763,7 +768,7 @@ export default function Calibrator() {
         base: MediaTrackConstraints,
         hints: MediaTrackConstraints,
       ) => {
-  dlog("Requesting camera stream:", label, { ...base, ...hints });
+        dlog("Requesting camera stream:", label, { ...base, ...hints });
         return navigator.mediaDevices.getUserMedia({
           video: { ...base, ...hints },
           audio: false,
@@ -824,7 +829,7 @@ export default function Calibrator() {
 
       const mediaStream = await getStreamRobust();
 
-  dlog("Got media stream:", {
+      dlog("Got media stream:", {
         tracks: mediaStream.getTracks().length,
       });
 
@@ -845,7 +850,7 @@ export default function Calibrator() {
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-  dlog("Set video srcObject, attempting to play");
+        dlog("Set video srcObject, attempting to play");
 
         // Ensure video plays (autoPlay attribute may not be enough)
         // Add small delay to ensure browser has attached the stream
@@ -858,7 +863,7 @@ export default function Calibrator() {
         }, 100);
       }
       setCameraReady(true);
-  dlog("Camera ready!");
+      dlog("Camera ready!");
 
       // Save preference (best-effort)
       try {
@@ -991,23 +996,30 @@ export default function Calibrator() {
             // Calculate what the image-space position would be for the fallback
             const targetPoint = canonicalTargets[nextTargetIdx];
             const fallbackScale = Math.min(canvas.width, canvas.height) / 360;
-            const fallbackCanvasX = canvas.width / 2 + targetPoint.x * fallbackScale;
-            const fallbackCanvasY = canvas.height / 2 + targetPoint.y * fallbackScale;
-            
+            const fallbackCanvasX =
+              canvas.width / 2 + targetPoint.x * fallbackScale;
+            const fallbackCanvasY =
+              canvas.height / 2 + targetPoint.y * fallbackScale;
+
             // Map that fallback canvas pos back to image space
             finalClickPoint = {
               x: cropX + (fallbackCanvasX / canvas.width) * cropW,
-              y: cropY + (fallbackCanvasY / canvas.height) * cropH
+              y: cropY + (fallbackCanvasY / canvas.height) * cropH,
             };
           }
- dlog("[Calibrator] Snapped click to guide circle", { index: nextTargetIdx, finalClickPoint });
+          dlog("[Calibrator] Snapped click to guide circle", {
+            index: nextTargetIdx,
+            finalClickPoint,
+          });
         }
       }
     }
 
     // NEW: Click Snap - refine the click point to the nearest strong edge (ring boundary)
     // Only refine if we didn't already snap to a guide circle
-    const wasSnappedToGuide = finalClickPoint !== (undefined as any) && (finalClickPoint.x !== imageX || finalClickPoint.y !== imageY);
+    const wasSnappedToGuide =
+      finalClickPoint !== (undefined as any) &&
+      (finalClickPoint.x !== imageX || finalClickPoint.y !== imageY);
     const refinedPoint = wasSnappedToGuide
       ? finalClickPoint
       : refinePointSobel(canvas, finalClickPoint, 10);
@@ -1015,7 +1027,7 @@ export default function Calibrator() {
     // Store the refined image-space point for homography computation
     const clickPointInImageSpace = refinedPoint;
 
-  dlog("[Calibrator] Click mapping with zoom & snap:", {
+    dlog("[Calibrator] Click mapping with zoom & snap:", {
       display: { x: displayX, y: displayY },
       canvas: { x: canvasX, y: canvasY },
       zoom,
@@ -1080,7 +1092,7 @@ export default function Calibrator() {
         }); // Not locked yet
 
         // Debug: show where each click mapped to (use imageToBoard for image->board mapping)
-  dlog("[Calibrator] Homography computed:", {
+        dlog("[Calibrator] Homography computed:", {
           H,
           errorPx: error,
           pointMappings: newPoints.map((pt, i) => ({
@@ -1283,7 +1295,7 @@ export default function Calibrator() {
         setSectorOffset(0);
         setShowAngleAdjust(true);
 
-  dlog("[Auto-Calibrate] Success:", {
+        dlog("[Auto-Calibrate] Success:", {
           confidence: refined.confidence,
           errorPx: refined.errorPx,
           theta: detectedTheta,

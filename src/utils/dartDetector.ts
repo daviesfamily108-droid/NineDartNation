@@ -198,7 +198,7 @@ export class DartDetector {
     const mu = cnt ? sum / cnt : 0;
     const var_ = cnt ? Math.max(0, sum2 / cnt - mu * mu) : 0;
     const sigma = Math.sqrt(var_);
-  const dynamicThresh = Math.max(tuning.thresh, mu + 1.2 * sigma);
+    const dynamicThresh = Math.max(tuning.thresh, mu + 1.2 * sigma);
     // Rebuild mask using dynamic threshold and ignoring highlights
     for (let i = 0; i < n; i++) {
       if (isHighlight[i]) {

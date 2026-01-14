@@ -36,8 +36,8 @@ export default function GameCalibrationStatus({
     typeof errorPx === "number" && !Number.isNaN(errorPx)
       ? getGlobalCalibrationConfidence(errorPx)
       : typeof storedConfidence === "number"
-      ? storedConfidence
-      : null;
+        ? storedConfidence
+        : null;
 
   const showConfidenceNote =
     typeof baseConfidence === "number" &&

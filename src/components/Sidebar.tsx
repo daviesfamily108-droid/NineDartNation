@@ -206,12 +206,14 @@ export function Sidebar({
           ),
         ]);
 
-        const requests = requestsRes && (requestsRes as any).ok
-          ? await requestsRes.json()
-          : { requests: [] };
-        const messages = messagesRes && (messagesRes as any).ok
-          ? await messagesRes.json()
-          : { messages: [] };
+        const requests =
+          requestsRes && (requestsRes as any).ok
+            ? await requestsRes.json()
+            : { requests: [] };
+        const messages =
+          messagesRes && (messagesRes as any).ok
+            ? await messagesRes.json()
+            : { messages: [] };
 
         // Count unread messages
         const unreadMessages =
@@ -231,7 +233,9 @@ export function Sidebar({
         failures.count += 1;
         if (failures.count >= 3) {
           disabledUntil = Date.now() + 5 * 60 * 1000; // 5 minutes
-          console.warn("Sidebar notifications polling paused for 5m due to repeated failures");
+          console.warn(
+            "Sidebar notifications polling paused for 5m due to repeated failures",
+          );
         }
       }
     };

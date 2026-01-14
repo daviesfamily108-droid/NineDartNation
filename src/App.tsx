@@ -144,7 +144,8 @@ export default function App() {
       }
     };
     window.addEventListener("unhandledrejection", onUnhandled as any);
-    return () => window.removeEventListener("unhandledrejection", onUnhandled as any);
+    return () =>
+      window.removeEventListener("unhandledrejection", onUnhandled as any);
   }, []);
 
   useEffect(() => {
@@ -777,7 +778,8 @@ export default function App() {
           friendPollFailuresRef.current = 0;
           friendPollDisabledUntilRef.current = null;
         } else {
-          friendPollFailuresRef.current = (friendPollFailuresRef.current || 0) + 1;
+          friendPollFailuresRef.current =
+            (friendPollFailuresRef.current || 0) + 1;
           if (friendPollFailuresRef.current >= 3) {
             // Back off for 5 minutes after 3 consecutive failures
             friendPollDisabledUntilRef.current = Date.now() + 5 * 60 * 1000;

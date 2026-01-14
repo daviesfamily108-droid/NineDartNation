@@ -7,7 +7,10 @@
   useCallback,
 } from "react";
 import { createPortal } from "react-dom";
-import { getCalibrationStatus, getGlobalCalibrationConfidence } from "../../utils/gameCalibrationRequirements";
+import {
+  getCalibrationStatus,
+  getGlobalCalibrationConfidence,
+} from "../../utils/gameCalibrationRequirements";
 import {
   getAllTimeAvg,
   getAllTimeFirstNineAvg,
@@ -23,7 +26,6 @@ import { useUserSettings } from "../../store/userSettings";
 import { ensureVideoPlays } from "../../utils/ensureVideoPlays";
 
 import { memo } from "react";
-import CameraView from "../CameraView";
 
 const StatBlock = memo(function StatBlock({
   label,
@@ -66,12 +68,35 @@ const PlayerCalibrationPreview = memo(function PlayerCalibrationPreview({
   // immediately after calibrating (and during hydration), even if the
   // playerCalibrations map hasn't been fetched/updated yet.
   const localHasH = useCalibration((s) => !!s.H);
-  const isLocalPlayer = !!(
-    (user?.username &&
-      player?.name &&
-      player.name.toLowerCase() === user.username.toLowerCase()) ||
-    player?.name === "You"
-  );
+  const localAliases = useMemo(() => {
+    const aliases: string[] = [];
+    const push = (val: unknown) => {
+      if (typeof val === "string" && val.trim()) {
+        aliases.push(val.trim().toLowerCase());
+      }
+    };
+    push(user?.username);
+    push(user?.displayName);
+    push(user?.name);
+    push(user?.profile?.username);
+    push(user?.profile?.displayName);
+    aliases.push("you");
+    return aliases;
+  }, [user]);
+  const normalizedPlayerName = (player?.name || "").trim().toLowerCase();
+  const userId = (() => {
+    const raw = user?.id ?? user?.userId ?? user?._id;
+    if (raw == null) return null;
+    if (typeof raw === "string") return raw;
+    if (typeof raw === "number") return String(raw);
+    return null;
+  })();
+  const playerId = typeof player?.id === "string" ? player.id : null;
+  const isLocalPlayer =
+    localAliases.includes(normalizedPlayerName) ||
+    player?.name === "You" ||
+    (userId && playerId && userId === playerId) ||
+    playerId === "0";
   const isCalibrated = isLocalPlayer ? localHasH : !!calib;
 
   useEffect(() => {
@@ -302,7 +327,6 @@ export default function MatchStartShowcase({
   const visible = !!open;
   // CameraTile is preview-only; ensure we have a real stream available while
   // the overlay is visible (users may not have enabled the app-wide warm-up).
-  const shouldWarmupCamera = visible;
   const cameraSession = useCameraSession();
   const setCameraEnabled = useUserSettings.getState().setCameraEnabled;
 
@@ -330,6 +354,7 @@ export default function MatchStartShowcase({
   const calibrationLocked = useCalibration((s) => !!s.locked);
   const calibrationConfidence = useCalibration((s) => s.confidence);
   const calibrationImageSize = useCalibration((s) => s.imageSize);
+  const calibrationOverlaySize = useCalibration((s) => s.overlaySize);
   const calibrationErrorPx = useCalibration((s) => s.errorPx);
   const localCalibration = useMemo(
     () => ({
@@ -371,9 +396,85 @@ export default function MatchStartShowcase({
     [playerName: string]: any;
   }>({});
 
+  useEffect(() => {
+    if (!visible) return;
+    if (!players || players.length === 0) return;
+    if (!hasHomography) return;
+    const { H, imageSize, overlaySize, locked } = useCalibration.getState();
+    if (!H) return;
+
+    const normalized = (val: unknown) =>
+      typeof val === "string" && val.trim() ? val.trim().toLowerCase() : null;
+    const aliasList = [
+      normalized(user?.username),
+      normalized(user?.displayName),
+      normalized(user?.name),
+      normalized(user?.profile?.username),
+      normalized(user?.profile?.displayName),
+      "you",
+    ].filter(Boolean) as string[];
+    const userId = (() => {
+      const raw = user?.id ?? user?.userId ?? user?._id;
+      if (raw == null) return null;
+      if (typeof raw === "string") return raw;
+      if (typeof raw === "number") return String(raw);
+      return null;
+    })();
+    const localPlayer = players.find((p) => {
+      const name = normalized(p?.name);
+      if (name && aliasList.includes(name)) return true;
+      if (userId && typeof p?.id === "string" && p.id === userId) return true;
+      if (typeof p?.id === "string" && p.id === "0") return true;
+      return false;
+    });
+    if (!localPlayer) return;
+
+    setPlayerCalibrations((prev) => {
+      const existing = prev[localPlayer.name];
+      if (existing) {
+        const sameRef =
+          existing.H === H &&
+          existing.locked === locked &&
+          existing.imageSize?.w === imageSize?.w &&
+          existing.imageSize?.h === imageSize?.h &&
+          existing.overlaySize?.w === overlaySize?.w &&
+          existing.overlaySize?.h === overlaySize?.h;
+        if (sameRef) return prev;
+      }
+      return {
+        ...prev,
+        [localPlayer.name]: {
+          H,
+          imageSize,
+          overlaySize,
+          locked,
+        },
+      };
+    });
+  }, [
+    visible,
+    players,
+    user?.username,
+    user?.displayName,
+    user?.name,
+    user?.profile?.username,
+    user?.profile?.displayName,
+    user?.id,
+    user?.userId,
+    user?._id,
+    hasHomography,
+    calibrationImageSize?.w,
+    calibrationImageSize?.h,
+    calibrationOverlaySize?.w,
+    calibrationOverlaySize?.h,
+    calibrationLocked,
+  ]);
+
   // Optimized: previewReady is now derived from the global camera session state.
   // This avoids redundant polling loops and state synchronization races.
-  const previewReady = !!(cameraSession.isStreaming && cameraSession.getMediaStream?.());
+  const previewReady = !!(
+    cameraSession.isStreaming && cameraSession.getMediaStream?.()
+  );
   const [previewError, setPreviewError] = useState<string | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const previewContainerRef = useRef<HTMLDivElement | null>(null);
@@ -390,27 +491,6 @@ export default function MatchStartShowcase({
       (import.meta as any).env.MODE === "development");
   const [previewDiag, setPreviewDiag] = useState<any>(null);
   const lastPlayErrorRef = useRef<string | null>(null);
-  const [diagCopied, setDiagCopied] = useState(false);
-
-  const collectDiagnostics = async () => {
-    try {
-      const cam = await (window as any).__ndn_camera_debug?.collect?.();
-      const err = await (window as any).__ndn_error_collector?.collect?.();
-      const payload = { camera: cam || null, error: err || null, previewDiag: previewDiag || null, ts: Date.now() };
-      try {
-        if (navigator?.clipboard?.writeText) {
-          await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-          setDiagCopied(true);
-          setTimeout(() => setDiagCopied(false), 2000);
-        }
-      } catch {}
-      console.log("[NDN Diagnostics]", payload);
-      return payload;
-    } catch (e) {
-      console.warn("Collect diagnostics failed", e);
-      return null;
-    }
-  };
 
   // Retry pump: when overlay is visible but preview isn't linked, attempt to
   // request the app to start the camera a few times with backoff. This helps
@@ -428,7 +508,9 @@ export default function MatchStartShowcase({
     const attempt = (n: number) => {
       if (stopped) return;
       try {
-        window.dispatchEvent(new CustomEvent("ndn:start-camera", { detail: { mode: "local" } }));
+        window.dispatchEvent(
+          new CustomEvent("ndn:start-camera", { detail: { mode: "local" } }),
+        );
       } catch {}
       retryStartAttemptsRef.current = n;
       if (n >= 3) return;
@@ -572,7 +654,8 @@ export default function MatchStartShowcase({
               },
             }).then((res) => {
               try {
-                if (res && res.played) cameraSession.setVideoElementRef?.(previewVideo);
+                if (res && res.played)
+                  cameraSession.setVideoElementRef?.(previewVideo);
               } catch {}
             }),
           ).catch(() => {});
@@ -602,7 +685,7 @@ export default function MatchStartShowcase({
       if (appRoot) appRoot.setAttribute("aria-hidden", "true");
     } catch {}
     // Countdown interval:
-    // We use requestAnimationFrame and a stable end-timestamp to ensure 
+    // We use requestAnimationFrame and a stable end-timestamp to ensure
     // smooth 1-second updates even if the main thread is occasionally busy.
     let rafId: number | null = null;
     let lastSecondsSent = -1;
@@ -615,18 +698,18 @@ export default function MatchStartShowcase({
         try {
           const now = Date.now();
           const remaining = Math.max(0, Math.ceil((endTimestamp - now) / 1000));
-          
+
           if (remaining !== lastSecondsSent) {
             lastSecondsSent = remaining;
             setSeconds(remaining);
           }
-          
+
           if (remaining > 0) {
             rafId = window.requestAnimationFrame(tick);
           }
         } catch (e) {}
       };
-      
+
       rafId = window.requestAnimationFrame(tick);
     }
 
@@ -821,7 +904,10 @@ export default function MatchStartShowcase({
     // Prefer a live computation from the current errorPx when available so the
     // pre-match banner reflects the latest measured quality. Fall back to the
     // stored confidence if errorPx is missing.
-    if (typeof calibrationErrorPx === "number" && !Number.isNaN(calibrationErrorPx)) {
+    if (
+      typeof calibrationErrorPx === "number" &&
+      !Number.isNaN(calibrationErrorPx)
+    ) {
       const live = getGlobalCalibrationConfidence(calibrationErrorPx as number);
       if (typeof live === "number") return live;
     }
@@ -949,9 +1035,9 @@ export default function MatchStartShowcase({
                           </div>
                         )}
                         {/* Optimized Countdown Timer */}
-                        <MatchCountdownDisplay 
-                          seconds={seconds} 
-                          initialSeconds={initialSeconds} 
+                        <MatchCountdownDisplay
+                          seconds={seconds}
+                          initialSeconds={initialSeconds}
                         />
                       </div>
                     </div>
@@ -1142,7 +1228,8 @@ export default function MatchStartShowcase({
                                       </div>
                                     </div>
                                     <div className="text-xs text-white/60 mb-4 px-2">
-                                      The camera is still warming up or permissions are pending.
+                                      The camera is still warming up or
+                                      permissions are pending.
                                     </div>
                                     <div className="flex justify-center">
                                       <button

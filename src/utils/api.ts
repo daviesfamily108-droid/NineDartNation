@@ -71,31 +71,39 @@ export function apiFetch(path: ApiPath, init?: RequestInit) {
   try {
     const anyWin = window as any;
     if (anyWin.__ndnApiDisabled) {
-      return Promise.resolve(
-        ({ ok: false, status: 503, json: async () => ({}) } as any),
-      );
+      return Promise.resolve({
+        ok: false,
+        status: 503,
+        json: async () => ({}),
+      } as any);
     }
   } catch (_) {}
 
   // Perform the fetch, but on network error or remote-host 404 mark the API
   // disabled so subsequent calls are short-circuited and we avoid spamming the
   // network / devtools with repeated failing requests.
-  return fetch(url, init).catch((err) => {
-    try {
-      (window as any).__ndnApiDisabled = true;
-    } catch (_) {}
-    return ({ ok: false, status: 503, json: async () => ({}) } as any);
-  }).then((res) => {
-    try {
-      // If the request target is a remote host (not same origin) and returned
-      // a 404, consider the remote API unavailable and disable further calls.
-      const host = new URL(String(url)).hostname;
-      if (res && (res as any).status === 404 && host !== window.location.hostname) {
+  return fetch(url, init)
+    .catch((err) => {
+      try {
         (window as any).__ndnApiDisabled = true;
-      }
-    } catch (_) {}
-    return res;
-  });
+      } catch (_) {}
+      return { ok: false, status: 503, json: async () => ({}) } as any;
+    })
+    .then((res) => {
+      try {
+        // If the request target is a remote host (not same origin) and returned
+        // a 404, consider the remote API unavailable and disable further calls.
+        const host = new URL(String(url)).hostname;
+        if (
+          res &&
+          (res as any).status === 404 &&
+          host !== window.location.hostname
+        ) {
+          (window as any).__ndnApiDisabled = true;
+        }
+      } catch (_) {}
+      return res;
+    });
 }
 
 export function installApiInterceptor() {
