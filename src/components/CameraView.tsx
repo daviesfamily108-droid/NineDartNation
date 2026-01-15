@@ -124,6 +124,12 @@ const TIP_STABLE_MAX_JITTER_PX = process.env.NODE_ENV === "test" ? 999 : 4;
 // commit on motion blur or lighting flicker.
 // Give the scene a bit longer to settle after motion/lighting changes
 const DETECTION_SETTLE_MS = process.env.NODE_ENV === "test" ? 0 : 900;
+// Prevent lingering "hand in frame" detections from auto-committing; require a
+// fresh detection within this window unless motion resets the timer explicitly.
+const MAX_DETECTION_STILL_MS = 1400;
+// Significant tip movement threshold that signals a real throw event and resets
+// the continuous-detection timer.
+const TIP_MOTION_RESET_PX = 24;
 const BOARD_CLEAR_GRACE_MS = 6500;
 // Disable all camera overlays (rings, debug bboxes/axis) while keeping scoring intact.
 // This hides the cyan debug boxes/rings shown around trebles/doubles and detections.
@@ -897,6 +903,7 @@ export default forwardRef(function CameraView(
     lastTip: Point | null;
     stableFrames: number;
   }>({ lastTip: null, stableFrames: 0 });
+  const detectionStartRef = useRef<number>(0);
   const frameCountRef = useRef<number>(0);
   const tickRef = useRef<(() => void) | null>(null);
   const [detectionLog, setDetectionLog] = useState<DetectionLogEntry[]>([]);
@@ -3670,6 +3677,14 @@ export default forwardRef(function CameraView(
           dlog("CameraView: raw detection", det);
           const nowPerf = performance.now();
 
+          if (det) {
+            if (!detectionStartRef.current) {
+              detectionStartRef.current = nowPerf;
+            }
+          } else {
+            detectionStartRef.current = 0;
+          }
+
           // Bounceout heuristic: if we were tracking a candidate and the detection
           // vanishes before we ever became ready to commit, treat as a bounceout MISS.
           // This is intentionally conservative to avoid false MISS spam.
@@ -3892,6 +3907,9 @@ export default forwardRef(function CameraView(
                   };
                   lastMotionLikeEventAtRef.current = nowPerf;
                   if (!isOnlineMatch) lastOfflineThrowAtRef.current = nowPerf;
+                  if (dist >= TIP_MOTION_RESET_PX) {
+                    detectionStartRef.current = nowPerf;
+                  }
                 }
               }
             } catch (e) {}
@@ -3900,6 +3918,9 @@ export default forwardRef(function CameraView(
               nowPerf - lastMotionLikeEventAtRef.current >= DETECTION_SETTLE_MS;
             const tipStable =
               tipStabilityRef.current.stableFrames >= TIP_STABLE_MIN_FRAMES;
+            const detectionFresh =
+              detectionStartRef.current > 0 &&
+              nowPerf - detectionStartRef.current <= MAX_DETECTION_STILL_MS;
 
             // Offline anti-false-positive: only allow commits shortly after a
             // throw-like motion event.
@@ -4365,7 +4386,8 @@ export default forwardRef(function CameraView(
                 // before committing, which keeps ghost risk low.
                 const allowCommitCandidate =
                   inOfflineThrowWindow &&
-                  (settled || tipStable || (!isGhost && calibrationGood));
+                  detectionFresh &&
+                  (settled || tipStable);
 
                 if (ring === "MISS" || value <= 0) {
                   autoCandidateRef.current = null;
@@ -4387,11 +4409,13 @@ export default forwardRef(function CameraView(
                     shouldAccept = false;
                     rejectReason = !inOfflineThrowWindow
                       ? "no-throw-window"
-                      : !settled
-                        ? "not-settled"
-                        : !tipStable
-                          ? "unstable-tip"
-                          : "not-ready";
+                      : !detectionFresh
+                        ? "detection-stale"
+                        : !settled
+                          ? "not-settled"
+                          : !tipStable
+                            ? "unstable-tip"
+                            : "not-ready";
 
                     try {
                       console.debug("[AUTOSCORE DROP] gate", {
@@ -4402,6 +4426,11 @@ export default forwardRef(function CameraView(
                         settled,
                         tipStable,
                         tipStableFrames: tipStabilityRef.current.stableFrames,
+                        detectionFresh,
+                        detectionAgeMs:
+                          detectionStartRef.current > 0
+                            ? Math.round(nowPerf - detectionStartRef.current)
+                            : null,
                       });
                     } catch {}
 
@@ -4411,9 +4440,9 @@ export default forwardRef(function CameraView(
                     try {
                       if (!isOnlineMatch) {
                         // IMPORTANT: never allow fallback commits outside the
-                        // post-throw window; this is the main protection against
-                        // phantom commits from static board artifacts.
-                        if (!inOfflineThrowWindow) {
+                        // post-throw window or while a lingering detection hasn't
+                        // seen real motion since it first appeared.
+                        if (!inOfflineThrowWindow || !detectionFresh) {
                           offlineFallbackRef.current = {
                             sig: null,
                             firstTs: 0,
@@ -4586,6 +4615,7 @@ export default forwardRef(function CameraView(
                       accepted: false,
                       warmup: warmupActive,
                       rejectReason,
+                      fresh: detectionFresh,
                     });
                   } else {
                     const existing = autoCandidateRef.current;
@@ -4688,6 +4718,11 @@ export default forwardRef(function CameraView(
                           frames: current.frames,
                           holdMs,
                           cooled,
+                          detectionFresh,
+                          detectionAgeMs:
+                            detectionStartRef.current > 0
+                              ? Math.round(nowPerf - detectionStartRef.current)
+                              : null,
                         });
                       } catch {}
                     }
@@ -4720,6 +4755,7 @@ export default forwardRef(function CameraView(
               accepted: shouldAccept && value > 0 && ring !== "MISS",
               warmup: warmupActive,
               rejectReason,
+              fresh: detectionFresh,
             });
             if (process.env.NODE_ENV === "test") {
               try {
