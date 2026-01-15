@@ -126,7 +126,7 @@ const TIP_STABLE_MAX_JITTER_PX = process.env.NODE_ENV === "test" ? 999 : 4;
 const DETECTION_SETTLE_MS = process.env.NODE_ENV === "test" ? 0 : 900;
 // Prevent lingering "hand in frame" detections from auto-committing; require a
 // fresh detection within this window unless motion resets the timer explicitly.
-const MAX_DETECTION_STILL_MS = 1400;
+const MAX_DETECTION_STILL_MS = 2400;
 // Significant tip movement threshold that signals a real throw event and resets
 // the continuous-detection timer.
 const TIP_MOTION_RESET_PX = 24;
@@ -3918,9 +3918,16 @@ export default forwardRef(function CameraView(
               nowPerf - lastMotionLikeEventAtRef.current >= DETECTION_SETTLE_MS;
             const tipStable =
               tipStabilityRef.current.stableFrames >= TIP_STABLE_MIN_FRAMES;
+            const detectionAgeMs =
+              detectionStartRef.current > 0
+                ? nowPerf - detectionStartRef.current
+                : Number.POSITIVE_INFINITY;
+            const motionAgeMs =
+              lastMotionLikeEventAtRef.current > 0
+                ? nowPerf - lastMotionLikeEventAtRef.current
+                : Number.POSITIVE_INFINITY;
             const detectionFresh =
-              detectionStartRef.current > 0 &&
-              nowPerf - detectionStartRef.current <= MAX_DETECTION_STILL_MS;
+              Math.min(detectionAgeMs, motionAgeMs) <= MAX_DETECTION_STILL_MS;
 
             // Offline anti-false-positive: only allow commits shortly after a
             // throw-like motion event.
@@ -4427,10 +4434,12 @@ export default forwardRef(function CameraView(
                         tipStable,
                         tipStableFrames: tipStabilityRef.current.stableFrames,
                         detectionFresh,
-                        detectionAgeMs:
-                          detectionStartRef.current > 0
-                            ? Math.round(nowPerf - detectionStartRef.current)
-                            : null,
+                        detectionAgeMs: Number.isFinite(detectionAgeMs)
+                          ? Math.round(detectionAgeMs)
+                          : null,
+                        motionAgeMs: Number.isFinite(motionAgeMs)
+                          ? Math.round(motionAgeMs)
+                          : null,
                       });
                     } catch {}
 
@@ -4728,10 +4737,12 @@ export default forwardRef(function CameraView(
                           holdMs,
                           cooled,
                           detectionFresh,
-                          detectionAgeMs:
-                            detectionStartRef.current > 0
-                              ? Math.round(nowPerf - detectionStartRef.current)
-                              : null,
+                          detectionAgeMs: Number.isFinite(detectionAgeMs)
+                            ? Math.round(detectionAgeMs)
+                            : null,
+                          motionAgeMs: Number.isFinite(motionAgeMs)
+                            ? Math.round(motionAgeMs)
+                            : null,
                         });
                       } catch {}
                     }
@@ -5306,30 +5317,6 @@ export default forwardRef(function CameraView(
     } catch {}
   }
 
-  function saySingleDartScore(label: string) {
-    if (!callerEnabled) return;
-    try {
-      const synth = window.speechSynthesis;
-      if (!synth) return;
-      const msg = new SpeechSynthesisUtterance();
-      let text = label.split(" ")[0]; // Take "T20" from "T20 60"
-      if (text.startsWith("D")) text = "Double " + text.substring(1);
-      else if (text.startsWith("T")) text = "Treble " + text.substring(1);
-      else if (text === "BULL") text = "Bullseye";
-      else if (text === "25") text = "Twenty five";
-
-      msg.text = text;
-      msg.rate = 1.05;
-      msg.pitch = 1.0;
-      if (callerVoice) {
-        const v = synth.getVoices().find((v) => v.name === callerVoice);
-        if (v) msg.voice = v;
-      }
-      msg.volume = typeof callerVolume === "number" ? callerVolume : 1;
-      synth.speak(msg);
-    } catch {}
-  }
-
   function addDart(
     value: number,
     label: string,
@@ -5522,6 +5509,9 @@ export default forwardRef(function CameraView(
         visitTotal: 0,
         entries: bustEntries,
       });
+      if (shouldDeferCommit) {
+        sayVisitTotal(0);
+      }
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
@@ -5577,12 +5567,9 @@ export default forwardRef(function CameraView(
     } catch (e) {}
 
     // Voice callouts
-    if (isFinish) {
+    if (shouldDeferCommit && (isFinish || newDarts === 3)) {
+      // Provide immediate feedback when we're deferring the actual commit
       sayVisitTotal(newScore);
-    } else if (newDarts === 3) {
-      sayVisitTotal(newScore);
-    } else if (newDarts < 3) {
-      saySingleDartScore(label);
     }
 
     if (
@@ -5780,6 +5767,9 @@ export default forwardRef(function CameraView(
         const name = matchState.players[matchState.currentPlayerIdx]?.name;
         if (name) addSample(name, newDarts, 0);
       } catch (e) {}
+      if (shouldDeferCommit) {
+        sayVisitTotal(0);
+      }
       setPendingDarts(0);
       pendingDartsRef.current = 0;
       setPendingScore(0);
@@ -5800,10 +5790,8 @@ export default forwardRef(function CameraView(
     ]);
 
     // Snappy voice call for the replacement
-    if (isFinish || newDarts === 3) {
+    if (shouldDeferCommit && (isFinish || newDarts === 3)) {
       sayVisitTotal(newScore);
-    } else {
-      saySingleDartScore(parsed.label);
     }
 
     if (isFinish) {

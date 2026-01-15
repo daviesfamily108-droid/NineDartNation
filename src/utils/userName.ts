@@ -4,13 +4,13 @@ export function getPreferredUserName(
 ): string {
   try {
     const candidates = [
+      user?.username,
+      user?.profile?.username,
+      user?.profile?.fullName,
+      user?.fullName,
       user?.profile?.displayName,
       user?.displayName,
       user?.name,
-      user?.fullName,
-      user?.profile?.fullName,
-      user?.username,
-      user?.profile?.username,
     ];
     for (const raw of candidates) {
       if (typeof raw !== "string") continue;
