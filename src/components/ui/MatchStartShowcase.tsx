@@ -1190,10 +1190,10 @@ export default function MatchStartShowcase({
 
                       {/* Pre-match live camera preview (uses the global camera session) */}
                       {idx === 0 && (
-                        <div className="w-full mt-3 flex-1 flex flex-col min-h-0">
+                        <div className="w-full mt-3">
                           <div
                             ref={previewContainerRef}
-                            className="rounded-2xl overflow-hidden border border-white/10 bg-black/30 relative flex-1 flex flex-col min-h-0 min-h-[300px] sm:min-h-[460px]"
+                            className="rounded-2xl overflow-hidden border border-white/10 bg-black/30 relative w-full aspect-video"
                           >
                             <div
                               className={`absolute top-4 left-4 z-10 px-3 py-1 rounded-full text-[0.6rem] font-bold tracking-wide uppercase shadow-lg ${calibratedCameraLinked ? "bg-emerald-500/90 text-emerald-50" : "bg-rose-500/80 text-white"}`}
@@ -1201,7 +1201,7 @@ export default function MatchStartShowcase({
                               {calibrationStatusText}
                             </div>
                             {/* Show the full board (no crop) */}
-                            <div className="w-full flex-1 flex flex-col items-stretch">
+                            <div className="absolute inset-0 flex flex-col items-stretch">
                               <CameraTile
                                 autoStart
                                 forceAutoStart
