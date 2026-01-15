@@ -1715,32 +1715,58 @@ export default function Calibrator() {
         const boardEstimate = boardEstimateRef.current;
         const activeDragIndex = dragStateRef.current?.targetIndex ?? null;
 
+        const ensureVisible = (point: Point | null): Point | null => {
+          if (!point) return null;
+          const { x, y } = point;
+          if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            return null;
+          }
+          const margin = 40;
+          if (
+            x < -margin ||
+            y < -margin ||
+            x > canvas.width + margin ||
+            y > canvas.height + margin
+          ) {
+            return null;
+          }
+          return point;
+        };
+
         // Draw target circles for uncaptured points
         for (let i = 0; i < 5; i++) {
           if (i >= calibrationPoints.length) {
             const targetPoint = canonicalTargets[i];
-            let drawX: number;
-            let drawY: number;
+            const fallbackScale = Math.min(canvas.width, canvas.height) / 360;
+            const fallbackPos: Point = {
+              x: canvas.width / 2 + targetPoint.x * fallbackScale,
+              y: canvas.height / 2 + targetPoint.y * fallbackScale,
+            };
+
+            let resolved: Point | null = null;
 
             const override = targetOverridesRef.current[i];
             if (override) {
-              const mapped = mapImageToCanvas(override.x, override.y);
-              drawX = mapped.x;
-              drawY = mapped.y;
-            } else if (boardEstimate) {
+              resolved = ensureVisible(
+                mapImageToCanvas(override.x, override.y),
+              );
+            }
+
+            if (!resolved && boardEstimate) {
               const pxPerMm = boardEstimate.radius / BoardRadii.doubleOuter;
               const imageX = boardEstimate.cx + targetPoint.x * pxPerMm;
               const imageY = boardEstimate.cy + targetPoint.y * pxPerMm;
-              const mapped = mapImageToCanvas(imageX, imageY);
-              drawX = mapped.x;
-              drawY = mapped.y;
-            } else {
-              const fallbackScale = Math.min(canvas.width, canvas.height) / 360;
-              drawX = canvas.width / 2 + targetPoint.x * fallbackScale;
-              drawY = canvas.height / 2 + targetPoint.y * fallbackScale;
+              resolved = ensureVisible(mapImageToCanvas(imageX, imageY));
             }
 
-            targetScreenPositionsRef.current[i] = { x: drawX, y: drawY };
+            if (!resolved) {
+              resolved = fallbackPos;
+            }
+
+            const drawX = resolved.x;
+            const drawY = resolved.y;
+
+            targetScreenPositionsRef.current[i] = resolved;
             const isDraggingTarget = activeDragIndex === i;
 
             if (isDraggingTarget) {
