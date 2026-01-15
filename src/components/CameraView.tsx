@@ -104,22 +104,22 @@ const OFFLINE_THROW_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 4500;
 // short time IF we're inside the post-throw window. This prevents the
 // frustrating "pending forever" state while preserving anti-ghost protection.
 const SNAP_COMMIT_MIN_MS = process.env.NODE_ENV === "test" ? 0 : 900;
-const SNAP_COMMIT_MIN_TIP_STABLE_FRAMES = 2;
+const SNAP_COMMIT_MIN_TIP_STABLE_FRAMES = 1;
 const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 10;
 // Immediately after calibration, lighting/ROI/camera stabilization can be slightly noisy.
 // Give the detector a short grace window with relaxed gates so the first darts count.
 const POST_CALIBRATION_GRACE_MS = process.env.NODE_ENV === "test" ? 0 : 8000;
-// Raise confidence threshold slightly to further reduce ghost detections
-// Slightly raise confidence and stability requirements to clamp false positives
-const AUTO_COMMIT_CONFIDENCE = 0.85;
+// Confidence threshold tuned for field play: high enough to suppress glare but
+// low enough that real darts with minor blur still make it through.
+const AUTO_COMMIT_CONFIDENCE = 0.8;
 // Real-world reliability: require the detected tip to be stable (low jitter)
 // across multiple frames before allowing a commit.
 // Real cameras often have small inter-frame jitter; requiring too many stable
 // frames can cause missed darts. These values aim to block flicker while still
 // committing quickly once the dart is actually in the board.
-const TIP_STABLE_MIN_FRAMES = process.env.NODE_ENV === "test" ? 1 : 4;
+const TIP_STABLE_MIN_FRAMES = process.env.NODE_ENV === "test" ? 1 : 3;
 // Tighter jitter tolerance so a dart must stay pinned in nearly the same spot
-const TIP_STABLE_MAX_JITTER_PX = process.env.NODE_ENV === "test" ? 999 : 3;
+const TIP_STABLE_MAX_JITTER_PX = process.env.NODE_ENV === "test" ? 999 : 4;
 // After any detection appears/disappears, wait briefly before arming so we don't
 // commit on motion blur or lighting flicker.
 // Give the scene a bit longer to settle after motion/lighting changes
@@ -3949,8 +3949,8 @@ export default forwardRef(function CameraView(
             } else {
               label = `${ring} ${value > 0 ? value : ""}`.trim();
             }
-            const TIP_MARGIN_PX = 3; // small margin (px) to allow rounding / proc-to-video pixel mismatch
-            const PCAL_MARGIN_PX = 3; // allow small margin in calibration image space
+            const TIP_MARGIN_PX = 6; // small margin (px) to allow rounding / proc-to-video pixel mismatch
+            const PCAL_MARGIN_PX = 5; // allow small margin in calibration image space
             const hasCalibration = !!H && !!imageSize;
             // IMPORTANT: errorPx should reflect real calibration quality.
             // Treat missing errorPx as *unknown* (not zero) unless calibration is locked.
@@ -3970,7 +3970,7 @@ export default forwardRef(function CameraView(
             let _onBoard = false;
             if (pBoard) {
               const boardR = Math.hypot(pBoard.x, pBoard.y);
-              const BOARD_MARGIN_MM = 3; // mm tolerance for being on-board
+              const BOARD_MARGIN_MM = 8; // mm tolerance for being on-board
               _onBoard = boardR <= BoardRadii.doubleOuter + BOARD_MARGIN_MM;
             }
 
@@ -4451,8 +4451,8 @@ export default forwardRef(function CameraView(
                           const ageMs = nowPerf - fb.firstTs;
                           // Tuned to be "fast enough to feel responsive" but still
                           // resistant to single-frame ghosts.
-                          const FALLBACK_MIN_FRAMES = 8;
-                          const FALLBACK_MIN_MS = 650;
+                          const FALLBACK_MIN_FRAMES = 6;
+                          const FALLBACK_MIN_MS = 520;
                           if (
                             fb.sig === sig &&
                             (fb.frames >= FALLBACK_MIN_FRAMES ||
