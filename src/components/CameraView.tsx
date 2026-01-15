@@ -4531,6 +4531,7 @@ export default forwardRef(function CameraView(
                     try {
                       if (
                         inOfflineThrowWindow &&
+                        detectionFresh &&
                         !isGhost &&
                         calibrationGood &&
                         det.confidence >= 0.82
@@ -4600,6 +4601,14 @@ export default forwardRef(function CameraView(
                           shouldAccept = true;
                           rejectReason = null;
                         }
+                      } else {
+                        offlineFallbackRef.current = {
+                          sig: null,
+                          firstTs: 0,
+                          lastTs: 0,
+                          frames: 0,
+                          lastTip: null,
+                        };
                       }
                     } catch {}
 
