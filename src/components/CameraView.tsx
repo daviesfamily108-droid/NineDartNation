@@ -3636,10 +3636,11 @@ export default forwardRef(function CameraView(
           );
         }
 
+        const visitHasRoom = (pendingDartsRef.current || 0) < 3;
         // Try to detect a new dart when not paused and visit has room
         {
           const condPaused = !paused;
-          const condPending = pendingDarts < 3;
+          const condPending = visitHasRoom;
           const condArmed = detectionArmedRef.current;
           const condFrame = frameCountRef.current > DETECTION_MIN_FRAMES;
           dlog("CameraView: detection conditions", {
@@ -3649,11 +3650,12 @@ export default forwardRef(function CameraView(
             condFrame,
             frameCount: frameCountRef.current,
             minFrames: DETECTION_MIN_FRAMES,
+            pendingDartsRef: pendingDartsRef.current,
           });
         }
         if (
           !paused &&
-          pendingDarts < 3 &&
+          visitHasRoom &&
           detectionArmedRef.current &&
           frameCountRef.current > DETECTION_MIN_FRAMES
         ) {

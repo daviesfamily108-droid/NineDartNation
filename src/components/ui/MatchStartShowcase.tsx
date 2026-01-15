@@ -1207,10 +1207,9 @@ export default function MatchStartShowcase({
                                 forceAutoStart
                                 fill
                                 aspect="free"
-                                // Use "fill" so the video covers the rounded preview
-                                // container on all devices (phone/tablet/desktop)
-                                // avoiding letterboxing and black bars.
-                                tileFitModeOverride="fill"
+                                // Force "fit" so the entire dartboard stays visible regardless of
+                                // device aspect ratio or user camera settings.
+                                tileFitModeOverride="fit"
                                 scale={1}
                               />
 
