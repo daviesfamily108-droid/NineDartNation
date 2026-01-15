@@ -27,6 +27,8 @@ type CameraTileProps = {
   style?: CSSProperties;
   fill?: boolean;
   tileFitModeOverride?: "fit" | "fill";
+  // Allow callers to pass through additional metadata without TypeScript errors.
+  [extraProp: string]: unknown;
 };
 
 export default function CameraTile(props: CameraTileProps) {

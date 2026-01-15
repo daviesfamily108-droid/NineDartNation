@@ -41,6 +41,7 @@ import { makeOnlineAddVisitAdapter } from './matchControlAdapters'
 import { applyVisitCommit } from '../logic/applyVisitCommit'
 import { useOnlineGameStats } from './scoreboards/useGameStats'
 import { getWsCandidates } from '../utils/ws'
+import { getPreferredUserName } from '../utils/userName'
 
 export default function OnlinePlay({ user }: { user?: any }) {
   const toast = useToast();
@@ -51,6 +52,8 @@ export default function OnlinePlay({ user }: { user?: any }) {
   // forward-declare so handlers defined earlier can call it
   let startMobileWebRTC: (code: string) => Promise<void> = async () => { return }
   const blocklist = useBlocklist();
+  const localPlayerName = useMemo(() => getPreferredUserName(user, 'You'), [user]);
+  const callerName = useMemo(() => getPreferredUserName(user, 'Player'), [user]);
 
   // ...existing code...
 
@@ -295,7 +298,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       ;(window as any).__NDN_AUTO_TESTED__ = true
       // Create simple 101 match and simulate visits:
       // You: 41 (attempts=0) -> Opp: 26 -> You: 10 (cross into window; attempts=1) -> Opp: 26 -> You: 40 finish on D20 (attempts=1, finishedByDouble=true)
-      match.newMatch([user?.username || 'You', 'Opponent'], 101, 'local-dev')
+      match.newMatch([localPlayerName, 'Opponent'], 101, 'local-dev')
       // You visit 1: 41 (no attempts yet)
       match.addVisit(41, 3, { preOpenDarts: 0, doubleWindowDarts: 0, finishedByDouble: false, visitTotal: 41 })
       match.nextPlayer()
@@ -503,7 +506,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
         const d = e?.detail || {}
         const start = Number(d.start || 501)
         // Create a quick local match with two players
-        match.newMatch([user?.username || 'You', 'Opponent'], start, roomId)
+        match.newMatch([localPlayerName, 'Opponent'], start, roomId)
         // Seed a few visits to populate UI
         match.addVisit(60, 3) // You
         match.nextPlayer()
@@ -1332,7 +1335,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
     if (leg && leg.totalScoreRemaining === 0) { match.endLeg(score) } else { match.nextPlayer() }
     if (callerEnabled) {
       const rem = leg ? leg.totalScoreRemaining : match.startingScore
-      sayScore(user?.username || 'Player', score, Math.max(0, rem), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly })
+    sayScore(callerName, score, Math.max(0, rem), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly })
     }
     if (user?.username && p?.name === user.username) { addSample(user.username, 3, score) }
     sendState()

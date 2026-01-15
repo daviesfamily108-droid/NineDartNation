@@ -12,6 +12,7 @@ import { broadcastMessage } from "../utils/broadcast";
 import HeatMap from "./HeatMap";
 import { getUserCurrency, formatPriceInCurrency } from "../utils/config";
 import { bumpGameMode } from "../store/profileStats";
+import { getPreferredUserName } from "../utils/userName";
 import { getApiBaseUrl } from "../utils/api";
 import {
   DOUBLE_PRACTICE_ORDER,
@@ -469,7 +470,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   const speakAutoVisit = useCallback(
     (pending: PendingAutoVisit) => {
       if (!callerEnabled) return;
-      const speaker = user?.username || "Player";
+      const speaker = getPreferredUserName(user, "Player");
       try {
         sayScore(
           speaker,
@@ -480,13 +481,7 @@ export default function OfflinePlay({ user }: { user: any }) {
         );
       } catch {}
     },
-    [
-      callerEnabled,
-      callerVoice,
-      callerVolume,
-      speakCheckoutOnly,
-      user?.username,
-    ],
+    [callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, user],
   );
 
   const commitPendingVisit = useCallback(
@@ -626,7 +621,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     lastVisitDartsRef.current = playerVisitDarts;
   }, [playerVisitDarts]);
 
-  const humanName = user?.username || "Player 1";
+  const humanName = getPreferredUserName(user, "Player 1");
   const aiDisplayName = ai === "None" ? "Player 2" : ai;
   const currentThrowerName = isPlayerTurn ? humanName : aiDisplayName;
   const opponentName = isPlayerTurn ? aiDisplayName : humanName;
@@ -1277,7 +1272,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       } catch {}
     }
     // Initialize the global match store for live 3-dart averages and stats tracking
-    const humanName = user?.username || "You";
+    const humanName = getPreferredUserName(user, "You");
     const aiName = ai !== "None" ? `AI (${ai})` : "Opponent";
     const players = ai !== "None" ? [humanName, aiName] : [humanName];
     match.newMatch(players, x01Score, `offline-${Date.now()}`);
@@ -1374,7 +1369,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       if (callerEnabled) {
         try {
           sayScore(
-            user?.username || "Player",
+            getPreferredUserName(user, "Player"),
             0,
             Math.max(currentVisitStart, 0),
             callerVoice,
@@ -3817,7 +3812,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                             {(() => {
                               // In offline X01, player is vs AI or practice
                               const currentThrower = isPlayerTurn
-                                ? user?.username || "You"
+                                ? getPreferredUserName(user, "You")
                                 : ai === "None"
                                   ? "—"
                                   : `${ai} AI`;
@@ -6450,7 +6445,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="p-3 rounded-2xl glass border border-white/10">
                       <div className="text-sm font-semibold mb-1">
-                        {user?.username || "You"}
+                        {getPreferredUserName(user, "You")}
                       </div>
                       <div className="text-3xl font-extrabold">
                         {playerLegs}

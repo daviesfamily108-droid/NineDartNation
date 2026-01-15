@@ -350,16 +350,57 @@ export class DartDetector {
 
     // Project all blob points onto axis and pick extreme (max t) as tip candidate
     let maxT = -Infinity;
-    let tipX = meanX,
-      tipY = meanY;
+    let minT = Infinity;
+    let maxPtX = meanX,
+      maxPtY = meanY;
+    let minPtX = meanX,
+      minPtY = meanY;
     for (const idx of bestIdxs) {
       const y = (idx / w) | 0;
       const x = idx - y * w;
       const t = (x - meanX) * vx + (y - meanY) * vy;
       if (t > maxT) {
         maxT = t;
-        tipX = x;
-        tipY = y;
+        maxPtX = x;
+        maxPtY = y;
+      }
+      if (t < minT) {
+        minT = t;
+        minPtX = x;
+        minPtY = y;
+      }
+    }
+
+    // Choose the extreme closest to the board centre as the tip. This avoids
+    // accidentally locking onto dart flights when they dominate the detected
+    // blob, ensuring scoring uses the steel tip location only.
+    const distSq = (x: number, y: number) => {
+      const dx = x - this.roiCx;
+      const dy = y - this.roiCy;
+      return dx * dx + dy * dy;
+    };
+    const distMax = distSq(maxPtX, maxPtY);
+    const distMin = distSq(minPtX, minPtY);
+    let tipX: number;
+    let tipY: number;
+    if (distMin <= distMax) {
+      tipX = minPtX;
+      tipY = minPtY;
+      // Flip axis so positive direction still points away from the board
+      if (maxT - minT !== 0) {
+        const dot = (tipX - meanX) * vx + (tipY - meanY) * vy;
+        if (dot > 0) {
+          vx = -vx;
+          vy = -vy;
+        }
+      }
+    } else {
+      tipX = maxPtX;
+      tipY = maxPtY;
+      const dot = (tipX - meanX) * vx + (tipY - meanY) * vy;
+      if (dot > 0) {
+        vx = -vx;
+        vy = -vy;
       }
     }
 
