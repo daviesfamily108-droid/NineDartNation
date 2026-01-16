@@ -71,10 +71,8 @@ CREATE TABLE IF NOT EXISTS public.tournaments (
     capacity INTEGER NOT NULL,
     official BOOLEAN DEFAULT FALSE,
     prize BOOLEAN DEFAULT FALSE,
-    prize_type TEXT, -- 'premium', 'cash', 'none'
+    prize_type TEXT, -- 'premium', 'none'
     prize_amount DECIMAL(10,2),
-    currency TEXT,
-    payout_status TEXT DEFAULT 'none', -- 'none', 'pending', 'paid'
     status TEXT DEFAULT 'scheduled', -- 'scheduled', 'running', 'completed'
     winner_email TEXT,
     winner_name TEXT,
@@ -103,14 +101,6 @@ CREATE TABLE IF NOT EXISTS public.friendships (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     PRIMARY KEY (user_email, friend_email),
     CHECK (user_email < friend_email) -- Prevent duplicate friendships
-);
-
--- Wallets for premium purchases
-CREATE TABLE IF NOT EXISTS public.wallets (
-    email TEXT PRIMARY KEY,
-    balances JSONB DEFAULT '{}', -- { 'USD': 1000, 'EUR': 500 } in cents
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Camera pairing sessions

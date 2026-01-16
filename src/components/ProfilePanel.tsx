@@ -107,7 +107,6 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
   const [profilePhoto, setProfilePhoto] = useState("");
 
   // Account data
-  const [wallet, setWallet] = useState<any | null>(null);
   const [subscription, setSubscription] = useState<any>(null);
 
   // Achievements
@@ -267,26 +266,13 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
     );
   }, [user?.username]);
 
-  // Load subscription & wallet
+  // Load subscription
   useEffect(() => {
     if (!user?.email) return;
     apiFetch(`/api/subscription?email=${encodeURIComponent(user.email)}`)
       .then((r) => r.json())
       .then(setSubscription)
       .catch(() => {});
-
-    (async () => {
-      try {
-        const token = localStorage.getItem("authToken");
-        const headers: any = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const res = await fetch(
-          `/api/wallet/balance?email=${encodeURIComponent(user.email)}`,
-          { headers },
-        );
-        if (res.ok) setWallet(await res.json());
-      } catch {}
-    })();
   }, [user?.email]);
 
   const saveBio = () => {
@@ -806,20 +792,6 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
                 Upgrade
               </button>
             )}
-          </div>
-
-          {/* Wallet */}
-          <div className="p-3 bg-white/5 rounded-lg">
-            <div className="font-medium mb-2">Wallet Balance</div>
-            <div className="text-lg font-bold">
-              {wallet?.wallet?.balances
-                ? Object.entries(wallet.wallet.balances)
-                    .map(
-                      ([c, v]: [string, any]) => `${c} ${(v / 100).toFixed(2)}`,
-                    )
-                    .join(" • ")
-                : "£0.00"}
-            </div>
           </div>
 
           {/* Username Change */}

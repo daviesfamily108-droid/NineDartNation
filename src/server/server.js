@@ -232,26 +232,6 @@ const db = {
       .eq('friend_email', email2);
   },
 
-  // Wallets
-  async getWallet(email) {
-    if (!supabase) return { balances: {} };
-    const { data } = await supabase
-      .from('wallets')
-      .select('*')
-      .eq('email', email)
-      .single();
-    return data || { balances: {} };
-  },
-
-  async updateWallet(email, balances) {
-    if (!supabase) return;
-    await supabase.from('wallets').upsert([{
-      email,
-      balances,
-      updated_at: new Date().toISOString()
-    }]);
-  },
-
   // Camera sessions
   async createCameraSession(code, desktopClientId, expiresAt) {
     if (!supabase) return;
@@ -715,14 +695,8 @@ app.post('/webhook/stripe', async (req, res) => {
       }
     }
   }
-  // Demo: toggle fullAccess true and credit owner's wallet with premium revenue if provided
+  // Demo: toggle fullAccess true
   subscription.fullAccess = true;
-  try {
-    const { amountCents, currency } = req.body || {}
-    const cents = Math.max(0, Number(amountCents) || 0)
-    const cur = String(currency || 'GBP').toUpperCase()
-    if (cents > 0) creditWallet(OWNER_EMAIL, cur, cents)
-  } catch {}
   res.json({ ok: true })
 });
 
@@ -1158,12 +1132,6 @@ async function loadPersistentData() {
     // Load matches
     // Note: matches are loaded on-demand, not preloaded to avoid memory usage with 1.5k concurrent users
 
-    // Load wallets
-    // Note: wallets are loaded on-demand, not preloaded
-
-    // Load wallets
-    // Note: wallets are loaded on-demand, not preloaded
-
     // Clean up expired camera sessions
     await db.deleteExpiredCameraSessions();
 
@@ -1239,34 +1207,6 @@ if (!users.has('daviesfamily108@gmail.com')) {
 const friendships = new Map();
 // simple messages store: recipientEmail -> [{ id, from, message, ts }]
 const messages = new Map();
-// In-memory wallets: email -> { email, balances: { [currency]: cents } }
-const wallets = new Map();
-// In-memory withdrawals: id -> { id, email, currency, amountCents, status: 'pending'|'paid'|'rejected', requestedAt, decidedAt?, notes? }
-const withdrawals = new Map();
-// In-memory payout methods: email -> { brand, last4, addedAt }
-const payoutMethods = new Map();
-
-function creditWallet(email, currency, amountCents) {
-  const addr = String(email||'').toLowerCase()
-  if (!addr || !currency || !Number.isFinite(amountCents) || amountCents <= 0) return
-  const code = String(currency).toUpperCase()
-  const w = wallets.get(addr) || { email: addr, balances: {} }
-  w.balances[code] = (w.balances[code] || 0) + Math.floor(amountCents)
-  wallets.set(addr, w)
-}
-
-function debitWallet(email, currency, amountCents) {
-  const addr = String(email||'').toLowerCase()
-  const code = String(currency).toUpperCase()
-  const w = wallets.get(addr)
-  if (!w) return false
-  const bal = w.balances[code] || 0
-  if (amountCents > bal) return false
-  w.balances[code] = bal - Math.floor(amountCents)
-  wallets.set(addr, w)
-  return true
-}
-
 // Persistence helpers (demo)
 const FRIENDS_FILE = './friends.json'
 function saveFriendships() {
@@ -2064,104 +2004,6 @@ app.post('/api/admin/reports/resolve', (req, res) => {
   res.json({ ok: true, report: reports[idx] })
 })
 
-// Wallet API (demo, not secure)
-app.get('/api/wallet/balance', (req, res) => {
-  const email = String(req.query.email || '').toLowerCase()
-  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
-  const w = wallets.get(email) || { email, balances: {} }
-  res.json({ ok: true, wallet: w })
-})
-
-// Wallet: get linked payout method (brand + last4)
-app.get('/api/wallet/payout-method', (req, res) => {
-  const email = String(req.query.email || '').toLowerCase()
-  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
-  const m = payoutMethods.get(email) || null
-  res.json({ ok: true, method: m })
-})
-
-// Wallet: link/update payout method (store non-sensitive brand + last4 for display only)
-app.post('/api/wallet/link-card', (req, res) => {
-  const { email, brand, last4 } = req.body || {}
-  const addr = String(email || '').toLowerCase()
-  const b = String(brand || '').trim()
-  const l4 = String(last4 || '').trim()
-  if (!addr || !b || !l4 || !/^\d{4}$/.test(l4)) {
-    return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  }
-  payoutMethods.set(addr, { brand: b, last4: l4, addedAt: Date.now() })
-  res.json({ ok: true, method: payoutMethods.get(addr) })
-})
-
-app.post('/api/wallet/withdraw', (req, res) => {
-  const { email, currency, amount } = req.body || {}
-  const addr = String(email || '').toLowerCase()
-  const curr = String(currency || 'USD').toUpperCase()
-  const amt = Math.round(Number(amount) * 100)
-  if (!addr || !curr || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  const w = wallets.get(addr)
-  if (!w || (w.balances[curr]||0) < amt) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-  const id = nanoid(10)
-  const method = payoutMethods.get(addr)
-  // If a payout method is linked, debit and mark as paid instantly
-  if (method) {
-    const ok = debitWallet(addr, curr, amt)
-    if (!ok) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-    const item = { id, email: addr, currency: curr, amountCents: amt, status: 'paid', requestedAt: Date.now(), decidedAt: Date.now(), notes: `Paid to ${method.brand} ÔÇóÔÇóÔÇóÔÇó ${method.last4}` }
-    withdrawals.set(id, item)
-    return res.json({ ok: true, request: item, paid: true, method })
-  }
-  // Otherwise, create a pending request for admin review
-  const item = { id, email: addr, currency: curr, amountCents: amt, status: 'pending', requestedAt: Date.now() }
-  withdrawals.set(id, item)
-  res.json({ ok: true, request: item, paid: false })
-})
-
-// Admin: list withdrawals
-app.get('/api/admin/wallet/withdrawals', (req, res) => {
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  res.json({ ok: true, withdrawals: Array.from(withdrawals.values()) })
-})
-
-// Admin: decide withdrawal (approve or reject)
-app.post('/api/admin/wallet/withdrawals/decide', (req, res) => {
-  const { id, approve, notes, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
-  const item = withdrawals.get(String(id||''))
-  if (!item) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
-  if (item.status !== 'pending') return res.status(400).json({ ok: false, error: 'ALREADY_DECIDED' })
-  item.decidedAt = Date.now()
-  item.notes = String(notes || '')
-  if (approve) {
-    // debit wallet now
-    const ok = debitWallet(item.email, item.currency, item.amountCents)
-    if (!ok) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-    item.status = 'paid'
-  } else {
-    item.status = 'rejected'
-  }
-  withdrawals.set(item.id, item)
-  res.json({ ok: true, withdrawal: item })
-})
-
-// Admin: credit a user's wallet (owner-only; currency amount in major units or cents?)
-app.post('/api/admin/wallet/credit', (req, res) => {
-  const { email, currency, amountCents, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
-  const addr = String(email || '').toLowerCase()
-  const cur = String(currency || 'GBP').toUpperCase()
-  const cents = Math.round(Number(amountCents))
-  if (!addr || !cur || !Number.isFinite(cents) || cents <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  creditWallet(addr, cur, cents)
-  const w = wallets.get(addr) || { email: addr, balances: {} }
-  res.json({ ok: true, wallet: w })
-})
-
 // WS heartbeat interval to drop dead peers (moved earlier; keep single definition)
 
 // Tournaments HTTP API (demo)
@@ -2171,15 +2013,14 @@ app.get('/api/tournaments', async (req, res) => {
 })
 
 app.post('/api/tournaments/create', async (req, res) => {
-  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeAmount, currency, prizeNotes, requesterEmail, requireCalibration } = req.body || {}
+  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, prizeAmount, prizeNotes, requesterEmail, requireCalibration } = req.body || {}
   const id = nanoid(10)
   // Only the owner can create "official" tournaments or set prize metadata
   const isOwner = String(requesterEmail || '').toLowerCase() === OWNER_EMAIL
   const isOfficial = !!official && isOwner
   // Normalize prize metadata
-  const pType = isOfficial ? (prizeType === 'cash' ? 'cash' : 'premium') : 'none'
-  const amount = (pType === 'cash' && isOwner) ? Math.max(0, Number(prizeAmount) || 0) : 0
-  const curr = (pType === 'cash' && isOwner) ? (String(currency || 'USD').toUpperCase()) : undefined
+  const pType = isOfficial ? 'premium' : 'none'
+  const amount = isOfficial && isOwner ? Math.max(0, Number(prizeAmount) || 0) : 0
   const notes = (isOwner && typeof prizeNotes === 'string') ? prizeNotes : ''
   const t = {
     id,
@@ -2196,9 +2037,7 @@ app.post('/api/tournaments/create', async (req, res) => {
     requireCalibration: !!requireCalibration,
     prize: isOfficial ? (pType !== 'none') : false,
     prizeType: pType,
-    prizeAmount: amount || undefined,
-    currency: curr,
-    payoutStatus: pType === 'cash' ? 'none' : 'none',
+  prizeAmount: amount || undefined,
     prizeNotes: notes,
     status: 'scheduled',
     winnerEmail: null,
@@ -2264,19 +2103,9 @@ app.post('/api/admin/tournaments/winner', async (req, res) => {
   t.status = 'completed'
   t.winnerEmail = String(winnerEmail || '').toLowerCase()
   if (t.official) {
-    if (t.prizeType === 'cash') {
-      // mark payout required; manual processing for now
-      t.payoutStatus = 'pending'
-      // credit winner's in-app wallet balance (store in cents)
-      if (t.currency && typeof t.prizeAmount === 'number' && t.prizeAmount > 0 && t.winnerEmail) {
-        creditWallet(t.winnerEmail, t.currency, Math.round(t.prizeAmount * 100))
-      }
-    } else {
-      // default premium prize
-      const ONE_MONTH = 30 * 24 * 60 * 60 * 1000
-      premiumWinners.set(t.winnerEmail, Date.now() + ONE_MONTH)
-      t.payoutStatus = 'none'
-    }
+    // default premium prize
+    const ONE_MONTH = 30 * 24 * 60 * 60 * 1000
+    premiumWinners.set(t.winnerEmail, Date.now() + ONE_MONTH)
   }
   await db.updateTournament(t.id, t)
   await broadcastTournaments()
@@ -2299,10 +2128,14 @@ app.post('/api/admin/tournaments/update', async (req, res) => {
   }
   const t = await db.getTournament(String(tournamentId || ''))
   if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
-  const allowed = ['title','game','mode','value','description','startAt','checkinMinutes','capacity','status','prizeType','prizeAmount','currency','prizeNotes','startingScore']
+  const allowed = ['title','game','mode','value','description','startAt','checkinMinutes','capacity','status','prizeType','prizeAmount','prizeNotes','startingScore']
   for (const k of allowed) {
     if (Object.prototype.hasOwnProperty.call(patch || {}, k)) {
-      t[k] = patch[k]
+      if (k === 'prizeType') {
+        t[k] = patch[k] === 'none' ? 'none' : 'premium'
+      } else {
+        t[k] = patch[k]
+      }
     }
   }
   await db.updateTournament(t.id, t)
@@ -2343,22 +2176,6 @@ app.post('/api/tournaments/delete', async (req, res) => {
   await db.deleteTournament(id)
   await broadcastTournaments()
   res.json({ ok: true })
-})
-
-// Admin: mark prize paid (for cash prize)
-app.post('/api/admin/tournaments/mark-paid', async (req, res) => {
-  const { tournamentId, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
-  const t = await db.getTournament(String(tournamentId || ''))
-  if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
-  if (t.prizeType !== 'cash') return res.status(400).json({ ok: false, error: 'NOT_CASH_PRIZE' })
-  t.payoutStatus = 'paid'
-  t.paidAt = Date.now()
-  await db.updateTournament(t.id, t)
-  await broadcastTournaments()
-  res.json({ ok: true, tournament: t })
 })
 
 // Admin: reseed weekly official tournament
@@ -2411,7 +2228,6 @@ async function ensureOfficialWeekly() {
       official: true,
       prize: true,
       prizeType: 'premium',
-      payoutStatus: 'none',
       status: 'scheduled',
       winnerEmail: null,
       createdAt: Date.now(),
@@ -2439,7 +2255,6 @@ async function ensureOfficialWeekly() {
         official: true,
         prize: true,
         prizeType: 'premium',
-        payoutStatus: 'none',
         status: 'scheduled',
         winnerEmail: null,
         createdAt: Date.now(),

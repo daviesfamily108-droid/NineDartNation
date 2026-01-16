@@ -176,7 +176,6 @@ export default function SettingsPanel({ user }: { user?: any }) {
   const [bio, setBio] = useState("");
   const [profilePhoto, setProfilePhoto] = useState("");
   const [allowAnalytics, setAllowAnalytics] = useState(true);
-  const [wallet, setWallet] = useState<any | null>(null);
   const [subscription, setSubscription] = useState<any>(null);
 
   // Help Assistant state
@@ -219,19 +218,6 @@ export default function SettingsPanel({ user }: { user?: any }) {
       .then((r) => r.json())
       .then(setSubscription)
       .catch(() => {});
-    // Fetch wallet balance
-    (async () => {
-      try {
-        const token = localStorage.getItem("authToken");
-        const headers: any = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const res = await fetch(
-          `/api/wallet/balance?email=${encodeURIComponent(user.email)}`,
-          { headers },
-        );
-        if (res.ok) setWallet(await res.json());
-      } catch {}
-    })();
   }, [user?.email]);
 
   const saveBio = () => {
@@ -554,71 +540,6 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     >
                       Highlights ✨
                     </button>
-                  </div>
-                  <div className="mt-4 border-t pt-3">
-                    <div className="font-medium mb-2">Wallet 💰</div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm opacity-80 mr-4">
-                        Balance:{" "}
-                        <strong>
-                          {wallet &&
-                          wallet.wallet &&
-                          Object.keys(wallet.wallet.balances || {}).length > 0
-                            ? Object.entries(wallet.wallet.balances)
-                                .map(
-                                  ([c, v]) =>
-                                    `${c} ${(Number(v) / 100).toFixed(2)}`,
-                                )
-                                .join(" · ")
-                            : "0.00"}
-                        </strong>
-                      </div>
-                      <input
-                        className="input w-40"
-                        placeholder="Withdraw amount"
-                        value={""}
-                        onChange={() => {}}
-                      />
-                      <select className="input">
-                        <option>USD</option>
-                        <option>GBP</option>
-                        <option>EUR</option>
-                      </select>
-                      <button
-                        className="btn"
-                        onClick={async () => {
-                          const email = user?.email || "";
-                          if (!email) return alert("Not signed in");
-                          const amt = prompt(
-                            "Enter withdraw amount (e.g., 10.00)",
-                          );
-                          if (!amt) return;
-                          try {
-                            const token = localStorage.getItem("authToken");
-                            const headers: any = {
-                              "Content-Type": "application/json",
-                            };
-                            if (token)
-                              headers.Authorization = `Bearer ${token}`;
-                            const res = await fetch("/api/wallet/withdraw", {
-                              method: "POST",
-                              headers,
-                              body: JSON.stringify({
-                                email,
-                                amount: amt,
-                                currency: "USD",
-                              }),
-                            });
-                            if (!res.ok) throw new Error("Failed");
-                            alert("Withdrawal requested");
-                          } catch (err) {
-                            alert("Failed to request withdrawal");
-                          }
-                        }}
-                      >
-                        Withdraw 💸
-                      </button>
-                    </div>
                   </div>
                   <div className="border-t border-red-500/20 pt-3">
                     <div className="font-medium mb-2 text-red-100">

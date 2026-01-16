@@ -558,7 +558,9 @@ app.post('/api/admin/notifications/bulk', requireAdmin, async (req, res) => {
         if (!error && Array.isArray(data)) {
           for (const u of data) targets.push(String(u.email || '').toLowerCase());
         }
-  } catch (err) { startLogger.error('[DB] Failed to fetch users for bulk notifications:', err && err.message); }
+      } catch (err) {
+        startLogger.error('[DB] Failed to fetch users for bulk notifications:', err && err.message);
+      }
     } else {
       for (const [k] of users.entries()) targets.push(k);
     }
@@ -575,47 +577,71 @@ app.post('/api/admin/notifications/bulk', requireAdmin, async (req, res) => {
 });
 
 app.get('/api/notifications', requireAuth, async (req, res) => {
-  const email = String(req.query.email || '').toLowerCase();
-  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' });
-  if (!req.user || (!req.user.isAdmin && req.user.email !== email)) return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
-  // Prefer Supabase if available
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from('notifications').select('*').eq('email', email);
-      if (!error && data) return res.json(data);
-    } catch (err) {
-      startLogger.error('[DB] Failed to fetch notifications:', err);
+  const email = String(req.query.email || req.user?.email || '').toLowerCase();
+  if (!email) return res.json([]);
+  const local = notifications.get(email) || [];
+  if (!supabase) return res.json(local);
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('email', email)
+      .order('created_at', { ascending: false });
+    if (!error && Array.isArray(data)) {
+      const mapped = data.map((row) => ({
+        id: row.id,
+        email: row.email,
+        message: row.message,
+        type: row.type,
+        read: row.read,
+        createdAt: row.created_at ? Date.parse(row.created_at) : Date.now(),
+        meta: row.meta ?? null,
+      }));
+      return res.json(mapped);
     }
+  } catch (err) {
+    startLogger.error('[DB] Failed to load notifications:', err);
   }
-  const list = notifications.get(email) || [];
-  return res.json(list);
-});
+  return res.json(local);
+})
 
 app.post('/api/notifications', requireAuth, async (req, res) => {
   const { email, message, type, meta } = req.body || {};
-  if (!email || !message) return res.status(400).json({ ok: false, error: 'Missing email or message' });
-  // Only admin or the target user may create notifications for the target email
-  if (!req.user || (!req.user.isAdmin && req.user.email !== String(email).toLowerCase())) return res.status(403).json({ ok: false, error: 'FORBIDDEN' });
-  try {
-    const out = await createNotification(email, message, type, meta);
-    return res.json(out);
-  } catch (err) {
-    startLogger.error('[NOTIF] create failed:', err && err.message);
-    return res.status(500).json({ ok: false, error: 'FAILED' });
+  const target = String(email || req.user?.email || '').toLowerCase();
+  if (!target || !message) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' });
+  const result = await createNotification(target, message, type || 'generic', meta || null);
+  return res.json({ ok: true, result });
+})
+
+app.patch('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), async (req, res) => {
+  const id = String(req.params.id || '');
+  const email = String(req.query.email || req.user?.email || '').toLowerCase();
+  if (!id || !email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' });
+  const arr = notifications.get(email) || [];
+  const idx = arr.findIndex((n) => n.id === id);
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'NOT_FOUND' });
+  arr[idx] = { ...arr[idx], ...(req.body || {}) };
+  notifications.set(email, arr);
+  if (supabase) {
+    try {
+      await supabase
+        .from('notifications')
+        .update({ read: arr[idx].read })
+        .eq('id', id);
+    } catch (err) {
+      startLogger.error('[DB] Failed to update notification:', err);
+    }
   }
-});
+  return res.json({ ok: true });
+})
 
 app.delete('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), async (req, res) => {
   const id = String(req.params.id || '');
-  const email = String(req.query.email || '').toLowerCase();
-  if (!id || !email) return res.status(400).json({ ok: false, error: 'Missing id or email' });
-  // Remove from in-memory map
-  const list = notifications.get(email) || [];
-  const idx = list.findIndex(x => x.id === id);
-  if (idx >= 0) {
-    list.splice(idx, 1);
-    notifications.set(email, list);
-  }
+  const email = String(req.query.email || req.user?.email || '').toLowerCase();
+  if (!id || !email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' });
+  const arr = notifications.get(email) || [];
+  const next = arr.filter((n) => n.id !== id);
+  notifications.set(email, next);
   if (supabase) {
     try {
       await supabase.from('notifications').delete().eq('id', id);
@@ -624,105 +650,6 @@ app.delete('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((re
     }
   }
   return res.json({ ok: true });
-});
-
-app.patch('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), async (req, res) => {
-  const id = String(req.params.id || '');
-  const email = String(req.query.email || '').toLowerCase();
-  const { read } = req.body || {};
-  if (!id || !email || typeof read !== 'boolean') return res.status(400).json({ ok: false, error: 'Missing id/email/read' });
-  const list = notifications.get(email) || [];
-  const n = list.find(x => x.id === id);
-  if (n) n.read = !!read;
-  notifications.set(email, list);
-  if (supabase) {
-    try {
-      await supabase.from('notifications').update({ read: !!read }).eq('id', id);
-    } catch (err) {
-      startLogger.error('[DB] Failed to update notification:', err);
-    }
-  }
-  return res.json({ ok: true });
-});
-
-// Debug endpoint to check Supabase status
-app.get('/api/debug/supabase', requireAdmin, (req, res) => {
-  res.json({
-    supabaseConfigured: !!supabase,
-    userCount: users.size,
-    supabaseUrl: supabase ? 'configured' : 'not configured'
-  });
-});
-
-// Debug: Inspect server-side user state for a given email (in-memory and in Supabase)
-app.get('/api/debug/user', requireAdmin, async (req, res) => {
-  const email = String(req.query.email || '').toLowerCase();
-  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' });
-  const inMemoryUser = users.get(email) || null;
-  let supabaseUser = null;
-  if (supabase) {
-    try {
-      const { data, error } = await supabase.from('users').select('*').eq('email', email).single();
-      if (!error && data) supabaseUser = data;
-    } catch (err) {
-      startLogger.error('[DEBUG] Supabase fetch failed:', err && err.message);
-    }
-  }
-  return res.json({ ok: true, email, inMemoryUser, supabaseUser, admin: adminEmails.has(email), premiumWinner: premiumWinners.get(email) || null, supabaseConfigured: !!supabase });
-});
-
-// Debug: show registered routes & methods
-app.get('/api/debug/routes', requireAdmin, (req, res) => {
-  try {
-    const routes = (app._router?.stack || [])
-      .filter((r) => r.route)
-      .map((r) => ({ path: r.route.path, methods: Object.keys(r.route.methods) }));
-    return res.json({ ok: true, routes });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err && err.message });
-  }
-});
-app.get('/metrics', async (req, res) => {
-  try {
-    res.setHeader('Content-Type', register.contentType)
-    // Update gauges just-in-time
-    try { wsRooms.set(rooms.size) } catch {}
-    try { wsConnections.set(clients.size) } catch {}
-    const out = await register.metrics()
-    res.end(out)
-  } catch (e) {
-    res.status(500).end('metrics_error')
-  }
-})
-
-// Liveness and readiness
-app.get('/healthz', (req, res) => res.json({ ok: true }))
-app.get('/readyz', (req, res) => {
-  // Basic readiness: HTTP up and WS server initialized; optionally include memory snapshot
-  try {
-    const mem = process.memoryUsage()
-    const ready = !!wss
-    res.json({ ok: ready, ws: ready, rooms: rooms?.size || 0, clients: clients?.size || 0, mem: { rss: mem.rss, heapUsed: mem.heapUsed } })
-  } catch (e) {
-    res.status(500).json({ ok: false, error: 'UNEXPECTED' })
-  }
-})
-
-// Report LAN IPv4 addresses for phone pairing convenience
-app.get('/api/hosts', (req, res) => {
-  try {
-    const nets = os.networkInterfaces() || {}
-    const hosts = []
-    for (const name of Object.keys(nets)) {
-      for (const ni of nets[name] || []) {
-        if (!ni) continue
-        if (ni.family === 'IPv4' && !ni.internal) hosts.push(ni.address)
-      }
-    }
-    res.json({ hosts })
-  } catch (e) {
-    res.json({ hosts: [] })
-  }
 })
 
 // Placeholder webhook (accepts JSON; in production use Stripe raw body & verify signature)
@@ -750,14 +677,8 @@ app.post('/webhook/stripe', async (req, res) => {
       }
     }
   }
-  // Demo: toggle fullAccess true and credit owner's wallet with premium revenue if provided
+  // Demo: toggle fullAccess true
   subscription.fullAccess = true;
-  try {
-    const { amountCents, currency } = req.body || {}
-    const cents = Math.max(0, Number(amountCents) || 0)
-    const cur = String(currency || 'GBP').toUpperCase()
-    if (cents > 0) creditWallet(OWNER_EMAIL, cur, cents)
-  } catch {}
   res.json({ ok: true })
 });
 
@@ -1375,7 +1296,7 @@ function genCamCode() {
 // (removed duplicate camSessions/genCamCode)
 // Simple in-memory tournaments
 // { id, title, game, mode, value, description, startAt, checkinMinutes, capacity, participants: [{email, username}], official, prize, status: 'scheduled'|'running'|'completed', winnerEmail,
-//   prizeType: 'premium'|'cash'|'none', prizeAmount?: number, currency?: string, payoutStatus?: 'none'|'pending'|'paid', prizeNotes?: string, createdAt?: number, paidAt?: number }
+//   prizeType: 'premium'|'none', prizeNotes?: string, createdAt?: number }
 const tournaments = new Map();
 let lastTournamentPersistAt = null
 
@@ -1502,9 +1423,6 @@ if (supabase && String(process.env.NDN_AUTO_MIGRATE_TOURNAMENTS || '') === '1') 
           official: !!t.official,
           prize: !!t.prize || false,
           prize_type: t.prizeType || null,
-          prize_amount: t.prizeAmount || null,
-          currency: t.currency || null,
-          payout_status: t.payoutStatus || null,
           status: t.status || 'scheduled',
           winner_email: t.winnerEmail || null,
           starting_score: t.startingScore || null,
@@ -1577,34 +1495,6 @@ if (!users.has('daviesfamily108@gmail.com')) {
 const friendships = new Map();
 // simple messages store: recipientEmail -> [{ id, from, message, ts }]
 const messages = new Map();
-// In-memory wallets: email -> { email, balances: { [currency]: cents } }
-const wallets = new Map();
-// In-memory withdrawals: id -> { id, email, currency, amountCents, status: 'pending'|'paid'|'rejected', requestedAt, decidedAt?, notes? }
-const withdrawals = new Map();
-// In-memory payout methods: email -> { brand, last4, addedAt }
-const payoutMethods = new Map();
-
-function creditWallet(email, currency, amountCents) {
-  const addr = String(email||'').toLowerCase()
-  if (!addr || !currency || !Number.isFinite(amountCents) || amountCents <= 0) return
-  const code = String(currency).toUpperCase()
-  const w = wallets.get(addr) || { email: addr, balances: {} }
-  w.balances[code] = (w.balances[code] || 0) + Math.floor(amountCents)
-  wallets.set(addr, w)
-}
-
-function debitWallet(email, currency, amountCents) {
-  const addr = String(email||'').toLowerCase()
-  const code = String(currency).toUpperCase()
-  const w = wallets.get(addr)
-  if (!w) return false
-  const bal = w.balances[code] || 0
-  if (amountCents > bal) return false
-  w.balances[code] = bal - Math.floor(amountCents)
-  wallets.set(addr, w)
-  return true
-}
-
 // Persistence helpers (demo)
 const FRIENDS_FILE = './friends.json'
 function saveFriendships() {
@@ -2674,142 +2564,6 @@ app.post('/api/admin/reports/resolve', (req, res) => {
   res.json({ ok: true, report: reports[idx] })
 })
 
-// Wallet API (demo, not secure)
-app.get('/api/wallet/balance', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), (req, res) => {
-  const email = String(req.query.email || '').toLowerCase()
-  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
-  const w = wallets.get(email) || { email, balances: {} }
-  res.json({ ok: true, wallet: w })
-})
-
-// Wallet: get linked payout method (brand + last4)
-app.get('/api/wallet/payout-method', requireAuth, requireSelfOrAdminForEmail((req) => req.query.email), (req, res) => {
-  const email = String(req.query.email || '').toLowerCase()
-  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
-  const m = payoutMethods.get(email) || null
-  res.json({ ok: true, method: m })
-})
-
-// Wallet: link/update payout method (store non-sensitive brand + last4 for display only)
-app.post('/api/wallet/link-card', requireAuth, requireSelfOrAdminForEmail((req) => req.body && String(req.body.email || '').toLowerCase()), (req, res) => {
-  const { email, brand, last4 } = req.body || {}
-  const addr = String(email || '').toLowerCase()
-  const b = String(brand || '').trim()
-  const l4 = String(last4 || '').trim()
-  if (!addr || !b || !l4 || !/^\d{4}$/.test(l4)) {
-    return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  }
-  payoutMethods.set(addr, { brand: b, last4: l4, addedAt: Date.now() })
-  res.json({ ok: true, method: payoutMethods.get(addr) })
-})
-
-app.post('/api/wallet/withdraw', requireAuth, requireSelfOrAdminForEmail((req) => req.body && String(req.body.email || '').toLowerCase()), (req, res) => {
-  const { email, currency, amount } = req.body || {}
-  const addr = String(email || '').toLowerCase()
-  const curr = String(currency || 'USD').toUpperCase()
-  const amt = Math.round(Number(amount) * 100)
-  if (!addr || !curr || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  const w = wallets.get(addr)
-  if (!w || (w.balances[curr]||0) < amt) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-  const id = nanoid(10)
-  const method = payoutMethods.get(addr)
-  // If a payout method is linked, debit and mark as paid instantly
-  if (method) {
-    const ok = debitWallet(addr, curr, amt)
-    if (!ok) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-    const item = { id, email: addr, currency: curr, amountCents: amt, status: 'paid', requestedAt: Date.now(), decidedAt: Date.now(), notes: `Paid to ${method.brand} ÔÇóÔÇóÔÇóÔÇó ${method.last4}` }
-    withdrawals.set(id, item)
-    return res.json({ ok: true, request: item, paid: true, method })
-  }
-  // Otherwise, create a pending request for admin review
-  const item = { id, email: addr, currency: curr, amountCents: amt, status: 'pending', requestedAt: Date.now() }
-  withdrawals.set(id, item)
-  res.json({ ok: true, request: item, paid: false })
-})
-
-// Admin: credit wallet (owner-only)
-app.post('/api/admin/wallet/credit', requireAdmin, async (req, res) => {
-  const { email, currency, amount } = req.body || {}
-  const addr = String(email || '').toLowerCase()
-  const curr = String(currency || 'USD').toUpperCase()
-  const amt = Math.round(Number(amount) * 100)
-  if (!addr || !Number.isFinite(amt) || amt <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  creditWallet(addr, curr, amt)
-  const item = { id: nanoid(10), email: addr, currency: curr, amountCents: amt, ts: Date.now(), by: req.user && req.user.email }
-  logger.info('[WALLET] Credited %o', item)
-  return res.json({ ok: true, credited: item })
-})
-
-// Admin: process withdrawal (approve or reject)
-app.post('/api/admin/wallet/withdrawals/decide', requireAdmin, (req, res) => {
-  const { id, action, notes } = req.body || {}
-  if (!id || !action) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  const wReq = withdrawals.get(id)
-  if (!wReq) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
-  if (action === 'reject') {
-    wReq.status = 'rejected'
-    wReq.decidedAt = Date.now()
-    wReq.notes = String(notes || '')
-    withdrawals.set(id, wReq)
-    return res.json({ ok: true, request: wReq })
-  }
-  if (action === 'paid') {
-    const ok = debitWallet(wReq.email, wReq.currency, wReq.amountCents)
-    if (!ok) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-    wReq.status = 'paid'
-    wReq.decidedAt = Date.now()
-    wReq.notes = String(notes || '')
-    withdrawals.set(id, wReq)
-    return res.json({ ok: true, request: wReq })
-  }
-  return res.status(400).json({ ok: false, error: 'UNKNOWN_ACTION' })
-})
-
-// Admin: list withdrawals
-app.get('/api/admin/wallet/withdrawals', requireAdmin, (req, res) => {
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  res.json({ ok: true, withdrawals: Array.from(withdrawals.values()) })
-})
-
-// Admin: decide withdrawal (approve or reject)
-app.post('/api/admin/wallet/withdrawals/decide', (req, res) => {
-  const { id, approve, notes, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
-  const item = withdrawals.get(String(id||''))
-  if (!item) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
-  if (item.status !== 'pending') return res.status(400).json({ ok: false, error: 'ALREADY_DECIDED' })
-  item.decidedAt = Date.now()
-  item.notes = String(notes || '')
-  if (approve) {
-    // debit wallet now
-    const ok = debitWallet(item.email, item.currency, item.amountCents)
-    if (!ok) return res.status(400).json({ ok: false, error: 'INSUFFICIENT_FUNDS' })
-    item.status = 'paid'
-  } else {
-    item.status = 'rejected'
-  }
-  withdrawals.set(item.id, item)
-  res.json({ ok: true, withdrawal: item })
-})
-
-// Admin: credit a user's wallet (owner-only; currency amount in major units or cents?)
-app.post('/api/admin/wallet/credit', (req, res) => {
-  const { email, currency, amountCents, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
-  const addr = String(email || '').toLowerCase()
-  const cur = String(currency || 'GBP').toUpperCase()
-  const cents = Math.round(Number(amountCents))
-  if (!addr || !cur || !Number.isFinite(cents) || cents <= 0) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  creditWallet(addr, cur, cents)
-  const w = wallets.get(addr) || { email: addr, balances: {} }
-  res.json({ ok: true, wallet: w })
-})
-
 // WS heartbeat interval to drop dead peers (moved earlier; keep single definition)
 
 // Tournaments HTTP API (demo)
@@ -2818,16 +2572,14 @@ app.get('/api/tournaments', (req, res) => {
 })
 
 app.post('/api/tournaments/create', async (req, res) => {
-  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeAmount, currency, prizeNotes, requesterEmail, requireCalibration } = req.body || {}
+  const { title, game, mode, value, description, startAt, checkinMinutes, capacity, startingScore, creatorEmail, creatorName, official, prizeType, prizeNotes, requesterEmail, requireCalibration } = req.body || {}
   const isOwner = String(requesterEmail || '').toLowerCase() === OWNER_EMAIL
   const isOfficial = !!official && isOwner
   const isAdminCreator = adminEmails.has(String(requesterEmail || '').toLowerCase()) || isOwner
   const id = nanoid(10)
   // Only the owner can create "official" tournaments or set prize metadata
   // Normalize prize metadata
-  const pType = isOfficial ? (prizeType === 'cash' ? 'cash' : 'premium') : 'none'
-  const amount = (pType === 'cash' && isOwner) ? Math.max(0, Number(prizeAmount) || 0) : 0
-  const curr = (pType === 'cash' && isOwner) ? (String(currency || 'USD').toUpperCase()) : undefined
+  const pType = isOfficial ? 'premium' : 'none'
   const notes = (isOwner && typeof prizeNotes === 'string') ? prizeNotes : ''
   const t = {
     id,
@@ -2843,10 +2595,7 @@ app.post('/api/tournaments/create', async (req, res) => {
     official: isOfficial,
     requireCalibration: !!requireCalibration,
     prize: isOfficial ? (pType !== 'none') : false,
-    prizeType: pType,
-    prizeAmount: amount || undefined,
-    currency: curr,
-    payoutStatus: pType === 'cash' ? 'none' : 'none',
+  prizeType: pType,
     prizeNotes: notes,
     status: 'scheduled',
     winnerEmail: null,
@@ -2870,10 +2619,7 @@ app.post('/api/tournaments/create', async (req, res) => {
         capacity: t.capacity || null,
         official: !!t.official,
         prize: !!t.prize || false,
-        prize_type: t.prizeType || null,
-        prize_amount: t.prizeAmount || null,
-        currency: t.currency || null,
-        payout_status: t.payoutStatus || null,
+  prize_type: t.prizeType || null,
         status: t.status || 'scheduled',
         winner_email: t.winnerEmail || null,
         starting_score: t.startingScore || null,
@@ -3018,24 +2764,16 @@ app.post('/api/admin/tournaments/winner', async (req, res) => {
   t.status = 'completed'
   t.winnerEmail = String(winnerEmail || '').toLowerCase()
   if (t.official) {
-    if (t.prizeType === 'cash') {
-      // mark payout required; manual processing for now
-      t.payoutStatus = 'pending'
-      // credit winner's in-app wallet balance (store in cents)
-      if (t.currency && typeof t.prizeAmount === 'number' && t.prizeAmount > 0 && t.winnerEmail) {
-        creditWallet(t.winnerEmail, t.currency, Math.round(t.prizeAmount * 100))
-      }
-    } else {
-      // default premium prize
-      const ONE_MONTH = 30 * 24 * 60 * 60 * 1000
+    // default premium prize
+    const ONE_MONTH = 30 * 24 * 60 * 60 * 1000
+    if (t.winnerEmail) {
       premiumWinners.set(t.winnerEmail, Date.now() + ONE_MONTH)
-      t.payoutStatus = 'none'
     }
   }
   persistTournamentsToDisk()
   try {
     if (supabase) {
-      const { error } = await supabase.from('tournaments').update({ status: t.status, winner_email: t.winnerEmail, payout_status: t.payoutStatus }).eq('id', t.id)
+  const { error } = await supabase.from('tournaments').update({ status: t.status, winner_email: t.winnerEmail }).eq('id', t.id)
       if (error) {
   startLogger.warn('[Tournaments] Supabase winner update failed:', error)
         return res.status(500).json({ ok: false, error: 'DB_PERSIST_FAILED' })
@@ -3061,7 +2799,7 @@ app.post('/api/admin/tournaments/update', (req, res) => {
   }
   const t = tournaments.get(String(tournamentId || ''))
   if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
-  const allowed = ['title','game','mode','value','description','startAt','checkinMinutes','capacity','status','prizeType','prizeAmount','currency','prizeNotes','startingScore']
+  const allowed = ['title','game','mode','value','description','startAt','checkinMinutes','capacity','status','prizeType','prizeNotes','startingScore']
   for (const k of allowed) {
     if (Object.prototype.hasOwnProperty.call(patch || {}, k)) {
       t[k] = patch[k]
@@ -3081,9 +2819,7 @@ app.post('/api/admin/tournaments/update', (req, res) => {
       checkin_minutes: t.checkinMinutes,
       capacity: t.capacity,
       status: t.status,
-      prize_type: t.prizeType || null,
-      prize_amount: t.prizeAmount || null,
-      currency: t.currency || null,
+  prize_type: t.prizeType || null,
       starting_score: t.startingScore || null
     }).eq('id', t.id)
   })() } catch (err) { startLogger.warn('[Tournaments] Supabase update failed:', err && err.message) }
@@ -3136,22 +2872,6 @@ app.post('/api/tournaments/delete', (req, res) => {
   })() } catch (err) { startLogger.warn('[Tournaments] Supabase delete failed:', err && err.message) }
   broadcastTournaments()
   res.json({ ok: true })
-})
-
-// Admin: mark prize paid (for cash prize)
-app.post('/api/admin/tournaments/mark-paid', (req, res) => {
-  const { tournamentId, requesterEmail } = req.body || {}
-  if ((String(requesterEmail || '').toLowerCase()) !== OWNER_EMAIL) {
-    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  }
-  const t = tournaments.get(String(tournamentId || ''))
-  if (!t) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
-  if (t.prizeType !== 'cash') return res.status(400).json({ ok: false, error: 'NOT_CASH_PRIZE' })
-  t.payoutStatus = 'paid'
-  t.paidAt = Date.now()
-  tournaments.set(t.id, t)
-  broadcastTournaments()
-  res.json({ ok: true, tournament: t })
 })
 
 // Admin: reseed weekly official tournament
@@ -3220,7 +2940,6 @@ function ensureOfficialWeekly() {
       official: true,
       prize: true,
       prizeType: 'premium',
-      payoutStatus: 'none',
       status: 'scheduled',
       winnerEmail: null,
       createdAt: Date.now(),
@@ -3248,7 +2967,6 @@ function ensureOfficialWeekly() {
         official: true,
         prize: true,
         prizeType: 'premium',
-        payoutStatus: 'none',
         status: 'scheduled',
         winnerEmail: null,
         createdAt: Date.now(),

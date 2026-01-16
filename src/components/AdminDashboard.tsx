@@ -29,15 +29,11 @@ export default function AdminDashboard({ user }: { user: any }) {
     }
   })();
   const [admins, setAdmins] = useState<string[]>([]);
-  const [walletCreditEmail, setWalletCreditEmail] = useState("");
-  const [walletCreditAmount, setWalletCreditAmount] = useState("");
-  const [walletCreditCurrency, setWalletCreditCurrency] = useState("USD");
   const [email, setEmail] = useState("");
   const [status] = useState<any>(null);
   const [announcement, setAnnouncement] = useState("");
   const [loading, setLoading] = useState(false);
   const [tournaments, setTournaments] = useState<any[]>([]);
-  const [withdrawals] = useState<any[]>([]);
   const [userSearch, setUserSearch] = useState("");
   const [userResults, setUserResults] = useState<any[]>([]);
   const [createForm, setCreateForm] = useState<any>({
@@ -53,7 +49,6 @@ export default function AdminDashboard({ user }: { user: any }) {
     capacity: 16,
     prizeType: "premium",
     prizeAmount: 3,
-    currency: "GBP",
     prizeNotes: "",
   });
   const [emailCopy, setEmailCopy] = useState<any>({
@@ -430,9 +425,8 @@ export default function AdminDashboard({ user }: { user: any }) {
           creatorName: user?.username,
           requesterEmail: user?.email,
           official: true,
-          prizeType: createForm.prizeType,
+          prizeType: "premium",
           prizeAmount: Number(createForm.prizeAmount || 0),
-          currency: createForm.currency,
           prizeNotes: createForm.prizeNotes,
         }),
       });
@@ -471,23 +465,6 @@ export default function AdminDashboard({ user }: { user: any }) {
     }
   }
 
-  async function markPaid(tid: string) {
-    setLoading(true);
-    try {
-      await fetch("/api/admin/tournaments/mark-paid", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-        },
-        body: JSON.stringify({ tournamentId: tid }),
-      });
-      await refresh();
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function deleteTournament(tid: string) {
     setLoading(true);
     try {
@@ -515,23 +492,6 @@ export default function AdminDashboard({ user }: { user: any }) {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
         },
         body: JSON.stringify({}),
-      });
-      await refresh();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function decideWithdrawal(id: string, approve: boolean) {
-    setLoading(true);
-    try {
-      await fetch("/api/admin/wallet/withdrawals/decide", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-        },
-        body: JSON.stringify({ id, approve }),
       });
       await refresh();
     } finally {
@@ -1169,116 +1129,6 @@ export default function AdminDashboard({ user }: { user: any }) {
           </div>
 
           <div className="card">
-            <h3 className="text-xl font-semibold mb-3">Withdrawals</h3>
-            <ul className="space-y-2">
-              {withdrawals.map((w: any) => (
-                <li
-                  key={w.id}
-                  className="p-2 rounded bg-black/20 text-sm flex items-center justify-between"
-                >
-                  <div>
-                    <div className="font-mono text-xs">{w.id}</div>
-                    <div>
-                      {w.email} · {w.currency}{" "}
-                      {(w.amountCents / 100).toFixed(2)}
-                    </div>
-                    <div className="opacity-70">
-                      {w.status} · {new Date(w.requestedAt).toLocaleString()}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {w.status === "pending" && (
-                      <>
-                        <button
-                          className="btn bg-emerald-600 hover:bg-emerald-700"
-                          disabled={loading}
-                          onClick={() => decideWithdrawal(w.id, true)}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          className="btn bg-rose-600 hover:bg-rose-700"
-                          disabled={loading}
-                          onClick={() => decideWithdrawal(w.id, false)}
-                        >
-                          Reject
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </li>
-              ))}
-              {withdrawals.length === 0 && (
-                <li className="opacity-60">No withdrawal requests.</li>
-              )}
-            </ul>
-          </div>
-
-          <div className="card">
-            <h3 className="text-xl font-semibold mb-3">Wallet Operations 💰</h3>
-            <div className="text-sm opacity-80 mb-3">
-              Manually credit user wallets. Use with caution.
-            </div>
-            <div className="grid grid-cols-1 gap-4">
-              <div className="p-4 rounded-lg bg-black/20 border border-white/5">
-                <h4 className="font-semibold mb-3">Credit Wallet</h4>
-                <div className="flex flex-wrap gap-3">
-                  <input
-                    className="input flex-1 min-w-[200px]"
-                    placeholder="user@example.com"
-                    value={walletCreditEmail}
-                    onChange={(e) => setWalletCreditEmail(e.target.value)}
-                  />
-                  <input
-                    className="input w-32"
-                    placeholder="Amount (10.00)"
-                    value={walletCreditAmount}
-                    onChange={(e) => setWalletCreditAmount(e.target.value)}
-                  />
-                  <select
-                    className="input w-24"
-                    value={walletCreditCurrency}
-                    onChange={(e) => setWalletCreditCurrency(e.target.value)}
-                  >
-                    <option>USD</option>
-                    <option>GBP</option>
-                    <option>EUR</option>
-                  </select>
-                  <button
-                    className="btn bg-indigo-600 hover:bg-indigo-700"
-                    onClick={async () => {
-                      try {
-                        const token = localStorage.getItem("authToken");
-                        const headers: any = {
-                          "Content-Type": "application/json",
-                        };
-                        if (token) headers.Authorization = `Bearer ${token}`;
-                        const res = await fetch("/api/admin/wallet/credit", {
-                          method: "POST",
-                          headers,
-                          body: JSON.stringify({
-                            email: walletCreditEmail,
-                            currency: walletCreditCurrency,
-                            amount: walletCreditAmount,
-                          }),
-                        });
-                        if (!res.ok) throw new Error("Failed");
-                        setWalletCreditEmail("");
-                        setWalletCreditAmount("");
-                        alert("Wallet credited");
-                      } catch (err) {
-                        alert("Failed to credit wallet");
-                      }
-                    }}
-                  >
-                    Credit
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
             <h3 className="text-xl font-semibold mb-3">System Health</h3>
             <div className="text-sm opacity-80 mb-3">
               Current status of system components and services.
@@ -1858,66 +1708,23 @@ export default function AdminDashboard({ user }: { user: any }) {
                   }))
                 }
               />
-              <div className="grid grid-cols-3 gap-2 items-center">
-                <select
-                  className="input"
-                  value={createForm.prizeType}
-                  onChange={(e) => {
-                    const newType = e.target.value;
-                    setCreateForm((f: any) => ({
-                      ...f,
-                      prizeType: newType,
-                      prizeAmount: newType === "premium" ? 3 : 0,
-                    }));
-                  }}
-                >
+              <div className="grid grid-cols-2 gap-2 items-center">
+                <select className="input" value="premium" disabled>
                   <option value="premium">PREMIUM</option>
-                  <option value="cash">Cash</option>
                 </select>
-                {createForm.prizeType === "premium" ? (
-                  <select
-                    className="input"
-                    value={createForm.prizeAmount}
-                    onChange={(e) =>
-                      setCreateForm((f: any) => ({
-                        ...f,
-                        prizeAmount: Number(e.target.value),
-                      }))
-                    }
-                  >
-                    <option value={1}>1 month</option>
-                    <option value={3}>3 months</option>
-                  </select>
-                ) : (
-                  <input
-                    className="input"
-                    type="number"
-                    min={0}
-                    value={createForm.prizeAmount}
-                    onChange={(e) =>
-                      setCreateForm((f: any) => ({
-                        ...f,
-                        prizeAmount: Number(e.target.value),
-                      }))
-                    }
-                  />
-                )}
                 <select
                   className="input"
-                  disabled={createForm.prizeType !== "cash"}
-                  value={createForm.currency}
+                  value={createForm.prizeAmount}
                   onChange={(e) =>
                     setCreateForm((f: any) => ({
                       ...f,
-                      currency: e.target.value,
+                      prizeType: "premium",
+                      prizeAmount: Number(e.target.value),
                     }))
                   }
                 >
-                  <option value="GBP">GBP</option>
-                  <option value="USD">USD</option>
-                  <option value="EUR">EUR</option>
-                  <option value="CAD">CAD</option>
-                  <option value="AUD">AUD</option>
+                  <option value={1}>1 month</option>
+                  <option value={3}>3 months</option>
                 </select>
               </div>
               <input
@@ -2017,7 +1824,7 @@ export default function AdminDashboard({ user }: { user: any }) {
           <div className="card">
             <h3 className="text-xl font-semibold mb-3">Manage Tournaments</h3>
             <div className="text-sm opacity-80 mb-3">
-              View and manage all tournaments. Set winners or mark payouts.
+              View and manage all tournaments. Set winners and manage brackets.
             </div>
             <ul className="space-y-2">
               {tournaments.map((t: any) => (
@@ -2049,19 +1856,8 @@ export default function AdminDashboard({ user }: { user: any }) {
                   </div>
                   {t.prize && (
                     <div className="text-xs mb-2">
-                      Prize:{" "}
-                      {t.prizeType === "cash" && t.prizeAmount
-                        ? `${t.currency || "USD"} ${t.prizeAmount}`
-                        : `${t.prizeAmount || 3} month${(t.prizeAmount || 3) > 1 ? "s" : ""} PREMIUM`}
-                      {t.prizeType === "cash" &&
-                        t.status === "completed" &&
-                        t.payoutStatus && (
-                          <span
-                            className={`ml-2 px-1.5 py-0.5 rounded ${t.payoutStatus === "paid" ? "bg-emerald-600" : "bg-amber-600"}`}
-                          >
-                            {t.payoutStatus}
-                          </span>
-                        )}
+                      Prize: {t.prizeAmount || 3} month
+                      {(t.prizeAmount || 3) > 1 ? "s" : ""} PREMIUM
                     </div>
                   )}
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -2074,17 +1870,6 @@ export default function AdminDashboard({ user }: { user: any }) {
                     >
                       Set Winner
                     </button>
-                    {t.prizeType === "cash" &&
-                      t.status === "completed" &&
-                      t.payoutStatus !== "paid" && (
-                        <button
-                          className="btn text-xs"
-                          disabled={loading}
-                          onClick={() => markPaid(t.id)}
-                        >
-                          Mark Paid
-                        </button>
-                      )}
                     <button
                       className="btn text-xs"
                       disabled={loading}

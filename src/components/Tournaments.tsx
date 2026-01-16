@@ -26,10 +26,7 @@ type Tournament = {
   participants: { email: string; username: string }[];
   official?: boolean;
   prize?: boolean;
-  prizeType?: "premium" | "cash" | "none";
-  prizeAmount?: number;
-  currency?: string;
-  payoutStatus?: "none" | "pending" | "paid";
+  prizeType?: "premium" | "none";
   status: "scheduled" | "running" | "completed";
   winnerEmail?: string | null;
   startingScore?: number;
@@ -766,13 +763,7 @@ export default function Tournaments({ user }: { user: any }) {
                   {nextOfficial.participants.length}
                 </div>
                 {nextOfficial.prize && (
-                  <div className="text-xs mt-1">
-                    Prize:{" "}
-                    {nextOfficial.prizeType === "cash" &&
-                    nextOfficial.prizeAmount
-                      ? `${nextOfficial.currency || "USD"} ${nextOfficial.prizeAmount}`
-                      : "3 months PREMIUM"}
-                  </div>
+                  <div className="text-xs mt-1">Prize: 3 months PREMIUM</div>
                 )}
                 {nextOfficial.status !== "scheduled" && (
                   <div className="text-xs">Status: {nextOfficial.status}</div>
@@ -863,11 +854,7 @@ export default function Tournaments({ user }: { user: any }) {
                           </span>
                           <span
                             className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-slate-600 text-white text-[10px] leading-none cursor-help"
-                            title={
-                              t.prizeType === "cash"
-                                ? "Official cash prize tournament — payout handled by admin."
-                                : "Weekly winners get 3 months of PREMIUM and can re-enter once their prize period ends."
-                            }
+                            title="Weekly winners get 3 months of PREMIUM and can re-enter once their prize period ends."
                             aria-label="Prize info"
                           >
                             i
@@ -884,21 +871,7 @@ export default function Tournaments({ user }: { user: any }) {
                       Cap {t.capacity} · Joined {t.participants.length}
                     </div>
                     {t.prize && (
-                      <div className="text-xs">
-                        Prize:{" "}
-                        {t.prizeType === "cash" && t.prizeAmount
-                          ? `${t.currency || "USD"} ${t.prizeAmount}`
-                          : "3 months PREMIUM"}
-                        {t.status === "completed" &&
-                          t.prizeType === "cash" &&
-                          t.payoutStatus && (
-                            <span
-                              className={`ml-2 px-2 py-0.5 rounded ${t.payoutStatus === "paid" ? "bg-emerald-600" : "bg-amber-600"}`}
-                            >
-                              {t.payoutStatus === "paid" ? "Paid" : "Pending"}
-                            </span>
-                          )}
-                      </div>
+                      <div className="text-xs">Prize: 3 months PREMIUM</div>
                     )}
                     {t.status !== "scheduled" && (
                       <div className="text-xs">Status: {t.status}</div>

@@ -921,7 +921,7 @@ export default function App() {
     {
       key: "tournaments",
       label: "Tournament Closures",
-      description: "Bracket updates, payouts, and notices.",
+      description: "Bracket updates and notices.",
       count: tournamentNotifs,
       icon: Trophy,
     },

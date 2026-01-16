@@ -137,7 +137,7 @@ Your phone will now act as a live dartboard camera!`,
     title: "Tournaments",
     explanation: `Tournaments are competitive events where you can:
 - Play against other skilled players
-- Win prizes (Premium subscriptions or cash)
+- Win prizes (Premium subscriptions)
 - Climb leaderboards
 - Compete in structured brackets
 
