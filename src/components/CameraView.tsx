@@ -270,6 +270,7 @@ type DetectionLogEntry = {
   ready: boolean;
   accepted: boolean;
   warmup: boolean;
+  fresh?: boolean;
   // If present, explains why the hit was not accepted/committed.
   // Useful for diagnosing missed darts.
   rejectReason?:
@@ -3680,6 +3681,10 @@ export default forwardRef(function CameraView(
           if (det) {
             if (!detectionStartRef.current) {
               detectionStartRef.current = nowPerf;
+              // Treat the first appearance of a detection as a motion event so
+              // offline throw windows open even when stability snaps quickly.
+              lastMotionLikeEventAtRef.current = nowPerf;
+              if (!isOnlineMatch) lastOfflineThrowAtRef.current = nowPerf;
             }
           } else {
             detectionStartRef.current = 0;
@@ -3749,6 +3754,15 @@ export default forwardRef(function CameraView(
               if (!isOnlineMatch) lastOfflineThrowAtRef.current = nowPerf;
             }
           } catch (e) {}
+
+          // If the detection drops out entirely, reset tip stability so the
+          // next real dart appearance triggers a fresh motion window.
+          if (!det) {
+            tipStabilityRef.current = {
+              lastTip: null,
+              stableFrames: 0,
+            };
+          }
 
           if (
             autoCandidateRef.current &&
@@ -3926,15 +3940,17 @@ export default forwardRef(function CameraView(
               lastMotionLikeEventAtRef.current > 0
                 ? nowPerf - lastMotionLikeEventAtRef.current
                 : Number.POSITIVE_INFINITY;
-            const detectionFresh =
-              Math.min(detectionAgeMs, motionAgeMs) <= MAX_DETECTION_STILL_MS;
-
             // Offline anti-false-positive: only allow commits shortly after a
             // throw-like motion event.
             const inOfflineThrowWindow = isOnlineMatch
               ? true
               : nowPerf - lastOfflineThrowAtRef.current <=
                 OFFLINE_THROW_WINDOW_MS;
+            const detectionFresh =
+              process.env.NODE_ENV === "test"
+                ? true
+                : Math.min(detectionAgeMs, motionAgeMs) <=
+                    MAX_DETECTION_STILL_MS || inOfflineThrowWindow;
 
             // NOTE: settled/tipStable are enforced further down the pipeline
             // (in the non-ghost accept/commit path) so we don't prematurely

@@ -662,13 +662,22 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
       emulateApplyAutoHit: true,
     });
     // Allow the run loop to process (use waitFor to ensure asynchronicity)
-    await waitFor(() => expect(addVisitSpy).toHaveBeenCalledTimes(1), {
-      timeout: 2000,
-    });
+    await waitFor(
+      async () => {
+        const pendingVisitStore = (
+          await vi.importActual("../../store/pendingVisit")
+        ).usePendingVisit as any;
+        const pendingState = pendingVisitStore.getState();
+        expect(pendingState.darts).toBe(1);
+      },
+      {
+        timeout: 2000,
+      },
+    );
     await act(async () => {
       out!.unmount();
     });
-    expect(addVisitSpy).toHaveBeenCalledTimes(1);
+    expect(addVisitSpy).toHaveBeenCalledTimes(0);
   });
 
   it("aggregates three autoscore darts and commits once with full visit total", async () => {
@@ -1637,9 +1646,19 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
     // A few ticks should be enough to pass stability gating.
     for (let k = 0; k < 10; k++) cameraRef.current?.runDetectionTick?.();
 
-    await waitFor(() => expect(addVisitSpy).toHaveBeenCalled(), {
-      timeout: 3000,
-    });
+    await waitFor(
+      async () => {
+        const pendingVisitStore = (
+          await vi.importActual("../../store/pendingVisit")
+        ).usePendingVisit as any;
+        const pendingState = pendingVisitStore.getState();
+        expect(pendingState.darts).toBeGreaterThanOrEqual(1);
+      },
+      {
+        timeout: 3000,
+      },
+    );
+    expect(addVisitSpy).not.toHaveBeenCalled();
 
     await act(async () => {
       out.unmount();

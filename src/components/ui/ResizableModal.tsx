@@ -204,7 +204,7 @@ export default function ResizableModal({
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        onClose?.();
       }
     }
     window.addEventListener("keydown", handleKey, true);

@@ -10,8 +10,9 @@
  * 6. Error recovery (fallback mechanisms)
  */
 
-import type { Homography } from "./vision";
+import { isPointOnBoard, type Homography } from "./vision";
 import type { BoardDetectionResult } from "./boardDetection";
+import type { DetectedDart } from "./dartDetection";
 
 export interface AccuracyTestResult {
   name: string;

@@ -586,5 +586,17 @@
     "game": "X01",
     "requireCalibration": false,
     "createdAt": 1768400411035
+  },
+  {
+    "id": "p95vEeHyVr",
+    "creatorId": "h7x_ul1p",
+    "creatorName": "Alice-zo72ndv",
+    "mode": "firstto",
+    "value": 1,
+    "startingScore": 501,
+    "creatorAvg": 0,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1768509147481
   }
 ]

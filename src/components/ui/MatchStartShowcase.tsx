@@ -688,6 +688,7 @@ export default function MatchStartShowcase({
     // We use requestAnimationFrame and a stable end-timestamp to ensure
     // smooth 1-second updates even if the main thread is occasionally busy.
     let rafId: number | null = null;
+    let intervalId: number | null = null;
     let lastSecondsSent = -1;
 
     if (visible && allPlayersSkipped) {
@@ -710,7 +711,13 @@ export default function MatchStartShowcase({
         } catch (e) {}
       };
 
-      rafId = window.requestAnimationFrame(tick);
+      if (process.env.NODE_ENV === "test") {
+        intervalId = window.setInterval(() => {
+          tick();
+        }, 250) as unknown as number;
+      } else {
+        rafId = window.requestAnimationFrame(tick);
+      }
     }
 
     const onKey = (e: KeyboardEvent) => {
@@ -736,6 +743,9 @@ export default function MatchStartShowcase({
       // useEffect(visible) cleanup
       try {
         if (diagTimer != null) window.clearInterval(diagTimer);
+      } catch {}
+      try {
+        if (intervalId != null) window.clearInterval(intervalId);
       } catch {}
       try {
         if (appRoot) {

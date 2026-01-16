@@ -83,8 +83,6 @@ export function downloadDiagnostic(
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-import { Homography, Point } from "./vision";
-
 export type DiagnosticPayload = {
   createdAt: number;
   H: Homography | null;

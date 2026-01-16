@@ -97,11 +97,10 @@ describe("CameraView three-dart watchdog", () => {
     render(
       <CameraView
         ref={ref}
-        manualOnly={true}
+        disableDetection={true}
         // Keep commit immediate so we can observe onVisitCommitted without needing
         // the board-clear event.
         immediateAutoCommit={true}
-        autoCommitMode="immediate"
         scoringMode="x01"
         onAddVisit={onAddVisit}
         onVisitCommitted={onVisitCommitted}
