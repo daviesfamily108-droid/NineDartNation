@@ -222,7 +222,7 @@ function load(): Pick<
         cameraScale: 1.0,
         cameraAspect: "wide",
         cameraFitMode: "fit",
-        cameraRecordDarts: false,
+        cameraRecordDarts: true,
         cameraShowLabels: false,
         cameraLowLatency: false,
         cameraProcessingFps: 15,
@@ -237,9 +237,9 @@ function load(): Pick<
         hideInGameSidebar: true,
         autoscoreProvider: "built-in",
         autoscoreWsUrl: "",
-        autoCommitMode: "wait-for-clear",
-        confirmUncertainDarts: true,
-        autoScoreConfidenceThreshold: 0.85,
+        autoCommitMode: "immediate",
+        confirmUncertainDarts: false,
+        autoScoreConfidenceThreshold: 0.82,
         autoscoreDetectorMinArea: 30,
         autoscoreDetectorThresh: 15,
         autoscoreDetectorRequireStableN: 2,
@@ -256,6 +256,21 @@ function load(): Pick<
         x01DoubleIn: false,
       };
     const j = JSON.parse(raw);
+    const version = Number((j as any)?.__version || 0);
+    if (version < 2) {
+      // Smooth autoscore migration: reduce manual steps for existing users.
+      const migrated = {
+        ...j,
+        autoCommitMode: "immediate",
+        confirmUncertainDarts: false,
+        cameraRecordDarts: true,
+        autoScoreConfidenceThreshold: 0.82,
+        __version: 2,
+      };
+      try {
+        localStorage.setItem(KEY, JSON.stringify(migrated));
+      } catch {}
+    }
     return {
       favoriteDouble: j.favoriteDouble || "D16",
       callerEnabled:
@@ -313,12 +328,12 @@ function load(): Pick<
       confirmUncertainDarts:
         typeof j.confirmUncertainDarts === "boolean"
           ? j.confirmUncertainDarts
-          : true,
+          : false,
       autoScoreConfidenceThreshold:
         typeof j.autoScoreConfidenceThreshold === "number" &&
         isFinite(j.autoScoreConfidenceThreshold)
           ? Math.max(0.5, Math.min(0.99, j.autoScoreConfidenceThreshold))
-          : 0.85,
+          : 0.82,
       autoscoreDetectorMinArea:
         typeof j.autoscoreDetectorMinArea === "number" &&
         isFinite(j.autoscoreDetectorMinArea)
@@ -367,7 +382,7 @@ function load(): Pick<
       cameraEnabled:
         typeof j.cameraEnabled === "boolean" ? j.cameraEnabled : true,
       hideCameraOverlay:
-        typeof j.cameraRecordDarts === "boolean" ? j.cameraRecordDarts : true,
+        typeof j.hideCameraOverlay === "boolean" ? j.hideCameraOverlay : false,
       offlineLayout: j.offlineLayout === "classic" ? "classic" : "modern",
       hideInGameSidebar:
         typeof j.hideInGameSidebar === "boolean" ? j.hideInGameSidebar : true,
@@ -388,7 +403,7 @@ function load(): Pick<
           : 10,
       x01DoubleIn: typeof j.x01DoubleIn === "boolean" ? j.x01DoubleIn : false,
       cameraRecordDarts:
-        typeof j.cameraRecordDarts === "boolean" ? j.cameraRecordDarts : false,
+        typeof j.cameraRecordDarts === "boolean" ? j.cameraRecordDarts : true,
       cameraShowLabels:
         typeof j.cameraShowLabels === "boolean" ? j.cameraShowLabels : false,
     };
@@ -422,9 +437,9 @@ function load(): Pick<
       hideInGameSidebar: true,
       autoscoreProvider: "built-in",
       autoscoreWsUrl: "",
-      autoCommitMode: "wait-for-clear",
-      confirmUncertainDarts: true,
-      autoScoreConfidenceThreshold: 0.85,
+      autoCommitMode: "immediate",
+      confirmUncertainDarts: false,
+      autoScoreConfidenceThreshold: 0.82,
       harshLightingMode: false,
       enhanceBigTrebles: false,
       textSize: "medium",

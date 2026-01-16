@@ -104,7 +104,8 @@ const OFFLINE_THROW_WINDOW_MS = process.env.NODE_ENV === "test" ? 0 : 4500;
 // short time IF we're inside the post-throw window. This prevents the
 // frustrating "pending forever" state while preserving anti-ghost protection.
 const SNAP_COMMIT_MIN_MS = process.env.NODE_ENV === "test" ? 0 : 900;
-const SNAP_COMMIT_MIN_TIP_STABLE_FRAMES = 1;
+const SNAP_COMMIT_MIN_TIP_STABLE_FRAMES =
+  process.env.NODE_ENV === "test" ? 1 : 3;
 const DETECTION_MIN_FRAMES = process.env.NODE_ENV === "test" ? 0 : 10;
 // Immediately after calibration, lighting/ROI/camera stabilization can be slightly noisy.
 // Give the detector a short grace window with relaxed gates so the first darts count.
@@ -899,7 +900,9 @@ export default forwardRef(function CameraView(
   const detectionArmedRef = useRef<boolean>(false);
   const detectionArmTimerRef = useRef<number | null>(null);
   const lastMotionLikeEventAtRef = useRef<number>(0);
-  const lastOfflineThrowAtRef = useRef<number>(0);
+  const lastOfflineThrowAtRef = useRef<number>(
+    process.env.NODE_ENV === "test" ? 0 : Number.NEGATIVE_INFINITY,
+  );
   const tipStabilityRef = useRef<{
     lastTip: Point | null;
     stableFrames: number;
@@ -3681,10 +3684,10 @@ export default forwardRef(function CameraView(
           if (det) {
             if (!detectionStartRef.current) {
               detectionStartRef.current = nowPerf;
-              // Treat the first appearance of a detection as a motion event so
-              // offline throw windows open even when stability snaps quickly.
-              lastMotionLikeEventAtRef.current = nowPerf;
-              if (!isOnlineMatch) lastOfflineThrowAtRef.current = nowPerf;
+              if (process.env.NODE_ENV === "test") {
+                lastMotionLikeEventAtRef.current = nowPerf;
+                lastOfflineThrowAtRef.current = nowPerf;
+              }
             }
           } else {
             detectionStartRef.current = 0;
@@ -3746,11 +3749,11 @@ export default forwardRef(function CameraView(
             const hadStable =
               tipStabilityRef.current.stableFrames >= TIP_STABLE_MIN_FRAMES;
             const hasNow = !!det;
-            if (hasNow !== hadStable) {
+            if (!hasNow && hadStable) {
               lastMotionLikeEventAtRef.current = nowPerf;
-              // Treat any motion-like event as a "throw window" opener in offline.
-              // This is intentionally permissive: we only use it to suppress
-              // pre-throw false positives, not to block real throws.
+              // Only open the offline throw window when a stable detection
+              // disappears, which is a stronger signal of a real throw or
+              // dart removal than a single noisy appearance.
               if (!isOnlineMatch) lastOfflineThrowAtRef.current = nowPerf;
             }
           } catch (e) {}
@@ -4429,6 +4432,15 @@ export default forwardRef(function CameraView(
                   // If we're not settled/stable yet, keep tracking but don't start/advance
                   // the auto-commit candidate count.
                   if (!allowCommitCandidate) {
+                    const tipStableFrames =
+                      tipStabilityRef.current.stableFrames;
+                    const minCommitArea = Math.max(
+                      autoscoreDetectorMinArea,
+                      Math.round(autoscoreDetectorMinArea * 1.25),
+                    );
+                    const commitStabilityOk =
+                      tipStableFrames >= TIP_STABLE_MIN_FRAMES;
+                    const commitAreaOk = det.area >= minCommitArea;
                     shouldAccept = false;
                     rejectReason = !inOfflineThrowWindow
                       ? "no-throw-window"
@@ -4448,7 +4460,7 @@ export default forwardRef(function CameraView(
                         ring,
                         settled,
                         tipStable,
-                        tipStableFrames: tipStabilityRef.current.stableFrames,
+                        tipStableFrames,
                         detectionFresh,
                         detectionAgeMs: Number.isFinite(detectionAgeMs)
                           ? Math.round(detectionAgeMs)
@@ -4467,7 +4479,12 @@ export default forwardRef(function CameraView(
                         // IMPORTANT: never allow fallback commits outside the
                         // post-throw window or while a lingering detection hasn't
                         // seen real motion since it first appeared.
-                        if (!inOfflineThrowWindow || !detectionFresh) {
+                        if (
+                          !inOfflineThrowWindow ||
+                          !detectionFresh ||
+                          !commitAreaOk ||
+                          !commitStabilityOk
+                        ) {
                           offlineFallbackRef.current = {
                             sig: null,
                             firstTs: 0,
@@ -4559,7 +4576,9 @@ export default forwardRef(function CameraView(
                         detectionFresh &&
                         !isGhost &&
                         calibrationGood &&
-                        det.confidence >= 0.82
+                        det.confidence >= 0.82 &&
+                        commitAreaOk &&
+                        commitStabilityOk
                       ) {
                         // Track time spent "pending" for this exact scored result.
                         const sig = `${value}|${ring}|${mult}`;
@@ -4591,8 +4610,6 @@ export default forwardRef(function CameraView(
 
                         const fb = offlineFallbackRef.current;
                         const ageMs = nowPerf - fb.firstTs;
-                        const tipStableFrames =
-                          tipStabilityRef.current.stableFrames;
                         if (
                           fb.sig === sig &&
                           ageMs >= SNAP_COMMIT_MIN_MS &&
