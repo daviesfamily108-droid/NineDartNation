@@ -825,6 +825,19 @@ export function detectBoard(
         errorPx = rmsError(homography, canonicalSrc, calibrationPoints);
       }
 
+      // Re-center the homography so board center maps exactly to detected bull.
+      // This keeps bull scoring tight even when ring refinement introduces a
+      // tiny translation drift.
+      if (homography) {
+        const centerImg = applyHomography(homography, { x: 0, y: 0 });
+        const dx = detected.cx - centerImg.x;
+        const dy = detected.cy - centerImg.y;
+        if (Math.hypot(dx, dy) > 0.25) {
+          homography = translateHomography(homography, dx, dy);
+          errorPx = rmsError(homography, canonicalSrc, calibrationPoints);
+        }
+      }
+
       // Truth-based confidence: keep all calibration confidence values on the same
       // scale used throughout the app (errorPx -> 0-100 mapping).
       // This avoids having multiple competing confidence formulas.

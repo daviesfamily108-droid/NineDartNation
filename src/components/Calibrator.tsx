@@ -15,6 +15,7 @@ import { useCalibration } from "../store/calibration";
 import {
   computeHomographyDLT,
   rmsError,
+  applyHomography,
   imageToBoard,
   type Point,
   canonicalRimTargets,
@@ -22,6 +23,7 @@ import {
   type Homography,
   detectBoardOrientation,
   ransacHomography,
+  translateHomography,
   refinePointSobel,
 } from "../utils/vision";
 import { thetaRadToDeg } from "../utils/math";
@@ -1073,6 +1075,20 @@ export default function Calibrator() {
           H = computeHomographyDLT(canonicalTargets, newPoints);
           error = rmsError(H, canonicalTargets, newPoints);
         }
+
+        // Recenter homography on bull click to prevent small translation drift.
+        try {
+          const bullPoint = newPoints[4];
+          if (bullPoint && H) {
+            const projected = applyHomography(H, { x: 0, y: 0 });
+            const dx = bullPoint.x - projected.x;
+            const dy = bullPoint.y - projected.y;
+            if (Math.hypot(dx, dy) > 0.25) {
+              H = translateHomography(H, dx, dy);
+              error = rmsError(H, canonicalTargets, newPoints);
+            }
+          }
+        } catch {}
 
         const solvedQualities = newPoints.map((pt, idx) =>
           evaluateClickQuality(idx, pt, canonicalTargets[idx], H),
