@@ -1,4 +1,5 @@
 ﻿import { create } from "zustand";
+import { dinfo } from "../utils/logger";
 
 export type VisitAudit = {
   ts: number;
@@ -89,7 +90,7 @@ export const useAudit = create<AuditState>((set) => ({
           postRemaining: item.postRemaining,
           threeDartAvg: item.threeDartAvg,
         } as any;
-        console.info(`[Audit:${tag}]`, info);
+        dinfo(`[Audit:${tag}]`, info);
       } catch {}
       // Persist recent visits to localStorage so Home can show recent across reloads
       try {
@@ -106,7 +107,7 @@ export const useAudit = create<AuditState>((set) => ({
         lastUpdated: Date.now(),
       };
       try {
-        console.info("[Audit:Calibration]", updated);
+        dinfo("[Audit:Calibration]", updated);
       } catch {}
       return { ...state, calibration: updated };
     }),

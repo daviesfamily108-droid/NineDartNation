@@ -203,6 +203,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
                 required
               />
             )}
@@ -213,6 +214,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
                 placeholder="Username or Email"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
                 required
               />
             )}
@@ -267,6 +269,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
                 placeholder="Password Reminder (optional)"
                 value={reminder}
                 onChange={(e) => setReminder(e.target.value)}
+                autoComplete="off"
               />
             )}
             {error && (

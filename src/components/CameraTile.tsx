@@ -12,6 +12,7 @@ import { apiFetch } from "../utils/api";
 import { getPreferredWsUrl } from "../utils/ws";
 import { ensureVideoPlays } from "../utils/ensureVideoPlays";
 import { Camera, Smartphone } from "lucide-react";
+import { dinfo } from "../utils/logger";
 
 function clsx(...args: any[]) {
   return args.filter(Boolean).join(" ");
@@ -360,7 +361,7 @@ function CameraFrame(props: any) {
         const ctx = c.getContext("2d", { alpha: false });
         if (ctx && v.videoWidth > 0) {
           if (!activated) {
-            console.info("CameraTile: canvas fallback activated");
+            dinfo("CameraTile: canvas fallback activated");
             activated = true;
           }
           if (c.width !== v.videoWidth) {
@@ -383,7 +384,10 @@ function CameraFrame(props: any) {
         const canvas = document.createElement("canvas");
         canvas.width = 16;
         canvas.height = 16;
-        const ctx = canvas.getContext("2d", { alpha: false });
+        const ctx = canvas.getContext("2d", {
+          alpha: false,
+          willReadFrequently: true,
+        });
         if (ctx) {
           try {
             ctx.drawImage(v, 0, 0, 16, 16);

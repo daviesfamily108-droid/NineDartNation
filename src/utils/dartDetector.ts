@@ -1,4 +1,5 @@
 ﻿// High-accuracy dart detector for built-in autoscore
+import { dlog } from "./logger";
 // Strategy:
 // - Maintain a grayscale background model (running average) when no darts are present
 // - For each frame, compute abs-diff mask vs background and apply a 3x3 morphological closing to reduce noise
@@ -162,7 +163,7 @@ export class DartDetector {
     const bg = this.bg!;
     if (!this.initialized) {
       this.updateBackground(frame, 1.0);
-      console.log("[DETECTOR] Background not initialized yet");
+      dlog("[DETECTOR] Background not initialized yet");
       return null;
     }
 
@@ -258,7 +259,7 @@ export class DartDetector {
       if (!recent) this.updateBackground(frame, 0.02);
       // Log occasionally to show why rejection happens
       if (Math.random() < 0.02) {
-        console.log("[DETECTOR] No valid blob:", {
+        dlog("[DETECTOR] No valid blob:", {
           bestArea,
           minArea: tuning.minArea,
           maxArea: tuning.maxArea,
@@ -339,7 +340,7 @@ export class DartDetector {
       if (angDeg > tuning.angMaxDeg) {
         // likely glare or non-radial artifact
         if (!recent) this.updateBackground(frame, 0.02);
-        console.log("[DETECTOR] Rejected - angle too large:", {
+        dlog("[DETECTOR] Rejected - angle too large:", {
           angDeg,
           maxAllowed: tuning.angMaxDeg,
           inGrace: tuning.inGrace,
@@ -436,7 +437,7 @@ export class DartDetector {
       tuning.requireStableN,
     );
     if (!stable) {
-      console.log("[DETECTOR] Waiting for stability:", {
+      dlog("[DETECTOR] Waiting for stability:", {
         stableCount: this.stableCount,
         needFrames: tuning.requireStableN,
         inGrace: tuning.inGrace,
@@ -445,11 +446,11 @@ export class DartDetector {
     }
     // Debounce
     if (recent) {
-      console.log("[DETECTOR] In cooldown period");
+      dlog("[DETECTOR] In cooldown period");
       return null;
     }
 
-    console.log("[DETECTOR] ✅ DART FOUND!", {
+    dlog("[DETECTOR] ✅ DART FOUND!", {
       tipX,
       tipY,
       area: bestArea,

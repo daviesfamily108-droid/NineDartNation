@@ -7,6 +7,7 @@ export default function AddToHomeButton() {
 
   useEffect(() => {
     try {
+      (window as any).__NDN_DEFER_INSTALL_PROMPT__ = true;
       const handler = (e: any) => {
         e.preventDefault();
         (window as any).deferredInstallPrompt = e;
@@ -15,8 +16,12 @@ export default function AddToHomeButton() {
       window.addEventListener("beforeinstallprompt", handler as any);
       // if there is an existing prompt saved by global handler in index.html
       if ((window as any).deferredInstallPrompt) setAvailable(true);
-      return () =>
+      return () => {
         window.removeEventListener("beforeinstallprompt", handler as any);
+        try {
+          (window as any).__NDN_DEFER_INSTALL_PROMPT__ = false;
+        } catch {}
+      };
     } catch (e) {
       // nothing
     }

@@ -10,6 +10,11 @@ export function setupInstallPromptHooks() {
   try {
     window.deferredInstallPrompt = null;
     window.addEventListener("beforeinstallprompt", (event) => {
+      const shouldDefer = Boolean(
+        (window as any).__NDN_DEFER_INSTALL_PROMPT__ ||
+          localStorage.getItem("NDN_DEFER_INSTALL_PROMPT") === "1",
+      );
+      if (!shouldDefer) return;
       event.preventDefault();
       window.deferredInstallPrompt = event;
     });

@@ -18,7 +18,7 @@ import React, {
   useImperativeHandle,
 } from "react";
 import type { MutableRefObject } from "react";
-import { dlog } from "../utils/logger";
+import { dlog, dinfo } from "../utils/logger";
 import { ensureVideoPlays } from "../utils/ensureVideoPlays";
 import { useUserSettings } from "../store/userSettings";
 import { useCalibration } from "../store/calibration";
@@ -2530,7 +2530,7 @@ export default forwardRef(function CameraView(
         try {
           diag = d;
           // eslint-disable-next-line no-console
-          console.info("CameraView diag:", d);
+          dinfo("CameraView diag:", d);
         } catch {}
       };
       return [diag, set] as any;
@@ -2566,7 +2566,7 @@ export default forwardRef(function CameraView(
         try {
           if (!activated) {
             try {
-              console.info("CameraView: preview-canvas fallback activated");
+              dinfo("CameraView: preview-canvas fallback activated");
             } catch {}
             activated = true;
           }
@@ -2637,7 +2637,7 @@ export default forwardRef(function CameraView(
         const SH = 32;
         sampler.width = SW;
         sampler.height = SH;
-        const sctx = sampler.getContext("2d");
+        const sctx = sampler.getContext("2d", { willReadFrequently: true });
         if (!sctx) return;
         sampleHandle = window.setInterval(() => {
           try {
@@ -2659,7 +2659,7 @@ export default forwardRef(function CameraView(
             else sampleBlankCount = 0;
             if (sampleBlankCount >= 3) {
               try {
-                console.info(
+                dinfo(
                   "CameraView: video surface appears blank; enabling canvas fallback",
                 );
               } catch {}
@@ -2688,7 +2688,7 @@ export default forwardRef(function CameraView(
             const TH = 32;
             tmp.width = TW;
             tmp.height = TH;
-            const tctx = tmp.getContext("2d");
+            const tctx = tmp.getContext("2d", { willReadFrequently: true });
             if (tctx) {
               tctx.drawImage(vv, 0, 0, TW, TH);
               const d = tctx.getImageData(0, 0, TW, TH).data;
@@ -2739,7 +2739,7 @@ export default forwardRef(function CameraView(
           ts: Date.now(),
         };
         try {
-          console.info("CameraView preview diag:", payload);
+          dinfo("CameraView preview diag:", payload);
         } catch {}
         return payload;
       } catch (e) {
@@ -4344,7 +4344,7 @@ export default forwardRef(function CameraView(
             if (!warmupActive) {
               if (isGhost) {
                 try {
-                  console.debug("[AUTOSCORE DROP] ghost", {
+                  dlog("[AUTOSCORE DROP] ghost", {
                     label,
                     value,
                     ring,
@@ -4453,7 +4453,7 @@ export default forwardRef(function CameraView(
                             : "not-ready";
 
                     try {
-                      console.debug("[AUTOSCORE DROP] gate", {
+                      dlog("[AUTOSCORE DROP] gate", {
                         reason: rejectReason,
                         label,
                         value,
@@ -4531,15 +4531,12 @@ export default forwardRef(function CameraView(
                             (fb.frames >= FALLBACK_MIN_FRAMES ||
                               ageMs >= FALLBACK_MIN_MS)
                           ) {
-                            console.info(
-                              "[AUTOSCORE] offline fallback commit",
-                              {
-                                sig,
-                                frames: fb.frames,
-                                ageMs,
-                                reason: rejectReason,
-                              },
-                            );
+                            dinfo("[AUTOSCORE] offline fallback commit", {
+                              sig,
+                              frames: fb.frames,
+                              ageMs,
+                              reason: rejectReason,
+                            });
                             applyAutoHit({
                               value,
                               ring,
@@ -4615,7 +4612,7 @@ export default forwardRef(function CameraView(
                           ageMs >= SNAP_COMMIT_MIN_MS &&
                           tipStableFrames >= SNAP_COMMIT_MIN_TIP_STABLE_FRAMES
                         ) {
-                          console.info("[AUTOSCORE] snap commit", {
+                          dinfo("[AUTOSCORE] snap commit", {
                             sig,
                             ageMs,
                             tipStableFrames,
@@ -4762,7 +4759,7 @@ export default forwardRef(function CameraView(
                           : null;
 
                       try {
-                        console.debug("[AUTOSCORE DROP] tracking", {
+                        dlog("[AUTOSCORE DROP] tracking", {
                           reason: rejectReason,
                           value,
                           ring,
@@ -4788,7 +4785,7 @@ export default forwardRef(function CameraView(
               rejectReason = "warmup";
 
               try {
-                console.debug("[AUTOSCORE DROP] warmup", {
+                dlog("[AUTOSCORE DROP] warmup", {
                   label,
                   value,
                   ring,
