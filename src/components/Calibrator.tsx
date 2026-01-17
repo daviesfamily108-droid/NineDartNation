@@ -95,6 +95,9 @@ function getSavedCalibrations(): Array<{
   imageSize?: { w: number; h: number };
   overlaySize?: { w: number; h: number };
   confidence?: number | null;
+  theta?: number | null;
+  sectorOffset?: number | null;
+  rotationOffsetRad?: number | null;
 }> {
   try {
     const saved = localStorage.getItem("ndn-calibration-history");
@@ -110,6 +113,9 @@ function saveCalibrationToHistory(
   imageSize?: { w: number; h: number },
   overlaySize?: { w: number; h: number },
   confidence?: number | null,
+  theta?: number | null,
+  sectorOffset?: number | null,
+  rotationOffsetRad?: number | null,
 ) {
   try {
     const history = getSavedCalibrations();
@@ -123,6 +129,9 @@ function saveCalibrationToHistory(
       ...(imageSize ? { imageSize } : {}),
       ...(overlaySize ? { overlaySize } : {}),
       ...(typeof confidence === "number" ? { confidence } : {}),
+      ...(typeof theta === "number" ? { theta } : {}),
+      ...(typeof sectorOffset === "number" ? { sectorOffset } : {}),
+      ...(typeof rotationOffsetRad === "number" ? { rotationOffsetRad } : {}),
     };
     history.unshift(newEntry); // Add to beginning
     history.splice(10); // Keep only last 10
@@ -472,6 +481,7 @@ export default function Calibrator() {
   // NEW: Angle adjustment state
   const [theta, setTheta] = useState<number | null>(null);
   const [sectorOffset, setSectorOffset] = useState<number>(0);
+  const [rotationOffsetRad, setRotationOffsetRad] = useState<number>(0);
   const [showAngleAdjust, setShowAngleAdjust] = useState(false);
   // NEW: Zoom state for camera view
   const [zoom, setZoom] = useState<number>(1.0);
@@ -1150,6 +1160,7 @@ export default function Calibrator() {
     setErrorPx(null);
     setTheta(null);
     setSectorOffset(0);
+    setRotationOffsetRad(0);
     setShowAngleAdjust(false);
     resetTargetOverrides();
     resetAutoPlacementFreeze();
@@ -1176,6 +1187,7 @@ export default function Calibrator() {
         cameraId: selectedCameraId,
         theta: detectedTheta,
         sectorOffset,
+        rotationOffsetRad,
         imageSize: {
           w: canvasRef.current?.width || 0,
           h: canvasRef.current?.height || 0,
@@ -1193,6 +1205,9 @@ export default function Calibrator() {
         imageSizeSnapshot,
         overlaySizeSnapshot,
         confidence?.percentage ?? null,
+        detectedTheta,
+        sectorOffset,
+        rotationOffsetRad,
       );
       setSavedCalibrations(getSavedCalibrations());
 
@@ -1208,6 +1223,7 @@ export default function Calibrator() {
     setErrorPx(null);
     setTheta(null);
     setSectorOffset(0);
+    setRotationOffsetRad(0);
     setShowAngleAdjust(false);
     resetTargetOverrides();
     resetAutoPlacementFreeze();
@@ -1219,6 +1235,7 @@ export default function Calibrator() {
         locked: true,
         theta,
         sectorOffset,
+        rotationOffsetRad,
         imageSize: {
           w: canvasRef.current?.width || 0,
           h: canvasRef.current?.height || 0,
@@ -1294,6 +1311,7 @@ export default function Calibrator() {
           cameraId: selectedCameraId,
           theta: detectedTheta,
           sectorOffset: 0,
+          rotationOffsetRad: 0,
           imageSize: { w: canvas.width, h: canvas.height },
           overlaySize: {
             w: videoRef.current?.videoWidth || canvas.width,
@@ -1312,6 +1330,9 @@ export default function Calibrator() {
               h: videoRef.current?.videoHeight || canvas.height,
             },
             typeof autoConfidence === "number" ? autoConfidence : null,
+            detectedTheta,
+            0,
+            0,
           );
         } catch (e) {
           console.warn("Failed to write calibration to history:", e);
@@ -1319,6 +1340,7 @@ export default function Calibrator() {
 
         setTheta(detectedTheta);
         setSectorOffset(0);
+        setRotationOffsetRad(0);
         setShowAngleAdjust(true);
 
         dlog("[Auto-Calibrate] Success:", {
@@ -1360,12 +1382,28 @@ export default function Calibrator() {
       errorPx: savedCal.errorPx,
       confidence:
         typeof savedCal.confidence === "number" ? savedCal.confidence : null,
+      ...(typeof savedCal.theta === "number" ? { theta: savedCal.theta } : {}),
+      ...(typeof savedCal.sectorOffset === "number"
+        ? { sectorOffset: savedCal.sectorOffset }
+        : {}),
+      ...(typeof savedCal.rotationOffsetRad === "number"
+        ? { rotationOffsetRad: savedCal.rotationOffsetRad }
+        : {}),
       ...(savedCal.imageSize ? { imageSize: savedCal.imageSize } : {}),
       ...(savedCal.overlaySize ? { overlaySize: savedCal.overlaySize } : {}),
     });
     setCalibrationPoints([]);
     setHistory([]);
     setErrorPx(savedCal.errorPx);
+    setTheta(typeof savedCal.theta === "number" ? savedCal.theta : null);
+    setSectorOffset(
+      typeof savedCal.sectorOffset === "number" ? savedCal.sectorOffset : 0,
+    );
+    setRotationOffsetRad(
+      typeof savedCal.rotationOffsetRad === "number"
+        ? savedCal.rotationOffsetRad
+        : 0,
+    );
     setShowHistory(false);
     resetTargetOverrides();
   };
@@ -2458,7 +2496,7 @@ export default function Calibrator() {
         </div>
 
         {/* Angle Adjustment Panel - NEW */}
-        {showAngleAdjust && !locked && theta !== null && (
+        {showAngleAdjust && theta !== null && (
           <div className="bg-gradient-to-br from-purple-900/40 to-blue-900/40 backdrop-blur-sm border border-purple-400/30 rounded-2xl p-6 shadow-xl mb-6">
             <h3 className="text-lg font-bold text-purple-300 mb-1">
               📐 Camera Angle Adjustment
@@ -2493,6 +2531,35 @@ export default function Calibrator() {
                 {Math.abs(thetaRadToDeg(theta)) < 1
                   ? "✅ Camera is front-facing"
                   : `Camera is rotated ${Math.abs(thetaRadToDeg(theta)).toFixed(1)}° ${thetaRadToDeg(theta) > 0 ? "clockwise" : "counter-clockwise"}`}
+              </p>
+            </div>
+
+            {/* Fine Rotation Offset Slider */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-semibold text-purple-300">
+                  Fine Rotation (precision)
+                </label>
+                <span className="text-sm font-bold text-cyan-400">
+                  {thetaRadToDeg(rotationOffsetRad).toFixed(1)}°
+                </span>
+              </div>
+              <input
+                type="range"
+                min="-10"
+                max="10"
+                step="0.1"
+                value={thetaRadToDeg(rotationOffsetRad)}
+                onChange={(e) =>
+                  setRotationOffsetRad(
+                    (parseFloat(e.target.value) * Math.PI) / 180,
+                  )
+                }
+                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                Use for micro-adjustments if darts hit the right ring but the
+                wrong wedge.
               </p>
             </div>
 
@@ -2547,6 +2614,7 @@ export default function Calibrator() {
                   setShowAngleAdjust(false);
                   setTheta(null);
                   setSectorOffset(0);
+                  setRotationOffsetRad(0);
                 }}
                 className="px-4 py-2.5 bg-slate-700/50 hover:bg-slate-700 border border-slate-600/50 hover:border-slate-500 rounded-lg font-semibold text-sm transition-all"
               >
