@@ -11,6 +11,7 @@ export function scoreFromImagePoint(
   pImg: Point,
   theta?: number,
   sectorOffset?: number,
+  rotationOffsetRad?: number,
 ) {
   const pBoard = imageToBoard(H_boardToImage, pImg);
   if (!pBoard) {
@@ -18,7 +19,12 @@ export function scoreFromImagePoint(
     return { base: 0, ring: "MISS" as const, sector: null, mult: 0 as const };
   }
   if (typeof theta === "number") {
-    return scoreAtBoardPointTheta(pBoard, theta, sectorOffset ?? 0);
+    return scoreAtBoardPointTheta(
+      pBoard,
+      theta,
+      sectorOffset ?? 0,
+      rotationOffsetRad ?? 0,
+    );
   }
   return scoreAtBoardPoint(pBoard);
 }

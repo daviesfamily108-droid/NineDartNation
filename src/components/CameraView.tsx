@@ -759,6 +759,7 @@ export default forwardRef(function CameraView(
     imageSize,
     overlaySize,
     theta,
+    rotationOffsetRad,
     sectorOffset,
     reset: resetCalibration,
     _hydrated,
@@ -3811,6 +3812,7 @@ export default forwardRef(function CameraView(
                 pCal,
                 theta ?? 0,
                 sectorOffset ?? 0,
+                rotationOffsetRad ?? 0,
               );
               let pBoard: Point | null = null;
               try {
@@ -3969,6 +3971,7 @@ export default forwardRef(function CameraView(
               pCal,
               theta ?? 0,
               sectorOffset ?? 0,
+              rotationOffsetRad ?? 0,
             );
             // Map the *dart tip* into board-space coordinates via homography.
             // This is the actual point entering the board and is what we should
@@ -5241,7 +5244,13 @@ export default forwardRef(function CameraView(
         ? overlayRef.current.height / imageSize.h
         : 1;
     const pCal: Point = { x: x / sx, y: y / sy };
-    const score = scoreFromImagePoint(H, pCal);
+    const score = scoreFromImagePoint(
+      H,
+      pCal,
+      theta ?? 0,
+      sectorOffset ?? 0,
+      rotationOffsetRad ?? 0,
+    );
     const s = `${score.ring} ${score.base > 0 ? score.base : ""}`.trim();
     setLastAutoScore(s);
     setLastAutoValue(score.base);
