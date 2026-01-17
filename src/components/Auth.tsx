@@ -24,6 +24,20 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
 
   const API_URL = getApiBaseUrl();
 
+  const fetchWithTimeout = async (
+    input: RequestInfo | URL,
+    init: RequestInit = {},
+    timeoutMs = 12000,
+  ) => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(input, { ...init, signal: controller.signal });
+    } finally {
+      window.clearTimeout(timer);
+    }
+  };
+
   async function handleSignIn(e: any) {
     e.preventDefault();
     setError("");
@@ -43,7 +57,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
     }
     try {
       console.time("Auth:signIn roundtrip");
-      const res = await fetch(`${API_URL}/api/auth/login`, {
+      const res = await fetchWithTimeout(`${API_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
@@ -52,7 +66,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
             : { username, password },
         ),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       console.timeEnd("Auth:signIn roundtrip");
       if (res.ok && data?.user && data?.token) {
         localStorage.setItem("authToken", data.token);
@@ -60,8 +74,12 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       } else {
         setError(data?.error || "Invalid username or password.");
       }
-    } catch {
-      setError("Network error.");
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        setError("Login timed out. Please try again.");
+      } else {
+        setError("Network error.");
+      }
     } finally {
       setLoading(false);
     }
@@ -77,20 +95,24 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       return;
     }
     try {
-      const res = await fetch(`${API_URL}/api/auth/signup`, {
+      const res = await fetchWithTimeout(`${API_URL}/api/auth/signup`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, username, password }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data?.user && data?.token) {
         localStorage.setItem("authToken", data.token);
         onAuth(data.user);
       } else {
         setError(data?.error || "Signup failed.");
       }
-    } catch {
-      setError("Network error.");
+    } catch (err: any) {
+      if (err?.name === "AbortError") {
+        setError("Signup timed out. Please try again.");
+      } else {
+        setError("Network error.");
+      }
     } finally {
       setLoading(false);
     }
@@ -106,12 +128,12 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       return;
     }
     try {
-      const r = await fetch(`${API_URL}/api/auth/send-reset`, {
+      const r = await fetchWithTimeout(`${API_URL}/api/auth/send-reset`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const j = await r.json();
+      const j = await r.json().catch(() => ({}));
       if (!j?.ok) throw new Error(j?.error || "Failed to send reset email");
       setError("Password reset link sent to your email.");
     } catch (err: any) {
@@ -131,12 +153,12 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       return;
     }
     try {
-      const r = await fetch(`${API_URL}/api/auth/send-username`, {
+      const r = await fetchWithTimeout(`${API_URL}/api/auth/send-username`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
-      const j = await r.json();
+      const j = await r.json().catch(() => ({}));
       if (!j?.ok) throw new Error(j?.error || "Failed to send username email");
       setError("Your username has been emailed to you.");
     } catch (err: any) {
