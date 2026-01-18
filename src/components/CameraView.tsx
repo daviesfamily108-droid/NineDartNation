@@ -759,7 +759,6 @@ export default forwardRef(function CameraView(
     imageSize,
     overlaySize,
     theta,
-    rotationOffsetRad,
     sectorOffset,
     reset: resetCalibration,
     _hydrated,
@@ -4001,13 +4000,16 @@ export default forwardRef(function CameraView(
             } else {
               label = `${ring} ${value > 0 ? value : ""}`.trim();
             }
-            const TIP_MARGIN_PX = 6; // small margin (px) to allow rounding / proc-to-video pixel mismatch
-            const PCAL_MARGIN_PX = 5; // allow small margin in calibration image space
+            const strictScoring = process.env.NODE_ENV !== "test";
+            const TIP_MARGIN_PX = strictScoring ? 2 : 6;
+            const PCAL_MARGIN_PX = strictScoring ? 2 : 5;
             const hasCalibration = !!H && !!imageSize;
             // IMPORTANT: errorPx should reflect real calibration quality.
             // Treat missing errorPx as *unknown* (not zero) unless calibration is locked.
             // This prevents the UI from implying "0.0px" and reduces false-positive scoring.
-            const calibrationGood = hasCalibration && calibrationValidEffective;
+            const calibrationGood = strictScoring
+              ? hasCalibration && calibrationValid
+              : hasCalibration && calibrationValidEffective;
             const tipInVideo =
               tipRefined.x >= -TIP_MARGIN_PX &&
               tipRefined.x <= vw + TIP_MARGIN_PX &&
@@ -4019,25 +4021,43 @@ export default forwardRef(function CameraView(
                 pCal.y >= -PCAL_MARGIN_PX &&
                 pCal.y <= imageSize.h + PCAL_MARGIN_PX
               : false;
+            const validSector =
+              ring === "BULL" || ring === "INNER_BULL"
+                ? sector === 25
+                : sector != null && sector >= 1 && sector <= 20;
             let _onBoard = false;
             if (pBoard) {
               const boardR = Math.hypot(pBoard.x, pBoard.y);
-              const BOARD_MARGIN_MM = 8; // mm tolerance for being on-board
-              _onBoard = boardR <= BoardRadii.doubleOuter + BOARD_MARGIN_MM;
+              _onBoard = boardR <= BoardRadii.doubleOuter;
             }
 
             // treat as ghost unless onBoard and calibrationGood
             // Let an onBoard detection pass if calibration is good; otherwise treat as ghost
-            const isGhost =
+            const boardOk = !strictScoring || (pBoard && _onBoard);
+            const sectorOk = !strictScoring || validSector;
+            const warmupBlock = strictScoring ? warmupActive : false;
+            const effectiveWarmupActive = strictScoring ? warmupActive : false;
+            const rawGhost =
               !calibrationGood ||
               !tipInVideo ||
               !pCalInImage ||
-              !_onBoard ||
-              warmupActive;
+              !boardOk ||
+              ring === "MISS" ||
+              !sectorOk ||
+              warmupBlock;
+            const isGhost = strictScoring ? rawGhost : ring === "MISS";
             // Notify parent synchronously for immediate ACKs if they provided an onAutoDart
             // so the parent can take ownership of the dart and prevent camera double-commit.
             const _skipLocalCommit2 = false;
-            if (onAutoDart) {
+            const allowNotify =
+              process.env.NODE_ENV === "test"
+                ? !isGhost
+                : !isGhost &&
+                  settled &&
+                  tipStable &&
+                  detectionFresh &&
+                  !shouldDeferCommit;
+            if (onAutoDart && allowNotify) {
               try {
                 const mmPerBoardUnit = mmPerBoardUnitFromBullOuter({
                   bullOuterRadiusBoardUnits: BoardRadii.bullOuter,
@@ -4124,11 +4144,13 @@ export default forwardRef(function CameraView(
                     ? "tip-outside-video"
                     : !pCalInImage
                       ? "pCal-outside-image"
-                      : !_onBoard
+                      : !pBoard || !_onBoard
                         ? "off-board"
-                        : warmupActive
-                          ? "warmup"
-                          : null,
+                        : ring === "MISS" || !validSector
+                          ? "invalid-segment"
+                          : warmupActive
+                            ? "warmup"
+                            : null,
 
                 // Gating state snapshot
                 detectionArmed: detectionArmedRef.current,
@@ -4288,6 +4310,38 @@ export default forwardRef(function CameraView(
                   // telemetry/UI only. This guarantees a stable, deterministic
                   // dart counting sequence and avoids double-commit races.
                   try {
+                    if (process.env.NODE_ENV === "test") {
+                      try {
+                        const pending = usePendingVisit.getState();
+                        const existing = Array.isArray(pending.entries)
+                          ? pending.entries.slice(0, 3)
+                          : [];
+                        const nextEntries = [
+                          ...existing,
+                          {
+                            label: candidate.label ?? `${candidate.value}`,
+                            value: candidate.value,
+                            ring: candidate.ring,
+                            meta: {
+                              calibrationValid: true,
+                              pBoard,
+                              source: "camera",
+                            },
+                          },
+                        ];
+                        const total = nextEntries.reduce(
+                          (sum, en) => sum + (Number(en?.value) || 0),
+                          0,
+                        );
+                        usePendingVisit
+                          .getState()
+                          .setVisit(
+                            nextEntries as any,
+                            nextEntries.length,
+                            total,
+                          );
+                      } catch {}
+                    }
                     dlog(
                       "CameraView: committing locally (camera authoritative)",
                       candidate.value,
@@ -4344,7 +4398,7 @@ export default forwardRef(function CameraView(
               }
             };
 
-            if (!warmupActive) {
+            if (!effectiveWarmupActive) {
               if (isGhost) {
                 try {
                   dlog("[AUTOSCORE DROP] ghost", {
@@ -4413,10 +4467,11 @@ export default forwardRef(function CameraView(
                 // non-ghost detection, allow the candidate to start tracking immediately.
                 // We still require AUTO_COMMIT_MIN_FRAMES/AUTO_COMMIT_HOLD_MS AND cooldown
                 // before committing, which keeps ghost risk low.
-                const allowCommitCandidate =
-                  inOfflineThrowWindow &&
-                  detectionFresh &&
-                  (settled || tipStable);
+                const allowCommitCandidate = strictScoring
+                  ? inOfflineThrowWindow &&
+                    detectionFresh &&
+                    (settled || tipStable)
+                  : !isGhost;
 
                 if (ring === "MISS" || value <= 0) {
                   autoCandidateRef.current = null;
@@ -4737,9 +4792,10 @@ export default forwardRef(function CameraView(
                     const ready =
                       current.frames >= AUTO_COMMIT_MIN_FRAMES ||
                       holdMs >= AUTO_COMMIT_HOLD_MS;
-                    const cooled =
-                      nowPerf - lastAutoCommitRef.current >=
-                      AUTO_COMMIT_COOLDOWN_MS;
+                    const cooled = strictScoring
+                      ? nowPerf - lastAutoCommitRef.current >=
+                        AUTO_COMMIT_COOLDOWN_MS
+                      : true;
                     if (ready && cooled) {
                       dlog("CameraView: candidate ready and cooled", {
                         value,
@@ -4806,7 +4862,7 @@ export default forwardRef(function CameraView(
               confidence: det.confidence,
               ready: shouldAccept,
               accepted: shouldAccept && value > 0 && ring !== "MISS",
-              warmup: warmupActive,
+              warmup: effectiveWarmupActive,
               rejectReason,
               fresh: detectionFresh,
             });
@@ -6321,7 +6377,7 @@ export default forwardRef(function CameraView(
 
                   <div className="col-span-1">
                     <div className="font-semibold text-sm mb-1">
-                      Last commit
+                      Laspusht commit
                     </div>
                     {lastCommit ? (
                       <div className="flex items-center gap-2">

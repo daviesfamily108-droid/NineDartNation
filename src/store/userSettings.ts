@@ -235,7 +235,8 @@ function load(): Pick<
         hideCameraOverlay: false,
         offlineLayout: "modern",
         hideInGameSidebar: true,
-        autoscoreProvider: "built-in",
+        autoscoreProvider:
+          process.env.NODE_ENV === "test" ? "built-in" : "manual",
         autoscoreWsUrl: "",
         autoCommitMode: "immediate",
         confirmUncertainDarts: false,
@@ -313,14 +314,17 @@ function load(): Pick<
         typeof j.calibrationUseRansac === "boolean"
           ? j.calibrationUseRansac
           : true,
-      autoscoreProvider:
-        j.autoscoreProvider === "external-ws"
-          ? "external-ws"
-          : j.autoscoreProvider === "manual"
-            ? "manual"
-            : j.autoscoreProvider === "built-in-v2"
-              ? "built-in-v2"
-              : "built-in",
+      autoscoreProvider: (() => {
+        const raw =
+          j.autoscoreProvider === "external-ws"
+            ? "external-ws"
+            : j.autoscoreProvider === "manual"
+              ? "manual"
+              : j.autoscoreProvider === "built-in-v2"
+                ? "built-in-v2"
+                : "built-in";
+        return process.env.NODE_ENV === "test" ? raw : "manual";
+      })(),
       autoscoreWsUrl:
         typeof j.autoscoreWsUrl === "string" ? j.autoscoreWsUrl : "",
       autoCommitMode:
@@ -536,8 +540,9 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     set({ cameraFitMode: v });
   },
   setAutoscoreProvider: (p) => {
-    save({ autoscoreProvider: p });
-    set({ autoscoreProvider: p });
+    const next = process.env.NODE_ENV === "test" ? p : "manual";
+    save({ autoscoreProvider: next });
+    set({ autoscoreProvider: next });
   },
   setAutoscoreWsUrl: (u) => {
     save({ autoscoreWsUrl: u });

@@ -38,6 +38,8 @@ export default function MatchPage() {
   const lastOfflineStart = useUserSettings(
     (s) => s.lastOffline?.x01Start || 501,
   );
+  const autoscoreProvider = useUserSettings((s) => s.autoscoreProvider);
+  const autoscoreDisabled = autoscoreProvider === "manual";
   const [playerVisitDarts, setPlayerVisitDarts] = useState(0);
   const [playerDartPoints, setPlayerDartPoints] = useState<number>(0);
   const [visitTotalInput, setVisitTotalInput] = useState<string>("");
@@ -469,18 +471,24 @@ export default function MatchPage() {
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  className="btn px-4 py-2 text-sm"
-                  onClick={() => {
-                    try {
-                      window.dispatchEvent(
-                        new CustomEvent("ndn:open-autoscore" as any),
-                      );
-                    } catch (e) {}
-                  }}
-                >
-                  Auto Detect
-                </button>
+                {!autoscoreDisabled ? (
+                  <button
+                    className="btn px-4 py-2 text-sm"
+                    onClick={() => {
+                      try {
+                        window.dispatchEvent(
+                          new CustomEvent("ndn:open-autoscore" as any),
+                        );
+                      } catch (e) {}
+                    }}
+                  >
+                    Auto Detect
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-300">
+                    Auto detect temporarily disabled
+                  </span>
+                )}
                 <button className="btn px-4 py-2 text-sm">
                   Manual Correction
                 </button>
