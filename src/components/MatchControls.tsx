@@ -1,5 +1,6 @@
 ﻿import React, { useState } from "react";
 import { Undo2 } from "lucide-react";
+import ScoreNumberPad from "./ui/ScoreNumberPad";
 
 interface MatchControlsProps {
   inProgress?: boolean;
@@ -26,8 +27,14 @@ export default function MatchControls({
   showDartsSelect = true,
   quickButtons = [180, 140, 100, 60],
 }: MatchControlsProps) {
-  const [score, setScore] = useState<number>(0);
+  const [scoreInput, setScoreInput] = useState<string>("0");
   const [darts, setDarts] = useState<number>(3);
+  const parsedScore = Number(scoreInput || 0);
+  const safeScore = Number.isFinite(parsedScore) ? parsedScore : 0;
+  const commitScore = () => {
+    onAddVisit(Math.max(0, safeScore), darts);
+    setScoreInput("0");
+  };
 
   if (!inProgress) {
     return <p className="text-slate-600">No game in progress.</p>;
@@ -39,16 +46,12 @@ export default function MatchControls({
         <input
           className="input w-32"
           type="number"
-          value={score}
-          onChange={(e) => setScore(parseInt(e.target.value || "0"))}
+          value={scoreInput}
+          onChange={(e) => setScoreInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              onAddVisit(
-                Math.max(0, Number.isFinite(score) ? score : 0),
-                darts,
-              );
-              setScore(0);
+              commitScore();
             }
           }}
           placeholder="Score"
@@ -64,13 +67,7 @@ export default function MatchControls({
             <option value={3}>3 darts</option>
           </select>
         )}
-        <button
-          className="btn"
-          onClick={() => {
-            onAddVisit(Math.max(0, Number.isFinite(score) ? score : 0), darts);
-            setScore(0);
-          }}
-        >
+        <button className="btn" onClick={commitScore}>
           Add Visit ➕
         </button>
         <button
@@ -95,15 +92,21 @@ export default function MatchControls({
           ))}
         </div>
       )}
+      <ScoreNumberPad
+        value={scoreInput}
+        onChange={setScoreInput}
+        onSubmit={commitScore}
+        helperText="Tap numbers then press Enter to submit."
+      />
       <div className="flex flex-wrap items-center gap-2">
         <button
           className="btn"
           onClick={() => {
-            onEndLeg && onEndLeg(score);
-            setScore(0);
+            onEndLeg && onEndLeg(Math.max(0, safeScore));
+            setScoreInput("0");
           }}
         >
-          End Leg (Checkout {score || 0}) �
+          End Leg (Checkout {safeScore || 0}) �
         </button>
         <button
           className="btn bg-slate-700 hover:bg-slate-800"

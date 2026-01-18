@@ -37,8 +37,6 @@ import { useWS } from "./components/WSProvider";
 import { getRollingAvg, getAllTimeAvg } from "./store/profileStats";
 import { useMatch } from "./store/match";
 import { useUserSettings } from "./store/userSettings";
-import { useCalibration } from "./store/calibration";
-import { getCalibrationStatus } from "./utils/gameCalibrationRequirements";
 import { apiFetch, getApiBaseUrl } from "./utils/api";
 import "./styles/premium.css";
 import "./styles/themes.css";
@@ -109,20 +107,7 @@ export default function App() {
   const _cameraEnabled = useUserSettings((s) => s.cameraEnabled);
   const matchInProgress = useMatch((s) => s.inProgress);
   const isCompact = matchInProgress && tab !== "score";
-  const {
-    H: calibH,
-    locked: calibLocked,
-    imageSize: calibImageSize,
-    errorPx: calibErrorPx,
-  } = useCalibration();
   const toast = useToast();
-  const calibrationStatus = getCalibrationStatus({
-    H: calibH,
-    locked: calibLocked,
-    imageSize: calibImageSize as any,
-    errorPx: calibErrorPx as any,
-  });
-  const prevCalibrated = useRef(calibrationStatus === "verified");
   const normalizedDelta = Math.abs(avgDelta) >= 0.05 ? avgDelta : 0;
   const API_URL = getApiBaseUrl();
 
@@ -147,15 +132,6 @@ export default function App() {
     return () =>
       window.removeEventListener("unhandledrejection", onUnhandled as any);
   }, []);
-
-  useEffect(() => {
-    const isVerified = calibrationStatus === "verified";
-    // Notify if calibration is lost (transition from verified to not-verified)
-    if (prevCalibrated.current && !isVerified) {
-      toast("Calibration lost. Please recalibrate.", { type: "info" });
-    }
-    prevCalibrated.current = isVerified;
-  }, [calibrationStatus, toast]);
 
   // Restore user from token on mount (run once only)
   useEffect(() => {
@@ -1096,41 +1072,6 @@ export default function App() {
                 {/* Right: Status + Actions */}
                 <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
                   <WSConnectionDot className="mr-1" />
-                  {/* Calibration Status (Desktop) */}
-                  {!isMobile && calibrationStatus !== "none" && (
-                    <button
-                      onClick={() => setTab("calibrate")}
-                      className={`flex px-3 py-1.5 text-[10px] rounded-full transition-all items-center gap-2 group border ${
-                        calibrationStatus === "verified"
-                          ? "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20"
-                          : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-amber-500/20"
-                      }`}
-                      title="Click to adjust calibration"
-                    >
-                      <div className="relative flex h-2 w-2">
-                        <span
-                          className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                            calibrationStatus === "verified"
-                              ? "bg-emerald-400"
-                              : "bg-amber-400"
-                          }`}
-                        ></span>
-                        <span
-                          className={`relative inline-flex rounded-full h-2 w-2 ${
-                            calibrationStatus === "verified"
-                              ? "bg-emerald-500"
-                              : "bg-amber-500"
-                          }`}
-                        ></span>
-                      </div>
-                      <span className="font-bold tracking-wide uppercase hidden lg:inline">
-                        {calibrationStatus === "verified"
-                          ? "Calibrated ✅"
-                          : "Calibration quality unknown"}
-                      </span>
-                    </button>
-                  )}
-
                   <div className="flex items-center gap-1 sm:gap-2 bg-black/20 p-1 rounded-full border border-white/5">
                     <button
                       className="px-2 sm:px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full bg-white/5 hover:bg-white/10 text-white transition-all"

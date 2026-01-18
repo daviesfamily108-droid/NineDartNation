@@ -344,7 +344,7 @@ export const useMatch = create<MatchState & Actions>((set) => ({
       // Only now compute best/worst 3-dart, best 9-dart, best checkout
       // Create new player objects with updated stats
       const newPlayers = state.players.map((p) => {
-        const updated = { ...p };
+        const updated = { ...p, currentThreeDartAvg: 0 };
         updatePlayerEndOfGameStats(updated);
         return updated;
       });

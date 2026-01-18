@@ -9,7 +9,6 @@ import CameraView from "./CameraView";
 import React, { memo } from "react";
 const MemoCameraView: any = memo(CameraView as any);
 import { broadcastMessage } from "../utils/broadcast";
-import HeatMap from "./HeatMap";
 import { getUserCurrency, formatPriceInCurrency } from "../utils/config";
 import { bumpGameMode } from "../store/profileStats";
 import { getPreferredUserName } from "../utils/userName";
@@ -78,6 +77,7 @@ import MatchStartShowcase from "./ui/MatchStartShowcase";
 import { useAudit } from "../store/audit";
 import GameHeaderBar from "./ui/GameHeaderBar";
 import PauseQuitModal from "./ui/PauseQuitModal";
+import ScoreNumberPad from "./ui/ScoreNumberPad";
 import { useMatchControl } from "../store/matchControl";
 import { formatAvg } from "../utils/stats";
 import GameScoreboard, { type PlayerStats } from "./scoreboards/GameScoreboard";
@@ -2670,6 +2670,47 @@ export default function OfflinePlay({ user }: { user: any }) {
                         setShowQuitPause(false);
                       }}
                     />
+                  )}
+                  {selectedMode === "X01" && (
+                    <div className="mt-3 mb-3 rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-white/90">
+                      <div className="text-xs uppercase tracking-wide text-white/50 mb-2">
+                        Checkout box
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <div className="text-xs text-white/60 mb-1">
+                            Darts used at double
+                          </div>
+                          <div className="flex gap-2">
+                            {[1, 2, 3].map((n) => (
+                              <button
+                                key={`double-${n}`}
+                                className={`btn px-3 py-1 text-sm ${doubleDarts === n ? "bg-brand-600" : "btn--ghost"}`}
+                                onClick={() => setDoubleDarts(n)}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-white/60 mb-1">
+                            Darts at checkout
+                          </div>
+                          <div className="flex gap-2">
+                            {[1, 2, 3].map((n) => (
+                              <button
+                                key={`checkout-${n}`}
+                                className={`btn px-3 py-1 text-sm ${checkoutDarts === n ? "bg-brand-600" : "btn--ghost"}`}
+                                onClick={() => setCheckoutDarts(n)}
+                              >
+                                {n}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   )}
                   <div
                     ref={(el) => {
@@ -5711,6 +5752,13 @@ export default function OfflinePlay({ user }: { user: any }) {
                                     </button>
                                   </div>
 
+                                  <ScoreNumberPad
+                                    value={visitTotalInput}
+                                    onChange={handleVisitTotalChange}
+                                    onSubmit={addVisitTotal}
+                                    helperText="Tap numbers then Enter to commit the visit total."
+                                  />
+
                                   <div className="flex flex-wrap items-center gap-2">
                                     <label className="text-xs uppercase tracking-wide text-white/60">
                                       Manual
@@ -6006,6 +6054,12 @@ export default function OfflinePlay({ user }: { user: any }) {
                               Commit Visit
                             </button>
                           </div>
+                          <ScoreNumberPad
+                            value={visitTotalInput}
+                            onChange={handleVisitTotalChange}
+                            onSubmit={addVisitTotal}
+                            helperText="Tap numbers then Enter to commit the visit total."
+                          />
                           <div className="flex items-center gap-2">
                             <input
                               className="input w-44"
@@ -6312,30 +6366,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                   )}
                 </span>
               </div>
-              <label className="block mb-1">Darts to hit double:</label>
-              <div className="flex gap-2 mb-2">
-                {[1, 2, 3].map((n) => (
-                  <button
-                    key={n}
-                    className={`btn ${doubleDarts === n ? "bg-brand-600" : ""}`}
-                    onClick={() => setDoubleDarts(n)}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <label className="block mb-1">Darts for checkout:</label>
-              <div className="flex gap-2 mb-2">
-                {[1, 2, 3].map((n) => (
-                  <button
-                    key={n}
-                    className={`btn ${checkoutDarts === n ? "bg-brand-600" : ""}`}
-                    onClick={() => setCheckoutDarts(n)}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
               <div className="grid grid-cols-1 gap-2 mt-2">
                 <button className="btn w-full" onClick={handleWinPopupSubmit}>
                   Submit
@@ -6554,13 +6584,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                       · Dbl {leg.doubleDarts} · CO {leg.checkoutDarts}
                     </div>
                   ))}
-                </div>
-              </div>
-              <div className="mt-4">
-                <div className="text-sm font-semibold mb-2">Shot Heat Map</div>
-                <div className="rounded-2xl overflow-hidden bg-black p-3">
-                  {/* Lazy-load HeatMap component to avoid increasing initial bundle too much */}
-                  <HeatMap />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2 mt-4">

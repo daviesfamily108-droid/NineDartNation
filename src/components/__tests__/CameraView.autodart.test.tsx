@@ -1582,7 +1582,7 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
     });
   });
 
-  it("commits once tip becomes stable across frames", async () => {
+  it("does not auto-commit when autoscore is disabled", async () => {
     // Stable tip after a couple of frames.
     __setMockDetectionGenerator(() => ({
       tip: { x: 120, y: 80 },
@@ -1652,7 +1652,7 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
           await vi.importActual("../../store/pendingVisit")
         ).usePendingVisit as any;
         const pendingState = pendingVisitStore.getState();
-        expect(pendingState.darts).toBeGreaterThanOrEqual(1);
+        expect(pendingState.darts).toBe(0);
       },
       {
         timeout: 3000,

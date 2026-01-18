@@ -2001,13 +2001,13 @@ export default function Calibrator() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
           <div>
             <div className="flex items-center gap-4">
-              <div className="text-4xl">⚙️</div>
+              <div className="text-4xl">📷</div>
               <div>
                 <h2 className="text-2xl font-black tracking-tight">
-                  Dartboard Calibration ⚙️
+                  Camera Connection
                 </h2>
                 <p className="text-white/40 text-sm font-medium">
-                  Map your camera view to the physical board
+                  Connect and preview your dartboard camera
                 </p>
               </div>
             </div>

@@ -29,9 +29,7 @@ import { DartDetector } from "../utils/dartDetector";
 import { addSample } from "../store/profileStats";
 import { subscribeExternalWS } from "../utils/scoring";
 import ResizablePanel from "./ui/ResizablePanel";
-import ResizableModal from "./ui/ResizableModal";
 import FocusLock from "react-focus-lock";
-import useHeatmapStore from "../store/heatmap";
 import { usePendingVisit } from "../store/pendingVisit";
 import { useCameraSession } from "../store/cameraSession";
 import { useMatchControl } from "../store/matchControl";
@@ -444,7 +442,9 @@ export default forwardRef(function CameraView(
   const preserveCalibrationOverlay = useUserSettings(
     (s) => s.preserveCalibrationOverlay,
   );
-  const manualOnly = autoscoreProvider === "manual" || disableDetection;
+  const autoscoreEnabled = false;
+  const manualOnly =
+    autoscoreProvider === "manual" || disableDetection || !autoscoreEnabled;
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>(
     [],
   );
@@ -759,8 +759,8 @@ export default forwardRef(function CameraView(
     imageSize,
     overlaySize,
     theta,
+    rotationOffsetRad,
     sectorOffset,
-    reset: resetCalibration,
     _hydrated,
     locked,
     errorPx,
@@ -1688,17 +1688,15 @@ export default forwardRef(function CameraView(
       /* noop */
     }
   };
-  const addHeatSample = useHeatmapStore((s) => s.addSample);
   // Quick entry dropdown selections
-  const [quickSelAuto, setQuickSelAuto] = useState("");
   const [quickSelManual, setQuickSelManual] = useState("");
   const [nonRegCount, setNonRegCount] = useState(0);
-  const [showRecalModal, setShowRecalModal] = useState(false);
+  const [, setShowRecalModal] = useState(false);
   const [hadRecentAuto, setHadRecentAuto] = useState(false);
   const [_pulseManualPill, setPulseManualPill] = useState(false);
-  const [activeTab, setActiveTab] = useState<"auto" | "manual">("auto");
+  const [activeTab, setActiveTab] = useState<"auto" | "manual">("manual");
   const [showManualModal, setShowManualModal] = useState(false);
-  const [showAutoModal, setShowAutoModal] = useState(false);
+  const [, setShowAutoModal] = useState(false);
   const [showScoringModal, setShowScoringModal] = useState(false);
   const manualPreviewRef = useRef<HTMLCanvasElement | null>(null);
   // Dart timer
@@ -1717,7 +1715,7 @@ export default forwardRef(function CameraView(
   const lastParentSigAtRef = useRef<number>(0);
   const inFlightAutoCommitRef = useRef<boolean>(false);
   const pulseTimeoutRef = useRef<number | null>(null);
-  const [detectorSeedVersion, setDetectorSeedVersion] = useState(0);
+  const [detectorSeedVersion] = useState(0);
   const handlePhoneReconnect = useCallback(() => {
     try {
       window.dispatchEvent(
@@ -1731,13 +1729,14 @@ export default forwardRef(function CameraView(
   }, []);
   // Open Autoscore modal from parent via global event
   useEffect(() => {
+    if (!autoscoreEnabled) return;
     const onOpen = () => {
       if (!manualOnly) setShowAutoModal(true);
     };
     window.addEventListener("ndn:open-autoscore" as any, onOpen);
     return () =>
       window.removeEventListener("ndn:open-autoscore" as any, onOpen);
-  }, [manualOnly]);
+  }, [autoscoreEnabled, manualOnly]);
 
   // cleanup pulse timer on unmount
   useEffect(() => {
@@ -1864,7 +1863,7 @@ export default forwardRef(function CameraView(
       setShowManualModal(true);
     };
     const onClose = () => {
-      setActiveTab("auto");
+      setActiveTab("manual");
       setShowManualModal(false);
     };
     window.addEventListener("ndn:open-manual" as any, onOpen);
@@ -5254,32 +5253,12 @@ export default forwardRef(function CameraView(
             // onAutoDart meta type is constrained in this file.
           });
         } catch (e) {}
-        try {
-          addHeatSample({
-            playerId:
-              matchState.players[matchState.currentPlayerIdx]?.id ?? null,
-            sector: d.sector ?? null,
-            mult: (d.mult as any) ?? 0,
-            ring: d.ring as any,
-            ts: Date.now(),
-          });
-        } catch (e) {}
       } else {
         addDart(d.value, label, d.ring as any, {
           calibrationValid: false,
           pBoard: null,
           source: "camera",
         });
-        try {
-          addHeatSample({
-            playerId:
-              matchState.players[matchState.currentPlayerIdx]?.id ?? null,
-            sector: d.sector ?? null,
-            mult: (d.mult as any) ?? 0,
-            ring: d.ring as any,
-            ts: Date.now(),
-          });
-        } catch (e) {}
       }
     });
     return () => sub.close();
@@ -5319,16 +5298,6 @@ export default forwardRef(function CameraView(
           sector: score.sector,
           mult: score.mult,
         });
-        try {
-          addHeatSample({
-            playerId:
-              matchState.players[matchState.currentPlayerIdx]?.id ?? null,
-            sector: score.sector ?? null,
-            mult: score.mult ?? 0,
-            ring: score.ring as any,
-            ts: Date.now(),
-          });
-        } catch (e) {}
         setHadRecentAuto(false);
       }
     } catch (e) {}
@@ -5924,21 +5893,6 @@ export default forwardRef(function CameraView(
     setHadRecentAuto(false);
   }
 
-  function onRecalibrateNow() {
-    setShowRecalModal(false);
-    setNonRegCount(0);
-    // Ask App to switch to calibrate tab
-    try {
-      window.dispatchEvent(new CustomEvent("ndn:request-calibrate"));
-    } catch (e) {}
-  }
-
-  function onResetCalibration() {
-    resetCalibration();
-    setShowRecalModal(false);
-    setNonRegCount(0);
-  }
-
   // Keyboard shortcut: press 'm' to open Manual Correction (if not typing in an input)
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -6036,18 +5990,6 @@ export default forwardRef(function CameraView(
       {showToolbar && (
         <div className="lg:col-span-2">
           <div className="flex items-center gap-2 mb-2">
-            {!manualOnly && (
-              <button
-                className={`btn px-3 py-1 text-sm ${activeTab === "auto" ? "tab--active" : ""}`}
-                onClick={() => {
-                  setActiveTab("auto");
-                  setShowManualModal(false);
-                  setShowAutoModal(true);
-                }}
-              >
-                Autoscore
-              </button>
-            )}
             <button
               className={`btn px-3 py-1 text-sm ${activeTab === "manual" ? "tab--active" : ""}`}
               onClick={() => {
@@ -6058,15 +6000,10 @@ export default forwardRef(function CameraView(
             >
               Manual Correction
             </button>
-            {manualOnly && (
-              <span className="text-xs opacity-70">
-                Manual scoring mode active
-              </span>
-            )}
           </div>
         </div>
       )}
-      {!hideInlinePanels && !manualOnly ? (
+      {!hideInlinePanels ? (
         <div className="card relative camera-fullwidth-card lg:col-span-2 w-full min-w-0">
           <div className="camera-fullwidth-body flex flex-col gap-4 w-full min-w-0">
             <h2 className="text-xl font-semibold mb-3">Camera</h2>
@@ -6838,16 +6775,6 @@ export default forwardRef(function CameraView(
               )}
               <button
                 className="btn bg-slate-700 hover:bg-slate-800"
-                disabled={!effectiveStreaming}
-                onClick={() => {
-                  detectorRef.current = null;
-                  setDetectorSeedVersion((v) => v + 1);
-                }}
-              >
-                Reset Autoscore Background
-              </button>
-              <button
-                className="btn bg-slate-700 hover:bg-slate-800"
                 onClick={() => {
                   try {
                     window.dispatchEvent(new Event("ndn:camera-reset" as any));
@@ -6876,179 +6803,8 @@ export default forwardRef(function CameraView(
           </button>
         </div>
       ) : null}
-      {!hideInlinePanels && manualOnly && (
-        <div className="card">
-          <h2 className="text-xl font-semibold mb-3">Manual Scoring</h2>
-          <p className="text-sm opacity-80 mb-3">
-            Camera-based autoscore is disabled. Use the manual visit input or
-            open the Manual Correction panel to record darts.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              className="btn"
-              onClick={() => {
-                setShowManualModal(true);
-                setActiveTab("manual");
-              }}
-            >
-              Open Manual Correction
-            </button>
-            <button
-              className="btn btn--ghost"
-              onClick={() => {
-                try {
-                  window.dispatchEvent(new Event("ndn:open-scoring" as any));
-                } catch (e) {}
-              }}
-            >
-              Manage Pending Visit
-            </button>
-          </div>
-        </div>
-      )}
       {/* Snapshot panel removed to reduce unused space */}
       <canvas ref={canvasRef} className="hidden"></canvas>
-      {/* Autoscore moved into a pill-triggered modal to reduce on-screen clutter */}
-      {/* Modal: Autoscore */}
-      {showAutoModal && !manualOnly && (
-        <div
-          className="fixed inset-0 bg-black/60 z-[100]"
-          role="dialog"
-          aria-modal="true"
-        >
-          <div className="absolute inset-0 flex items-center justify-center p-4">
-            <ResizableModal
-              storageKey="ndn:autoscore:size"
-              className="w-full max-w-3xl"
-              defaultWidth={720}
-              defaultHeight={520}
-              minWidth={420}
-              minHeight={320}
-              maxWidth={1400}
-              maxHeight={900}
-              initialFitHeight
-            >
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-xl font-semibold">Autoscore</h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    className="btn btn--ghost"
-                    onClick={() => setShowAutoModal(false)}
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
-              <div className="text-sm opacity-80 mb-3">
-                Click the camera overlay to autoscore. Use Manual Correction if
-                the last auto is off.
-              </div>
-              <div className="flex items-center gap-2 mb-3 flex-wrap">
-                <span className="font-semibold">Last auto:</span>
-                <span>{lastAutoScore || "�"}</span>
-                <button
-                  className="btn"
-                  onClick={onAddAutoDart}
-                  disabled={pendingDarts >= 3}
-                >
-                  Add Auto Dart
-                </button>
-                {nonRegCount > 0 && (
-                  <span className="text-sm opacity-80">
-                    No-registers: {nonRegCount}/3
-                  </span>
-                )}
-              </div>
-              <div className="mt-2">
-                <div className="text-sm font-semibold mb-2">Quick entry</div>
-                {/* Bulls */}
-                <div className="flex flex-wrap gap-2 mb-3">
-                  <button
-                    className="btn"
-                    disabled={pendingDarts >= 3}
-                    onClick={() => {
-                      if (
-                        !hadRecentAuto ||
-                        !lastAutoScore ||
-                        lastAutoRing === "MISS" ||
-                        lastAutoValue === 0
-                      ) {
-                        const c = nonRegCount + 1;
-                        setNonRegCount(c);
-                        if (c >= 5) setShowRecalModal(true);
-                      } else setNonRegCount(0);
-                      addDart(25, "BULL 25", "BULL");
-                      setHadRecentAuto(false);
-                    }}
-                  >
-                    25
-                  </button>
-                  <button
-                    className="btn"
-                    disabled={pendingDarts >= 3}
-                    onClick={() => {
-                      if (
-                        !hadRecentAuto ||
-                        !lastAutoScore ||
-                        lastAutoRing === "MISS" ||
-                        lastAutoValue === 0
-                      ) {
-                        const c = nonRegCount + 1;
-                        setNonRegCount(c);
-                        if (c >= 5) setShowRecalModal(true);
-                      } else setNonRegCount(0);
-                      addDart(50, "INNER_BULL 50", "INNER_BULL");
-                      setHadRecentAuto(false);
-                    }}
-                  >
-                    50
-                  </button>
-                </div>
-                {/* Grouped dropdown: Doubles, Singles, Trebles */}
-                <div className="flex items-center gap-2 mb-3">
-                  <input
-                    className="input w-full max-w-sm"
-                    list="autoscore-quick-list"
-                    placeholder="Type or select (e.g., D16, T20, S5)"
-                    value={quickSelAuto}
-                    onChange={(e) =>
-                      setQuickSelAuto(e.target.value.toUpperCase())
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const m = quickSelAuto.match(/^(S|D|T)(\d{1,2})$/);
-                        if (m) {
-                          onQuickEntry(parseInt(m[2], 10), m[1] as any);
-                        }
-                      }
-                    }}
-                  />
-                  <datalist id="autoscore-quick-list">
-                    {(["D", "S", "T"] as const).map((mult) =>
-                      Array.from({ length: 20 }, (_, i) => i + 1).map((num) => (
-                        <option key={`${mult}${num}`} value={`${mult}${num}`} />
-                      )),
-                    )}
-                  </datalist>
-                  <button
-                    className="btn"
-                    disabled={!quickSelAuto || pendingDarts >= 3}
-                    onClick={() => {
-                      const m = quickSelAuto.match(/^(S|D|T)(\d{1,2})$/);
-                      if (!m) return;
-                      const mult = m[1] as "S" | "D" | "T";
-                      const num = parseInt(m[2], 10);
-                      onQuickEntry(num, mult);
-                    }}
-                  >
-                    Add
-                  </button>
-                </div>
-              </div>
-            </ResizableModal>
-          </div>
-        </div>
-      )}
 
       {/* Confirm uncertain dart (low confidence) */}
       {pendingConfirm && (
@@ -7582,16 +7338,6 @@ export default forwardRef(function CameraView(
                       Capture Still
                     </button>
                     <button
-                      className="btn bg-gradient-to-r from-slate-600 to-slate-800 text-white font-bold"
-                      disabled={!effectiveStreaming}
-                      onClick={() => {
-                        detectorRef.current = null;
-                        setDetectorSeedVersion((v) => v + 1);
-                      }}
-                    >
-                      Reset Autoscore Background
-                    </button>
-                    <button
                       className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold"
                       onClick={() => {
                         try {
@@ -7683,51 +7429,6 @@ export default forwardRef(function CameraView(
               </div>
             </div>
           </FocusLock>
-        </div>
-      )}
-      {showRecalModal && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
-          <div className="card max-w-md w-full relative text-left bg-[#2d2250] text-white p-6 rounded-xl shadow-xl">
-            <button
-              className="absolute top-2 right-2 btn px-2 py-1 bg-purple-500 text-white font-bold"
-              onClick={() => {
-                setShowRecalModal(false);
-                setNonRegCount(0);
-              }}
-            >
-              Close
-            </button>
-            <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-white">
-              Recalibration Recommended
-            </h3>
-            <div className="mb-4 text-lg font-semibold text-indigo-200">
-              We detected 3 incorrect autoscores in a row. You can recalibrate
-              now or reset calibration and try again.
-            </div>
-            <div className="flex gap-2">
-              <button
-                className="btn bg-gradient-to-r from-purple-500 to-purple-700 text-white font-bold"
-                onClick={onRecalibrateNow}
-              >
-                Go to Calibrate
-              </button>
-              <button
-                className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold"
-                onClick={onResetCalibration}
-              >
-                Reset Calibration
-              </button>
-              <button
-                className="btn bg-gradient-to-r from-slate-500 to-slate-700 text-white font-bold"
-                onClick={() => {
-                  setShowRecalModal(false);
-                  setNonRegCount(0);
-                }}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
         </div>
       )}
       {/* Duplicate Pending Visit panel removed to avoid showing the same controls twice when inline panels are visible. */}
