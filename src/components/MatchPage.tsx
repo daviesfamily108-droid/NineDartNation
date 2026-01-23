@@ -508,7 +508,7 @@ export default function MatchPage() {
             </div>
           </div>
 
-          <div className="min-w-0 space-y-4 mt-[25px] sm:mt-[25px]">
+          <div className="min-w-0 space-y-4 mt-[68px] sm:mt-[68px]">
             <div className="card p-3">
               <GameScoreboard
                 gameMode={((match as any)?.game || "X01") as any}
