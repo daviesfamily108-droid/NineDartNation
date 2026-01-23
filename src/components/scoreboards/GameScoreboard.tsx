@@ -71,11 +71,11 @@ export default function GameScoreboard({
   if (!players || players.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+    <div className="grid w-full grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
       {players.map((player, idx) => (
         <div
           key={idx}
-          className={`rounded-lg border p-3 ${
+          className={`w-full rounded-lg border p-3 ${
             player.isCurrentTurn
               ? "border-emerald-500/40 bg-emerald-500/10"
               : "border-slate-500/40 bg-slate-500/10"

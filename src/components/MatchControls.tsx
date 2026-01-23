@@ -8,10 +8,11 @@ interface MatchControlsProps {
   pendingEntries?: Array<any>;
   onAddVisit: (score: number, darts: number) => void;
   onUndo?: () => void;
-  onEndLeg?: (score?: number) => void;
+  onEndLeg?: (score?: number, darts?: number, meta?: any) => void;
   onNextPlayer?: () => void;
   onEndGame?: () => void;
   showDartsSelect?: boolean;
+  showCheckoutSelectors?: boolean;
   quickButtons?: number[];
 }
 
@@ -25,10 +26,13 @@ export default function MatchControls({
   onNextPlayer,
   onEndGame,
   showDartsSelect = true,
+  showCheckoutSelectors = true,
   quickButtons = [180, 140, 100, 60],
 }: MatchControlsProps) {
   const [scoreInput, setScoreInput] = useState<string>("0");
   const [darts, setDarts] = useState<number>(3);
+  const [checkoutDarts, setCheckoutDarts] = useState<number>(3);
+  const [doubleDarts, setDoubleDarts] = useState<number>(1);
   const parsedScore = Number(scoreInput || 0);
   const safeScore = Number.isFinite(parsedScore) ? parsedScore : 0;
   const commitScore = () => {
@@ -102,7 +106,10 @@ export default function MatchControls({
         <button
           className="btn"
           onClick={() => {
-            onEndLeg && onEndLeg(Math.max(0, safeScore));
+            onEndLeg &&
+              onEndLeg(Math.max(0, safeScore), checkoutDarts, {
+                doubleDarts,
+              });
             setScoreInput("0");
           }}
         >
@@ -123,6 +130,40 @@ export default function MatchControls({
           End Game �
         </button>
       </div>
+      {showCheckoutSelectors && (
+        <div className="grid gap-3 text-sm">
+          <div>
+            <div className="text-xs text-white/60 mb-1">
+              Darts used at double
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[0, 1, 2, 3].map((n) => (
+                <button
+                  key={`double-${n}`}
+                  className={`btn px-3 py-1 text-sm ${doubleDarts === n ? "bg-brand-600" : "btn--ghost"}`}
+                  onClick={() => setDoubleDarts(n)}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-white/60 mb-1">Darts at checkout</div>
+            <div className="flex flex-wrap gap-2">
+              {[0, 1, 2, 3].map((n) => (
+                <button
+                  key={`checkout-${n}`}
+                  className={`btn px-3 py-1 text-sm ${checkoutDarts === n ? "bg-brand-600" : "btn--ghost"}`}
+                  onClick={() => setCheckoutDarts(n)}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

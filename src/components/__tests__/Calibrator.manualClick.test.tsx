@@ -44,7 +44,7 @@ vi.mock("../../utils/vision", async () => {
 });
 
 describe("Calibrator manual click mapping", () => {
-  it("stores imageSize and overlaySize when 5 clicks compute a homography", async () => {
+  it("does not apply calibration when manual clicks are disabled", async () => {
     const { default: Calibrator } = await import("../Calibrator");
     const { useCalibration } = await import("../../store/calibration");
 
@@ -91,11 +91,10 @@ describe("Calibrator manual click mapping", () => {
     fireEvent.click(canvas, { clientX: 50, clientY: 250 });
     fireEvent.click(canvas, { clientX: 200, clientY: 150 });
 
-    // Wait for calibration to be set
     await waitFor(() => {
       const s = useCalibration.getState();
-      expect(s.imageSize).toEqual({ w: 800, h: 600 });
-      expect(s.overlaySize).toEqual({ w: 1280, h: 720 });
+      expect(s.imageSize).toBeNull();
+      expect(s.overlaySize).toBeNull();
     });
   });
 });

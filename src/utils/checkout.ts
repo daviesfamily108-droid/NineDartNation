@@ -226,6 +226,10 @@ export function sayScore(
     const synth = window.speechSynthesis;
     if (!synth) return;
     const msg = new SpeechSynthesisUtterance();
+    const spokenName =
+      name?.toString().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim() ||
+      name ||
+      "Player";
     const isCheckout = remaining <= 170 && remaining > 0;
     const isOneEighty = scored === 180;
     const shouldAnnounce = !opts?.checkoutOnly || isCheckout || isOneEighty;
@@ -234,18 +238,18 @@ export function sayScore(
     // Natural caller phrases with variation
     if (isOneEighty) {
       const phrases = [
-        `${name}... One hundred and eighty!`,
-        `One hundred and EIGHTY! ${name}!`,
-        `${name} with a maximum! One eighty!`,
+        `${spokenName}... One hundred and eighty!`,
+        `One hundred and EIGHTY! ${spokenName}!`,
+        `${spokenName} with a maximum! One eighty!`,
       ];
       msg.text = phrases[Math.floor(Math.random() * phrases.length)];
       msg.rate = 0.95;
       msg.pitch = 1.1;
     } else if (remaining === 0) {
       const winPhrases = [
-        `Game shot! And the match, ${name}!`,
-        `${name} takes it! Game shot!`,
-        `And that's the checkout! ${name} wins!`,
+        `Game shot! And the match, ${spokenName}!`,
+        `${spokenName} takes it! Game shot!`,
+        `And that's the checkout! ${spokenName} wins!`,
       ];
       msg.text = winPhrases[Math.floor(Math.random() * winPhrases.length)];
       msg.rate = 0.9;
@@ -253,19 +257,19 @@ export function sayScore(
     } else if (isCheckout) {
       // Checkout range - build tension
       if (remaining <= 40) {
-        msg.text = `${name}... requires ${remaining}.`;
+        msg.text = `${spokenName}... requires ${remaining}.`;
       } else if (remaining <= 100) {
-        msg.text = `${name}, you require ${remaining}.`;
+        msg.text = `${spokenName}, you require ${remaining}.`;
       } else {
-        msg.text = `${name} leaves ${remaining}.`;
+        msg.text = `${spokenName} leaves ${remaining}.`;
       }
       msg.rate = 0.92;
       msg.pitch = 1.0;
     } else if (scored === 0) {
       const noScorePhrases = [
-        `${name}... no score.`,
-        `No score there for ${name}.`,
-        `${name}, unfortunately, no score.`,
+        `${spokenName}... no score.`,
+        `No score there for ${spokenName}.`,
+        `${spokenName}, unfortunately, no score.`,
       ];
       msg.text =
         noScorePhrases[Math.floor(Math.random() * noScorePhrases.length)];
@@ -274,9 +278,9 @@ export function sayScore(
     } else if (scored >= 140) {
       // Big scores get excitement
       const bigPhrases = [
-        `${name}! ${scored}!`,
-        `Lovely darts! ${name} with ${scored}!`,
-        `${scored}! Great scoring from ${name}!`,
+        `${spokenName}! ${scored}!`,
+        `Lovely darts! ${spokenName} with ${scored}!`,
+        `${scored}! Great scoring from ${spokenName}!`,
       ];
       msg.text = bigPhrases[Math.floor(Math.random() * bigPhrases.length)];
       msg.rate = 0.95;

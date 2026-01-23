@@ -22,8 +22,7 @@ function computeTotals(p: Player) {
     }
   }
   const threeDA = darts > 0 ? (points / darts) * 3 : 0;
-  const nineDA = threeDA * 3;
-  return { points, darts, threeDA, nineDA, bestLeg, worstLeg, oneEighties };
+  return { points, darts, threeDA, bestLeg, worstLeg, oneEighties };
 }
 
 export default function MatchSummaryModal({
@@ -96,12 +95,6 @@ export default function MatchSummaryModal({
                   </div>
                 </div>
                 <div>
-                  <span className="opacity-70">Final 9DA</span>
-                  <div className="font-semibold">
-                    {cards[0].nineDA.toFixed(1)}
-                  </div>
-                </div>
-                <div>
                   <span className="opacity-70">Darts At Double</span>
                   <div className="font-semibold">
                     {cards[0].dartsAtDouble ?? "—"}
@@ -153,12 +146,6 @@ export default function MatchSummaryModal({
                   <span className="opacity-70">Final 3DA</span>
                   <div className="font-semibold">
                     {cards[1].threeDA.toFixed(1)}
-                  </div>
-                </div>
-                <div>
-                  <span className="opacity-70">Final 9DA</span>
-                  <div className="font-semibold">
-                    {cards[1].nineDA.toFixed(1)}
                   </div>
                 </div>
                 <div>

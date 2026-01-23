@@ -349,12 +349,12 @@ export const useMatch = create<MatchState & Actions>((set) => ({
         return updated;
       });
       try {
-        // Persist all-time stats without adding another time-series entry;
-        // per-visit samples (from CameraView) already feed rolling averages.
+        // Persist all-time stats and backfill rolling averages when no
+        // per-visit samples were recorded for this match.
         // Use dynamic import to avoid circular import / TDZ issues at module init.
         import("./profileStats").then((m) => {
           try {
-            m.addMatchToAllTime(newPlayers, { recordSeries: false });
+            m.addMatchToAllTime(newPlayers, { recordSeries: true });
           } catch {}
         });
       } catch {}

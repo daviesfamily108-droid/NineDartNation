@@ -38,8 +38,6 @@ export default function MatchPage() {
   const lastOfflineStart = useUserSettings(
     (s) => s.lastOffline?.x01Start || 501,
   );
-  const autoscoreProvider = useUserSettings((s) => s.autoscoreProvider);
-  const autoscoreDisabled = autoscoreProvider === "manual";
   const [playerVisitDarts, setPlayerVisitDarts] = useState(0);
   const [playerDartPoints, setPlayerDartPoints] = useState<number>(0);
   const [visitTotalInput, setVisitTotalInput] = useState<string>("");
@@ -62,11 +60,6 @@ export default function MatchPage() {
   }, []);
 
   useEffect(() => {
-    // Ensure calibration overlay is preserved in the match window so the camera view matches calibration
-    try {
-      useUserSettings.getState().setPreserveCalibrationOverlay(true);
-    } catch {}
-
     // Ensure camera is enabled for the pop-out so the feed can start immediately
     try {
       useUserSettings.getState().setCameraEnabled(true);
@@ -471,27 +464,9 @@ export default function MatchPage() {
                 </span>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {!autoscoreDisabled ? (
-                  <button
-                    className="btn px-4 py-2 text-sm"
-                    onClick={() => {
-                      try {
-                        window.dispatchEvent(
-                          new CustomEvent("ndn:open-autoscore" as any),
-                        );
-                      } catch (e) {}
-                    }}
-                  >
-                    Auto Detect
-                  </button>
-                ) : (
-                  <span className="text-xs text-slate-300">
-                    Auto detect temporarily disabled
-                  </span>
-                )}
-                <button className="btn px-4 py-2 text-sm">
-                  Manual Correction
-                </button>
+                <span className="text-xs text-emerald-300 font-semibold px-3 py-2 rounded-md bg-white/5 border border-white/10">
+                  Manual scoring only
+                </span>
               </div>
             </div>
 
@@ -503,7 +478,7 @@ export default function MatchPage() {
                 </span>
               </div>
               {/* Compact autoscore + manual scoring controls */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-3">
                   <MatchControls
                     inProgress={match.inProgress}
@@ -514,150 +489,20 @@ export default function MatchPage() {
                     }
                     onUndo={() => match.undoVisit()}
                     onNextPlayer={() => match.nextPlayer()}
-                    onEndLeg={(score) => match.endLeg(score ?? 0)}
+                    onEndLeg={(score, darts, meta) => {
+                      const numericScore =
+                        typeof score === "number" ? score : 0;
+                      const finalDarts =
+                        typeof darts === "number" ? Math.max(0, darts) : 0;
+                      match.addVisit(numericScore, finalDarts, {
+                        visitTotal: numericScore,
+                        doubleWindowDarts: meta?.doubleDarts ?? 0,
+                      });
+                      match.endLeg(numericScore);
+                    }}
                     onEndGame={() => match.endGame()}
                     quickButtons={[180, 140, 100, 60]}
                   />
-                </div>
-
-                <div className="space-y-3">
-                  <div className="p-3 rounded-2xl bg-slate-900/60 border border-white/10 text-slate-100 shadow-sm">
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <h4 className="text-sm font-semibold uppercase tracking-wide text-indigo-200">
-                        Manual Scoring
-                      </h4>
-                      <span className="text-[11px] text-white/60">
-                        Override a visit or enter dart-by-dart
-                      </span>
-                    </div>
-
-                    <div className="space-y-3 text-sm">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className="text-[11px] uppercase tracking-wide text-white/60">
-                          Single Dart
-                        </label>
-                        <input
-                          className="input w-20 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
-                          type="number"
-                          min={0}
-                          max={60}
-                          value={playerDartPoints}
-                          onChange={(e) =>
-                            setPlayerDartPoints(Number(e.target.value || 0))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter")
-                              e.shiftKey ? replaceLast() : addDartNumeric();
-                          }}
-                          placeholder="60"
-                        />
-                        <button
-                          className="btn px-3 py-1 text-sm"
-                          onClick={addDartNumeric}
-                        >
-                          Add Dart
-                        </button>
-                        <button
-                          className="btn btn--ghost px-3 py-1 text-sm"
-                          onClick={replaceLast}
-                        >
-                          Replace Last
-                        </button>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className="text-[11px] uppercase tracking-wide text-white/60">
-                          Three Dart Edit
-                        </label>
-                        <input
-                          className="input w-24 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
-                          type="number"
-                          min={0}
-                          max={match.startingScore}
-                          value={visitTotalInput}
-                          onChange={(e) =>
-                            handleVisitTotalChange(e.target.value)
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") addVisitTotal();
-                          }}
-                          placeholder="100"
-                        />
-                        <button
-                          className="btn px-3 py-1 text-sm"
-                          onClick={addVisitTotal}
-                        >
-                          Commit Visit
-                        </button>
-                        <button
-                          className="btn btn--ghost px-3 py-1 text-sm"
-                          onClick={() =>
-                            manualEntries.length
-                              ? replaceLast()
-                              : match.undoVisit()
-                          }
-                        >
-                          Undo Visit
-                        </button>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className="text-[11px] uppercase tracking-wide text-white/60">
-                          Manual
-                        </label>
-                        <input
-                          className="input w-28 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
-                          value={manualBox}
-                          onChange={(e) => setManualBox(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter")
-                              e.shiftKey ? replaceLastManual() : addManual();
-                          }}
-                          placeholder="T20"
-                        />
-                        <button
-                          className="btn px-3 py-1 text-sm"
-                          onClick={addManual}
-                        >
-                          Apply
-                        </button>
-                        <button
-                          className="btn btn--ghost px-3 py-1 text-sm"
-                          onClick={replaceLastManual}
-                          disabled={playerVisitDarts === 0}
-                        >
-                          Replace Last
-                        </button>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[11px] uppercase tracking-wide text-white/60">
-                          Multi-entry (one per line)
-                        </label>
-                        <textarea
-                          className="w-full rounded-xl bg-slate-950/70 border border-white/10 text-sm text-slate-100 placeholder-white/40 p-3 focus:outline-none focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-500/30"
-                          rows={4}
-                          value={multiEntry}
-                          onChange={(e) => setMultiEntry(e.target.value)}
-                          placeholder={"T20\nD16\n5"}
-                        />
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            className="btn px-3 py-1 text-sm"
-                            onClick={addMultiEntry}
-                          >
-                            Add All Scores
-                          </button>
-                          <button
-                            className="btn btn--ghost px-3 py-1 text-sm"
-                            onClick={clearMultiEntry}
-                          >
-                            Clear
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </div>
               </div>
             </div>

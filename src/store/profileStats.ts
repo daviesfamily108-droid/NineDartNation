@@ -335,6 +335,8 @@ export function addMatchToAllTime(
     let scored = 0;
     let fnDarts = 0;
     let fnScored = 0;
+    let matchStart = Number.POSITIVE_INFINITY;
+    let matchEnd = 0;
     // Per-match quality metrics
     let matchBest3 = 0;
     let matchWorst3 = 0;
@@ -382,6 +384,11 @@ export function addMatchToAllTime(
           typeof leg.checkoutScore === "number" ? leg.checkoutScore : 0;
         if (co > matchBestCheckout) matchBestCheckout = co;
       }
+      // Track time window for this match (for rolling stats backfill)
+      const legStart = Number(leg.startTime || 0);
+      const legEnd = Number(leg.endTime || 0) || legStart || Date.now();
+      if (legStart > 0) matchStart = Math.min(matchStart, legStart);
+      if (legEnd > 0) matchEnd = Math.max(matchEnd, legEnd);
       // Count 180s from visits
       try {
         for (const v of leg.visits || []) {
@@ -428,9 +435,20 @@ export function addMatchToAllTime(
         num180s: (prev.num180s || 0) + (match180s || 0),
       };
       setAllTime(p.name, next);
-      // Also add a time-series sample for rolling averages
-      if (recordSeries)
-        addSample(p.name, darts, scored, Date.now(), fnDarts, fnScored);
+      // Also add a time-series sample for rolling averages (avoid double
+      // counting if per-visit samples were recorded during this match).
+      if (recordSeries) {
+        const series = getSeries(p.name);
+        const start = Number.isFinite(matchStart) ? matchStart : Date.now();
+        const end = matchEnd > 0 ? matchEnd : start;
+        const pad = 5000;
+        const hasSamplesInWindow = series.some(
+          (e) => e.t >= start - pad && e.t <= end + pad,
+        );
+        if (!hasSamplesInWindow) {
+          addSample(p.name, darts, scored, end, fnDarts, fnScored);
+        }
+      }
     }
   }
 }

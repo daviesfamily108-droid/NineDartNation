@@ -12,6 +12,7 @@ import { useWS } from "./WSProvider";
 import { apiFetch } from "../utils/api";
 import { useUserSettings } from "../store/userSettings";
 import GameCalibrationStatus from "./GameCalibrationStatus";
+import { launchInPlayDemo } from "../utils/inPlayDemo";
 
 type Tournament = {
   id: string;
@@ -325,6 +326,17 @@ export default function Tournaments({ user }: { user: any }) {
   }, [wsGlobal?.connected]);
 
   const email = String(user?.email || "").toLowerCase();
+  const showDemoControls =
+    (import.meta as any).env?.DEV || email === "daviesfamily108@gmail.com";
+
+  const runTournamentInPlayDemo = () => {
+    launchInPlayDemo({
+      players: ["Tournament A", "Tournament B"],
+      startingScore: 501,
+      roomId: "tournament-demo",
+      visits: [{ score: 45 }, { score: 81 }, { score: 140 }],
+    });
+  };
 
   const hasJoined = (t: Tournament | null | undefined) => {
     if (!t || !email) return false;
@@ -654,13 +666,20 @@ export default function Tournaments({ user }: { user: any }) {
             <button className="btn" onClick={() => setShowCreate(true)}>
               Create Tournament + 🎯
             </button>
-            {((import.meta as any).env?.DEV ||
-              email === "daviesfamily108@gmail.com") && (
+            {showDemoControls && (
               <button
                 className="btn btn-ghost ml-2"
                 onClick={() => setShowDemoStart(true)}
               >
                 Demo Start Showcase 🎯
+              </button>
+            )}
+            {showDemoControls && (
+              <button
+                className="btn btn-ghost ml-2"
+                onClick={runTournamentInPlayDemo}
+              >
+                Demo In-Game 🎮
               </button>
             )}
           </div>

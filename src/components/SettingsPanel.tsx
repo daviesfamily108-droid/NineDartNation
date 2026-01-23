@@ -1719,7 +1719,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     className="input w-full"
                   >
                     <option value="all-time">All Time Average</option>
-                    <option value="24h">24 Hour Average</option>
+                    <option value="24h">30 Day Average</option>
                   </select>
                 </div>
                 <div className="flex items-center gap-3">

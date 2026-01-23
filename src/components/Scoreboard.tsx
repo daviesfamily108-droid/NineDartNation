@@ -129,8 +129,22 @@ export default function Scoreboard({
                     }
                   }}
                   onUndo={() => (matchActions?.undoVisit ?? undoVisit)()}
-                  onEndLeg={(score) => {
-                    (matchActions?.endLeg ?? endLeg)(score ?? 0);
+                  onEndLeg={(score, darts, meta) => {
+                    const numericScore = typeof score === "number" ? score : 0;
+                    const finalDarts =
+                      typeof darts === "number" ? Math.max(0, darts) : 0;
+                    if (matchActions?.addVisit) {
+                      matchActions.addVisit(numericScore, finalDarts, {
+                        visitTotal: numericScore,
+                        doubleWindowDarts: meta?.doubleDarts ?? 0,
+                      });
+                    } else {
+                      addVisit(numericScore, finalDarts, {
+                        visitTotal: numericScore,
+                        doubleWindowDarts: meta?.doubleDarts ?? 0,
+                      });
+                    }
+                    (matchActions?.endLeg ?? endLeg)(numericScore);
                   }}
                   onNextPlayer={() =>
                     (matchActions?.nextPlayer ?? nextPlayer)()

@@ -320,6 +320,9 @@ export type CameraViewHandle = {
   ) => void;
   // Test-only helper to commit the currently pending visit.
   __test_commitVisit?: () => void;
+  __test_forceSetPendingVisit?: (
+    entries: Array<{ label: string; value: number; ring: Ring }>,
+  ) => void;
 };
 
 export default forwardRef(function CameraView(
@@ -911,7 +914,6 @@ export default forwardRef(function CameraView(
   const frameCountRef = useRef<number>(0);
   const tickRef = useRef<(() => void) | null>(null);
   const [detectionLog, setDetectionLog] = useState<DetectionLogEntry[]>([]);
-  const [showDetectionLog, setShowDetectionLog] = useState(false);
   const [lastDetection, setLastDetection] = useState<DetectionLogEntry | null>(
     null,
   );
@@ -2778,7 +2780,6 @@ export default forwardRef(function CameraView(
   }
 
   function CameraSelector() {
-    const [showRawDevices, setShowRawDevices] = useState(false);
     const [manualDeviceId, setManualDeviceId] = useState("");
     const selectDeviceId = async (id?: string | null) => {
       if (cameraStarting) return;
@@ -2792,7 +2793,7 @@ export default forwardRef(function CameraView(
     };
     // Always show a discovery UI so users can rescan / request permission even when no cameras were enumerated
     return (
-      <div className="camera-selector absolute top-2 right-2 z-20 flex items-center gap-2 bg-black/40 rounded px-2 py-1 text-xs">
+      <div className="camera-selector absolute bottom-2 right-2 z-20 flex items-center gap-2 bg-black/40 rounded px-2 py-1 text-xs">
         <span>Cam:</span>
         <select
           onPointerDown={(e) => {
@@ -2892,80 +2893,6 @@ export default forwardRef(function CameraView(
         >
           Rescan
         </button>
-        <button
-          className="btn btn--ghost btn-sm ml-2"
-          onClick={() => {
-            setShowVideoDiagnostics((v) => !v);
-            // prime snapshot immediately when turning on
-            try {
-              if (!showVideoDiagnostics) {
-                setVideoDiagnostics(
-                  collectVideoDiagnostics({ error: cameraAccessError }),
-                );
-              }
-            } catch {}
-          }}
-          title="Show video diagnostics"
-        >
-          {showVideoDiagnostics ? "Hide diag" : "Diag"}
-        </button>
-        <div className="flex items-center gap-2 ml-2">
-          <button
-            className="btn btn--ghost btn-sm"
-            onClick={() => {
-              setShowRawDevices((v) => !v);
-              if (!showRawDevices) {
-                (async () => {
-                  try {
-                    const list =
-                      await navigator.mediaDevices.enumerateDevices();
-                    setAvailableCameras(
-                      list.filter((d) => d.kind === "videoinput"),
-                    );
-                  } catch (e) {}
-                })();
-              }
-            }}
-          >
-            {showRawDevices ? "Hide devices" : "Show devices"}
-          </button>
-        </div>
-        {showRawDevices && (
-          <div className="mt-2 space-y-1 ml-1 text-xs">
-            <div className="opacity-60 text-xxs mb-1">
-              If you don't see your virtual camera (e.g., OBS), ensure the
-              virtual camera is enabled and your browser has camera permission.
-              Click Rescan after enabling.
-            </div>
-            {availableCameras.map((d) => {
-              const isOBS =
-                String(d.label || "")
-                  .toLowerCase()
-                  .includes("obs") ||
-                String(d.label || "")
-                  .toLowerCase()
-                  .includes("virtual");
-              return (
-                <div key={d.deviceId} className="flex items-center gap-2">
-                  <div className="truncate">
-                    {d.label || "Unnamed device"}{" "}
-                    {isOBS && (
-                      <span className="text-xs opacity-60 ml-1">(OBS)</span>
-                    )}
-                  </div>
-                  <div className="opacity-60 ml-1">{d.deviceId}</div>
-                  <button
-                    className="btn btn--ghost btn-xs ml-2"
-                    onClick={() => selectDeviceId(d.deviceId)}
-                  >
-                    Select
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
         {showVideoDiagnostics && (
           <div className="mt-2 ml-1 text-xs rounded-lg border border-white/10 bg-black/30 p-2">
             <div className="flex items-center justify-between gap-2">
@@ -6193,379 +6120,9 @@ export default forwardRef(function CameraView(
                 Wide
               </button>
             </div>
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <button
-                className="btn btn--ghost px-3 py-1 text-xs font-semibold"
-                onClick={() => setShowDetectionLog((prev) => !prev)}
-              >
-                {showDetectionLog ? "Hide" : "Show"} detection log
-              </button>
-              <button
-                className={`btn btn--ghost px-3 py-1 text-xs font-semibold ${showDiagnosticsOverlay ? "bg-indigo-500/80 text-white" : ""}`}
-                onClick={() => setShowDiagnosticsOverlay((prev) => !prev)}
-                title="Toggle diagnostics overlay (Ctrl+Shift+D)"
-              >
-                {showDiagnosticsOverlay ? "Hide" : "Show"} diagnostics
-              </button>
-              <span className="text-xs text-slate-400">
-                Recent detections: {detectionLog.length}
-              </span>
+            <div className="mt-3 text-xs text-slate-400">
+              Manual scoring active · camera preview only.
             </div>
-
-            {showDiagnosticsOverlay && (
-              <div className="mt-2 rounded-2xl border border-white/15 bg-slate-950/80 p-3 text-[11px] text-white font-mono space-y-1">
-                <div className="flex flex-wrap gap-x-4 gap-y-1 items-center">
-                  <span className="text-slate-300">Toggle:</span>
-                  <span className="text-slate-400">Ctrl+Shift+D</span>
-                  <span className="text-slate-300">Commit:</span>
-                  <span>
-                    {shouldDeferCommit ? "wait-for-clear" : "immediate"}
-                    {awaitingClear ? " (awaiting-clear)" : ""}
-                  </span>
-                  <span className="text-slate-300">Online:</span>
-                  <span>{isOnlineMatch ? "yes" : "no"}</span>
-                </div>
-
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                  <span className="text-slate-300">Calibration:</span>
-                  <span
-                    className={
-                      calibrationValid ? "text-emerald-300" : "text-rose-300"
-                    }
-                  >
-                    {calibrationValid ? "VALID" : "INVALID"}
-                  </span>
-                  <span className="text-slate-300">locked:</span>
-                  <span>{locked ? "yes" : "no"}</span>
-                  <span className="text-slate-300">errorPx:</span>
-                  <span>
-                    {errorPxVal == null ? "(missing)" : errorPxVal.toFixed(2)}
-                  </span>
-                  <span className="text-slate-300">conf:</span>
-                  <span>
-                    {calibrationConfidence == null
-                      ? "(n/a)"
-                      : `${Math.round(calibrationConfidence)}%`}
-                  </span>
-                  <span className="text-slate-300">force-cal:</span>
-                  <span className="text-slate-400">OFF</span>
-                  <button
-                    className="btn btn--ghost px-2 py-0.5 text-xs opacity-50 cursor-not-allowed"
-                    disabled
-                    title="Developer calibration override disabled"
-                  >
-                    Disabled
-                  </button>
-                </div>
-
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="col-span-1">
-                    <div className="font-semibold text-sm mb-1">
-                      Last detection
-                    </div>
-                    {lastDetection ? (
-                      <div className="flex items-center gap-2">
-                        {lastDetection.frame ? (
-                          <img
-                            src={lastDetection.frame}
-                            alt="last-detect"
-                            className="w-20 h-12 object-cover rounded"
-                          />
-                        ) : (
-                          <div className="w-20 h-12 bg-slate-800 rounded" />
-                        )}
-                        <div className="text-xs">
-                          <div className="font-semibold">
-                            {lastDetection.value}
-                          </div>
-                          <div className="text-slate-400">
-                            {lastDetection.ring} �{" "}
-                            {lastDetection.confidence.toFixed(2)}
-                          </div>
-                          <div className="mt-1 flex gap-2">
-                            <button
-                              className="btn btn--ghost px-2 py-1 text-xs"
-                              onClick={() => {
-                                try {
-                                  addDart(
-                                    lastDetection.value,
-                                    `${lastDetection.value}`,
-                                    lastDetection.ring,
-                                    {
-                                      calibrationValid: true,
-                                      pBoard: lastDetection.pCal ?? null,
-                                      source: "camera",
-                                    },
-                                  );
-                                } catch (e) {}
-                              }}
-                            >
-                              Commit
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-slate-400">
-                        No detections yet.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="col-span-1">
-                    <div className="font-semibold text-sm mb-1">
-                      Laspusht commit
-                    </div>
-                    {lastCommit ? (
-                      <div className="flex items-center gap-2">
-                        {lastCommit.frame ? (
-                          <img
-                            src={lastCommit.frame}
-                            alt="last-commit"
-                            className="w-20 h-12 object-cover rounded"
-                          />
-                        ) : (
-                          <div className="w-20 h-12 bg-slate-800 rounded" />
-                        )}
-                        <div className="text-xs">
-                          <div className="font-semibold">
-                            {lastCommit.score}
-                          </div>
-                          <div className="text-slate-400">
-                            {lastCommit.darts} darts �{" "}
-                            {new Date(lastCommit.ts).toLocaleTimeString()}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="text-xs text-slate-400">
-                        No commits yet.
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="col-span-1">
-                    <div className="font-semibold text-sm mb-1">Tests</div>
-                    <div className="flex flex-col gap-2">
-                      <button
-                        className="btn btn--ghost px-3 py-1 text-xs"
-                        onClick={() => {
-                          try {
-                            if (tickRef.current) tickRef.current();
-                          } catch (e) {}
-                        }}
-                      >
-                        Run detection test
-                      </button>
-                      <button
-                        className="btn btn--ghost px-3 py-1 text-xs"
-                        onClick={() => {
-                          try {
-                            // Force the offline "throw window" open for testing
-                            lastOfflineThrowAtRef.current = performance.now();
-                            updateDiagnostics({ inOfflineThrowWindow: true });
-                          } catch (e) {}
-                        }}
-                        title="Force throw window (testing)"
-                      >
-                        Force throw window
-                      </button>
-                      <button
-                        className="btn btn--ghost px-3 py-1 text-xs"
-                        onClick={() => {
-                          try {
-                            addDart(60, "60", "TRIPLE", {
-                              calibrationValid: true,
-                              pBoard: null,
-                              source: "manual",
-                            });
-                          } catch (e) {}
-                        }}
-                      >
-                        Simulate 60 (T20)
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-2">
-                    <div className="text-slate-300 mb-1">Last detection</div>
-                    <div>
-                      label: {diagnosticsRef.current.lastLabel ?? "(none)"}
-                    </div>
-                    <div>
-                      confidence:{" "}
-                      {diagnosticsRef.current.lastConfidence == null
-                        ? "(n/a)"
-                        : Number(diagnosticsRef.current.lastConfidence).toFixed(
-                            3,
-                          )}
-                    </div>
-                    <div>
-                      reject:{" "}
-                      <span
-                        className={
-                          diagnosticsRef.current.lastReject
-                            ? "text-amber-300"
-                            : "text-emerald-300"
-                        }
-                      >
-                        {diagnosticsRef.current.lastReject ?? "(accepted)"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-white/10 bg-black/30 p-2">
-                    <div className="text-slate-300 mb-1">Mapping</div>
-                    <div>
-                      tip:{" "}
-                      {diagnosticsRef.current.lastTip
-                        ? `${Math.round(diagnosticsRef.current.lastTip.x)},${Math.round(diagnosticsRef.current.lastTip.y)}`
-                        : "(n/a)"}
-                    </div>
-                    <div>
-                      pCal:{" "}
-                      {diagnosticsRef.current.lastPcal
-                        ? `${Math.round(diagnosticsRef.current.lastPcal.x)},${Math.round(diagnosticsRef.current.lastPcal.y)}`
-                        : "(n/a)"}
-                    </div>
-                    <div>
-                      pBoard:{" "}
-                      {diagnosticsRef.current.lastPboard
-                        ? `${Math.round(diagnosticsRef.current.lastPboard.x)},${Math.round(diagnosticsRef.current.lastPboard.y)}`
-                        : "(n/a)"}
-                    </div>
-                    <div className="text-slate-500 mt-1">
-                      tipStableFrames: {tipStabilityRef.current.stableFrames}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-2 rounded-xl border border-white/10 bg-black/30 p-2">
-                  <div className="text-slate-300 mb-1">Gates</div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-1">
-                    <div className="text-slate-400">
-                      H:{" "}
-                      <span className="text-white">
-                        {diagnosticsRef.current.hasHomography ? "yes" : "no"}
-                      </span>
-                    </div>
-                    <div className="text-slate-400">
-                      imageSize:{" "}
-                      <span className="text-white">
-                        {diagnosticsRef.current.imageSizeStr ?? "(n/a)"}
-                      </span>
-                    </div>
-                    <div className="text-slate-400">
-                      armed:{" "}
-                      <span className="text-white">
-                        {diagnosticsRef.current.detectionArmed ? "yes" : "no"}
-                      </span>
-                    </div>
-                    <div className="text-slate-400">
-                      paused:{" "}
-                      <span className="text-white">
-                        {diagnosticsRef.current.paused ? "yes" : "no"}
-                      </span>
-                    </div>
-                    <div className="text-slate-400">
-                      pending:{" "}
-                      <span className="text-white">
-                        {diagnosticsRef.current.pendingDarts ?? "?"}
-                      </span>
-                    </div>
-                    <div className="text-slate-400">
-                      frame:{" "}
-                      <span className="text-white">
-                        {diagnosticsRef.current.frameCount ?? "?"}/
-                        {diagnosticsRef.current.minFrames ?? "?"}
-                      </span>
-                    </div>
-                    <div className="text-slate-400">
-                      warmup:{" "}
-                      <span className="text-white">
-                        {diagnosticsRef.current.warmupActive ? "yes" : "no"}
-                      </span>
-                    </div>
-                    <div className="text-slate-400">
-                      settled:{" "}
-                      <span className="text-white">
-                        {diagnosticsRef.current.settled ? "yes" : "no"}
-                      </span>
-                    </div>
-                    <div className="text-slate-400">
-                      tipStable:{" "}
-                      <span className="text-white">
-                        {diagnosticsRef.current.tipStable ? "yes" : "no"}
-                      </span>
-                    </div>
-                    <div className="text-slate-400">
-                      calEff:{" "}
-                      <span className="text-white">
-                        {diagnosticsRef.current.calibrationValidEffective
-                          ? "yes"
-                          : "no"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-slate-500 mt-1">
-                    policy:{" "}
-                    {diagnosticsRef.current.shouldDeferCommit
-                      ? "wait-for-clear"
-                      : "immediate"}
-                  </div>
-                  <div>
-                    throwWindow:{" "}
-                    <span className="text-white">
-                      {diagnosticsRef.current.inOfflineThrowWindow
-                        ? "yes"
-                        : "no"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-            {showDetectionLog && (
-              <div className="mt-2 rounded-2xl border border-white/15 bg-slate-900/80 p-3 text-xs text-white font-mono max-h-36 overflow-y-auto space-y-1">
-                {detectionLog.length === 0 ? (
-                  <div className="text-center text-slate-400">
-                    No autoscore detections yet.
-                  </div>
-                ) : (
-                  detectionLog
-                    .slice()
-                    .reverse()
-                    .map((entry) => (
-                      <div
-                        key={entry.ts}
-                        className="flex items-center justify-between gap-3"
-                      >
-                        <span
-                          className="truncate flex-1"
-                          title={`Value ${entry.value} ${entry.ring}`}
-                        >
-                          {cameraShowLabels
-                            ? entry.label.padEnd(6, " ")
-                            : `${entry.value}`}
-                        </span>
-                        <span className="text-slate-400">
-                          {entry.confidence.toFixed(2)}
-                        </span>
-                        <span
-                          className={`px-2 rounded-full text-[10px] font-semibold ${entry.accepted ? "bg-emerald-500/80" : entry.ready ? "bg-amber-500/80" : "bg-rose-500/80"}`}
-                        >
-                          {entry.accepted
-                            ? "accepted"
-                            : entry.ready
-                              ? "queued"
-                              : "ignored"}
-                        </span>
-                      </div>
-                    ))
-                )}
-              </div>
-            )}
 
             {/* Keep the camera view clear: no floating status/commit card overlay. */}
             {inProgress ? (
@@ -6579,210 +6136,192 @@ export default forwardRef(function CameraView(
                 </button>
               </div>
             ) : null}
-            <div className="flex flex-wrap items-center gap-2 mt-3">
-              {isPhoneCamera ? (
-                <>
-                  <div
-                    className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? "bg-emerald-500/10 border-emerald-400/40 text-emerald-100" : "bg-amber-500/10 border-amber-400/40 text-amber-100"}`}
-                  >
-                    {phoneFeedActive
-                      ? "CAM Phone camera stream active"
-                      : "CAM Waiting for phone camera stream"}
-                  </div>
-                  <button
-                    className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm"
-                    onClick={handlePhoneReconnect}
-                  >
-                    Reconnect Phone
-                  </button>
-                  <button
-                    className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm"
-                    onClick={() => {
-                      try {
-                        cameraSession.setShowOverlay?.(
-                          !cameraSession.showOverlay,
-                        );
-                      } catch (e) {}
-                    }}
-                  >
-                    {cameraSession.showOverlay
-                      ? "Hide Overlay"
-                      : "Show Overlay"}
-                  </button>
-                  <button
-                    className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
-                    disabled={!phoneFeedActive}
-                    onClick={() => {
-                      try {
-                        cameraSession.clearSession?.();
-                      } catch (e) {}
-                    }}
-                  >
-                    Stop Phone Feed
-                  </button>
-                  {canFallbackToLocal && (
-                    <button
-                      className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm"
-                      onClick={handleUseLocalCamera}
-                      disabled={!availableCameras.length}
+            <div className="mt-3 rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+              <div className="mb-2 text-[11px] uppercase tracking-wide text-slate-400">
+                Camera controls
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {isPhoneCamera ? (
+                  <>
+                    <div
+                      className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? "bg-emerald-500/10 border-emerald-400/40 text-emerald-100" : "bg-amber-500/10 border-amber-400/40 text-amber-100"}`}
                     >
-                      Use Local Camera
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  {!streaming ? (
+                      {phoneFeedActive
+                        ? "CAM Phone camera stream active"
+                        : "CAM Waiting for phone camera stream"}
+                    </div>
                     <button
-                      className="btn"
-                      onClick={startCamera}
-                      disabled={cameraStarting}
+                      className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm"
+                      onClick={handlePhoneReconnect}
                     >
-                      {cameraStarting
-                        ? "Connecting Camera..."
-                        : "Connect Camera"}
+                      Reconnect Phone
                     </button>
-                  ) : (
                     <button
-                      className="btn bg-rose-600 hover:bg-rose-700"
-                      onClick={stopCamera}
+                      className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm"
+                      onClick={() => {
+                        try {
+                          cameraSession.setShowOverlay?.(
+                            !cameraSession.showOverlay,
+                          );
+                        } catch (e) {}
+                      }}
                     >
-                      Stop Camera
+                      {cameraSession.showOverlay
+                        ? "Hide Overlay"
+                        : "Show Overlay"}
                     </button>
-                  )}
-                </>
-              )}
-              {!manualOnly && (
+                    <button
+                      className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
+                      disabled={!phoneFeedActive}
+                      onClick={() => {
+                        try {
+                          cameraSession.clearSession?.();
+                        } catch (e) {}
+                      }}
+                    >
+                      Stop Phone Feed
+                    </button>
+                    {canFallbackToLocal && (
+                      <button
+                        className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm"
+                        onClick={handleUseLocalCamera}
+                        disabled={!availableCameras.length}
+                      >
+                        Use Local Camera
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {!streaming ? (
+                      <button
+                        className="btn"
+                        onClick={startCamera}
+                        disabled={cameraStarting}
+                      >
+                        {cameraStarting
+                          ? "Connecting Camera..."
+                          : "Connect Camera"}
+                      </button>
+                    ) : (
+                      <button
+                        className="btn bg-rose-600 hover:bg-rose-700"
+                        onClick={stopCamera}
+                      >
+                        Stop Camera
+                      </button>
+                    )}
+                  </>
+                )}
+                {!manualOnly && (
+                  <button
+                    className="btn bg-slate-700 hover:bg-slate-800"
+                    onClick={requestDeviceManager}
+                    title="Open phone, WiFi, and USB camera options"
+                  >
+                    Camera Devices
+                  </button>
+                )}
+                <button
+                  className="btn btn--ghost px-3 py-1 text-sm"
+                  onClick={() => setHideCameraOverlay(!hideCameraOverlay)}
+                  title="Toggle the board guide overlay"
+                >
+                  {hideCameraOverlay
+                    ? "Show board guides"
+                    : "Hide board guides"}
+                </button>
+                <button
+                  className="btn"
+                  onClick={capture}
+                  disabled={!effectiveStreaming}
+                >
+                  Capture Still
+                </button>
+                {matchState?.inProgress && (
+                  <>
+                    <PauseTimerBadge compact />
+                    <button
+                      className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
+                      onClick={() => setShowQuitPause(true)}
+                    >
+                      Quit / Pause
+                    </button>
+                    {showQuitPause && (
+                      <PauseQuitModal
+                        onClose={() => setShowQuitPause(false)}
+                        onQuit={() => {
+                          try {
+                            // Emit a global event other parts of the app can listen to
+                            window.dispatchEvent(
+                              new CustomEvent("ndn:match-quit"),
+                            );
+                            // broadcast to other windows
+                            try {
+                              broadcastMessage({ type: "quit" });
+                            } catch {}
+                          } catch (e) {}
+                          setShowQuitPause(false);
+                        }}
+                        onPause={(minutes) => {
+                          const endsAt = Date.now() + minutes * 60 * 1000;
+                          try {
+                            useMatchControl.getState().setPaused(true, endsAt);
+                            try {
+                              broadcastMessage({
+                                type: "pause",
+                                pauseEndsAt: endsAt,
+                                pauseStartedAt: Date.now(),
+                              });
+                            } catch {}
+                          } catch (e) {}
+                          setShowQuitPause(false);
+                        }}
+                      />
+                    )}
+                    <button
+                      className="btn btn--ghost px-3 py-1 text-sm"
+                      onClick={() => {
+                        try {
+                          writeMatchSnapshot();
+                          window.open(
+                            `${window.location.origin}${window.location.pathname}?match=1`,
+                            "_blank",
+                          );
+                        } catch (e) {}
+                      }}
+                    >
+                      Open match in new window
+                    </button>
+                    <button
+                      className="btn btn--ghost px-3 py-1 text-sm"
+                      onClick={async () => {
+                        try {
+                          if (document.documentElement.requestFullscreen) {
+                            await document.documentElement.requestFullscreen();
+                          } else if ((document as any).body.requestFullscreen) {
+                            await (document as any).body.requestFullscreen();
+                          }
+                        } catch (e) {}
+                      }}
+                    >
+                      Open full screen
+                    </button>
+                  </>
+                )}
                 <button
                   className="btn bg-slate-700 hover:bg-slate-800"
-                  onClick={requestDeviceManager}
-                  title="Open phone, WiFi, and USB camera options"
+                  onClick={() => {
+                    try {
+                      window.dispatchEvent(
+                        new Event("ndn:camera-reset" as any),
+                      );
+                    } catch (e) {}
+                  }}
                 >
-                  Camera Devices
+                  Reset Camera Size
                 </button>
-              )}
-              <button
-                className="btn btn--ghost px-3 py-1 text-sm"
-                onClick={() => setHideCameraOverlay(!hideCameraOverlay)}
-                title="Toggle the board guide overlay"
-              >
-                {hideCameraOverlay ? "Show board guides" : "Hide board guides"}
-              </button>
-              <button
-                className={`btn ${cameraEnabled ? "bg-rose-600 hover:bg-rose-700 text-white" : "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
-                onClick={() => setCameraEnabled(!cameraEnabled)}
-                title="Toggle whether the camera is used for scoring"
-              >
-                {cameraEnabled ? "Disable camera mode" : "Enable camera mode"}
-              </button>
-              <button
-                className="btn"
-                onClick={capture}
-                disabled={!effectiveStreaming}
-              >
-                Capture Still
-              </button>
-              {matchState?.inProgress && (
-                <>
-                  <PauseTimerBadge compact />
-                  <button
-                    className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
-                    onClick={() => setShowQuitPause(true)}
-                  >
-                    Quit / Pause
-                  </button>
-                  {showQuitPause && (
-                    <PauseQuitModal
-                      onClose={() => setShowQuitPause(false)}
-                      onQuit={() => {
-                        try {
-                          // Emit a global event other parts of the app can listen to
-                          window.dispatchEvent(
-                            new CustomEvent("ndn:match-quit"),
-                          );
-                          // broadcast to other windows
-                          try {
-                            broadcastMessage({ type: "quit" });
-                          } catch {}
-                        } catch (e) {}
-                        setShowQuitPause(false);
-                      }}
-                      onPause={(minutes) => {
-                        const endsAt = Date.now() + minutes * 60 * 1000;
-                        try {
-                          useMatchControl.getState().setPaused(true, endsAt);
-                          try {
-                            broadcastMessage({
-                              type: "pause",
-                              pauseEndsAt: endsAt,
-                              pauseStartedAt: Date.now(),
-                            });
-                          } catch {}
-                        } catch (e) {}
-                        setShowQuitPause(false);
-                      }}
-                    />
-                  )}
-                  <button
-                    className="btn btn--ghost px-3 py-1 text-sm"
-                    onClick={() => {
-                      try {
-                        writeMatchSnapshot();
-                        window.open(
-                          `${window.location.origin}${window.location.pathname}?match=1`,
-                          "_blank",
-                        );
-                      } catch (e) {}
-                    }}
-                  >
-                    Open match in new window
-                  </button>
-                  <button
-                    className={`btn btn--ghost px-3 py-1 text-sm ${forwarding ? "bg-emerald-600 text-black" : ""}`}
-                    onClick={() => {
-                      try {
-                        const v = videoRef.current as HTMLVideoElement | null;
-                        if (!v) return;
-                        if (!forwarding) {
-                          startForwarding(v, 600);
-                          setForwarding(true);
-                        } else {
-                          stopForwarding();
-                          setForwarding(false);
-                        }
-                      } catch (e) {}
-                    }}
-                  >
-                    {forwarding
-                      ? "Stop preview forward"
-                      : "Forward preview (PoC)"}
-                  </button>
-                  <button
-                    className="btn btn--ghost px-3 py-1 text-sm"
-                    onClick={async () => {
-                      try {
-                        if (document.documentElement.requestFullscreen) {
-                          await document.documentElement.requestFullscreen();
-                        } else if ((document as any).body.requestFullscreen) {
-                          await (document as any).body.requestFullscreen();
-                        }
-                      } catch (e) {}
-                    }}
-                  >
-                    Open full screen
-                  </button>
-                </>
-              )}
-              <button
-                className="btn bg-slate-700 hover:bg-slate-800"
-                onClick={() => {
-                  try {
-                    window.dispatchEvent(new Event("ndn:camera-reset" as any));
-                  } catch (e) {}
-                }}
-              >
-                Reset Camera Size
-              </button>
+              </div>
             </div>
           </div>
         </div>

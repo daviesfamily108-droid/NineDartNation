@@ -55,7 +55,9 @@ describe("MatchControls component", () => {
     // End Leg
     const endLeg = screen.getByText(/End Leg/) as HTMLButtonElement;
     fireEvent.click(endLeg);
-    await waitFor(() => expect(onEndLeg).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(onEndLeg).toHaveBeenCalledWith(0, 3, { doubleDarts: 1 }),
+    );
 
     // End Game
     const endGame = screen.getByText(/End Game/i);

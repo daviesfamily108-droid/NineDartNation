@@ -243,6 +243,11 @@ export default function OfflinePlay({ user }: { user: any }) {
   // New: match popup state
   const [showMatchModal, setShowMatchModal] = useState(false);
   const [showQuitPause, setShowQuitPause] = useState(false);
+  const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+  const [quitVotes, setQuitVotes] = useState({
+    player: false,
+    opponent: false,
+  });
   const setPaused = useMatchControl((s) => s.setPaused);
   useEffect(() => {
     const onQuit = () => {
@@ -433,6 +438,11 @@ export default function OfflinePlay({ user }: { user: any }) {
   const [ai100s, setAi100s] = useState<number>(0);
   const [playerHighestCheckout, setPlayerHighestCheckout] = useState<number>(0);
   const [aiHighestCheckout, setAiHighestCheckout] = useState<number>(0);
+  const [checkoutPrompt, setCheckoutPrompt] = useState<{
+    remaining: number;
+    routes: string[];
+  } | null>(null);
+  const [checkoutPopupOpen, setCheckoutPopupOpen] = useState<boolean>(false);
   // End-of-match summary modal
   const [showMatchSummary, setShowMatchSummary] = useState<boolean>(false);
   // Manual correction input for offline (matches CameraView UX)
@@ -466,6 +476,38 @@ export default function OfflinePlay({ user }: { user: any }) {
       pendingVisitTimerRef.current = null;
     }
   }, []);
+
+  const updateCheckoutPrompt = useCallback(
+    (remaining: number) => {
+      if (remaining > 0 && remaining <= 60) {
+        const routes = suggestCheckouts(remaining, favoriteDouble);
+        setCheckoutPrompt({ remaining, routes });
+        setCheckoutPopupOpen(true);
+      } else {
+        setCheckoutPrompt(null);
+        setCheckoutPopupOpen(false);
+      }
+    },
+    [favoriteDouble],
+  );
+
+  const finalizeQuitMatch = useCallback(() => {
+    try {
+      broadcastMessage({ type: "quit" });
+    } catch {}
+    setShowMatchModal(false);
+    setInMatch(false);
+    setShowQuitPause(false);
+    setShowQuitConfirm(false);
+    setQuitVotes({ player: false, opponent: false });
+  }, []);
+
+  useEffect(() => {
+    if (!showQuitConfirm) return;
+    if (quitVotes.player && quitVotes.opponent) {
+      finalizeQuitMatch();
+    }
+  }, [finalizeQuitMatch, quitVotes, showQuitConfirm]);
 
   const speakAutoVisit = useCallback(
     (pending: PendingAutoVisit) => {
@@ -532,6 +574,11 @@ export default function OfflinePlay({ user }: { user: any }) {
           finish: finished,
           bust: false,
         });
+      } catch {}
+
+      try {
+        match.addVisit(visitTotal, darts, { visitTotal });
+        if (finished) match.endLeg(preRemaining);
       } catch {}
 
       if (finished) {
@@ -734,6 +781,36 @@ export default function OfflinePlay({ user }: { user: any }) {
   const statsFives = useOfflineGameStats("Fives" as any);
   const statsSevens = useOfflineGameStats("Sevens" as any);
 
+  const scoreboardPlayers = useMemo(() => {
+    switch (selectedMode) {
+      case "Cricket":
+        return statsCricket;
+      case "Shanghai":
+        return statsShanghai;
+      case "Killer":
+        return statsKiller;
+      case "Scam":
+        return statsScam;
+      case "Fives":
+        return statsFives;
+      case "Sevens":
+        return statsSevens;
+      default:
+        return statsX01;
+    }
+  }, [
+    selectedMode,
+    statsCricket,
+    statsShanghai,
+    statsKiller,
+    statsScam,
+    statsFives,
+    statsSevens,
+    statsX01,
+  ]);
+  const scoreboardMatchScore =
+    selectedMode === "X01" ? `${playerLegs}-${aiLegs}` : undefined;
+
   const activeScoreboardStats = useMemo(() => {
     const list = statsX01 || [];
     const playerResolvedLastScore =
@@ -812,6 +889,11 @@ export default function OfflinePlay({ user }: { user: any }) {
   const runningScored = totalScored + (playerVisitSum || 0);
   const runningDarts = totalDarts + (playerVisitDarts || 0);
   const _runningAvg = runningDarts > 0 ? (runningScored / runningDarts) * 3 : 0;
+
+  const formatDartCount = useCallback((count: number) => {
+    const safe = Math.max(0, Math.min(99, Math.round(count || 0)));
+    return safe.toString();
+  }, []);
 
   const recordDart = useCallback((mode: string, count = 1) => {
     if (!mode || count <= 0) return;
@@ -1283,6 +1365,8 @@ export default function OfflinePlay({ user }: { user: any }) {
     playerScoreRef.current = x01Score;
     setAiScore(x01Score);
     setOnDouble(false);
+    setCheckoutPrompt(null);
+    setCheckoutPopupOpen(false);
     setShowMatchModal(true);
     setIsPlayerTurn(true);
     setPlayerDartPoints(0);
@@ -1309,6 +1393,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
   // --- Offline per-dart helpers ---
   function endTurn(nextRemaining: number) {
+    updateCheckoutPrompt(nextRemaining);
     setPlayerVisitDarts(0);
     playerVisitDartsRef.current = 0;
     setPlayerVisitStart(nextRemaining === 0 ? x01Score : nextRemaining);
@@ -1492,12 +1577,16 @@ export default function OfflinePlay({ user }: { user: any }) {
     const preRemaining = hadPartialVisit ? visitStart : liveScore;
     const checkoutCap = preRemaining <= 170 ? 170 : 180;
     const total = clamp(Math.round(rawTotal), 0, checkoutCap);
+    const remaining = preRemaining - total;
+    const checkoutDartsUsed = clamp(Math.round(checkoutDarts || 0), 0, 3);
+    const doubleDartsUsed = clamp(Math.round(doubleDarts || 0), 0, 3);
+    const visitDarts = remaining === 0 ? checkoutDartsUsed : 3;
 
-    recordDart("X01", 3);
-    setPlayerDartsThrown((d) => d + 3);
-    setTotalPlayerDarts((d) => d + 3);
-    setPlayerVisitDarts(3);
-    playerVisitDartsRef.current = 3;
+    recordDart("X01", visitDarts);
+    setPlayerDartsThrown((d) => d + visitDarts);
+    setTotalPlayerDarts((d) => d + visitDarts);
+    setPlayerVisitDarts(visitDarts);
+    playerVisitDartsRef.current = visitDarts;
     setPlayerVisitSum(total);
     playerVisitSumRef.current = total;
     setPlayerLastVisitScore(total);
@@ -1505,8 +1594,6 @@ export default function OfflinePlay({ user }: { user: any }) {
     if (total === 180) setPlayer180s((n) => n + 1);
     else if (total >= 140) setPlayer140s((n) => n + 1);
     else if (total >= 100) setPlayer100s((n) => n + 1);
-
-    const remaining = preRemaining - total;
 
     if (remaining < 0) {
       if (callerEnabled) {
@@ -1518,7 +1605,7 @@ export default function OfflinePlay({ user }: { user: any }) {
         } catch {}
       }
       try {
-        useAudit.getState().recordVisit("offline-x01", 3, 0, {
+        useAudit.getState().recordVisit("offline-x01", visitDarts, 0, {
           preRemaining,
           postRemaining: visitStart,
           bust: true,
@@ -1536,7 +1623,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       playerVisitDartsAtDoubleRef.current = 0;
       // Update global match state so live averages and stats update
       try {
-        match.addVisit(0, 3);
+        match.addVisit(0, visitDarts);
       } catch {}
       endTurn(visitStart);
       return true;
@@ -1555,16 +1642,22 @@ export default function OfflinePlay({ user }: { user: any }) {
       } catch {}
     }
 
-    if (preRemaining <= 50) {
+    if (remaining === 0) {
+      setPlayerDoublesAtt((a) => a + doubleDartsUsed);
+      setPlayerDoublesHit((h) => h + 1);
+      setPlayerVisitDartsAtDouble(doubleDartsUsed);
+      playerVisitDartsAtDoubleRef.current = doubleDartsUsed;
+    } else if (preRemaining <= 50) {
       setPlayerDoublesAtt((a) => a + 3);
-      if (remaining === 0) setPlayerDoublesHit((h) => h + 1);
     }
 
     if (remaining === 0) {
       if (preRemaining <= 170)
         setPlayerHighestCheckout((h) => Math.max(h, preRemaining));
+      setCheckoutPrompt(null);
+      setCheckoutPopupOpen(false);
       try {
-        useAudit.getState().recordVisit("offline-x01", 3, total, {
+        useAudit.getState().recordVisit("offline-x01", visitDarts, total, {
           preRemaining,
           postRemaining: 0,
           finish: true,
@@ -1573,7 +1666,8 @@ export default function OfflinePlay({ user }: { user: any }) {
       } catch {}
       // Update global match state for finish
       try {
-        match.addVisit(total, 3);
+        match.addVisit(total, visitDarts);
+        match.endLeg(preRemaining);
       } catch {}
       setPendingLegWinner("player");
       setShowWinPopup(true);
@@ -1587,7 +1681,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     }
 
     try {
-      useAudit.getState().recordVisit("offline-x01", 3, total, {
+      useAudit.getState().recordVisit("offline-x01", visitDarts, total, {
         preRemaining,
         postRemaining: remaining,
         finish: false,
@@ -1596,7 +1690,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     } catch {}
     // Update global match state so live averages update after every 3 darts
     try {
-      match.addVisit(total, 3);
+      match.addVisit(total, visitDarts);
     } catch {}
     endTurn(remaining);
     setPlayerVisitSum(0);
@@ -2650,12 +2744,13 @@ export default function OfflinePlay({ user }: { user: any }) {
                     <PauseQuitModal
                       onClose={() => setShowQuitPause(false)}
                       onQuit={() => {
-                        try {
-                          broadcastMessage({ type: "quit" });
-                        } catch {}
-                        setShowMatchModal(false);
-                        setInMatch(false);
-                        setShowQuitPause(false);
+                        if (ai === "None") {
+                          setShowQuitPause(false);
+                          setQuitVotes({ player: true, opponent: false });
+                          setShowQuitConfirm(true);
+                          return;
+                        }
+                        finalizeQuitMatch();
                       }}
                       onPause={(minutes) => {
                         const endsAt = Date.now() + minutes * 60 * 1000;
@@ -2671,47 +2766,158 @@ export default function OfflinePlay({ user }: { user: any }) {
                       }}
                     />
                   )}
-                  {selectedMode === "X01" && (
-                    <div className="mt-3 mb-3 rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-white/90">
-                      <div className="text-xs uppercase tracking-wide text-white/50 mb-2">
-                        Checkout box
-                      </div>
-                      <div className="space-y-2">
-                        <div>
-                          <div className="text-xs text-white/60 mb-1">
-                            Darts used at double
-                          </div>
-                          <div className="flex gap-2">
-                            {[1, 2, 3].map((n) => (
-                              <button
-                                key={`double-${n}`}
-                                className={`btn px-3 py-1 text-sm ${doubleDarts === n ? "bg-brand-600" : "btn--ghost"}`}
-                                onClick={() => setDoubleDarts(n)}
-                              >
-                                {n}
-                              </button>
-                            ))}
-                          </div>
+                  {showQuitConfirm && (
+                    <div className="fixed inset-0 z-[170] flex items-center justify-center bg-black/70 p-4">
+                      <ResizableModal
+                        storageKey="ndn:modal:offline-quit-confirm"
+                        className="w-full relative"
+                        defaultWidth={460}
+                        defaultHeight={320}
+                        minWidth={360}
+                        minHeight={260}
+                        maxWidth={720}
+                        maxHeight={520}
+                        initialFitHeight
+                      >
+                        <h3 className="text-lg font-bold mb-2">
+                          Confirm Quit (Both Players)
+                        </h3>
+                        <p className="text-sm text-slate-200 mb-4">
+                          Both players must accept to end the match. If either
+                          player wants to continue, the match will keep going.
+                        </p>
+                        <div className="grid gap-2">
+                          <button
+                            className={`btn w-full ${quitVotes.player ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-700 hover:bg-slate-800"}`}
+                            onClick={() =>
+                              setQuitVotes((prev) => ({
+                                ...prev,
+                                player: true,
+                              }))
+                            }
+                          >
+                            {getPreferredUserName(user, "Player 1")} Accepts
+                          </button>
+                          <button
+                            className={`btn w-full ${quitVotes.opponent ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-700 hover:bg-slate-800"}`}
+                            onClick={() =>
+                              setQuitVotes((prev) => ({
+                                ...prev,
+                                opponent: true,
+                              }))
+                            }
+                          >
+                            {ai === "None" ? "Opponent" : `${ai} AI`} Accepts
+                          </button>
+                          <button
+                            className="btn bg-rose-600 hover:bg-rose-700 w-full"
+                            onClick={() => {
+                              setQuitVotes({ player: false, opponent: false });
+                              setShowQuitConfirm(false);
+                            }}
+                          >
+                            Continue Match
+                          </button>
                         </div>
-                        <div>
-                          <div className="text-xs text-white/60 mb-1">
-                            Darts at checkout
-                          </div>
-                          <div className="flex gap-2">
-                            {[1, 2, 3].map((n) => (
-                              <button
-                                key={`checkout-${n}`}
-                                className={`btn px-3 py-1 text-sm ${checkoutDarts === n ? "bg-brand-600" : "btn--ghost"}`}
-                                onClick={() => setCheckoutDarts(n)}
-                              >
-                                {n}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
+                      </ResizableModal>
                     </div>
                   )}
+                  {selectedMode === "X01" &&
+                    checkoutPopupOpen &&
+                    checkoutPrompt && (
+                      <div
+                        className="fixed inset-0 z-[160] flex items-center justify-center bg-black/70 p-4"
+                        onClick={() => setCheckoutPopupOpen(false)}
+                      >
+                        <div
+                          className="w-full max-w-xl rounded-3xl border border-emerald-400/40 bg-slate-900/95 p-4 text-white shadow-2xl"
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === "Escape") {
+                              e.preventDefault();
+                              setCheckoutPopupOpen(false);
+                            }
+                          }}
+                          tabIndex={-1}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-xs uppercase tracking-wide text-emerald-200/70">
+                                Checkout box
+                              </div>
+                              <div className="text-2xl font-bold text-emerald-100">
+                                {checkoutPrompt.remaining} left
+                              </div>
+                            </div>
+                            <button
+                              className="btn btn--ghost px-3 py-1 text-sm"
+                              onClick={() => setCheckoutPopupOpen(false)}
+                            >
+                              Close
+                            </button>
+                          </div>
+                          <div className="mt-3 space-y-3">
+                            <div>
+                              <div className="text-xs text-white/60 mb-1">
+                                Darts used at double
+                              </div>
+                              <div className="flex gap-2">
+                                {[0, 1, 2, 3].map((n) => (
+                                  <button
+                                    key={`double-${n}`}
+                                    className={`btn px-3 py-1 text-sm ${doubleDarts === n ? "bg-brand-600" : "btn--ghost"}`}
+                                    onClick={() => setDoubleDarts(n)}
+                                  >
+                                    {formatDartCount(n)}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs text-white/60 mb-1">
+                                Darts at checkout
+                              </div>
+                              <div className="flex gap-2">
+                                {[0, 1, 2, 3].map((n) => (
+                                  <button
+                                    key={`checkout-${n}`}
+                                    className={`btn px-3 py-1 text-sm ${checkoutDarts === n ? "bg-brand-600" : "btn--ghost"}`}
+                                    onClick={() => setCheckoutDarts(n)}
+                                  >
+                                    {formatDartCount(n)}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {checkoutPrompt.routes.length > 0 && (
+                              <div>
+                                <div className="text-xs text-emerald-200/80 mb-1">
+                                  Suggested checkout
+                                </div>
+                                <div className="space-y-1">
+                                  {checkoutPrompt.routes.map((route) => (
+                                    <div
+                                      key={route}
+                                      className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm font-semibold"
+                                    >
+                                      {route}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            <div className="pt-2 flex justify-end">
+                              <button
+                                className="btn bg-emerald-600 hover:bg-emerald-700 px-4 py-1 text-sm"
+                                onClick={() => setCheckoutPopupOpen(false)}
+                              >
+                                Enter
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   <div
                     ref={(el) => {
                       (contentRef as any).current = el;
@@ -5654,6 +5860,115 @@ export default function OfflinePlay({ user }: { user: any }) {
                       </div>
                     ) : (
                       <div className="space-y-2">
+                        <div className="font-semibold">Your Turn</div>
+                        <div className="flex flex-col gap-4">
+                          <div className="grid grid-cols-12 gap-4 items-start">
+                            <div className="col-span-12 md:col-span-4 space-y-3">
+                              <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-4 shadow-lg">
+                                <div className="text-xs uppercase tracking-wide text-white/50 mb-2">
+                                  Visit total
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <input
+                                    className="input w-28"
+                                    type="number"
+                                    min={0}
+                                    max={playerScore <= 170 ? 170 : 180}
+                                    placeholder="0–180"
+                                    value={visitTotalInput}
+                                    onChange={(e) =>
+                                      handleVisitTotalChange(e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") addVisitTotal();
+                                    }}
+                                  />
+                                  <button
+                                    className="btn px-4 py-1 text-sm"
+                                    onClick={addVisitTotal}
+                                    title="Commit a full 3-dart total like 93"
+                                  >
+                                    Commit Visit
+                                  </button>
+                                </div>
+                                <div className="mt-3">
+                                  <ScoreNumberPad
+                                    value={visitTotalInput}
+                                    onChange={handleVisitTotalChange}
+                                    onSubmit={addVisitTotal}
+                                    helperText="Tap numbers then Enter to commit the visit total."
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="col-span-12 md:col-span-4 space-y-3">
+                              <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-2 text-slate-100 shadow-lg">
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div className="rounded-lg bg-black/30 px-2 py-1">
+                                    <div className="uppercase tracking-wide text-white/50">
+                                      Current score
+                                    </div>
+                                    <div className="text-lg font-bold text-white">
+                                      {activeRemaining}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg bg-black/30 px-2 py-1">
+                                    <div className="uppercase tracking-wide text-white/50">
+                                      3-dart avg
+                                    </div>
+                                    <div className="text-lg font-bold text-emerald-300">
+                                      {_runningAvg.toFixed(1)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-2 text-slate-100 shadow-lg">
+                                <div className="text-xs uppercase tracking-wide text-white/50 mb-1">
+                                  Scoreboard
+                                </div>
+                                <GameScoreboard
+                                  gameMode={selectedMode as any}
+                                  players={singlePlayerScoreboard}
+                                  matchScore={scoreboardMatchScore}
+                                />
+                              </div>
+                            </div>
+
+                            <div className="col-span-12 md:col-span-4">
+                              <div className="relative rounded-2xl bg-black/60 border border-white/10 overflow-hidden shadow-lg">
+                                <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-2 py-1 text-[11px] uppercase tracking-wide text-white/70 bg-black/40 backdrop-blur-sm">
+                                  <span>Board camera</span>
+                                  {!cameraEnabled && (
+                                    <span className="text-amber-300 font-semibold">
+                                      Camera disabled
+                                    </span>
+                                  )}
+                                </div>
+                                {cameraEnabled ? (
+                                  <div className="bg-black aspect-video max-h-[420px]">
+                                    <MemoCameraView
+                                      scoringMode="custom"
+                                      showToolbar={false}
+                                      immediateAutoCommit
+                                      onAutoDart={() => false}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="p-4 text-sm text-slate-200/80">
+                                    Enable the camera to keep the board visible
+                                    while you score.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-xs text-slate-300">
+                            Tip: Tap numbers then Enter to commit a 3-dart
+                            visit.
+                          </div>
+                        </div>
                         {/* Scorecard only (camera sidebar removed for wider layout) */}
                         <div className="flex flex-col gap-3 min-h-0 flex-1 text-[14px]">
                           <div
@@ -5663,199 +5978,8 @@ export default function OfflinePlay({ user }: { user: any }) {
                               transform: "translateZ(0)",
                               WebkitOverflowScrolling: "touch",
                             }}
-                          >
-                            <div className="text-sm font-semibold opacity-80">
-                              Scoreboard
-                            </div>
-                            {/* Scoreboard */}
-                            <div className="flex-shrink-0">
-                              <GameScoreboard
-                                gameMode={selectedMode as any}
-                                players={statsX01}
-                                matchScore={`${playerLegs}-${aiLegs}`}
-                              />
-                            </div>
-
-                            {/* Manual Scoring Section */}
-                            {isPlayerTurn && (
-                              <div className="p-4 rounded-2xl bg-slate-900/60 border border-white/10 text-slate-100 shadow-lg backdrop-blur-sm flex-shrink-0">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                  <h4 className="text-sm font-semibold tracking-wide uppercase text-indigo-200">
-                                    Manual Scoring
-                                  </h4>
-                                  <span className="text-xs text-white/60">
-                                    Override a visit or enter dart-by-dart
-                                    scores.
-                                  </span>
-                                </div>
-                                <div className="mt-3 space-y-3">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <label className="text-xs uppercase tracking-wide text-white/60">
-                                      Single Dart
-                                    </label>
-                                    <input
-                                      className="input w-20 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
-                                      type="number"
-                                      min={0}
-                                      max={60}
-                                      value={playerDartPoints}
-                                      onChange={(e) =>
-                                        setPlayerDartPoints(
-                                          Number(e.target.value || 0),
-                                        )
-                                      }
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter")
-                                          e.shiftKey
-                                            ? replaceLast()
-                                            : addDartNumeric();
-                                      }}
-                                      placeholder="60"
-                                    />
-                                    <button
-                                      className="btn px-3 py-1 text-sm"
-                                      onClick={addDartNumeric}
-                                    >
-                                      Add Dart
-                                    </button>
-                                  </div>
-
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <label className="text-xs uppercase tracking-wide text-white/60">
-                                      Three Dart Edit
-                                    </label>
-                                    <input
-                                      className="input w-24 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
-                                      type="number"
-                                      min={0}
-                                      max={playerScore <= 170 ? 170 : 180}
-                                      value={visitTotalInput}
-                                      onChange={(e) =>
-                                        handleVisitTotalChange(e.target.value)
-                                      }
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter") addVisitTotal();
-                                      }}
-                                      placeholder="100"
-                                    />
-                                    <button
-                                      className="btn px-3 py-1 text-sm"
-                                      onClick={addVisitTotal}
-                                    >
-                                      Commit Visit
-                                    </button>
-                                    <button
-                                      className="btn btn--ghost px-3 py-1 text-sm"
-                                      onClick={replaceLast}
-                                    >
-                                      Undo Visit
-                                    </button>
-                                  </div>
-
-                                  <ScoreNumberPad
-                                    value={visitTotalInput}
-                                    onChange={handleVisitTotalChange}
-                                    onSubmit={addVisitTotal}
-                                    helperText="Tap numbers then Enter to commit the visit total."
-                                  />
-
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <label className="text-xs uppercase tracking-wide text-white/60">
-                                      Manual
-                                    </label>
-                                    <input
-                                      className="input w-28 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
-                                      value={manualBox}
-                                      onChange={(e) =>
-                                        setManualBox(e.target.value)
-                                      }
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter")
-                                          e.shiftKey
-                                            ? replaceLastManual()
-                                            : addManual();
-                                      }}
-                                      placeholder="T20"
-                                    />
-                                    <button
-                                      className="btn px-3 py-1 text-sm"
-                                      onClick={addManual}
-                                    >
-                                      Apply
-                                    </button>
-                                    <button
-                                      className="btn btn--ghost px-3 py-1 text-sm"
-                                      onClick={replaceLastManual}
-                                      disabled={playerVisitDarts === 0}
-                                    >
-                                      Replace Last
-                                    </button>
-                                  </div>
-
-                                  <div>
-                                    <label className="text-xs uppercase tracking-wide text-white/60">
-                                      Multi-entry (one per line)
-                                    </label>
-                                    <textarea
-                                      className="mt-2 w-full rounded-xl bg-slate-950/70 border border-white/10 text-sm text-slate-100 placeholder-white/40 p-3 focus:outline-none focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-500/30"
-                                      rows={3}
-                                      value={manualTextarea}
-                                      onChange={(e) =>
-                                        setManualTextarea(e.target.value)
-                                      }
-                                      placeholder={"T20\nD16\n25"}
-                                    />
-                                    <div className="mt-2 flex flex-wrap gap-2">
-                                      <button
-                                        className="btn px-3 py-1 text-sm"
-                                        onClick={addManualTextarea}
-                                      >
-                                        Apply All
-                                      </button>
-                                      <button
-                                        className="btn btn--ghost px-3 py-1 text-sm"
-                                        onClick={() => setManualTextarea("")}
-                                      >
-                                        Clear
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  <div className="pt-2 border-t border-white/10 mt-3">
-                                    <button
-                                      className="btn bg-rose-600 hover:bg-rose-700 px-3 py-1 text-sm"
-                                      onClick={clearCurrentVisit}
-                                      disabled={
-                                        playerVisitDarts === 0 &&
-                                        playerVisitSum === 0
-                                      }
-                                    >
-                                      Clear Current Visit
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                          ></div>
                         </div>
-                        {/* Remove the separate camera view below scoreboard */}
-                        {(selectedMode as any) === "X01" && !cameraEnabled && (
-                          <>
-                            <GameScoreboard
-                              gameMode={selectedMode as any}
-                              players={statsX01}
-                              matchScore={`${playerLegs}-${aiLegs}`}
-                            />
-                          </>
-                        )}
-                        {(selectedMode as any) === "Cricket" && (
-                          <>
-                            <GameScoreboard
-                              gameMode="Cricket"
-                              players={statsCricket}
-                            />
-                          </>
-                        )}
                         {/* Camera view for Cricket auto-scoring */}
                         {(selectedMode as any) === "Cricket" &&
                           cameraEnabled && (
@@ -6005,116 +6129,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                               />
                             </div>
                           )}
-                        <div className="font-semibold">Your Turn</div>
-                        <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-2">
-                            <input
-                              className="input w-24"
-                              type="number"
-                              min={0}
-                              max={60}
-                              value={playerDartPoints}
-                              onChange={(e) =>
-                                setPlayerDartPoints(Number(e.target.value || 0))
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter")
-                                  e.shiftKey ? replaceLast() : addDartNumeric();
-                              }}
-                            />
-                            <button
-                              className="btn px-3 py-1 text-sm"
-                              onClick={addDartNumeric}
-                              title="Add a single dart (0–60)"
-                            >
-                              Add Dart
-                            </button>
-                          </div>
-                          {/* Visit total entry */}
-                          <div className="flex items-center gap-2">
-                            <input
-                              className="input w-28"
-                              type="number"
-                              min={0}
-                              max={playerScore <= 170 ? 170 : 180}
-                              placeholder="Visit total (0–180)"
-                              value={visitTotalInput}
-                              onChange={(e) =>
-                                handleVisitTotalChange(e.target.value)
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") addVisitTotal();
-                              }}
-                            />
-                            <button
-                              className="btn px-3 py-1 text-sm"
-                              onClick={addVisitTotal}
-                              title="Commit a full 3-dart total like 93"
-                            >
-                              Commit Visit
-                            </button>
-                          </div>
-                          <ScoreNumberPad
-                            value={visitTotalInput}
-                            onChange={handleVisitTotalChange}
-                            onSubmit={addVisitTotal}
-                            helperText="Tap numbers then Enter to commit the visit total."
-                          />
-                          <div className="flex items-center gap-2">
-                            <input
-                              className="input w-44"
-                              placeholder="Manual (T20, D16, 5, 25, 50)"
-                              value={manualBox}
-                              onChange={(e) => setManualBox(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter")
-                                  e.shiftKey
-                                    ? replaceLastManual()
-                                    : addManual();
-                              }}
-                            />
-                            <button
-                              className="btn btn--ghost px-3 py-1 text-sm"
-                              onClick={replaceLastManual}
-                              disabled={playerVisitDarts === 0}
-                            >
-                              Replace Last
-                            </button>
-                            <button
-                              className="btn px-3 py-1 text-sm"
-                              onClick={addManual}
-                            >
-                              Add
-                            </button>
-                          </div>
-                          <div>
-                            <textarea
-                              className="input w-full h-24 resize-none"
-                              placeholder="Type scores manually (one per line, e.g. T20&#10;D16&#10;5&#10;25&#10;50) - No camera needed!"
-                              value={manualTextarea}
-                              onChange={(e) =>
-                                setManualTextarea(e.target.value)
-                              }
-                            />
-                            <div className="flex gap-2 mt-1">
-                              <button
-                                className="btn px-3 py-1 text-sm"
-                                onClick={addManualTextarea}
-                              >
-                                Add All Scores
-                              </button>
-                              <button
-                                className="btn btn--ghost px-3 py-1 text-sm"
-                                onClick={() => setManualTextarea("")}
-                              >
-                                Clear
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-xs text-slate-300">
-                          Tip: Enter to Add · Shift+Enter to Replace Last
-                        </div>
                       </div>
                     )}
                     <div className="h-1" />
@@ -6366,6 +6380,40 @@ export default function OfflinePlay({ user }: { user: any }) {
                   )}
                 </span>
               </div>
+              <div className="grid gap-3 text-sm">
+                <div>
+                  <div className="text-xs text-white/60 mb-1">
+                    Darts used at double
+                  </div>
+                  <div className="flex gap-2">
+                    {[0, 1, 2, 3].map((n) => (
+                      <button
+                        key={`win-double-${n}`}
+                        className={`btn px-3 py-1 text-sm ${doubleDarts === n ? "bg-brand-600" : "btn--ghost"}`}
+                        onClick={() => setDoubleDarts(n)}
+                      >
+                        {formatDartCount(n)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-white/60 mb-1">
+                    Darts at checkout
+                  </div>
+                  <div className="flex gap-2">
+                    {[0, 1, 2, 3].map((n) => (
+                      <button
+                        key={`win-checkout-${n}`}
+                        className={`btn px-3 py-1 text-sm ${checkoutDarts === n ? "bg-brand-600" : "btn--ghost"}`}
+                        onClick={() => setCheckoutDarts(n)}
+                      >
+                        {formatDartCount(n)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
               <div className="grid grid-cols-1 gap-2 mt-2">
                 <button className="btn w-full" onClick={handleWinPopupSubmit}>
                   Submit
@@ -6415,7 +6463,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                   totalPlayerDarts > 0
                     ? (totalPlayerPoints / totalPlayerDarts) * 3
                     : 0;
-                const player9da = player3da * 3;
                 const playerBest = (() => {
                   const darts = legStats
                     .filter(
@@ -6445,7 +6492,6 @@ export default function OfflinePlay({ user }: { user: any }) {
 
                 const ai3da =
                   totalAiDarts > 0 ? (totalAiPoints / totalAiDarts) * 3 : 0;
-                const ai9da = ai3da * 3;
                 const aiBest = (() => {
                   const darts = legStats
                     .filter(
@@ -6486,12 +6532,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                           <span className="opacity-70">Final 3DA</span>
                           <div className="font-semibold">
                             {player3da.toFixed(1)}
-                          </div>
-                        </div>
-                        <div>
-                          <span className="opacity-70">Final 9DA</span>
-                          <div className="font-semibold">
-                            {player9da.toFixed(1)}
                           </div>
                         </div>
                         <div>
@@ -6537,12 +6577,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                           </div>
                         </div>
                         <div>
-                          <span className="opacity-70">Final 9DA</span>
-                          <div className="font-semibold">
-                            {ai9da.toFixed(1)}
-                          </div>
-                        </div>
-                        <div>
                           <span className="opacity-70">Darts At Double</span>
                           <div className="font-semibold">{aiDoublesAtt}</div>
                         </div>
@@ -6581,7 +6615,8 @@ export default function OfflinePlay({ user }: { user: any }) {
                         : ai === "None"
                           ? "Opp"
                           : "AI"}{" "}
-                      · Dbl {leg.doubleDarts} · CO {leg.checkoutDarts}
+                      · Dbl {formatDartCount(leg.doubleDarts)} · CO{" "}
+                      {formatDartCount(leg.checkoutDarts || 0)}
                     </div>
                   ))}
                 </div>
@@ -6612,8 +6647,8 @@ export default function OfflinePlay({ user }: { user: any }) {
             <ul>
               {legStats.map((leg, i) => (
                 <li key={i}>
-                  Leg {i + 1}: Double darts: {leg.doubleDarts}, Checkout darts:{" "}
-                  {leg.checkoutDarts}
+                  Leg {i + 1}: Double darts: {formatDartCount(leg.doubleDarts)},
+                  Checkout darts: {formatDartCount(leg.checkoutDarts || 0)}
                 </li>
               ))}
             </ul>

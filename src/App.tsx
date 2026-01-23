@@ -34,7 +34,7 @@ import {
   Users,
 } from "lucide-react";
 import { useWS } from "./components/WSProvider";
-import { getRollingAvg, getAllTimeAvg } from "./store/profileStats";
+import { getMonthlyAvg3, getAllTimeAvg } from "./store/profileStats";
 import { useMatch } from "./store/match";
 import { useUserSettings } from "./store/userSettings";
 import { apiFetch, getApiBaseUrl } from "./utils/api";
@@ -219,7 +219,7 @@ export default function App() {
     const refresh = () => {
       const nextAvg =
         avgMode === "24h"
-          ? getRollingAvg(user.username)
+          ? getMonthlyAvg3(user.username)
           : getAllTimeAvg(user.username);
       setAllTimeAvg(nextAvg);
       const key = `ndn:allTimeAvgSnapshot:${user.username}`;
@@ -1020,7 +1020,9 @@ export default function App() {
                       </div>
                       <div className="flex items-center gap-2 shrink-0 text-[11px] sm:text-xs text-white/60 ndn-greeting-avg">
                         <span className="uppercase tracking-[0.3em] text-white/35 text-[9px]">
-                          All-Time 3-Dart Avg
+                          {avgMode === "24h"
+                            ? "30-Day 3-Dart Avg"
+                            : "All-Time 3-Dart Avg"}
                         </span>
                         <span className="text-sm sm:text-base font-black text-white tracking-tight">
                           {allTimeAvg.toFixed(1)}

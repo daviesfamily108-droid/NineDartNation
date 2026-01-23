@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 
 interface ScoreNumberPadProps {
   value: string;
@@ -29,6 +29,44 @@ export default function ScoreNumberPad({
     const trimmed = maxLength > 0 ? next.slice(0, maxLength) : next;
     onChange(trimmed);
   };
+
+  useEffect(() => {
+    if (disabled) return;
+    const isEditableTarget = (target: EventTarget | null) => {
+      if (!target || !(target as HTMLElement).tagName) return false;
+      const el = target as HTMLElement;
+      const tag = el.tagName.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select")
+        return true;
+      return !!el.getAttribute("contenteditable");
+    };
+    const handler = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (isEditableTarget(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key >= "0" && e.key <= "9") {
+        e.preventDefault();
+        appendDigit(e.key);
+        return;
+      }
+      if (e.key === "Backspace") {
+        e.preventDefault();
+        onChange((value || "").slice(0, -1));
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onChange("");
+        return;
+      }
+      if (e.key === "Enter" && onSubmit) {
+        e.preventDefault();
+        onSubmit();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [appendDigit, disabled, onChange, onSubmit, value]);
 
   return (
     <div className={className}>

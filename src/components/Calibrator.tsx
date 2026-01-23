@@ -1648,6 +1648,7 @@ export default function Calibrator() {
         if (!ctx) return;
 
         const video = videoRef.current;
+        const showGuides = false; // Keep the camera view clean; no calibration overlays
         let vw = canvas.width;
         let vh = canvas.height;
         let cropW = canvas.width / zoom;
@@ -1696,54 +1697,56 @@ export default function Calibrator() {
             }
 
             // Periodically run board detection on the full video frame (not cropped)
-            const now = performance.now();
-            const allowDetection =
-              (typeof document === "undefined" ||
-                document.visibilityState !== "hidden") &&
-              !autoPlacementFrozenRef.current &&
-              !dragStateRef.current;
-            const needsDetection =
-              allowDetection &&
-              calibrationPoints.length < 5 &&
-              video.videoWidth > 0 &&
-              video.videoHeight > 0 &&
-              (!boardEstimateRef.current ||
-                now - boardEstimateRef.current.timestamp > 600);
+            if (showGuides) {
+              const now = performance.now();
+              const allowDetection =
+                (typeof document === "undefined" ||
+                  document.visibilityState !== "hidden") &&
+                !autoPlacementFrozenRef.current &&
+                !dragStateRef.current;
+              const needsDetection =
+                allowDetection &&
+                calibrationPoints.length < 5 &&
+                video.videoWidth > 0 &&
+                video.videoHeight > 0 &&
+                (!boardEstimateRef.current ||
+                  now - boardEstimateRef.current.timestamp > 600);
 
-            if (needsDetection) {
-              if (!detectionCanvasRef.current) {
-                detectionCanvasRef.current = document.createElement("canvas");
-              }
-              const detectCanvas = detectionCanvasRef.current;
-              if (detectCanvas) {
-                detectCanvas.width = video.videoWidth;
-                detectCanvas.height = video.videoHeight;
-                const detectCtx = detectCanvas.getContext("2d");
-                if (detectCtx) {
-                  detectCtx.drawImage(
-                    video,
-                    0,
-                    0,
-                    detectCanvas.width,
-                    detectCanvas.height,
-                  );
-                  try {
-                    const detection = detectBoard(detectCanvas);
-                    if (detection?.success && detection.doubleOuter > 0) {
-                      const estimate = {
-                        cx: detection.cx,
-                        cy: detection.cy,
-                        radius: detection.doubleOuter,
-                        timestamp: now,
-                      };
-                      boardEstimateRef.current = estimate;
-                      if (!autoPlacementFrozenRef.current) {
-                        freezeAutoPlacement();
-                        lockTargetsToEstimate(estimate);
+              if (needsDetection) {
+                if (!detectionCanvasRef.current) {
+                  detectionCanvasRef.current = document.createElement("canvas");
+                }
+                const detectCanvas = detectionCanvasRef.current;
+                if (detectCanvas) {
+                  detectCanvas.width = video.videoWidth;
+                  detectCanvas.height = video.videoHeight;
+                  const detectCtx = detectCanvas.getContext("2d");
+                  if (detectCtx) {
+                    detectCtx.drawImage(
+                      video,
+                      0,
+                      0,
+                      detectCanvas.width,
+                      detectCanvas.height,
+                    );
+                    try {
+                      const detection = detectBoard(detectCanvas);
+                      if (detection?.success && detection.doubleOuter > 0) {
+                        const estimate = {
+                          cx: detection.cx,
+                          cy: detection.cy,
+                          radius: detection.doubleOuter,
+                          timestamp: now,
+                        };
+                        boardEstimateRef.current = estimate;
+                        if (!autoPlacementFrozenRef.current) {
+                          freezeAutoPlacement();
+                          lockTargetsToEstimate(estimate);
+                        }
                       }
+                    } catch (err) {
+                      console.warn("Board detection failed", err);
                     }
-                  } catch (err) {
-                    console.warn("Board detection failed", err);
                   }
                 }
               }
@@ -1765,6 +1768,11 @@ export default function Calibrator() {
           canvasWidth: canvas.width,
           canvasHeight: canvas.height,
         };
+
+        if (!showGuides) {
+          targetScreenPositionsRef.current = new Array(5).fill(null);
+          return;
+        }
 
         const boardEstimate = boardEstimateRef.current;
         const activeDragIndex = dragStateRef.current?.targetIndex ?? null;
@@ -2068,16 +2076,10 @@ export default function Calibrator() {
                   ref={canvasRef}
                   width={800}
                   height={600}
-                  onClick={handleCanvasClick}
-                  onPointerDown={handleCanvasPointerDown}
-                  onPointerMove={handleCanvasPointerMove}
-                  onPointerUp={handleCanvasPointerUp}
-                  onPointerLeave={handleCanvasPointerLeave}
-                  onPointerCancel={handleCanvasPointerCancel}
-                  className="w-full h-full object-cover cursor-crosshair touch-none"
+                  className="w-full h-full object-cover"
                   style={{
-                    cursor: locked ? "not-allowed" : "crosshair",
-                    touchAction: "none",
+                    cursor: "default",
+                    touchAction: "auto",
                   }}
                 />
 
@@ -2100,49 +2102,20 @@ export default function Calibrator() {
                   </div>
                 )}
               </div>
-
-              {/* Progress Section */}
-              <div className="px-4 sm:px-6 py-4 bg-slate-900/40 border-t border-slate-700/50">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Progress
-                  </span>
-                  <span className="text-sm font-bold text-cyan-400">
-                    {currentPointIndex} / 5
-                  </span>
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-800/60 bg-slate-900/40 text-sm text-slate-200">
+                <div>
+                  <p className="font-semibold">Match showcase & in-game feed</p>
+                  <p className="text-slate-400 text-xs">
+                    What you see here is exactly what players see before and
+                    during the match.
+                  </p>
                 </div>
-                <div className="h-2.5 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/30">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-400 via-blue-400 to-blue-500 rounded-full shadow-lg shadow-cyan-400/40 transition-all duration-500"
-                    style={{ width: `${(currentPointIndex / 5) * 100}%` }}
-                  />
+                <div className="flex items-center gap-2 text-emerald-300 font-semibold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Stable feed
                 </div>
               </div>
             </div>
-
-            {/* Instruction Card */}
-            {!isComplete && !locked && currentPointIndex < 5 && (
-              <div className="mt-6 bg-gradient-to-br from-blue-600/20 to-cyan-600/10 border border-blue-400/40 backdrop-blur-md p-5 rounded-2xl animate-in fade-in slide-in-from-bottom">
-                <div className="flex gap-3">
-                  <div className="text-2xl flex-shrink-0">👆</div>
-                  <div className="flex-1">
-                    <h3 className="text-sm font-semibold text-blue-200 mb-1">
-                      Step {currentPointIndex + 1} of 5
-                    </h3>
-                    <p className="text-sm text-blue-100/90 mb-2">
-                      {TARGET_LABELS[currentPointIndex]}
-                    </p>
-                    <p className="text-xs text-blue-200/70">
-                      Click the{" "}
-                      <span className="font-semibold">
-                        center of the double ring
-                      </span>{" "}
-                      for best accuracy
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Right Sidebar */}
@@ -2195,669 +2168,89 @@ export default function Calibrator() {
                 </button>
               </div>
             </div>
-            {/* Confidence Card */}
-            {calibrationPoints.length > 0 && (
-              <div className="bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-5 shadow-xl">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
-                  Calibration Confidence
-                </h3>
-                {confidence ? (
-                  <>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="text-3xl sm:text-4xl font-black text-white drop-shadow-lg">
-                        {confidence.percentage.toFixed(1)}%
-                      </div>
-                      <span
-                        className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                          confidence.percentage >= 90
-                            ? "bg-emerald-500/25 text-emerald-300"
-                            : confidence.percentage >= 75
-                              ? "bg-blue-500/25 text-blue-300"
-                              : confidence.percentage >= 50
-                                ? "bg-yellow-500/25 text-yellow-300"
-                                : "bg-red-500/25 text-red-300"
-                        }`}
-                      >
-                        {confidence.level}
-                      </span>
-                    </div>
-                    <div className="h-2 bg-slate-700/50 rounded-full overflow-hidden border border-slate-600/30">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          confidence.percentage >= 90
-                            ? "bg-gradient-to-r from-emerald-400 to-emerald-500 shadow-lg shadow-emerald-400/40"
-                            : confidence.percentage >= 75
-                              ? "bg-gradient-to-r from-cyan-400 to-blue-400 shadow-lg shadow-cyan-400/40"
-                              : confidence.percentage >= 50
-                                ? "bg-gradient-to-r from-yellow-400 to-amber-400 shadow-lg shadow-yellow-400/40"
-                                : "bg-gradient-to-r from-red-400 to-pink-400 shadow-lg shadow-red-400/40"
-                        }`}
-                        style={{ width: `${confidence.percentage}%` }}
-                      />
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-3 space-y-1">
-                      <span className="block">
-                        {
-                          "Set each circle on the double (or bull) to jump straight to near-perfect confidence."
-                        }
-                      </span>
-                      <span className="block">
-                        {
-                          "Angle forgiveness means even a tilted camera no longer drags the score down."
-                        }
-                      </span>
-                    </p>
-                  </>
-                ) : (
-                  <div className="text-center text-slate-400 text-sm py-4">
-                    Start calibrating to see confidence
-                  </div>
-                )}
-              </div>
-            )}
 
-            {/* Points Tracker */}
-            <div className="bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-5 shadow-xl">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">
-                Points
-              </h3>
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-4 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-emerald-300/80 font-semibold">
+                    Match readiness
+                  </p>
+                  <p className="text-sm text-slate-200 font-semibold">
+                    Pre-match showcase & live game view
+                  </p>
+                </div>
+                <span
+                  className={`px-3 py-1 rounded-full text-xs font-bold border ${cameraReady ? "bg-emerald-500/20 border-emerald-400/40 text-emerald-200" : "bg-yellow-500/10 border-yellow-400/40 text-yellow-200"}`}
+                >
+                  {cameraReady ? "Live" : "Standing by"}
+                </span>
+              </div>
+              <div className="space-y-2 text-sm text-slate-200">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    🎬 <span>Pre-match showcase feed</span>
+                  </span>
+                  <span className="text-emerald-300 font-semibold">
+                    {locked ? "Locked" : "Select & lock"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    🎯 <span>In-game camera feed</span>
+                  </span>
+                  <span className="text-emerald-300 font-semibold">
+                    {cameraReady ? "Visible" : "Awaiting"}
+                  </span>
+                </div>
+              </div>
+              <button
+                className="mt-4 w-full btn btn--primary"
+                onClick={handleCamLockToggle}
+              >
+                {locked || userSettings.preferredCameraLocked
+                  ? "Unlock camera"
+                  : "Lock this camera for match"}
+              </button>
+              <p className="mt-2 text-xs text-slate-300/80">
+                Locking keeps the same camera for lobby showcase and every leg.
+                Change cameras anytime from here.
+              </p>
+            </div>
+          </div>
+        </div>
+        {/* Camera Selector */}
+        {availableCameras.length > 1 && (
+          <div className="bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-5">
+            <button
+              onClick={() => setShowCameraSelector(!showCameraSelector)}
+              className="w-full flex items-center justify-between font-semibold text-purple-300 hover:text-purple-200 transition-colors mb-3"
+            >
+              <span>📹 Cameras ({availableCameras.length})</span>
+              <span className="text-lg">{showCameraSelector ? "▼" : "▶"}</span>
+            </button>
+            {showCameraSelector && (
               <div className="space-y-2">
-                {TARGET_LABELS.map((label, i) => {
-                  const isCompleted = i < calibrationPoints.length;
-                  const quality = isCompleted
-                    ? evaluateClickQuality(
-                        i,
-                        calibrationPoints[i],
-                        canonicalTargets[i],
-                        H || undefined,
-                      )
-                    : null;
-
-                  return (
-                    <div
-                      key={i}
-                      className={`p-3 rounded-lg border-2 transition-all ${
-                        isCompleted
-                          ? quality?.isValid
-                            ? "bg-emerald-500/15 border-emerald-400/40 ring-1 ring-emerald-400/20"
-                            : "bg-red-500/15 border-red-400/40 ring-1 ring-red-400/20"
-                          : i === currentPointIndex
-                            ? "bg-blue-500/15 border-blue-400/50 ring-1 ring-blue-400/30"
-                            : "bg-slate-700/20 border-slate-600/30 opacity-50"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                            isCompleted ? "shadow-md shadow-current" : ""
-                          }`}
-                          style={{
-                            backgroundColor: quality?.isValid
-                              ? TARGET_COLORS[i]
-                              : "#ef4444",
-                          }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className={`text-xs font-semibold truncate ${
-                              quality?.isValid
-                                ? "text-slate-300"
-                                : "text-red-300"
-                            }`}
-                          >
-                            {label.split(" (")[0]}
-                          </p>
-                          {quality && (
-                            <p
-                              className={`text-xs mt-0.5 ${
-                                quality.isValid
-                                  ? "text-slate-400"
-                                  : "text-red-400 font-semibold"
-                              }`}
-                            >
-                              {quality.icon} {quality.distance.toFixed(1)}px{" "}
-                              {!quality.isValid && "❌ Not on double"}
-                            </p>
-                          )}
-                        </div>
-                        <span className="text-xs font-bold flex-shrink-0">
-                          {isCompleted
-                            ? quality?.isValid
-                              ? "✅"
-                              : "❌"
-                            : String(i + 1).padStart(1)}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Game Compatibility */}
-            {isComplete && confidence && (
-              <div className="bg-gradient-to-br from-emerald-900/30 to-cyan-900/20 backdrop-blur-sm border border-emerald-400/30 rounded-2xl p-5 shadow-xl">
-                <h3 className="text-xs font-bold text-emerald-300 uppercase tracking-widest mb-3">
-                  ✅ Compatible
-                </h3>
-                <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {Object.entries(GAME_CALIBRATION_REQUIREMENTS).map(
-                    ([gameKey, gameReq]) => {
-                      const isSuitable =
-                        confidence.percentage >= gameReq.minConfidence;
-                      return (
-                        <div
-                          key={gameKey}
-                          className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
-                            isSuitable
-                              ? "bg-emerald-500/20 text-emerald-200"
-                              : "bg-slate-700/30 text-slate-400 opacity-60"
-                          }`}
-                        >
-                          <span className="mr-2">
-                            {isSuitable ? "✅" : "—"}
-                          </span>
-                          {gameReq.label}
-                        </div>
-                      );
-                    },
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-wrap gap-3 justify-center sm:justify-start mb-8">
-          {calibrationPoints.length > 0 && !isComplete && !locked && (
-            <button
-              onClick={handleUndo}
-              className="px-5 py-2.5 bg-slate-700/50 hover:bg-slate-700 border border-slate-600/50 hover:border-slate-500 rounded-lg font-semibold text-sm transition-all"
-            >
-              ↩️ Undo
-            </button>
-          )}
-
-          {calibrationPoints.length > 0 && !locked && (
-            <button
-              onClick={handleReset}
-              className="px-5 py-2.5 bg-slate-700/50 hover:bg-slate-700 border border-slate-600/50 hover:border-slate-500 rounded-lg font-semibold text-sm transition-all"
-            >
-              🔄 Reset
-            </button>
-          )}
-
-          {!locked && !isComplete && cameraReady && (
-            <button
-              onClick={handleSnapAndCalibrate}
-              disabled={autoDetectting}
-              className={`px-6 py-2.5 rounded-lg font-bold text-sm transition-all flex items-center gap-2 shadow-lg ${
-                autoDetectting
-                  ? "bg-slate-700 cursor-not-allowed"
-                  : "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-indigo-500/20"
-              }`}
-            >
-              {autoDetectting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Detecting...
-                </>
-              ) : (
-                <>📸 Snap & Auto-Calibrate</>
-              )}
-            </button>
-          )}
-
-          {isComplete && !locked && (
-            <button
-              onClick={handleLock}
-              className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 rounded-lg font-bold text-sm shadow-lg shadow-emerald-500/30 transition-all"
-            >
-              🔒 Lock Calibration
-            </button>
-          )}
-
-          {/* Diagnostic Mode controls */}
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 text-xs opacity-90">
-              <input
-                type="checkbox"
-                className="form-checkbox"
-                checked={diagnosticEnabled}
-                onChange={(e) => setDiagnosticEnabled(e.target.checked)}
-              />
-              <span>Diagnostic Mode</span>
-            </label>
-            <button
-              onClick={async () => {
-                // Build and trigger download; handle headless/test env gracefully
-                try {
-                  const bundle = await buildDiagnosticBundle({
-                    H: H || null,
-                    errorPx: typeof errorPx === "number" ? errorPx : null,
-                    confidence:
-                      typeof confidence?.percentage === "number"
-                        ? confidence.percentage
-                        : null,
-                    imageSize: imageSize || null,
-                    overlaySize: overlaySize || null,
-                    pointMappings: calibrationPoints.map((pt, i) => ({
-                      index: i,
-                      imageSpace: pt,
-                      boardSpace: H ? imageToBoard(H, pt) : null,
-                    })),
-                    captureCanvas: canvasRef.current || null,
-                    extra: {
-                      calibrationUseRansac: calibrationUseRansac,
-                    },
-                  });
-                  // Try to download (no-op in tests if DOM is not available)
-                  downloadDiagnostic(bundle);
-                } catch (err) {
-                  console.warn(
-                    "[Calibrator] Failed to export diagnostic bundle",
-                    err,
-                  );
-                }
-              }}
-              className="px-4 py-2 text-xs rounded-lg bg-white/5 hover:bg-white/10 border border-white/10"
-              disabled={!diagnosticEnabled}
-              title={
-                diagnosticEnabled
-                  ? "Export diagnostic bundle (JSON)"
-                  : "Enable Diagnostic Mode to export"
-              }
-            >
-              🧶 Export Diagnostic
-            </button>
-            <label className="flex items-center gap-2 text-xs ml-2">
-              <input
-                type="checkbox"
-                className="form-checkbox"
-                checked={!!calibrationUseRansac}
-                onChange={(e) =>
-                  userSettings.setCalibrationUseRansac?.(e.target.checked)
-                }
-                title="Use RANSAC-based homography for auto-detection"
-              />
-              <span className="text-xs">Use RANSAC (auto-detect)</span>
-            </label>
-          </div>
-
-          {locked && (
-            <button
-              onClick={handleUnlock}
-              className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-lg font-bold text-sm shadow-lg shadow-blue-500/30 transition-all"
-            >
-              🔓 Recalibrate
-            </button>
-          )}
-        </div>
-
-        {/* Angle Adjustment Panel - NEW */}
-        {showAngleAdjust && theta !== null && (
-          <div className="bg-gradient-to-br from-purple-900/40 to-blue-900/40 backdrop-blur-sm border border-purple-400/30 rounded-2xl p-6 shadow-xl mb-6">
-            <h3 className="text-lg font-bold text-purple-300 mb-1">
-              📐 Camera Angle Adjustment
-            </h3>
-            <p className="text-sm text-purple-200/70 mb-5">
-              Your camera is at an angle. Fine-tune these settings for perfect
-              accuracy from any position.
-            </p>
-
-            {/* Rotation Angle Slider */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-semibold text-purple-300">
-                  Board Rotation
-                </label>
-                <span className="text-sm font-bold text-cyan-400">
-                  {thetaRadToDeg(theta).toFixed(1)}°
-                </span>
-              </div>
-              <input
-                type="range"
-                min="-180"
-                max="180"
-                step="1"
-                value={-thetaRadToDeg(theta)}
-                onChange={(e) =>
-                  setTheta(-((parseFloat(e.target.value) * Math.PI) / 180))
-                }
-                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                {Math.abs(thetaRadToDeg(theta)) < 1
-                  ? "✅ Camera is front-facing"
-                  : `Camera is rotated ${Math.abs(thetaRadToDeg(theta)).toFixed(1)}° ${thetaRadToDeg(theta) > 0 ? "clockwise" : "counter-clockwise"}`}
-              </p>
-            </div>
-
-            {/* Fine Rotation Offset Slider */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-semibold text-purple-300">
-                  Fine Rotation (precision)
-                </label>
-                <span className="text-sm font-bold text-cyan-400">
-                  {thetaRadToDeg(rotationOffsetRad).toFixed(1)}°
-                </span>
-              </div>
-              <input
-                type="range"
-                min="-10"
-                max="10"
-                step="0.1"
-                value={thetaRadToDeg(rotationOffsetRad)}
-                onChange={(e) =>
-                  setRotationOffsetRad(
-                    (parseFloat(e.target.value) * Math.PI) / 180,
-                  )
-                }
-                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                Use for micro-adjustments if darts hit the right ring but the
-                wrong wedge.
-              </p>
-            </div>
-
-            {/* Sector Offset Slider */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-semibold text-purple-300">
-                  Sector Fine-Tune
-                </label>
-                <span className="text-sm font-bold text-cyan-400">
-                  {sectorOffset > 0 ? "+" : ""}
-                  {sectorOffset}
-                </span>
-              </div>
-              <input
-                type="range"
-                min="-5"
-                max="5"
-                step="1"
-                value={sectorOffset}
-                onChange={(e) => setSectorOffset(parseInt(e.target.value))}
-                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
-              />
-              <p className="text-xs text-slate-400 mt-1">
-                Adjust by sector if darts still score wrong sectors (0 =
-                automatic detection)
-              </p>
-            </div>
-
-            {/* Save & Test Instructions */}
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4 mb-4">
-              <p className="text-sm text-slate-300 mb-3">
-                <strong>Next step:</strong> Throw one dart to test
-              </p>
-              <div className="text-xs text-slate-400 space-y-1">
-                <p>• Check if it scores at the correct location</p>
-                <p>• If still wrong, adjust the sliders above</p>
-                <p>• Repeat until perfect accuracy</p>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <button
-                onClick={handleAngleSaved}
-                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 rounded-lg font-bold text-sm shadow-lg shadow-emerald-500/30 transition-all"
-              >
-                ✅ Save & Test
-              </button>
-              <button
-                onClick={() => {
-                  setShowAngleAdjust(false);
-                  setTheta(null);
-                  setSectorOffset(0);
-                  setRotationOffsetRad(0);
-                }}
-                className="px-4 py-2.5 bg-slate-700/50 hover:bg-slate-700 border border-slate-600/50 hover:border-slate-500 rounded-lg font-semibold text-sm transition-all"
-              >
-                Skip
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Auto-Detect Result Modal - NEW */}
-        {showAutoDetect && autoDetectResult && (
-          <div className="bg-gradient-to-br from-purple-900/40 to-blue-900/40 backdrop-blur-sm border border-purple-400/30 rounded-2xl p-6 shadow-xl mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">🔍 Auto-Detection Results</h3>
-              <button
-                onClick={() => setShowAutoDetect(false)}
-                className="text-slate-400 hover:text-slate-200 text-xl"
-              >
-                ✕
-              </button>
-            </div>
-
-            <p
-              className={`text-sm mb-4 font-semibold ${autoDetectResult.success ? "text-emerald-300" : "text-red-300"}`}
-            >
-              {autoDetectResult.message ||
-                (autoDetectResult.success
-                  ? "✅ Board detected successfully!"
-                  : "❌ Detection failed")}
-            </p>
-
-            {autoDetectResult.success && (
-              <>
-                <div className="grid grid-cols-2 gap-4 mb-6">
-                  <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
-                    <p className="text-xs text-slate-400 mb-1">
-                      System Confidence (game scale)
-                    </p>
-                    <p className="text-2xl font-bold text-cyan-400">
-                      {typeof derivedAutoDetectConfidence === "number"
-                        ? `${derivedAutoDetectConfidence.toFixed(1)}%`
-                        : "—"}
-                    </p>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      Detector score: {autoDetectResult.confidence.toFixed(0)}%
-                    </p>
-                  </div>
-                  <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
-                    <p className="text-xs text-slate-400 mb-1">
-                      Detection Error
-                    </p>
-                    <p className="text-2xl font-bold text-emerald-400">
-                      {typeof autoDetectResult.errorPx === "number" &&
-                      !Number.isNaN(autoDetectResult.errorPx)
-                        ? `${autoDetectResult.errorPx.toFixed(2)}px`
-                        : "N/A"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-slate-300 mb-2">
-                    <strong>Detected Features:</strong>
-                  </p>
-                  <div className="text-xs text-slate-400 space-y-1">
-                    <p>✅ Board center located</p>
-                    <p>✅ Ring boundaries identified</p>
-                    <p>✅ Board orientation detected</p>
-                    {autoDetectResult.theta !== undefined && (
-                      <p>
-                        ✅ Camera angle:{" "}
-                        {thetaRadToDeg(autoDetectResult.theta).toFixed(1)}°
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
+                {availableCameras.map((cam) => (
                   <button
+                    key={cam.deviceId}
                     onClick={() => {
-                      setShowAutoDetect(false);
-                      setCalibration({ locked: true });
+                      handleCameraChange(cam.deviceId);
+                      setShowCameraSelector(false);
                     }}
-                    className="flex-1 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 rounded-lg font-bold text-sm shadow-lg shadow-emerald-500/30 transition-all"
+                    className={`w-full text-left p-3 rounded-lg transition-all border ${
+                      selectedCameraId === cam.deviceId
+                        ? "bg-cyan-600/30 border-cyan-400/40 text-cyan-200 font-semibold"
+                        : "bg-slate-700/40 hover:bg-slate-700/60 border-slate-600/30 hover:border-slate-500/30 text-slate-200"
+                    }`}
                   >
-                    ✅ Accept & Lock
-                  </button>
-                  <button
-                    onClick={() => setShowAutoDetect(false)}
-                    className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold text-sm transition-all"
-                  >
-                    Retry
-                  </button>
-                </div>
-              </>
-            )}
-
-            {!autoDetectResult.success && (
-              <>
-                <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-4 mb-4">
-                  <p className="text-sm text-slate-300 mb-2">
-                    <strong>Detection Tips:</strong>
-                  </p>
-                  <div className="text-xs text-slate-400 space-y-1">
-                    <p>• Ensure dartboard is fully visible in camera frame</p>
-                    <p>• Make sure board is well-lit</p>
-                    <p>• Try different camera angles (45°-90° works best)</p>
-                    <p>• Clean camera lens if blurry</p>
-                  </div>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowAutoDetect(false)}
-                    className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 rounded-lg font-bold text-sm shadow-lg shadow-blue-500/30 transition-all"
-                  >
-                    Retry
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowAutoDetect(false);
-                      handleReset();
-                    }}
-                    className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-lg font-semibold text-sm transition-all"
-                  >
-                    Manual Mode
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* History & Camera Sections */}
-        <div className="space-y-5">
-          {/* Calibration History */}
-          {savedCalibrations.length > 0 && (
-            <div className="bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-5">
-              <button
-                onClick={() => setShowHistory(!showHistory)}
-                className="w-full flex items-center justify-between font-semibold text-blue-300 hover:text-blue-200 transition-colors mb-3"
-              >
-                <span>📋 Calibration History ({savedCalibrations.length})</span>
-                <span className="text-lg">{showHistory ? "▼" : "▶"}</span>
-              </button>
-              {showHistory && (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {savedCalibrations.map((cal) => (
-                    <div
-                      key={cal.id}
-                      className="w-full text-left p-3 bg-slate-700/40 hover:bg-slate-700/60 rounded-lg transition-all border border-slate-600/30 hover:border-slate-500/30 flex items-center justify-between group"
-                    >
-                      <button
-                        onClick={() => {
-                          handleLoadPrevious(cal);
-                          setShowHistory(false);
-                        }}
-                        className="flex-1 text-left"
-                      >
-                        <div>
-                          <p className="font-semibold text-slate-200 text-sm">
-                            {cal.date}
-                          </p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            Error:{" "}
-                            {typeof cal.errorPx === "number"
-                              ? `${cal.errorPx.toFixed(2)}px`
-                              : "Unknown"}
-                            {typeof cal.confidence === "number" && (
-                              <span className="ml-2">
-                                · Confidence: {cal.confidence.toFixed(1)}%
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteCalibrationFromHistory(cal.id);
-                          setSavedCalibrations(getSavedCalibrations());
-                        }}
-                        className="ml-2 p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition-all opacity-0 group-hover:opacity-100 flex-shrink-0"
-                        title="Delete this calibration"
-                      >
-                        <span className="text-lg font-bold">✕</span>
-                      </button>
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">{cam.label}</span>
+                      {selectedCameraId === cam.deviceId && <span>✅</span>}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Camera Selector */}
-          {availableCameras.length > 1 && (
-            <div className="bg-gradient-to-br from-slate-800/60 to-slate-900/60 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-5">
-              <button
-                onClick={() => setShowCameraSelector(!showCameraSelector)}
-                className="w-full flex items-center justify-between font-semibold text-purple-300 hover:text-purple-200 transition-colors mb-3"
-              >
-                <span>📹 Cameras ({availableCameras.length})</span>
-                <span className="text-lg">
-                  {showCameraSelector ? "▼" : "▶"}
-                </span>
-              </button>
-              {showCameraSelector && (
-                <div className="space-y-2">
-                  {availableCameras.map((cam) => (
-                    <button
-                      key={cam.deviceId}
-                      onClick={() => {
-                        handleCameraChange(cam.deviceId);
-                        setShowCameraSelector(false);
-                      }}
-                      className={`w-full text-left p-3 rounded-lg transition-all border ${
-                        selectedCameraId === cam.deviceId
-                          ? "bg-cyan-600/30 border-cyan-400/40 text-cyan-200 font-semibold"
-                          : "bg-slate-700/40 hover:bg-slate-700/60 border-slate-600/30 hover:border-slate-500/30 text-slate-200"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm">{cam.label}</span>
-                        {selectedCameraId === cam.deviceId && <span>✅</span>}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer Status */}
-        {locked && (
-          <div className="mt-8 bg-gradient-to-r from-emerald-600/20 to-cyan-600/20 border border-emerald-400/30 backdrop-blur-sm p-4 rounded-2xl text-center">
-            <p className="font-semibold text-emerald-300 mb-1">
-              ✅ Calibration Active
-            </p>
-            <p className="text-sm text-emerald-200/70">
-              Your setup is locked and ready for accurate scoring · Error:{" "}
-              {errorPx?.toFixed(2)}px
-            </p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

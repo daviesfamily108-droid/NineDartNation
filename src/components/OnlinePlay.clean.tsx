@@ -13,6 +13,7 @@ import GameCalibrationStatus from "./GameCalibrationStatus";
 import MatchStartShowcase from "./ui/MatchStartShowcase";
 import { useMatch } from "../store/match";
 import { useWS } from "./WSProvider";
+import { launchInPlayDemo } from "../utils/inPlayDemo";
 
 export default function OnlinePlayClean({ user }: { user?: any }) {
   const username = user?.username || "You";
@@ -32,6 +33,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const players = useMatch((s) => s.players);
   const [focusMode, setFocusMode] = useState(false);
   const matchesRef = useRef<HTMLDivElement | null>(null);
+  const showDemoControls =
+    (import.meta as any).env?.DEV ||
+    String(user?.email || "").toLowerCase() === "daviesfamily108@gmail.com";
 
   useEffect(() => {
     if (!focusMode) return;
@@ -488,6 +492,15 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
   // No local state for the start showcase; MatchStartShowcase reads from `match.inProgress` directly
 
+  const runOnlineInPlayDemo = () => {
+    launchInPlayDemo({
+      players: [username, "Opponent"],
+      startingScore: 501,
+      roomId: "online-demo",
+      visits: [{ score: 60 }, { score: 85 }, { score: 100 }],
+    });
+  };
+
   return (
     <div
       className="flex-1 min-h-0 ndn-page"
@@ -529,6 +542,14 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   <Trophy className="w-4 h-4" />
                   Create Match +
                 </button>
+                {showDemoControls && (
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    onClick={runOnlineInPlayDemo}
+                  >
+                    Demo In-Play
+                  </button>
+                )}
                 {(currentRoom?.matches?.length || 0) >= maxMatchesPerRoom && (
                   <div className="text-xs text-rose-400">
                     Room full — create a new room
