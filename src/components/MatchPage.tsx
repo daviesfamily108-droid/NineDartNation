@@ -46,6 +46,7 @@ export default function MatchPage() {
   const [manualEntries, setManualEntries] = useState<number[]>([]);
   const [showStartShowcase, setShowStartShowcase] = useState<boolean>(true);
   const showcaseLockedOpenRef = React.useRef(true);
+  const [showMobileCamera, setShowMobileCamera] = useState(false);
 
   // In the match pop-out window we want the same pre-game build-up overlay
   // (and camera preview) that exists on the main pre-game screen.
@@ -456,14 +457,100 @@ export default function MatchPage() {
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-3 sm:gap-4 mt-3 items-start">
+          {/* Mobile: Scoreboards first, then controls */}
+          <div className="lg:hidden min-w-0 space-y-4">
+            <div className="card p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">Scoreboards</h3>
+                <button
+                  onClick={() => setShowMobileCamera(!showMobileCamera)}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors"
+                >
+                  {showMobileCamera ? "Hide Camera 📹" : "Show Camera 📹"}
+                </button>
+              </div>
+              <GameScoreboard
+                gameMode={((match as any)?.game || "X01") as any}
+                players={(match.players || []).map((p: any, idx: number) => ({
+                  name: p.name || `Player ${idx + 1}`,
+                  isCurrentTurn: idx === (match.currentPlayerIdx || 0),
+                  legsWon: p.legsWon || 0,
+                  score:
+                    p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
+                    match.startingScore ??
+                    lastOfflineStart,
+                  lastScore:
+                    p.legs && p.legs.length
+                      ? p.legs[p.legs.length - 1].visits.slice(-1)[0]?.score ||
+                        0
+                      : 0,
+                }))}
+              />
+            </div>
+
+            {/* Mobile Camera - toggleable */}
+            {showMobileCamera && (
+              <div className="card p-2">
+                <div className="text-sm font-semibold mb-2 flex items-center justify-between">
+                  <span>Camera Feed</span>
+                  <span className="text-xs text-slate-300">
+                    For opponent viewing
+                  </span>
+                </div>
+                <div className="relative h-56 rounded-xl overflow-hidden bg-black">
+                  <CameraView
+                    hideInlinePanels={true}
+                    forceAutoStart={true}
+                    onAddVisit={commitVisit}
+                    onEndLeg={(score) => {
+                      try {
+                        match.endLeg(score ?? 0);
+                      } catch {}
+                    }}
+                    onVisitCommitted={(_score, _darts, finished, meta) => {
+                      if (!finished) return;
+                      const frame = meta?.frame ?? remoteFrame ?? null;
+                      setWinningShot({
+                        label: meta?.label || deriveWinningLabel() || undefined,
+                        ring: meta?.ring,
+                        frame,
+                        ts: Date.now(),
+                      });
+                      try {
+                        match.endGame();
+                      } catch {}
+                    }}
+                  />
+                  {winningShot?.frame && !match.inProgress && (
+                    <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
+                      <img
+                        src={winningShot.frame}
+                        alt="Winning double zoom"
+                        className="w-full h-full object-cover scale-125"
+                      />
+                      <div className="absolute bottom-2 left-2 right-2 text-xs text-white bg-black/60 rounded-md px-2 py-1 flex items-center justify-between gap-2">
+                        <span className="font-semibold">Winning dart zoom</span>
+                        {winningShot.label && (
+                          <span className="text-emerald-200">
+                            {winningShot.label}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="min-w-0 space-y-4">
-            <div className="card p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="card p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 lg:block">
               <div className="flex items-center gap-2 text-sm font-medium opacity-80">
                 <span className="text-xs uppercase tracking-wide text-white/60">
                   Match Controls
                 </span>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 lg:hidden">
                 <span className="text-xs text-emerald-300 font-semibold px-3 py-2 rounded-md bg-white/5 border border-white/10">
                   Manual scoring only
                 </span>
@@ -508,7 +595,7 @@ export default function MatchPage() {
             </div>
           </div>
 
-          <div className="min-w-0 space-y-4 mt-[68px] sm:mt-[68px]">
+          <div className="hidden lg:block min-w-0 space-y-4 mt-[68px]">
             <div className="card p-3">
               <GameScoreboard
                 gameMode={((match as any)?.game || "X01") as any}
@@ -529,7 +616,8 @@ export default function MatchPage() {
               />
             </div>
 
-            <div className="card p-2">
+            {/* Camera - hidden on mobile by default, visible on desktop */}
+            <div className="card p-2 hidden lg:block">
               <div className="text-sm font-semibold mb-2 flex items-center justify-between">
                 <span>Camera</span>
                 <span className="text-xs text-slate-300">Compact view</span>
