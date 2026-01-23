@@ -27,7 +27,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
   const fetchWithTimeout = async (
     input: RequestInfo | URL,
     init: RequestInit = {},
-    timeoutMs = 12000,
+    timeoutMs = 30000,
   ) => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -68,7 +68,11 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       });
       const data = await res.json().catch(() => ({}));
       console.timeEnd("Auth:signIn roundtrip");
-      if (res.ok && data?.user && data?.token) {
+      if (res.status === 429) {
+        setError(
+          "Too many login attempts. Please wait 60 seconds and try again.",
+        );
+      } else if (res.ok && data?.user && data?.token) {
         localStorage.setItem("authToken", data.token);
         onAuth(data.user);
       } else {
@@ -76,9 +80,11 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       }
     } catch (err: any) {
       if (err?.name === "AbortError") {
-        setError("Login timed out. Please try again.");
+        setError(
+          "Login timed out. The server may be slow or unavailable. Please try again or contact support if this persists.",
+        );
       } else {
-        setError("Network error.");
+        setError("Network error. Please check your connection and try again.");
       }
     } finally {
       setLoading(false);
@@ -317,13 +323,25 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
             </button>
 
             {mode === "signin" && (
-              <button
-                type="button"
-                onClick={handleSendUsername}
-                className="w-full py-2 text-xs font-bold text-white/30 hover:text-white/60 transition-colors"
-              >
-                Email me my username 📧
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleSendUsername}
+                  className="w-full py-2 text-xs font-bold text-white/30 hover:text-white/60 transition-colors"
+                >
+                  Email me my username 📧
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.clear();
+                    setError("Cache cleared. Please try logging in again.");
+                  }}
+                  className="w-full py-2 text-xs font-bold text-white/20 hover:text-white/40 transition-colors"
+                >
+                  Clear cache & retry 🔄
+                </button>
+              </>
             )}
           </form>
         </div>
