@@ -21,7 +21,7 @@ export default function GameCalibrationStatus({
   compact = false,
   onRecalibrate,
 }: GameCalibrationStatusProps) {
-  const { H, errorPx, confidence: storedConfidence } = useCalibration();
+  const { H, errorPx, confidence: storedConfidence, locked } = useCalibration();
 
   const gameConfidence = getCalibrationConfidenceForGame(gameMode, errorPx);
   const suitable = isCalibrationSuitableForGame(gameMode, errorPx);
@@ -47,6 +47,32 @@ export default function GameCalibrationStatus({
   // Some flows may not persist errorPx (or it may be 0/null) even though the
   // board is calibrated enough to use for scoring.
   const hasCalibration = !!H;
+
+  // If calibration is locked, always show "Camera connected ✅"
+  if (hasCalibration && locked) {
+    if (compact) {
+      return (
+        <div className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 inline-flex items-center gap-1 border border-emerald-600/30">
+          <CheckCircle className="w-3 h-3" />
+          Camera connected ✅
+        </div>
+      );
+    }
+
+    return (
+      <div className="px-3 py-2 rounded bg-emerald-500/20 border border-emerald-600/30 flex items-center gap-2">
+        <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+        <div className="flex-1">
+          <div className="font-medium text-emerald-300">
+            Camera Connected ✅
+          </div>
+          <div className="text-xs opacity-80">
+            Camera is locked and ready for {gameMode}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Camera not connected
   if (!hasCalibration) {
