@@ -224,26 +224,46 @@ export default function App() {
       setAllTimeAvg(nextAvg);
       const key = `ndn:allTimeAvgSnapshot:${user.username}`;
       const now = Date.now();
-      const DAY = 1000 * 60 * 60 * 24;
+      const currentMonth = new Date().getMonth();
+      const currentYear = new Date().getFullYear();
+
       try {
         const raw = localStorage.getItem(key);
         if (!raw) {
           localStorage.setItem(
             key,
-            JSON.stringify({ value: nextAvg, ts: now }),
+            JSON.stringify({
+              value: nextAvg,
+              ts: now,
+              month: currentMonth,
+              year: currentYear,
+            }),
           );
           setAvgDelta(0);
           return;
         }
         const parsed = JSON.parse(raw);
         const baseline = Number(parsed?.value) || 0;
-        const delta = nextAvg - baseline;
-        setAvgDelta(Number.isFinite(delta) ? delta : 0);
-        if (!parsed?.ts || now - Number(parsed.ts) >= DAY) {
+        const snapshotMonth = Number(parsed?.month);
+        const snapshotYear = Number(parsed?.year);
+
+        // Check if we're in a new month - if so, reset the baseline
+        if (snapshotYear !== currentYear || snapshotMonth !== currentMonth) {
+          // New month - set baseline to current average and delta to 0
           localStorage.setItem(
             key,
-            JSON.stringify({ value: nextAvg, ts: now }),
+            JSON.stringify({
+              value: nextAvg,
+              ts: now,
+              month: currentMonth,
+              year: currentYear,
+            }),
           );
+          setAvgDelta(0);
+        } else {
+          // Same month - calculate delta from baseline
+          const delta = nextAvg - baseline;
+          setAvgDelta(Number.isFinite(delta) ? delta : 0);
         }
       } catch {
         setAvgDelta(0);
@@ -1534,6 +1554,9 @@ function MobileNav({
   onChange: (k: TabKey) => void;
   user: any;
 }) {
+  const isAdmin = useIsAdmin(user?.email);
+  const tabs = buildTabList(user, isAdmin);
+
   return (
     <Drawer
       open={open}
@@ -1542,17 +1565,31 @@ function MobileNav({
       side="left"
       title="Navigate"
     >
-      <div className="mt-0 h-full overflow-y-auto">
-        {/* Always show the full sidebar in mobile drawer */}
-        <Sidebar
-          active={active}
-          onChange={(k) => {
-            onChange(k);
-            onClose();
-          }}
-          user={user}
-          className="flex relative static w-full shadow-none bg-transparent p-0 mobile-sidebar-visible"
-        />
+      <div className="mt-0 h-full overflow-y-auto p-4">
+        {/* Mobile menu tabs - explicitly render each tab */}
+        <div className="flex flex-col gap-3">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = active === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => {
+                  onChange(tab.key as TabKey);
+                  onClose();
+                }}
+                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                  isActive
+                    ? "bg-indigo-600 text-white shadow-lg"
+                    : "bg-white/5 text-slate-300 hover:bg-white/10"
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                <span className="font-semibold text-base">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </Drawer>
   );
