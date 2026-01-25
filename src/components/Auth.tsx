@@ -27,7 +27,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
   const fetchWithTimeout = async (
     input: RequestInfo | URL,
     init: RequestInit = {},
-    timeoutMs = 30000,
+    timeoutMs = 60000, // Increased to 60 seconds
   ) => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -79,12 +79,16 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
         setError(data?.error || "Invalid username or password.");
       }
     } catch (err: any) {
+      console.error("Login error:", err);
+      console.log("Attempting to connect to:", `${API_URL}/api/auth/login`);
       if (err?.name === "AbortError") {
         setError(
-          "Login timed out. The server may be slow or unavailable. Please try again or contact support if this persists.",
+          `Login timed out after 60 seconds. Server: ${API_URL}. Please check if your server is running and accessible.`,
         );
       } else {
-        setError("Network error. Please check your connection and try again.");
+        setError(
+          `Network error: ${err?.message || "Unknown error"}. Server: ${API_URL}. Please check your connection and try again.`,
+        );
       }
     } finally {
       setLoading(false);
@@ -340,6 +344,42 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
                   className="w-full py-2 text-xs font-bold text-white/20 hover:text-white/40 transition-colors"
                 >
                   Clear cache & retry 🔄
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setError("");
+                    setLoading(true);
+                    try {
+                      console.log(
+                        "Testing connection to:",
+                        `${API_URL}/api/health`,
+                      );
+                      const res = await fetchWithTimeout(
+                        `${API_URL}/api/health`,
+                        {
+                          method: "GET",
+                        },
+                        10000,
+                      );
+                      if (res.ok) {
+                        setError(`✅ Server is reachable at ${API_URL}`);
+                      } else {
+                        setError(
+                          `⚠️ Server responded with status ${res.status} at ${API_URL}`,
+                        );
+                      }
+                    } catch (err: any) {
+                      setError(
+                        `❌ Cannot reach server at ${API_URL}. Error: ${err?.message || "Unknown"}. Please check if your server is running.`,
+                      );
+                    } finally {
+                      setLoading(false);
+                    }
+                  }}
+                  className="w-full py-2 text-xs font-bold text-white/20 hover:text-white/40 transition-colors"
+                >
+                  Test server connection 🔌
                 </button>
               </>
             )}
