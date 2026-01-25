@@ -12,6 +12,8 @@ import { useUserSettings } from "../store/userSettings";
 import MatchControls from "./MatchControls";
 import { parseManualDart } from "../game/types";
 import MatchStartShowcase from "./ui/MatchStartShowcase";
+import { sayScore } from "../utils/checkout";
+import { getPreferredUserName } from "../utils/userName";
 
 export default function MatchPage() {
   const match = useMatch();
@@ -38,6 +40,11 @@ export default function MatchPage() {
   const lastOfflineStart = useUserSettings(
     (s) => s.lastOffline?.x01Start || 501,
   );
+  const user = useUserSettings((s) => s.user);
+  const callerEnabled = useUserSettings((s) => s.callerEnabled);
+  const callerVoice = useUserSettings((s) => s.callerVoice);
+  const callerVolume = useUserSettings((s) => s.callerVolume);
+  const speakCheckoutOnly = useUserSettings((s) => s.speakCheckoutOnly);
   const [playerVisitDarts, setPlayerVisitDarts] = useState(0);
   const [playerDartPoints, setPlayerDartPoints] = useState<number>(0);
   const [visitTotalInput, setVisitTotalInput] = useState<string>("");
@@ -253,6 +260,17 @@ export default function MatchPage() {
     const numericScore = typeof score === "number" ? score : 0;
     let newRemaining = prevRemaining - numericScore;
     if (!Number.isFinite(newRemaining) || newRemaining < 0) newRemaining = 0;
+
+    // Announce the score with the caller
+    if (callerEnabled) {
+      const playerName = p?.name || getPreferredUserName(user, "Player");
+      try {
+        sayScore(playerName, numericScore, newRemaining, callerVoice, {
+          volume: callerVolume,
+          checkoutOnly: speakCheckoutOnly,
+        });
+      } catch {}
+    }
 
     match.addVisit(numericScore, darts, meta ?? { visitTotal: numericScore });
     if (newRemaining === 0) {
