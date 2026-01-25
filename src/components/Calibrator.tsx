@@ -664,9 +664,12 @@ export default function Calibrator() {
     // so external auto-lock attempts are ignored. Tests assert on this behavior.
     try {
       userSettings.setIgnorePreferredCameraSync(true);
-      userSettings.setPreferredCameraLocked(
-        !userSettings.preferredCameraLocked,
-      );
+      const newLockedState = !userSettings.preferredCameraLocked;
+      userSettings.setPreferredCameraLocked(newLockedState);
+
+      // Also update the calibration store's locked property
+      setCalibration({ locked: newLockedState });
+
       setTimeout(() => {
         try {
           userSettings.setIgnorePreferredCameraSync(false);
