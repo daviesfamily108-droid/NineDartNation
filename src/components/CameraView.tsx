@@ -5873,7 +5873,7 @@ export default forwardRef(function CameraView(
     if (commitBlocked) {
       try {
         window.alert(
-          "Cannot commit: pending camera detections are not calibration validated for online matches",
+          "Cannot commit: pending camera detections require camera connection validation for online matches",
         );
       } catch {}
       return;

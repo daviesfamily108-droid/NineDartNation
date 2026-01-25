@@ -289,7 +289,7 @@ export function getCalibrationQualityText(
 } {
   // IMPORTANT: don't treat 0 as missing.
   if (errorPx == null || Number.isNaN(errorPx as any) || errorPx < 0) {
-    return { quality: "none", text: "Not calibrated" };
+    return { quality: "none", text: "Camera not connected" };
   }
 
   const confidence = getCalibrationConfidenceForGame(gameMode, errorPx);

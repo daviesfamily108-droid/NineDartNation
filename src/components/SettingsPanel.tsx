@@ -249,8 +249,10 @@ export default function SettingsPanel({ user }: { user?: any }) {
   const faq = {
     "how to play":
       "To play darts, select a game mode from the menu. For online play, join a match. For offline, start a local game.",
+    camera:
+      "Go to Settings > Camera & Vision > Camera Guide to set up your camera properly.",
     calibration:
-      "Go to Settings > Camera & Vision > Calibration Guide to set up your camera properly.",
+      "Go to Settings > Camera & Vision > Camera Guide to set up your camera properly.",
     premium:
       'Premium unlocks all game modes. Click the "Upgrade to PREMIUM" button in online play.',
     username: "Change your username once for free in Settings > Account.",
@@ -381,7 +383,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
     }
 
     return {
-      text: "I'm not sure about that. Try asking about playing, calibration, premium, username changes, voice settings, friends, stats, or settings.",
+      text: "I'm not sure about that. Try asking about playing, camera setup, premium, username changes, voice settings, friends, stats, or settings.",
     };
   };
 
@@ -490,7 +492,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
             color="from-indigo-600 to-indigo-500"
           />
           <PillButton
-            label="Calibration 📍"
+            label="Camera Setup 📍"
             icon={Camera}
             pill="calibration"
             color="from-emerald-600 to-emerald-500"
@@ -881,11 +883,11 @@ export default function SettingsPanel({ user }: { user?: any }) {
         </div>
       )}
 
-      {/* ==== CALIBRATION PILL ==== */}
+      {/* ==== CAMERA SETUP PILL ==== */}
       <div className="relative rounded-xl bg-white/5 backdrop-blur-md border border-white/10 p-1">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1 px-1">
           <PillButton
-            label="Calibration"
+            label="Camera Setup"
             icon={Camera}
             pill="calibration"
             color="from-purple-500 to-pink-500 shadow-purple-500/30"
@@ -893,7 +895,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
         </div>
       </div>
 
-      {/* CALIBRATION CONTENT */}
+      {/* CAMERA SETUP CONTENT */}
       {expandedPill === "calibration" && (
         <div
           data-testid="pill-calibration-content"

@@ -67,10 +67,9 @@ export default function CalibrationPopup({
                         locked: c?.locked,
                         errorPx: c?.errorPx,
                       });
-                      if (status === "verified") return "Calibrated ✅";
-                      if (status === "unknown")
-                        return "Calibration quality unknown";
-                      return "Needs calibration";
+                      if (status === "verified") return "Camera connected ✅";
+                      if (status === "unknown") return "Camera quality unknown";
+                      return "Camera not connected";
                     })()}
                   </div>
                 </div>

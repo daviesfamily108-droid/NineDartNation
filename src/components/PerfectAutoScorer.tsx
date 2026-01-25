@@ -111,7 +111,7 @@ export function PerfectAutoScorer({
     }
 
     if (!calibration) {
-      setError("First: Snap & Calibrate");
+      setError("First: Connect Camera");
       return;
     }
 

@@ -48,13 +48,13 @@ export default function GameCalibrationStatus({
   // board is calibrated enough to use for scoring.
   const hasCalibration = !!H;
 
-  // Not calibrated
+  // Camera not connected
   if (!hasCalibration) {
     if (compact) {
       return (
         <div className="text-xs px-2 py-1 rounded bg-slate-600/40 text-slate-300 inline-flex items-center gap-1 border border-slate-500/30">
           <AlertTriangle className="w-3 h-3" />
-          Not calibrated ❌
+          Camera not connected ❌
         </div>
       );
     }
