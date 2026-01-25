@@ -398,6 +398,32 @@
     height: calc(100% - (var(--ndn-header-h) + var(--ndn-safe-top) + 6px));
   }
 
+  /* Mobile drawer scrollbar styling - always visible */
+  .ndn-drawer-root .ndn-drawer-panel > div {
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139, 92, 246, 0.6) rgba(30, 41, 59, 0.3);
+  }
+  
+  /* Webkit browsers (Chrome, Safari, Edge) */
+  .ndn-drawer-root .ndn-drawer-panel > div::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  .ndn-drawer-root .ndn-drawer-panel > div::-webkit-scrollbar-track {
+    background: rgba(30, 41, 59, 0.3);
+    border-radius: 4px;
+  }
+  
+  .ndn-drawer-root .ndn-drawer-panel > div::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.6);
+    border-radius: 4px;
+  }
+  
+  .ndn-drawer-root .ndn-drawer-panel > div::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.8);
+  }
+
   /* Ensure main scroll area gets a small top padding so content sits under header with a tiny gap */
   #ndn-main-scroll {
     padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size, 6px) + var(--ndn-section-gap, 0px)) !important;

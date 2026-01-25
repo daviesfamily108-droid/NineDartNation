@@ -1568,9 +1568,15 @@ function MobileNav({
       side="left"
       title="Navigate"
     >
-      <div className="h-full overflow-y-auto p-4 pb-20">
+      <div
+        className="h-full overflow-y-scroll p-4 pb-20"
+        style={{
+          scrollbarWidth: "thin",
+          scrollbarColor: "rgba(139, 92, 246, 0.5) rgba(30, 41, 59, 0.3)",
+        }}
+      >
         {/* Mobile menu tabs - explicitly render each tab */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 min-h-full">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = active === tab.key;
