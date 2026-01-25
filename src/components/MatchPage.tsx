@@ -47,6 +47,9 @@ export default function MatchPage() {
   const [showStartShowcase, setShowStartShowcase] = useState<boolean>(true);
   const showcaseLockedOpenRef = React.useRef(true);
   const [showMobileCamera, setShowMobileCamera] = useState(false);
+  const [mobileViewMode, setMobileViewMode] = useState<"controls" | "camera">(
+    "controls",
+  );
 
   // In the match pop-out window we want the same pre-game build-up overlay
   // (and camera preview) that exists on the main pre-game screen.
@@ -463,10 +466,16 @@ export default function MatchPage() {
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-semibold">Scoreboards</h3>
                 <button
-                  onClick={() => setShowMobileCamera(!showMobileCamera)}
+                  onClick={() =>
+                    setMobileViewMode(
+                      mobileViewMode === "controls" ? "camera" : "controls",
+                    )
+                  }
                   className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors"
                 >
-                  {showMobileCamera ? "Hide Camera 📹" : "Show Camera 📹"}
+                  {mobileViewMode === "camera"
+                    ? "Show Controls 🎮"
+                    : "Show Camera 📹"}
                 </button>
               </div>
               <GameScoreboard
@@ -488,14 +497,12 @@ export default function MatchPage() {
               />
             </div>
 
-            {/* Mobile Camera - toggleable */}
-            {showMobileCamera && (
+            {/* Mobile Camera - shown when opponent is viewing or manually toggled */}
+            {mobileViewMode === "camera" && (
               <div className="card p-2">
                 <div className="text-sm font-semibold mb-2 flex items-center justify-between">
                   <span>Camera Feed</span>
-                  <span className="text-xs text-slate-300">
-                    For opponent viewing
-                  </span>
+                  <span className="text-xs text-slate-300">Opponent View</span>
                 </div>
                 <div className="relative h-56 rounded-xl overflow-hidden bg-black">
                   <CameraView
@@ -543,7 +550,50 @@ export default function MatchPage() {
             )}
           </div>
 
-          <div className="min-w-0 space-y-4">
+          {/* Mobile: Score Entry Controls - shown for current player */}
+          {mobileViewMode === "controls" && (
+            <div className="lg:hidden min-w-0 space-y-4">
+              <div className="card p-3">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <h3 className="text-base font-semibold">Score Entry</h3>
+                  <span className="text-xs text-slate-300">
+                    Enter visits or dart-by-dart edits
+                  </span>
+                </div>
+                {/* Compact autoscore + manual scoring controls */}
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="space-y-3">
+                    <MatchControls
+                      inProgress={match.inProgress}
+                      startingScore={match.startingScore}
+                      pendingEntries={pendingEntries}
+                      onAddVisit={(score, darts) =>
+                        commitVisit(score, darts, { visitTotal: score })
+                      }
+                      onUndo={() => match.undoVisit()}
+                      onNextPlayer={() => match.nextPlayer()}
+                      onEndLeg={(score, darts, meta) => {
+                        const numericScore =
+                          typeof score === "number" ? score : 0;
+                        const finalDarts =
+                          typeof darts === "number" ? Math.max(0, darts) : 0;
+                        match.addVisit(numericScore, finalDarts, {
+                          visitTotal: numericScore,
+                          doubleWindowDarts: meta?.doubleDarts ?? 0,
+                        });
+                        match.endLeg(numericScore);
+                      }}
+                      onEndGame={() => match.endGame()}
+                      quickButtons={[180, 140, 100, 60]}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Desktop: Left column with controls */}
+          <div className="hidden lg:block min-w-0 space-y-4">
             <div className="card p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 lg:block">
               <div className="flex items-center gap-2 text-sm font-medium opacity-80">
                 <span className="text-xs uppercase tracking-wide text-white/60">
