@@ -1063,7 +1063,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                             onChange={(e) =>
                               setCameraProcessingFps(Number(e.target.value))
                             }
-                            className="text-sm"
+                            className="input w-full"
                           >
                             <option value={10}>10 fps (very low)</option>
                             <option value={15}>15 fps (balanced)</option>
