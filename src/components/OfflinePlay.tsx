@@ -2420,7 +2420,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   // no external overlay: we render the match modal as absolute inset-0 inside this card
 
   return (
-    <div className="card ndn-game-shell ndn-page relative overflow-hidden">
+    <div className="card ndn-game-shell ndn-page relative overflow-hidden md:overflow-hidden overflow-y-auto">
       {showStartShowcase && (
         <MatchStartShowcase
           players={(match.players || []) as any}

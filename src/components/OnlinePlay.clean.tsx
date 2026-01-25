@@ -506,7 +506,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       className="flex-1 min-h-0 ndn-page"
       style={{ position: "relative", marginTop: 0 }}
     >
-      <div className="card ndn-game-shell relative overflow-hidden h-full flex flex-col">
+      <div className="card ndn-game-shell relative overflow-hidden md:overflow-hidden overflow-y-auto h-full flex flex-col">
         {showStartShowcase && (
           <MatchStartShowcase
             players={(players || []) as any}
