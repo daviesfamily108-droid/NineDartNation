@@ -38,6 +38,7 @@ import { getMonthlyAvg3, getAllTimeAvg } from "./store/profileStats";
 import { useMatch } from "./store/match";
 import { useUserSettings } from "./store/userSettings";
 import { apiFetch, getApiBaseUrl } from "./utils/api";
+import { DISCORD_INVITE_URL } from "./utils/config";
 import "./styles/premium.css";
 import "./styles/themes.css";
 const OnlinePlay = React.lazy(() => import("./components/OnlinePlay.clean"));
@@ -1556,6 +1557,8 @@ function MobileNav({
 }) {
   const isAdmin = useIsAdmin(user?.email);
   const tabs = buildTabList(user, isAdmin);
+  const [showDiscord, setShowDiscord] = React.useState(false);
+  const [showNDNDiscord, setShowNDNDiscord] = React.useState(false);
 
   return (
     <Drawer
@@ -1565,7 +1568,7 @@ function MobileNav({
       side="left"
       title="Navigate"
     >
-      <div className="mt-0 h-full overflow-y-auto p-4">
+      <div className="h-full overflow-y-auto p-4 pb-20">
         {/* Mobile menu tabs - explicitly render each tab */}
         <div className="flex flex-col gap-3">
           {tabs.map((tab) => {
@@ -1589,8 +1592,96 @@ function MobileNav({
               </button>
             );
           })}
+
+          {/* Discord buttons */}
+          <div className="mt-2 flex flex-col gap-2">
+            <button
+              className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] transition-all border border-[#5865F2]/30"
+              onClick={() => setShowDiscord(true)}
+            >
+              <MessageCircle className="w-5 h-5" />
+              <span className="font-semibold text-base">Bullseye League</span>
+            </button>
+
+            <button
+              className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] transition-all border border-[#5865F2]/30"
+              onClick={() => setShowNDNDiscord(true)}
+            >
+              <MessageCircle className="w-5 h-5" />
+              <span className="font-semibold text-base">NDN Community</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Discord dialogs */}
+      {showDiscord && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowDiscord(false)}
+          />
+          <div className="relative bg-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-4">
+              Join Bullseye Darts League
+            </h2>
+            <p className="text-slate-300 mb-6">
+              Connect with fellow darts enthusiasts, share tips, and compete in
+              tournaments!
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDiscord(false)}
+                className="flex-1 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <a
+                href={DISCORD_INVITE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 px-4 py-2 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-center transition-colors"
+              >
+                Join Discord 💬
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNDNDiscord && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => setShowNDNDiscord(false)}
+          />
+          <div className="relative bg-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-4">
+              NDN Community Discord
+            </h2>
+            <p className="text-slate-300 mb-6">
+              Join the official Nine Dart Nation community! Get help, share
+              scores, and stay updated.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowNDNDiscord(false)}
+                className="flex-1 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <a
+                href="https://discord.gg/ninedartnation"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 px-4 py-2 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-center transition-colors"
+              >
+                Join Discord 💬
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </Drawer>
   );
 }
