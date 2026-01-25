@@ -408,208 +408,70 @@ export default function Friends({ user }: { user?: any }) {
           className={`${activeChat ? "hidden lg:block" : "block"} lg:col-span-2 p-4 rounded-[28px] bg-gradient-to-br from-slate-900/80 to-indigo-900/60 border border-white/10 shadow-2xl`}
         >
           <div className="flex items-center justify-between mb-2">
-            <div className="font-semibold text-white/90">
-              Friends & Requests
-            </div>
+            <div className="font-semibold text-white/90">Friend Requests</div>
           </div>
-          <TabPills
-            tabs={[
-              { key: "all", label: "All 👥" },
-              { key: "online", label: "Online 🟢" },
-              { key: "ingame", label: "In-Game 🎮" },
-              { key: "offline", label: "Offline ⚪" },
-              {
-                key: "requests",
-                label: `Requests ${requestsCount > 0 ? "(" + requestsCount + ")" : ""} 📩`,
-              },
-            ]}
-            active={filter}
-            onChange={(k) => setFilter(k as any)}
-            className="mb-3"
-          />
-          {filter === "requests" ? (
-            <ul className="space-y-3">
-              {requestsCount > 0 ? (
-                <>
-                  {/* Incoming requests */}
-                  {requests.length > 0 &&
-                    requests.map((r) => (
-                      <li
-                        key={`incoming-${r.id || r.fromEmail}`}
-                        className="p-3 rounded-2xl border border-white/10 bg-slate-900/40 flex flex-col gap-3"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-lg">
-                            {r.fromUsername || r.fromEmail || "Unknown User"}
-                          </span>
-                          <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">
-                            Incoming
-                          </span>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => acceptFriend(r.id)}
-                            className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/30 transition-colors"
-                          >
-                            Accept ✅
-                          </button>
-                          <button
-                            onClick={() => declineFriend(r.id)}
-                            className="px-3 py-1 rounded-lg bg-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/30 transition-colors"
-                          >
-                            Decline ❌
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  {/* Outgoing requests */}
-                  {outgoingRequests.length > 0 &&
-                    outgoingRequests.map((r) => (
-                      <li
-                        key={`outgoing-${r.id || r.toEmail}`}
-                        className="p-3 rounded-2xl border border-white/10 bg-slate-900/40 flex flex-col gap-3"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-lg">
-                            {r.toUsername || r.toEmail || "Unknown User"}
-                          </span>
-                          <div className="px-3 py-1 rounded-lg bg-white/5 text-white/40 text-xs font-bold">
-                            Pending ⏳
-                          </div>
-                        </div>
+          <ul className="space-y-3 mt-3">
+            {requestsCount > 0 ? (
+              <>
+                {/* Incoming requests */}
+                {requests.length > 0 &&
+                  requests.map((r) => (
+                    <li
+                      key={`incoming-${r.id || r.fromEmail}`}
+                      className="p-3 rounded-2xl border border-white/10 bg-slate-900/40 flex flex-col gap-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-lg">
+                          {r.fromUsername || r.fromEmail || "Unknown User"}
+                        </span>
+                        <span className="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">
+                          Incoming
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
                         <button
-                          onClick={() => cancelRequest(r.id)}
+                          onClick={() => acceptFriend(r.id)}
+                          className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/30 transition-colors"
+                        >
+                          Accept ✅
+                        </button>
+                        <button
+                          onClick={() => declineFriend(r.id)}
                           className="px-3 py-1 rounded-lg bg-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/30 transition-colors"
                         >
-                          Cancel ✖️
+                          Decline ❌
                         </button>
-                      </li>
-                    ))}
-                </>
-              ) : (
-                <li className="text-sm opacity-70">No friend requests yet.</li>
-              )}
-            </ul>
-          ) : (
-            <ul className="space-y-3">
-              {filtered.map((f) => {
-                const fKey = String(f.email || "").toLowerCase();
-                const preview = threadPreviewByEmail.get(fKey);
-                const pseudoUnread = unreadCountByEmail.get(fKey) || 0;
-                const isSelected = activeChat?.email?.toLowerCase() === fKey;
-
-                return (
-                  <li
-                    key={f.email}
-                    className={`rounded-2xl border bg-slate-900/40 p-4 flex flex-col gap-3 shadow-lg transition-colors ${
-                      isSelected
-                        ? "border-indigo-400/60 bg-indigo-500/10"
-                        : "border-white/10 hover:border-white/20"
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setActiveChat({ email: f.email, username: f.username })
-                      }
-                      className="text-left"
-                      title="Open messages"
+                      </div>
+                    </li>
+                  ))}
+                {/* Outgoing requests */}
+                {outgoingRequests.length > 0 &&
+                  outgoingRequests.map((r) => (
+                    <li
+                      key={`outgoing-${r.id || r.toEmail}`}
+                      className="p-3 rounded-2xl border border-white/10 bg-slate-900/40 flex flex-col gap-3"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`inline-block w-2.5 h-2.5 rounded-full ${
-                                f.status === "online"
-                                  ? "bg-emerald-400"
-                                  : f.status === "ingame"
-                                    ? "bg-amber-400"
-                                    : "bg-slate-400"
-                              }`}
-                            ></span>
-                            <span className="font-semibold text-white truncate">
-                              {f.username || f.email}
-                            </span>
-                            {pseudoUnread > 0 && (
-                              <span className="ml-2 inline-flex items-center rounded-full bg-indigo-500/20 border border-indigo-400/30 px-2 py-0.5 text-[10px] font-bold text-indigo-200">
-                                {pseudoUnread > 9 ? "9+" : pseudoUnread} new
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-slate-400">
-                            {f.status || "offline"}
-                            {f.status !== "online" && f.lastSeen
-                              ? ` · ${timeAgo(f.lastSeen)}`
-                              : ""}
-                          </div>
-                          <div className="mt-2 text-xs text-slate-300/80 line-clamp-2">
-                            {preview
-                              ? censorProfanity(preview.message)
-                              : "Tap to view messages"}
-                          </div>
-                          {preview?.ts && (
-                            <div className="mt-1 text-[10px] text-slate-500">
-                              {new Date(preview.ts).toLocaleString()}
-                            </div>
-                          )}
-                          {f.status === "ingame" && f.match && (
-                            <div className="text-[11px] inline-flex items-center gap-1 mt-2 rounded-full border border-indigo-500/40 bg-indigo-500/10 px-3 py-0.5 text-indigo-200">
-                              <span className="font-medium">Live Match</span>
-                              <span>
-                                {f.match.game} {labelForMode(f.match.mode)}{" "}
-                                {f.match.value}
-                                {f.match.game === "X01" && f.match.startingScore
-                                  ? ` · ${f.match.startingScore}`
-                                  : ""}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="shrink-0 text-xs text-slate-400">
-                          {preview?.ts ? timeAgo(preview.ts) : ""}
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-lg">
+                          {r.toUsername || r.toEmail || "Unknown User"}
+                        </span>
+                        <div className="px-3 py-1 rounded-lg bg-white/5 text-white/40 text-xs font-bold">
+                          Pending ⏳
                         </div>
                       </div>
-                    </button>
-
-                    <div className="flex gap-2 flex-wrap">
-                      {f.status === "ingame" && f.roomId && (
-                        <button
-                          onClick={() => spectate(f.roomId)}
-                          className="px-3 py-1 rounded-lg bg-indigo-500/20 text-indigo-400 text-xs font-bold hover:bg-indigo-500/30 transition-colors"
-                        >
-                          Spectate 👁️
-                        </button>
-                      )}
                       <button
-                        onClick={() =>
-                          setActiveChat({
-                            email: f.email,
-                            username: f.username,
-                          })
-                        }
-                        className="flex-1 px-3 py-2 rounded-xl bg-indigo-600/25 text-indigo-200 text-xs font-bold hover:bg-indigo-600/35 transition-colors"
+                        onClick={() => cancelRequest(r.id)}
+                        className="px-3 py-1 rounded-lg bg-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/30 transition-colors"
                       >
-                        Open Chat 💬
+                        Cancel ✖️
                       </button>
-                      <button
-                        onClick={() => removeFriend(f.email)}
-                        className="px-3 py-2 rounded-xl bg-rose-500/20 text-rose-400 text-xs font-bold hover:bg-rose-500/30 transition-colors"
-                        title="Remove Friend"
-                      >
-                        Remove 🗑️
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-              {filtered.length === 0 && (
-                <li className="text-sm opacity-70">
-                  No friends {filter !== "all" ? `in ${filter}` : ""} yet.
-                </li>
-              )}
-            </ul>
-          )}
+                    </li>
+                  ))}
+              </>
+            ) : (
+              <li className="text-sm opacity-70">No friend requests yet.</li>
+            )}
+          </ul>
         </div>
 
         {/* Messages (detail / thread) */}
