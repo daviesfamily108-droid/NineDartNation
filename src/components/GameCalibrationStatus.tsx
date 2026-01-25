@@ -49,7 +49,8 @@ export default function GameCalibrationStatus({
   const hasCalibration = !!H;
 
   // If calibration is locked, always show "Camera connected ✅"
-  if (hasCalibration && locked) {
+  // When locked, we trust that the user has set up the camera properly
+  if (locked) {
     if (compact) {
       return (
         <div className="text-xs px-2 py-1 rounded bg-emerald-500/20 text-emerald-300 inline-flex items-center gap-1 border border-emerald-600/30">
