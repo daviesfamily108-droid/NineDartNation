@@ -197,11 +197,11 @@
      in the screenshot. Adjust these values if the tick/square needs tiny
      nudges. */
   /* moved additional 4mm left (total 11mm left relative to 72px) */
-  --ndn-mobile-menu-left: calc(72px - 11mm); /* horizontal position of hamburger */
-   --ndn-mobile-gap-size: 8px; /* the small rectangle gap under header (keep as-is) */
-  /* move hamburger a further 3mm down (total 6mm below gap) */
-  /* move hamburger slightly up by 1.5mm */
-  --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size) + 6mm - 1.5mm);
+  /* Position hamburger menu below the header, centered horizontally on left side */
+  --ndn-mobile-menu-left: 16px; /* 16px from left edge */
+  --ndn-mobile-gap-size: 8px; /* the small rectangle gap under header (keep as-is) */
+  /* Position hamburger below header with proper spacing */
+  --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size) + 8px);
   }
 
     .ndn-mobile-menu-btn {
@@ -219,9 +219,10 @@
       align-items: center;
       justify-content: center;
       border-radius: 12px !important;
-      background: rgba(255,255,255,0.15) !important;
+      background: rgba(30, 41, 59, 0.95) !important;
       backdrop-filter: blur(8px) !important;
-      border: 1px solid rgba(255,255,255,0.2) !important;
+      border: 1px solid rgba(255, 255, 255, 0.3) !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
       /* Prevent accidental layout shifts from transforms elsewhere */
       will-change: left, top;
     }
@@ -232,14 +233,14 @@
     .ndn-mobile-menu-slot {
       position: fixed !important;
       left: var(--ndn-mobile-menu-left) !important;
-      top: calc(var(--ndn-mobile-menu-top) - 4px) !important;
+      top: var(--ndn-mobile-menu-top) !important;
       width: 56px !important;
       height: 56px !important;
       border-radius: 14px !important;
       background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)) !important;
       border: 1px solid rgba(255,255,255,0.04) !important;
       box-shadow: 0 6px 18px rgba(2,6,23,0.5) !important;
-      z-index: 315 !important; /* below the hamburger (320) but above header (300) */
+      z-index: 9998 !important; /* below the hamburger (9999) but above header (50) */
       pointer-events: none !important;
       -webkit-backdrop-filter: blur(4px);
       backdrop-filter: blur(4px);

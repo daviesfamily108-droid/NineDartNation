@@ -951,6 +951,18 @@ export default function App() {
               />
             </div>
           )}
+          {/* Fixed hamburger menu button - positioned outside header to avoid glass overlay */}
+          {isMobile && (
+            <button
+              className="ndn-mobile-menu-btn p-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all shrink-0 fixed z-[9999]"
+              data-testid="mobile-menu-button"
+              onClick={() => setNavOpen(true)}
+              aria-label="Open Menu"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+          )}
+
           {/* Wrap header + scroller in a column so header stays static and only content scrolls below it */}
           <div className="flex flex-col h-full overflow-hidden">
             <div className="pt-1 xs:pt-2 relative z-50">
@@ -963,27 +975,17 @@ export default function App() {
                 style={{ willChange: "transform" }}
               >
                 {isMobile && (
-                  <>
-                    <button
-                      className="ndn-mobile-brand shrink-0 text-sm font-black px-3 py-1 rounded-xl bg-black/40 text-white/90 hover:bg-black/50 transition-colors"
-                      onClick={() => {
-                        setTab("score");
-                        setNavOpen(false);
-                      }}
-                      aria-label="Go Home"
-                      title="Go Home"
-                    >
-                      NDN 🎯
-                    </button>
-                    <button
-                      className="ndn-mobile-menu-btn p-2 -ml-2 mr-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all shrink-0 relative z-[9999]"
-                      data-testid="mobile-menu-button"
-                      onClick={() => setNavOpen(true)}
-                      aria-label="Open Menu"
-                    >
-                      <Menu className="w-6 h-6" />
-                    </button>
-                  </>
+                  <button
+                    className="ndn-mobile-brand shrink-0 text-sm font-black px-3 py-1 rounded-xl bg-black/40 text-white/90 hover:bg-black/50 transition-colors"
+                    onClick={() => {
+                      setTab("score");
+                      setNavOpen(false);
+                    }}
+                    aria-label="Go Home"
+                    title="Go Home"
+                  >
+                    NDN 🎯
+                  </button>
                 )}
 
                 {/* Left: Brand + Greeting - compact single-line with avg */}
@@ -1541,60 +1543,7 @@ function MobileNav({
       title="Navigate"
     >
       <div className="mt-0 h-full overflow-y-auto">
-        {/* Quick tabs fallback: render a compact grid so tabs are always visible in the drawer */}
-        <nav
-          className="mb-3 px-2 sm:hidden ndn-drawer"
-          aria-label="Drawer tabs"
-        >
-          <div className="mobile-tab-list">
-            {(() => {
-              const isAdmin = useIsAdmin(user?.email);
-              const tabs = buildTabList(user, isAdmin);
-              // Desired explicit order for mobile: Home, Online, Offline, Tournaments,
-              // Friends, Calibrate, Stats, Admin, Settings
-              const desired: TabKey[] = [
-                "score",
-                "online",
-                "offline",
-                "tournaments",
-                "friends",
-                "calibrate",
-                "stats",
-                "admin",
-                "settings",
-              ];
-
-              const tabMap = new Map(tabs.map((t) => [t.key, t]));
-              const ordered = desired
-                .map((k) => tabMap.get(k))
-                .filter(Boolean) as typeof tabs;
-
-              const stripEmoji = (l: string) =>
-                l
-                  .replace(
-                    /[\p{Emoji}\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu,
-                    "",
-                  )
-                  .trim();
-
-              return ordered.map((t) => (
-                <button
-                  key={t.key}
-                  onClick={() => {
-                    onChange(t.key as TabKey);
-                    onClose();
-                  }}
-                  className="text-left rounded-md bg-white/3 text-white/90 font-semibold"
-                >
-                  <div className="px-3 py-3 text-base truncate">
-                    {stripEmoji(t.label)}
-                  </div>
-                </button>
-              ));
-            })()}
-          </div>
-        </nav>
-
+        {/* Always show the full sidebar in mobile drawer */}
         <Sidebar
           active={active}
           onChange={(k) => {
