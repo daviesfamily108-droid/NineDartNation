@@ -678,6 +678,19 @@ export default function Calibrator() {
     } catch {}
   };
 
+  // Sync locked state from userSettings to calibration store on mount
+  useEffect(() => {
+    try {
+      const persistedLocked = userSettings.preferredCameraLocked;
+      if (persistedLocked && locked !== persistedLocked) {
+        // If userSettings says it's locked but calibration store doesn't, sync it
+        setCalibration({ locked: persistedLocked });
+      }
+    } catch (e) {
+      console.warn("Failed to sync locked state from userSettings", e);
+    }
+  }, []); // Run only on mount
+
   // Setup video element event listeners
   useEffect(() => {
     if (!videoRef.current) return;

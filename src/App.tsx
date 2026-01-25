@@ -37,6 +37,7 @@ import { useWS } from "./components/WSProvider";
 import { getMonthlyAvg3, getAllTimeAvg } from "./store/profileStats";
 import { useMatch } from "./store/match";
 import { useUserSettings } from "./store/userSettings";
+import { useCalibration } from "./store/calibration";
 import { apiFetch, getApiBaseUrl } from "./utils/api";
 import { DISCORD_INVITE_URL } from "./utils/config";
 import "./styles/premium.css";
@@ -111,6 +112,25 @@ export default function App() {
   const toast = useToast();
   const normalizedDelta = Math.abs(avgDelta) >= 0.05 ? avgDelta : 0;
   const API_URL = getApiBaseUrl();
+  const calibration = useCalibration();
+  const userSettings = useUserSettings();
+
+  // Sync locked state from userSettings to calibration store on app mount
+  useEffect(() => {
+    try {
+      const persistedLocked = userSettings.preferredCameraLocked;
+      if (persistedLocked && calibration.locked !== persistedLocked) {
+        // If userSettings says it's locked but calibration store doesn't, sync it
+        calibration.setCalibration({ locked: persistedLocked });
+        console.info(
+          "[APP] Synced camera locked state from userSettings:",
+          persistedLocked,
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to sync locked state from userSettings", e);
+    }
+  }, []); // Run only on mount
 
   // Globally catch unhandled promise rejections and surface as warnings so the
   // devtools console is less noisy. We still log the reason so developers can
