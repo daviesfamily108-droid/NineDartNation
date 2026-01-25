@@ -976,7 +976,7 @@ export default function App() {
                       NDN 🎯
                     </button>
                     <button
-                      className="ndn-mobile-menu-btn p-2 -ml-2 mr-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all shrink-0 relative z-[60]"
+                      className="ndn-mobile-menu-btn p-2 -ml-2 mr-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all shrink-0 relative z-[9999]"
                       data-testid="mobile-menu-button"
                       onClick={() => setNavOpen(true)}
                       aria-label="Open Menu"

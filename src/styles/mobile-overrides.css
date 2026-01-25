@@ -174,7 +174,7 @@
       /* move left and up by 1.8mm as requested */
       left: calc(10px - 1.8mm);
       top: calc(var(--ndn-safe-top) + 6px - 3.8mm);
-      z-index: 310;
+      z-index: 9998;
   padding: 8px;
   width: 44px;
   height: 44px;
@@ -212,15 +212,17 @@
       left: var(--ndn-mobile-menu-left) !important;
       transform: none !important;
       top: var(--ndn-mobile-menu-top) !important;
-      z-index: 320 !important;
+      z-index: 9999 !important;
       min-width: 48px !important;
       min-height: 48px !important;
       display: inline-flex !important;
       align-items: center;
       justify-content: center;
       border-radius: 12px !important;
-      background: rgba(255,255,255,0.03) !important;
-      backdrop-filter: blur(6px) !important;
+      background: rgba(15, 23, 42, 0.95) !important;
+      backdrop-filter: blur(12px) !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
       /* Prevent accidental layout shifts from transforms elsewhere */
       will-change: left, top;
     }
