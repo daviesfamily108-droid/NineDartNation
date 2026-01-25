@@ -459,7 +459,7 @@ export default function MatchPage() {
           }
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-3 sm:gap-4 mt-3 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 sm:gap-4 mt-3 items-start">
           {/* Mobile: Scoreboards first, then controls */}
           <div className="lg:hidden min-w-0 space-y-4">
             <div className="card p-3">
@@ -646,28 +646,76 @@ export default function MatchPage() {
           </div>
 
           <div className="hidden lg:block min-w-0 space-y-4 mt-[68px]">
-            <div className="card p-3">
-              <GameScoreboard
-                gameMode={((match as any)?.game || "X01") as any}
-                players={(match.players || []).map((p: any, idx: number) => ({
-                  name: p.name || `Player ${idx + 1}`,
-                  isCurrentTurn: idx === (match.currentPlayerIdx || 0),
-                  legsWon: p.legsWon || 0,
-                  score:
-                    p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
-                    match.startingScore ??
-                    lastOfflineStart,
-                  lastScore:
-                    p.legs && p.legs.length
-                      ? p.legs[p.legs.length - 1].visits.slice(-1)[0]?.score ||
-                        0
-                      : 0,
-                }))}
-              />
+            {/* Scoreboard and Camera side by side */}
+            <div className="grid grid-cols-[1fr_1fr] gap-3">
+              <div className="card p-3">
+                <GameScoreboard
+                  gameMode={((match as any)?.game || "X01") as any}
+                  players={(match.players || []).map((p: any, idx: number) => ({
+                    name: p.name || `Player ${idx + 1}`,
+                    isCurrentTurn: idx === (match.currentPlayerIdx || 0),
+                    legsWon: p.legsWon || 0,
+                    score:
+                      p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
+                      match.startingScore ??
+                      lastOfflineStart,
+                    lastScore:
+                      p.legs && p.legs.length
+                        ? p.legs[p.legs.length - 1].visits.slice(-1)[0]
+                            ?.score || 0
+                        : 0,
+                  }))}
+                />
+              </div>
+
+              {/* Camera - beside scoreboard on desktop */}
+              <div className="card p-2">
+                <div className="text-sm font-semibold mb-2 flex items-center justify-between">
+                  <span>Camera</span>
+                  <span className="text-xs text-slate-300">Live view</span>
+                </div>
+                <div className="relative h-full min-h-[280px] rounded-xl overflow-hidden bg-black">
+                  <CameraView
+                    hideInlinePanels={true}
+                    forceAutoStart={true}
+                    onAddVisit={commitVisit}
+                    onEndLeg={(score) => {
+                      try {
+                        match.endLeg(score ?? 0);
+                      } catch {}
+                    }}
+                    onVisitCommitted={(_score, _darts, finished, meta) => {
+                      if (!finished) return;
+                      const frame = meta?.frame ?? remoteFrame ?? null;
+                      setWinningShot({
+                        label: meta?.label || deriveWinningLabel() || undefined,
+                        ring: meta?.ring,
+                        frame,
+                        ts: Date.now(),
+                      });
+                      // Ensure the match fully ends so the header stats refresh and the
+                      // winning zoom overlay can render (it only shows once inProgress=false).
+                      // endGame is idempotent: it will no-op if already ended.
+                      try {
+                        match.endGame();
+                      } catch {}
+                    }}
+                  />
+                  {winningShot?.frame && !match.inProgress && (
+                    <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
+                      <img
+                        src={winningShot.frame}
+                        alt="Winning double zoom"
+                        className="w-full h-full object-cover scale-125"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
-            {/* Camera - hidden on mobile by default, visible on desktop */}
-            <div className="card p-2 hidden lg:block">
+            {/* Camera - hidden block, no longer used */}
+            <div className="card p-2 hidden">
               <div className="text-sm font-semibold mb-2 flex items-center justify-between">
                 <span>Camera</span>
                 <span className="text-xs text-slate-300">Compact view</span>
