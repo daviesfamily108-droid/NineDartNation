@@ -477,7 +477,7 @@ export default function MatchPage() {
           }
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 sm:gap-4 mt-3 items-start">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 mt-3 items-start">
           {/* Mobile: Scoreboards first, then controls */}
           <div className="lg:hidden min-w-0 space-y-4">
             <div className="card p-3">
@@ -610,60 +610,8 @@ export default function MatchPage() {
             </div>
           )}
 
-          {/* Desktop: Left column with controls */}
+          {/* Desktop: Scoreboard and Camera side by side */}
           <div className="hidden lg:block min-w-0 space-y-4">
-            <div className="card p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 lg:block">
-              <div className="flex items-center gap-2 text-sm font-medium opacity-80">
-                <span className="text-xs uppercase tracking-wide text-white/60">
-                  Match Controls
-                </span>
-              </div>
-              <div className="flex flex-wrap items-center gap-2 lg:hidden">
-                <span className="text-xs text-emerald-300 font-semibold px-3 py-2 rounded-md bg-white/5 border border-white/10">
-                  Manual scoring only
-                </span>
-              </div>
-            </div>
-
-            <div className="card p-3">
-              <div className="flex items-center justify-between gap-2 mb-2">
-                <h3 className="text-base font-semibold">Score Entry</h3>
-                <span className="text-xs text-slate-300">
-                  Enter visits or dart-by-dart edits
-                </span>
-              </div>
-              {/* Compact autoscore + manual scoring controls */}
-              <div className="grid grid-cols-1 gap-3">
-                <div className="space-y-3">
-                  <MatchControls
-                    inProgress={match.inProgress}
-                    startingScore={match.startingScore}
-                    pendingEntries={pendingEntries}
-                    onAddVisit={(score, darts) =>
-                      commitVisit(score, darts, { visitTotal: score })
-                    }
-                    onUndo={() => match.undoVisit()}
-                    onNextPlayer={() => match.nextPlayer()}
-                    onEndLeg={(score, darts, meta) => {
-                      const numericScore =
-                        typeof score === "number" ? score : 0;
-                      const finalDarts =
-                        typeof darts === "number" ? Math.max(0, darts) : 0;
-                      match.addVisit(numericScore, finalDarts, {
-                        visitTotal: numericScore,
-                        doubleWindowDarts: meta?.doubleDarts ?? 0,
-                      });
-                      match.endLeg(numericScore);
-                    }}
-                    onEndGame={() => match.endGame()}
-                    quickButtons={[180, 140, 100, 60]}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="hidden lg:block min-w-0 space-y-4 mt-[68px]">
             {/* Scoreboard and Camera side by side */}
             <div className="grid grid-cols-[1fr_1fr] gap-3">
               <div className="card p-3">
@@ -729,59 +677,6 @@ export default function MatchPage() {
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
-
-            {/* Camera - hidden block, no longer used */}
-            <div className="card p-2 hidden">
-              <div className="text-sm font-semibold mb-2 flex items-center justify-between">
-                <span>Camera</span>
-                <span className="text-xs text-slate-300">Compact view</span>
-              </div>
-              <div className="relative h-56 rounded-xl overflow-hidden bg-black">
-                <CameraView
-                  hideInlinePanels={true}
-                  forceAutoStart={true}
-                  onAddVisit={commitVisit}
-                  onEndLeg={(score) => {
-                    try {
-                      match.endLeg(score ?? 0);
-                    } catch {}
-                  }}
-                  onVisitCommitted={(_score, _darts, finished, meta) => {
-                    if (!finished) return;
-                    const frame = meta?.frame ?? remoteFrame ?? null;
-                    setWinningShot({
-                      label: meta?.label || deriveWinningLabel() || undefined,
-                      ring: meta?.ring,
-                      frame,
-                      ts: Date.now(),
-                    });
-                    // Ensure the match fully ends so the header stats refresh and the
-                    // winning zoom overlay can render (it only shows once inProgress=false).
-                    // endGame is idempotent: it will no-op if already ended.
-                    try {
-                      match.endGame();
-                    } catch {}
-                  }}
-                />
-                {winningShot?.frame && !match.inProgress && (
-                  <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
-                    <img
-                      src={winningShot.frame}
-                      alt="Winning double zoom"
-                      className="w-full h-full object-cover scale-125"
-                    />
-                    <div className="absolute bottom-2 left-2 right-2 text-xs text-white bg-black/60 rounded-md px-2 py-1 flex items-center justify-between gap-2">
-                      <span className="font-semibold">Winning dart zoom</span>
-                      {winningShot.label && (
-                        <span className="text-emerald-200">
-                          {winningShot.label}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </div>
