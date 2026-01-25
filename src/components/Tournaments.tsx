@@ -1078,17 +1078,31 @@ export default function Tournaments({ user }: { user: any }) {
         </div>
 
         {showCreate && (
-          <div className="mb-4">
-            <div className="card relative">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xl font-semibold">Create Tournament 🎯</h3>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="create-tournament-heading"
+            tabIndex={-1}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setShowCreate(false);
+            }}
+          >
+            <div className="bg-slate-800 rounded-2xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3
+                  id="create-tournament-heading"
+                  className="text-2xl font-semibold"
+                >
+                  Create Tournament 🎯
+                </h3>
                 <button className="btn" onClick={() => setShowCreate(false)}>
-                  Close 🎯
+                  Close ✕
                 </button>
               </div>
-              <div className="space-y-3 md:space-y-0 md:grid md:grid-cols-2 md:gap-4 pr-1">
+              <div className="space-y-4 md:space-y-0 md:grid md:grid-cols-2 md:gap-4">
                 <div>
-                  <label className="block text-sm font-semibold mb-1">
+                  <label className="block text-sm font-semibold mb-2">
                     Title
                   </label>
                   <input
@@ -1097,6 +1111,7 @@ export default function Tournaments({ user }: { user: any }) {
                     onChange={(e) =>
                       setForm((f) => ({ ...f, title: e.target.value }))
                     }
+                    placeholder="Enter tournament title"
                   />
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1237,10 +1252,10 @@ export default function Tournaments({ user }: { user: any }) {
                         }))
                       }
                     />
-                    <span className="font-semibold">Require calibration</span>
+                    <span className="font-semibold">Require Camera</span>
                   </label>
                   <div className="text-xs opacity-70 mt-1">
-                    If checked, players must have a calibrated board to join
+                    If checked, players must have a camera connected to join
                     matches spawned from this tournament.
                   </div>
                 </div>
@@ -1265,13 +1280,19 @@ export default function Tournaments({ user }: { user: any }) {
                 <div className="text-xs opacity-70">
                   Note: community tournaments do not award prizes.
                 </div>
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-3 mt-6">
+                  <button
+                    className="btn btn-ghost"
+                    onClick={() => setShowCreate(false)}
+                  >
+                    Cancel
+                  </button>
                   <button
                     className="btn"
                     disabled={loading}
                     onClick={createTournament}
                   >
-                    Create
+                    {loading ? "Creating..." : "Create Tournament"}
                   </button>
                 </div>
               </div>
