@@ -513,6 +513,28 @@ export default function MatchPage() {
                       : 0,
                 }))}
               />
+
+              {/* Score Input Letterbox - Mobile */}
+              <div className="mt-3">
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  className="input text-center text-lg font-semibold"
+                  style={{ width: "400mm", height: "30mm", maxWidth: "100%" }}
+                  value={visitTotalInput}
+                  onChange={(e) => setVisitTotalInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const score = parseInt(visitTotalInput) || 0;
+                      commitVisit(score, 3, { visitTotal: score });
+                      setVisitTotalInput("");
+                    }
+                  }}
+                  placeholder="Tap to enter score"
+                  disabled={!match.inProgress}
+                />
+              </div>
             </div>
 
             {/* Mobile Camera - shown when opponent is viewing or manually toggled */}
@@ -632,6 +654,27 @@ export default function MatchPage() {
                         : 0,
                   }))}
                 />
+
+                {/* Score Input Letterbox */}
+                <div className="mt-3">
+                  <input
+                    type="number"
+                    className="input text-center text-lg font-semibold"
+                    style={{ width: "400mm", height: "30mm", maxWidth: "100%" }}
+                    value={visitTotalInput}
+                    onChange={(e) => setVisitTotalInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const score = parseInt(visitTotalInput) || 0;
+                        commitVisit(score, 3, { visitTotal: score });
+                        setVisitTotalInput("");
+                      }
+                    }}
+                    placeholder="Enter score and press Enter"
+                    disabled={!match.inProgress}
+                  />
+                </div>
               </div>
 
               {/* Camera - beside scoreboard on desktop */}
