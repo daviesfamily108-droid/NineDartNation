@@ -409,13 +409,7 @@ export default function MatchPage() {
   }, [match.inProgress, deriveWinningLabel, winningShot?.label]);
 
   return (
-    <div
-      className="min-h-screen bg-slate-900 text-white"
-      style={{
-        paddingBottom:
-          "calc(var(--ndn-bottomnav-h, 0px) + env(safe-area-inset-bottom, 0px) + 16px)",
-      }}
-    >
+    <div className="card ndn-game-shell ndn-page relative overflow-hidden md:overflow-hidden overflow-y-auto">
       {showStartShowcase && (
         <MatchStartShowcase
           open={showStartShowcase}
@@ -431,16 +425,25 @@ export default function MatchPage() {
           showCalibrationDefault={true}
         />
       )}
-      <div className="p-2 sm:p-3 max-w-6xl mx-auto">
+      <h2 className="text-3xl font-bold text-brand-700 mb-4 ndn-section-title">
+        Match 🎯
+        {winningShot?.label && (
+          <span className="ml-2 text-xs px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">
+            Winning double: {winningShot.label}
+          </span>
+        )}
+      </h2>
+      <div
+        className="ndn-shell-body"
+        style={{
+          paddingBottom:
+            "calc(var(--ndn-bottomnav-h, 0px) + env(safe-area-inset-bottom, 0px) + 16px)",
+        }}
+      >
         <GameHeaderBar
           left={
             <div className="flex items-center gap-2">
-              <span className="font-medium">Match</span>
-              {winningShot?.label && (
-                <span className="text-xs bg-emerald-600/20 text-emerald-200 px-2 py-1 rounded-lg border border-emerald-500/30">
-                  Winning double: {winningShot.label}
-                </span>
-              )}
+              <span className="font-medium">Match Controls</span>
             </div>
           }
           right={
@@ -480,16 +483,16 @@ export default function MatchPage() {
         <div className="grid grid-cols-1 gap-4 mt-3 items-start">
           {/* Mobile: Scoreboards first, then controls */}
           <div className="lg:hidden min-w-0 space-y-4">
-            <div className="card p-4 rounded-lg border border-slate-700/30 bg-slate-900/40">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-base font-semibold">Scoreboards</h3>
+            <div className="card p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">Scoreboards</h3>
                 <button
                   onClick={() =>
                     setMobileViewMode(
                       mobileViewMode === "controls" ? "camera" : "controls",
                     )
                   }
-                  className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors shadow-sm"
+                  className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors"
                 >
                   {mobileViewMode === "camera"
                     ? "Show Controls 🎮"
@@ -515,11 +518,11 @@ export default function MatchPage() {
               />
 
               {/* Score Input Letterbox - Mobile */}
-              <div className="mt-4">
+              <div className="mt-3">
                 <input
                   type="number"
                   inputMode="numeric"
-                  className="input text-center text-lg font-semibold rounded-lg border-slate-700/50 bg-slate-950/60"
+                  className="input text-center text-lg font-semibold"
                   style={{ width: "400mm", height: "30mm", maxWidth: "100%" }}
                   value={visitTotalInput}
                   onChange={(e) => setVisitTotalInput(e.target.value)}
@@ -539,12 +542,12 @@ export default function MatchPage() {
 
             {/* Mobile Camera - shown when opponent is viewing or manually toggled */}
             {mobileViewMode === "camera" && (
-              <div className="card p-3 rounded-lg border border-slate-700/30 bg-slate-900/40">
-                <div className="text-sm font-semibold mb-3 flex items-center justify-between">
+              <div className="card p-2">
+                <div className="text-sm font-semibold mb-2 flex items-center justify-between">
                   <span>Camera Feed</span>
-                  <span className="text-xs text-slate-400">Opponent View</span>
+                  <span className="text-xs text-slate-300">Opponent View</span>
                 </div>
-                <div className="relative h-56 rounded-lg overflow-hidden bg-black shadow-md">
+                <div className="relative h-56 rounded-xl overflow-hidden bg-black">
                   <CameraView
                     hideInlinePanels={true}
                     forceAutoStart={true}
@@ -635,8 +638,8 @@ export default function MatchPage() {
           {/* Desktop: Scoreboard and Camera side by side */}
           <div className="hidden lg:block min-w-0 space-y-4">
             {/* Scoreboard and Camera side by side */}
-            <div className="grid grid-cols-[1fr_1fr] gap-4">
-              <div className="card p-4 rounded-lg border border-slate-700/30 bg-slate-900/40 shadow-sm">
+            <div className="grid grid-cols-[1fr_1fr] gap-3">
+              <div className="card p-3">
                 <GameScoreboard
                   gameMode={((match as any)?.game || "X01") as any}
                   players={(match.players || []).map((p: any, idx: number) => ({
@@ -656,10 +659,10 @@ export default function MatchPage() {
                 />
 
                 {/* Score Input Letterbox */}
-                <div className="mt-4">
+                <div className="mt-3">
                   <input
                     type="number"
-                    className="input text-center text-lg font-semibold rounded-lg border-slate-700/50 bg-slate-950/60 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/30 transition-all"
+                    className="input text-center text-lg font-semibold"
                     style={{ width: "400mm", height: "30mm", maxWidth: "100%" }}
                     value={visitTotalInput}
                     onChange={(e) => setVisitTotalInput(e.target.value)}
@@ -678,14 +681,12 @@ export default function MatchPage() {
               </div>
 
               {/* Camera - beside scoreboard on desktop */}
-              <div className="card p-3 rounded-lg border border-slate-700/30 bg-slate-900/40 shadow-sm">
-                <div className="text-sm font-semibold mb-3 flex items-center justify-between">
+              <div className="card p-2">
+                <div className="text-sm font-semibold mb-2 flex items-center justify-between">
                   <span>Camera</span>
-                  <span className="text-xs text-slate-400 bg-slate-800/50 px-2 py-1 rounded-md">
-                    Live view
-                  </span>
+                  <span className="text-xs text-slate-300">Live view</span>
                 </div>
-                <div className="relative h-full min-h-[280px] rounded-lg overflow-hidden bg-black shadow-lg">
+                <div className="relative h-full min-h-[280px] rounded-xl overflow-hidden bg-black">
                   <CameraView
                     hideInlinePanels={true}
                     forceAutoStart={true}
@@ -729,9 +730,9 @@ export default function MatchPage() {
       </div>
       {/* Bottom-right overlay: opponent camera thumbnail + live score */}
       <div className="fixed right-4 bottom-4 z-50">
-        <div className="w-52 bg-slate-900/90 backdrop-blur-sm text-white rounded-lg overflow-hidden shadow-2xl border border-slate-700/50">
-          <div className="p-3 flex items-center gap-3">
-            <div className="w-16 h-10 bg-black rounded-md overflow-hidden flex-shrink-0 ring-1 ring-slate-700">
+        <div className="w-48 bg-black/70 text-white rounded-xl overflow-hidden shadow-lg border border-white/10">
+          <div className="p-2 flex items-center gap-2">
+            <div className="w-16 h-10 bg-black rounded overflow-hidden flex-shrink-0">
               {remoteFrame ? (
                 // small thumbnail from remote camera
                 <img
@@ -746,13 +747,13 @@ export default function MatchPage() {
               )}
             </div>
             <div className="flex-1 text-sm">
-              <div className="font-semibold text-white">
+              <div className="font-medium">
                 {(match.players || [])[match.currentPlayerIdx]?.name ||
                   "Player"}
               </div>
-              <div className="text-xs text-slate-300 mt-0.5">
+              <div className="text-xs text-slate-300">
                 Remaining:
-                <span className="ml-1 font-bold text-indigo-400">
+                <span className="ml-1 font-semibold">
                   {(() => {
                     const p = (match.players || [])[match.currentPlayerIdx];
                     const leg = p?.legs?.[p.legs?.length - 1];
