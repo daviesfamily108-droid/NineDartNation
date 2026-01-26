@@ -519,21 +519,24 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           Online Lobby 🌐
         </h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
-          <div className="rounded-none border border-slate-850 bg-slate-950/60 p-3 h-full flex flex-col">
+          <div className="h-full flex flex-col gap-3">
             {/* Top row: Room, New Room, Create Match */}
-            <div className="mb-3 p-3 rounded-none bg-slate-950/70 border border-slate-850 flex items-center justify-between gap-3 flex-wrap">
+            <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-800/50 flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="text-sm text-white/70">Room</div>
-                <div className="px-3 py-1 bg-slate-900/80 rounded-none border border-slate-800 text-white/80">
+                <div className="px-3 py-1.5 bg-slate-800/60 rounded-lg border border-slate-700/50 text-white/90 font-medium">
                   Room ({currentRoom?.id})
                 </div>
-                <button className="btn btn-ghost btn-sm" onClick={newRoom}>
+                <button
+                  className="btn btn-ghost btn-sm rounded-lg"
+                  onClick={newRoom}
+                >
                   New Room
                 </button>
               </div>
               <div className="shrink-0 flex items-center gap-2">
                 <button
-                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm flex items-center gap-2"
+                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm flex items-center gap-2 rounded-lg"
                   onClick={() => setShowCreateModal(true)}
                   disabled={
                     (currentRoom?.matches?.length || 0) >= maxMatchesPerRoom
@@ -544,7 +547,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 </button>
                 {showDemoControls && (
                   <button
-                    className="btn btn-sm btn-ghost"
+                    className="btn btn-sm btn-ghost rounded-lg"
                     onClick={runOnlineInPlayDemo}
                   >
                     Demo In-Play
@@ -558,25 +561,23 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
               </div>
             </div>
 
-            <p className="mb-2" />
-
             {/* Filters & Controls */}
             {!inProgress && (
-              <div className="mb-4 p-3 rounded-none bg-slate-950/70 border border-slate-850 flex flex-col gap-3 shadow-sm">
+              <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-800/50 flex flex-col gap-3">
                 <div className="ndn-filterbar">
                   <div className="flex-1 min-w-[240px] relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                     <input
                       type="text"
                       placeholder="Search matches, players..."
-                      className="w-full pl-9 pr-3 py-2 rounded-none bg-slate-950 border border-slate-850 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/40 transition-all"
+                      className="w-full pl-9 pr-3 py-2 rounded-lg bg-slate-950/80 border border-slate-700/50 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/40 transition-all"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <select
-                      className="input input-compact cursor-pointer font-semibold bg-slate-950 border border-slate-850 rounded-none"
+                      className="input input-compact cursor-pointer font-semibold bg-slate-950/80 border border-slate-700/50 rounded-lg"
                       value={filterGame}
                       onChange={(e) => setFilterGame(e.target.value as any)}
                     >
@@ -587,7 +588,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       <option value="gotcha">Gotcha</option>
                     </select>
                     <select
-                      className="input input-compact cursor-pointer font-semibold bg-slate-950 border border-slate-850 rounded-none"
+                      className="input input-compact cursor-pointer font-semibold bg-slate-950/80 border border-slate-700/50 rounded-lg"
                       value={filterMode}
                       onChange={(e) => setFilterMode(e.target.value as any)}
                     >
@@ -596,7 +597,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       <option value="best_of">Best Of</option>
                     </select>
                     <select
-                      className="input input-compact cursor-pointer font-semibold bg-slate-950 border border-slate-850 rounded-none"
+                      className="input input-compact cursor-pointer font-semibold bg-slate-950/80 border border-slate-700/50 rounded-lg"
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value as any)}
                     >
@@ -606,7 +607,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      className={`px-3 py-2 rounded-none text-sm font-semibold transition-all border border-slate-850 ${focusMode ? "bg-red-600 text-white border-red-500" : "bg-slate-950 text-white/80 hover:bg-slate-900"}`}
+                      className={`px-3 py-2 rounded-lg text-sm font-semibold transition-all border ${focusMode ? "bg-red-600 text-white border-red-500" : "bg-slate-950/80 border-slate-700/50 text-white/80 hover:bg-slate-900"}`}
                       onClick={() => setFocusMode((s) => !s)}
                       aria-pressed={focusMode}
                       title="Toggle focus mode: hide small details and show focused view"
@@ -616,7 +617,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   </div>
                   <div className="flex items-center gap-2">
                     <button
-                      className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm flex items-center gap-2 px-4 rounded-none"
+                      className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm flex items-center gap-2 px-4 rounded-lg"
                       onClick={handleQuickJoin}
                       disabled={combinedMatches.length === 0}
                     >
@@ -629,11 +630,11 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             )}
 
             <div className="flex-1 overflow-auto flex flex-col">
-              <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+              <h3 className="font-semibold text-lg mb-3 flex items-center gap-2">
                 <Users className="w-5 h-5 text-indigo-400" />
                 Active Matches �️
               </h3>
-              <div className="flex-1 p-2 rounded-none border border-slate-850 bg-slate-950/80 flex flex-col">
+              <div className="flex-1 p-4 rounded-lg border border-slate-800/50 bg-slate-900/30 flex flex-col">
                 <div className="flex-1 overflow-auto">
                   {(combinedMatches.length || 0) === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center opacity-60">
@@ -672,7 +673,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                         {paginatedMatches.map((m: any) => (
                           <div
                             key={m.id}
-                            className="group relative p-3 rounded-none border border-slate-850 bg-[#0c0f1a] hover:border-indigo-500/40 transition-colors duration-150 shadow-none hover:shadow-[0_6px_20px_-12px_rgba(79,70,229,0.35)] flex flex-col gap-3 h-24 min-h-[6.5rem] transform transition-transform"
+                            className="group relative p-4 rounded-lg border border-slate-700/30 bg-slate-950/40 hover:border-indigo-500/50 hover:bg-slate-900/50 transition-all duration-150 shadow-sm hover:shadow-[0_8px_24px_-12px_rgba(99,102,241,0.4)] flex flex-col gap-3 min-h-[6.5rem]"
                             data-testid={`match-${m.id}`}
                           >
                             <div className="flex items-start justify-between">
