@@ -519,7 +519,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           Online Lobby 🌐
         </h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
-          <div className="rounded-none border border-slate-850 bg-slate-950/60 p-3 flex-1 min-h-0 overflow-hidden flex flex-col">
+          <div className="rounded-none border border-slate-850 bg-slate-950/60 p-3 h-full flex flex-col">
             {/* Top row: Room, New Room, Create Match */}
             <div className="mb-3 p-3 rounded-none bg-slate-950/70 border border-slate-850 flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
@@ -628,13 +628,13 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
               </div>
             )}
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 overflow-auto flex flex-col">
               <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
                 <Users className="w-5 h-5 text-indigo-400" />
                 Active Matches �️
               </h3>
-              <div className="mb-3 p-2 rounded-none border border-slate-850 bg-slate-950/80">
-                <div className="mb-4">
+              <div className="flex-1 p-2 rounded-none border border-slate-850 bg-slate-950/80 flex flex-col">
+                <div className="flex-1 overflow-auto">
                   {(combinedMatches.length || 0) === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 text-center opacity-60">
                       <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
