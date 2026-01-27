@@ -41,6 +41,19 @@ export default function MatchPage() {
     (s) => s.lastOffline?.x01Start || 501,
   );
   const user = useUserSettings((s) => s.user);
+  const localPlayerName =
+    user?.username ||
+    user?.name ||
+    user?.displayName ||
+    user?.email?.split("@")[0];
+  const resolvedLocalIndex = (match.players || []).findIndex(
+    (p: any) => p?.name && p.name === localPlayerName,
+  );
+  const localPlayerIndex = resolvedLocalIndex >= 0 ? resolvedLocalIndex : 0;
+  const isUsersTurn = (match.currentPlayerIdx ?? 0) === localPlayerIndex;
+  const opponentPlayers = (match.players || []).filter(
+    (_p: any, idx: number) => idx !== localPlayerIndex,
+  );
   const callerEnabled = useUserSettings((s) => s.callerEnabled);
   const callerVoice = useUserSettings((s) => s.callerVoice);
   const callerVolume = useUserSettings((s) => s.callerVolume);
@@ -480,248 +493,245 @@ export default function MatchPage() {
           }
         />
 
-        <div className="grid grid-cols-1 gap-4 mt-3 items-start">
-          {/* Mobile: Scoreboards first, then controls */}
-          <div className="lg:hidden min-w-0 space-y-4">
-            <div className="card p-3">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold">Scoreboards</h3>
-                <button
-                  onClick={() =>
-                    setMobileViewMode(
-                      mobileViewMode === "controls" ? "camera" : "controls",
-                    )
-                  }
-                  className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition-colors"
-                >
-                  {mobileViewMode === "camera"
-                    ? "Show Controls 🎮"
-                    : "Show Camera 📹"}
-                </button>
-              </div>
-              <GameScoreboard
-                gameMode={((match as any)?.game || "X01") as any}
-                players={(match.players || []).map((p: any, idx: number) => ({
-                  name: p.name || `Player ${idx + 1}`,
-                  isCurrentTurn: idx === (match.currentPlayerIdx || 0),
-                  legsWon: p.legsWon || 0,
-                  score:
-                    p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
-                    match.startingScore ??
-                    lastOfflineStart,
-                  lastScore:
-                    p.legs && p.legs.length
-                      ? p.legs[p.legs.length - 1].visits.slice(-1)[0]?.score ||
-                        0
-                      : 0,
-                }))}
-              />
-
-              {/* Score Input Letterbox - Mobile */}
-              <div className="mt-3">
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  className="input text-center text-lg font-semibold"
-                  style={{ width: "400mm", height: "30mm", maxWidth: "100%" }}
-                  value={visitTotalInput}
-                  onChange={(e) => setVisitTotalInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const score = parseInt(visitTotalInput) || 0;
-                      commitVisit(score, 3, { visitTotal: score });
-                      setVisitTotalInput("");
-                    }
-                  }}
-                  placeholder="Tap to enter score"
-                  disabled={!match.inProgress}
-                />
-              </div>
-            </div>
-
-            {/* Mobile Camera - shown when opponent is viewing or manually toggled */}
-            {mobileViewMode === "camera" && (
-              <div className="card p-2">
-                <div className="text-sm font-semibold mb-2 flex items-center justify-between">
-                  <span>Camera Feed</span>
-                  <span className="text-xs text-slate-300">Opponent View</span>
-                </div>
-                <div className="relative h-56 rounded-xl overflow-hidden bg-black">
-                  <CameraView
-                    hideInlinePanels={true}
-                    forceAutoStart={true}
-                    onAddVisit={commitVisit}
-                    onEndLeg={(score) => {
-                      try {
-                        match.endLeg(score ?? 0);
-                      } catch {}
-                    }}
-                    onVisitCommitted={(_score, _darts, finished, meta) => {
-                      if (!finished) return;
-                      const frame = meta?.frame ?? remoteFrame ?? null;
-                      setWinningShot({
-                        label: meta?.label || deriveWinningLabel() || undefined,
-                        ring: meta?.ring,
-                        frame,
-                        ts: Date.now(),
-                      });
-                      try {
-                        match.endGame();
-                      } catch {}
-                    }}
-                  />
-                  {winningShot?.frame && !match.inProgress && (
-                    <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
-                      <img
-                        src={winningShot.frame}
-                        alt="Winning double zoom"
-                        className="w-full h-full object-cover scale-125"
-                      />
-                      <div className="absolute bottom-2 left-2 right-2 text-xs text-white bg-black/60 rounded-md px-2 py-1 flex items-center justify-between gap-2">
-                        <span className="font-semibold">Winning dart zoom</span>
-                        {winningShot.label && (
-                          <span className="text-emerald-200">
-                            {winningShot.label}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Mobile: Score Entry Controls - shown for current player */}
-          {mobileViewMode === "controls" && (
+        <div className="rounded-3xl border border-slate-800/60 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-slate-950/90 p-4 sm:p-6 shadow-2xl">
+          <div className="grid grid-cols-1 gap-5 items-start">
+            {/* Mobile: Turn-based layout */}
             <div className="lg:hidden min-w-0 space-y-4">
-              <div className="card p-3">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <h3 className="text-base font-semibold">Score Entry</h3>
-                  <span className="text-xs text-slate-300">
-                    Enter visits or dart-by-dart edits
-                  </span>
-                </div>
-                {/* Compact autoscore + manual scoring controls */}
-                <div className="grid grid-cols-1 gap-3">
-                  <div className="space-y-3">
-                    <MatchControls
-                      inProgress={match.inProgress}
-                      startingScore={match.startingScore}
-                      pendingEntries={pendingEntries}
-                      onAddVisit={(score, darts) =>
-                        commitVisit(score, darts, { visitTotal: score })
-                      }
-                      onUndo={() => match.undoVisit()}
-                      onNextPlayer={() => match.nextPlayer()}
-                      onEndLeg={(score, darts, meta) => {
-                        const numericScore =
-                          typeof score === "number" ? score : 0;
-                        const finalDarts =
-                          typeof darts === "number" ? Math.max(0, darts) : 0;
-                        match.addVisit(numericScore, finalDarts, {
-                          visitTotal: numericScore,
-                          doubleWindowDarts: meta?.doubleDarts ?? 0,
-                        });
-                        match.endLeg(numericScore);
+              {isUsersTurn ? (
+                <div className="card p-4 rounded-2xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-base font-semibold">Your Scoreboard</h3>
+                    <span className="text-xs text-emerald-300 font-semibold px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/30">
+                      Your turn
+                    </span>
+                  </div>
+                  <GameScoreboard
+                    gameMode={((match as any)?.game || "X01") as any}
+                    players={(match.players || []).map(
+                      (p: any, idx: number) => ({
+                        name: p.name || `Player ${idx + 1}`,
+                        isCurrentTurn: idx === (match.currentPlayerIdx || 0),
+                        legsWon: p.legsWon || 0,
+                        score:
+                          p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
+                          match.startingScore ??
+                          lastOfflineStart,
+                        lastScore:
+                          p.legs && p.legs.length
+                            ? p.legs[p.legs.length - 1].visits.slice(-1)[0]
+                                ?.score || 0
+                            : 0,
+                      }),
+                    )}
+                  />
+
+                  <div className="mt-4 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/40 to-indigo-950/40 p-3 shadow-[0_0_24px_rgba(99,102,241,0.25)]">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      className="input text-center text-lg font-semibold rounded-xl border border-indigo-500/40 bg-transparent focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30 transition-all"
+                      style={{
+                        width: "400mm",
+                        height: "30mm",
+                        maxWidth: "100%",
                       }}
-                      onEndGame={() => match.endGame()}
-                      quickButtons={[180, 140, 100, 60]}
+                      value={visitTotalInput}
+                      onChange={(e) => setVisitTotalInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const score = parseInt(visitTotalInput) || 0;
+                          commitVisit(score, 3, { visitTotal: score });
+                          setVisitTotalInput("");
+                        }
+                      }}
+                      placeholder="Tap to enter score"
+                      disabled={!match.inProgress}
                     />
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {/* Desktop: Scoreboard and Camera side by side */}
-          <div className="hidden lg:block min-w-0 space-y-4">
-            {/* Scoreboard and Camera side by side */}
-            <div className="grid grid-cols-[1fr_1fr] gap-3">
-              <div className="card p-3">
-                <GameScoreboard
-                  gameMode={((match as any)?.game || "X01") as any}
-                  players={(match.players || []).map((p: any, idx: number) => ({
-                    name: p.name || `Player ${idx + 1}`,
-                    isCurrentTurn: idx === (match.currentPlayerIdx || 0),
-                    legsWon: p.legsWon || 0,
-                    score:
-                      p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
-                      match.startingScore ??
-                      lastOfflineStart,
-                    lastScore:
-                      p.legs && p.legs.length
-                        ? p.legs[p.legs.length - 1].visits.slice(-1)[0]
-                            ?.score || 0
-                        : 0,
-                  }))}
-                />
-
-                {/* Score Input Letterbox */}
-                <div className="mt-3">
-                  <input
-                    type="number"
-                    className="input text-center text-lg font-semibold"
-                    style={{ width: "400mm", height: "30mm", maxWidth: "100%" }}
-                    value={visitTotalInput}
-                    onChange={(e) => setVisitTotalInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        const score = parseInt(visitTotalInput) || 0;
-                        commitVisit(score, 3, { visitTotal: score });
-                        setVisitTotalInput("");
-                      }
-                    }}
-                    placeholder="Enter score and press Enter"
-                    disabled={!match.inProgress}
-                  />
-                </div>
-              </div>
-
-              {/* Camera - beside scoreboard on desktop */}
-              <div className="card p-2">
-                <div className="text-sm font-semibold mb-2 flex items-center justify-between">
-                  <span>Camera</span>
-                  <span className="text-xs text-slate-300">Live view</span>
-                </div>
-                <div className="relative h-full min-h-[280px] rounded-xl overflow-hidden bg-black">
-                  <CameraView
-                    hideInlinePanels={true}
-                    forceAutoStart={true}
-                    onAddVisit={commitVisit}
-                    onEndLeg={(score) => {
-                      try {
-                        match.endLeg(score ?? 0);
-                      } catch {}
-                    }}
-                    onVisitCommitted={(_score, _darts, finished, meta) => {
-                      if (!finished) return;
-                      const frame = meta?.frame ?? remoteFrame ?? null;
-                      setWinningShot({
-                        label: meta?.label || deriveWinningLabel() || undefined,
-                        ring: meta?.ring,
-                        frame,
-                        ts: Date.now(),
-                      });
-                      // Ensure the match fully ends so the header stats refresh and the
-                      // winning zoom overlay can render (it only shows once inProgress=false).
-                      // endGame is idempotent: it will no-op if already ended.
-                      try {
-                        match.endGame();
-                      } catch {}
-                    }}
-                  />
-                  {winningShot?.frame && !match.inProgress && (
-                    <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
-                      <img
-                        src={winningShot.frame}
-                        alt="Winning double zoom"
-                        className="w-full h-full object-cover scale-125"
-                      />
+              ) : (
+                <>
+                  <div className="card p-4 rounded-2xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-base font-semibold">Opponent</h3>
+                      <span className="text-xs text-amber-300 font-semibold px-2 py-1 rounded-full bg-amber-500/10 border border-amber-400/30">
+                        Waiting
+                      </span>
                     </div>
-                  )}
+                    <GameScoreboard
+                      gameMode={((match as any)?.game || "X01") as any}
+                      players={(opponentPlayers.length
+                        ? opponentPlayers
+                        : match.players || []
+                      ).map((p: any, idx: number) => ({
+                        name: p.name || `Player ${idx + 1}`,
+                        isCurrentTurn:
+                          p === (match.players || [])[match.currentPlayerIdx],
+                        legsWon: p.legsWon || 0,
+                        score:
+                          p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
+                          match.startingScore ??
+                          lastOfflineStart,
+                        lastScore:
+                          p.legs && p.legs.length
+                            ? p.legs[p.legs.length - 1].visits.slice(-1)[0]
+                                ?.score || 0
+                            : 0,
+                      }))}
+                    />
+                  </div>
+
+                  <div className="card p-3 rounded-2xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                    <div className="text-sm font-semibold mb-3 flex items-center justify-between">
+                      <span>Opponent Camera</span>
+                      <span className="text-xs text-slate-300">Live feed</span>
+                    </div>
+                    <div className="relative h-56 rounded-2xl overflow-hidden bg-black shadow-inner">
+                      <CameraView
+                        hideInlinePanels={true}
+                        forceAutoStart={true}
+                        onAddVisit={commitVisit}
+                        onEndLeg={(score) => {
+                          try {
+                            match.endLeg(score ?? 0);
+                          } catch {}
+                        }}
+                        onVisitCommitted={(_score, _darts, finished, meta) => {
+                          if (!finished) return;
+                          const frame = meta?.frame ?? remoteFrame ?? null;
+                          setWinningShot({
+                            label:
+                              meta?.label || deriveWinningLabel() || undefined,
+                            ring: meta?.ring,
+                            frame,
+                            ts: Date.now(),
+                          });
+                          try {
+                            match.endGame();
+                          } catch {}
+                        }}
+                      />
+                      {winningShot?.frame && !match.inProgress && (
+                        <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
+                          <img
+                            src={winningShot.frame}
+                            alt="Winning double zoom"
+                            className="w-full h-full object-cover scale-125"
+                          />
+                          <div className="absolute bottom-2 left-2 right-2 text-xs text-white bg-black/60 rounded-md px-2 py-1 flex items-center justify-between gap-2">
+                            <span className="font-semibold">
+                              Winning dart zoom
+                            </span>
+                            {winningShot.label && (
+                              <span className="text-emerald-200">
+                                {winningShot.label}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Desktop: Scoreboard and Camera side by side */}
+            <div className="hidden lg:block min-w-0 space-y-4">
+              {/* Scoreboard and Camera side by side */}
+              <div className="grid grid-cols-[1.1fr_0.9fr] gap-5 items-stretch">
+                <div className="card p-5 rounded-3xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5 h-full">
+                  <GameScoreboard
+                    gameMode={((match as any)?.game || "X01") as any}
+                    players={(match.players || []).map(
+                      (p: any, idx: number) => ({
+                        name: p.name || `Player ${idx + 1}`,
+                        isCurrentTurn: idx === (match.currentPlayerIdx || 0),
+                        legsWon: p.legsWon || 0,
+                        score:
+                          p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
+                          match.startingScore ??
+                          lastOfflineStart,
+                        lastScore:
+                          p.legs && p.legs.length
+                            ? p.legs[p.legs.length - 1].visits.slice(-1)[0]
+                                ?.score || 0
+                            : 0,
+                      }),
+                    )}
+                  />
+
+                  {/* Score Input Letterbox */}
+                  <div className="mt-5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/40 to-indigo-950/40 p-4 shadow-[0_0_24px_rgba(99,102,241,0.25)]">
+                    <input
+                      type="number"
+                      className="input text-center text-lg font-semibold rounded-xl border border-indigo-500/40 bg-transparent focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30 transition-all"
+                      style={{
+                        width: "400mm",
+                        height: "30mm",
+                        maxWidth: "100%",
+                      }}
+                      value={visitTotalInput}
+                      onChange={(e) => setVisitTotalInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const score = parseInt(visitTotalInput) || 0;
+                          commitVisit(score, 3, { visitTotal: score });
+                          setVisitTotalInput("");
+                        }
+                      }}
+                      placeholder="Enter score and press Enter"
+                      disabled={!match.inProgress}
+                    />
+                  </div>
+                </div>
+
+                {/* Camera - beside scoreboard on desktop */}
+                <div className="card p-4 rounded-3xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5 h-full">
+                  <div className="text-sm font-semibold mb-3 flex items-center justify-between">
+                    <span>Camera</span>
+                    <span className="text-xs text-slate-300">Live view</span>
+                  </div>
+                  <div className="relative h-full min-h-[280px] rounded-2xl overflow-hidden bg-black shadow-inner">
+                    <CameraView
+                      hideInlinePanels={true}
+                      forceAutoStart={true}
+                      onAddVisit={commitVisit}
+                      onEndLeg={(score) => {
+                        try {
+                          match.endLeg(score ?? 0);
+                        } catch {}
+                      }}
+                      onVisitCommitted={(_score, _darts, finished, meta) => {
+                        if (!finished) return;
+                        const frame = meta?.frame ?? remoteFrame ?? null;
+                        setWinningShot({
+                          label:
+                            meta?.label || deriveWinningLabel() || undefined,
+                          ring: meta?.ring,
+                          frame,
+                          ts: Date.now(),
+                        });
+                        // Ensure the match fully ends so the header stats refresh and the
+                        // winning zoom overlay can render (it only shows once inProgress=false).
+                        // endGame is idempotent: it will no-op if already ended.
+                        try {
+                          match.endGame();
+                        } catch {}
+                      }}
+                    />
+                    {winningShot?.frame && !match.inProgress && (
+                      <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
+                        <img
+                          src={winningShot.frame}
+                          alt="Winning double zoom"
+                          className="w-full h-full object-cover scale-125"
+                        />
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -730,9 +740,9 @@ export default function MatchPage() {
       </div>
       {/* Bottom-right overlay: opponent camera thumbnail + live score */}
       <div className="fixed right-4 bottom-4 z-50">
-        <div className="w-48 bg-black/70 text-white rounded-xl overflow-hidden shadow-lg border border-white/10">
-          <div className="p-2 flex items-center gap-2">
-            <div className="w-16 h-10 bg-black rounded overflow-hidden flex-shrink-0">
+        <div className="w-52 bg-slate-900/80 text-white rounded-2xl overflow-hidden shadow-2xl border border-slate-700/50 backdrop-blur-sm">
+          <div className="p-3 flex items-center gap-3">
+            <div className="w-16 h-10 bg-black rounded-lg overflow-hidden flex-shrink-0 ring-1 ring-slate-700/60">
               {remoteFrame ? (
                 // small thumbnail from remote camera
                 <img
@@ -747,13 +757,13 @@ export default function MatchPage() {
               )}
             </div>
             <div className="flex-1 text-sm">
-              <div className="font-medium">
+              <div className="font-semibold">
                 {(match.players || [])[match.currentPlayerIdx]?.name ||
                   "Player"}
               </div>
               <div className="text-xs text-slate-300">
                 Remaining:
-                <span className="ml-1 font-semibold">
+                <span className="ml-1 font-bold text-indigo-300">
                   {(() => {
                     const p = (match.players || [])[match.currentPlayerIdx];
                     const leg = p?.legs?.[p.legs?.length - 1];
