@@ -17,6 +17,9 @@
     --ndn-safe-bottom: env(safe-area-inset-bottom, 0px);
     /* per-section mobile gap (can be tweaked from JS when entering tabs) */
     --ndn-section-gap: 0px;
+    --ndn-mobile-page-pad: 12px;
+    --ndn-mobile-card-gap: 12px;
+    --ndn-mobile-max-w: 920px;
   }
 
   /* Prevent iOS text-size auto bumping layouts */
@@ -427,18 +430,24 @@
   /* Ensure main scroll area gets a small top padding so content sits under header with a tiny gap */
   #ndn-main-scroll {
     padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size, 6px) + var(--ndn-section-gap, 0px)) !important;
+    padding-left: var(--ndn-mobile-page-pad) !important;
+    padding-right: var(--ndn-mobile-page-pad) !important;
   }
 
   /* Convert main layout to a single-column flow with proper header clearance */
   .container, .app-shell, .main-content, .ndn-game-shell { 
-    padding: 0.5rem !important; 
+    padding: var(--ndn-mobile-page-pad) !important; 
+    box-sizing: border-box;
   }
-  
-  /* Main scroll area needs space below the fixed header */
-  #ndn-main-scroll {
-    padding-top: 8px !important;
+
+  .ndn-game-shell,
+  .ndn-page {
+    width: 100% !important;
+    max-width: var(--ndn-mobile-max-w) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
   }
-  
+
   .ndn-game-shell {
     margin-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-section-gap, 0px)); /* account for fixed header */
   }
@@ -458,11 +467,23 @@
   /* Cards should be edge-to-edge with comfortable padding */
   .card, .glass {
     border-radius: 12px !important;
-    margin: 0.5rem 0 !important;
+    margin: 0 0 var(--ndn-mobile-card-gap) 0 !important;
     padding: 16px !important;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
     background: #1e293b !important; /* Solid card bg */
     border: 1px solid rgba(255,255,255,0.05) !important;
+  }
+
+  .ndn-game-shell .grid,
+  .ndn-page .grid {
+    gap: var(--ndn-mobile-card-gap) !important;
+  }
+
+  .ndn-game-shell .card:last-child,
+  .ndn-page .card:last-child,
+  .ndn-game-shell .glass:last-child,
+  .ndn-page .glass:last-child {
+    margin-bottom: 0 !important;
   }
 
   /* Make buttons full width where appropriate and bigger tap targets */
@@ -551,6 +572,8 @@
     scroll-padding-bottom: calc(var(--ndn-safe-bottom) + 18px) !important;
     padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 12px) !important;
     scroll-padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 12px) !important;
+    padding-left: var(--ndn-mobile-page-pad) !important;
+    padding-right: var(--ndn-mobile-page-pad) !important;
   }
 
   .card, .glass {
@@ -660,6 +683,21 @@
     font-size: 1.05rem !important;
     line-height: 1.2 !important;
     margin-bottom: 8px !important;
+    text-align: center !important;
+  }
+
+  .ndn-shell-body,
+  .ndn-page .ndn-shell-body,
+  .ndn-game-shell .ndn-shell-body {
+    width: 100% !important;
+    max-width: var(--ndn-mobile-max-w) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  .ndn-game-shell .grid,
+  .ndn-page .grid {
+    justify-items: stretch !important;
   }
   .ndn-muted {
     color: rgba(226, 232, 240, 0.72) !important;
