@@ -143,3 +143,11 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     meta JSONB
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_email ON public.notifications(email);
+
+-- User stats (cross-device sync)
+CREATE TABLE IF NOT EXISTS public.user_stats (
+    username TEXT PRIMARY KEY,
+    payload JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_stats_updated_at ON public.user_stats(updated_at);

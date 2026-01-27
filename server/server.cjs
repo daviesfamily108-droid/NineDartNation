@@ -310,6 +310,84 @@ async function deleteUserHighlightPersistent(username, id) {
   return true;
 }
 
+// User stats persistence (server-wide). If Supabase is configured we'll use it,
+// otherwise fall back to a file-backed JSON store under server/data/user_stats.json
+const STATS_FILE = path.join(__dirname, 'data', 'user_stats.json');
+let statsCache = null; // { username: { updatedAt, allTime, series, daily, gameModes } }
+
+function loadStatsFromDisk() {
+  if (statsCache !== null) return statsCache;
+  try {
+    if (fs.existsSync(STATS_FILE)) {
+      const raw = fs.readFileSync(STATS_FILE, 'utf8');
+      statsCache = JSON.parse(raw || '{}') || {};
+      console.log('[Stats] Loaded stats from disk');
+    } else {
+      statsCache = {};
+    }
+  } catch (err) {
+    console.warn('[Stats] Failed to load from disk:', err && err.message);
+    statsCache = {};
+  }
+  return statsCache;
+}
+
+function persistStatsToDisk() {
+  try {
+    const dir = path.dirname(STATS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(STATS_FILE, JSON.stringify(statsCache || {}, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[Stats] Failed to persist to disk:', err && err.message);
+  }
+}
+
+async function getUserStatsPersistent(username) {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('user_stats')
+        .select('payload, updated_at')
+        .eq('username', username)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data || !data.payload) return null;
+      return { ...data.payload, updatedAt: data.payload.updatedAt || new Date(data.updated_at).getTime() };
+    } catch (err) {
+      console.warn('[Stats] Supabase fetch error:', err && err.message);
+    }
+  }
+  const store = loadStatsFromDisk();
+  return store[username] || null;
+}
+
+async function saveUserStatsPersistent(username, payload) {
+  const incomingUpdatedAt = Number(payload && payload.updatedAt) || Date.now();
+  const existing = await getUserStatsPersistent(username);
+  if (existing && existing.updatedAt && existing.updatedAt > incomingUpdatedAt) {
+    return existing;
+  }
+  const next = { ...payload, updatedAt: incomingUpdatedAt };
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('user_stats')
+        .upsert({ username, updated_at: new Date(incomingUpdatedAt).toISOString(), payload: next })
+        .select('payload')
+        .single();
+      if (error) throw error;
+      return data && data.payload ? data.payload : next;
+    } catch (err) {
+      console.warn('[Stats] Supabase upsert error:', err && err.message);
+    }
+  }
+  const store = loadStatsFromDisk();
+  store[username] = next;
+  statsCache = store;
+  persistStatsToDisk();
+  return next;
+}
+
 // Initialize Redis for cross-server session management
 const redis = require('redis');
 
@@ -1266,6 +1344,38 @@ app.delete('/api/user/highlights/:id', async (req, res) => {
     if (!ok) return res.status(404).json({ error: 'Highlight not found.' });
     return res.json({ ok: true });
   } catch (err) {
+    return res.status(401).json({ error: 'Invalid token.' });
+  }
+});
+
+// User stats storage (sync across devices)
+app.get('/api/user/stats', async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const username = decoded.username;
+    const stats = await getUserStatsPersistent(username);
+    return res.json({ stats: stats || null });
+  } catch (err) {
+    return res.status(401).json({ error: 'Invalid token.' });
+  }
+});
+
+app.post('/api/user/stats', express.json(), async (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const username = decoded.username;
+    const payload = req.body && req.body.stats;
+    if (!payload) return res.status(400).json({ error: 'Stats payload required.' });
+    const saved = await saveUserStatsPersistent(username, payload);
+    return res.json({ ok: true, stats: saved });
+  } catch (err) {
+    console.error('[Stats] Error saving stats:', err && err.message);
     return res.status(401).json({ error: 'Invalid token.' });
   }
 });

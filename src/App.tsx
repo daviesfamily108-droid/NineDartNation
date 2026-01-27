@@ -34,7 +34,11 @@ import {
   Users,
 } from "lucide-react";
 import { useWS } from "./components/WSProvider";
-import { getMonthlyAvg3, getAllTimeAvg } from "./store/profileStats";
+import {
+  getMonthlyAvg3,
+  getAllTimeAvg,
+  syncStatsFromServer,
+} from "./store/profileStats";
 import { useMatch } from "./store/match";
 import { useUserSettings } from "./store/userSettings";
 import { useCalibration } from "./store/calibration";
@@ -236,6 +240,9 @@ export default function App() {
       // resolve aliases like "You" back to the signed-in user when persisting stats.
       localStorage.setItem("ndn:currentUser", user.username);
       (window as any).ndnCurrentUser = user.username;
+    } catch {}
+    try {
+      syncStatsFromServer(user.username);
     } catch {}
     const refresh = () => {
       const nextAvg =

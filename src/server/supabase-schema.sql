@@ -122,3 +122,11 @@ CREATE INDEX IF NOT EXISTS idx_tournament_participants_email ON public.tournamen
 CREATE INDEX IF NOT EXISTS idx_friendships_user ON public.friendships(user_email);
 CREATE INDEX IF NOT EXISTS idx_friendships_friend ON public.friendships(friend_email);
 CREATE INDEX IF NOT EXISTS idx_camera_sessions_expires ON public.camera_sessions(expires_at);
+
+-- User stats (cross-device sync)
+CREATE TABLE IF NOT EXISTS public.user_stats (
+    username TEXT PRIMARY KEY,
+    payload JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_stats_updated_at ON public.user_stats(updated_at);

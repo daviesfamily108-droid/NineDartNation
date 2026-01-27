@@ -1,4 +1,5 @@
 ﻿import { broadcastMessage } from "../utils/broadcast";
+import { apiFetch } from "../utils/api";
 import type { Player, Leg } from "./match";
 
 export type AllTimeTotals = {
@@ -29,6 +30,112 @@ export type GameModeStats = Record<string, GameModeStat>;
 const keyFor = (name: string) => `ndn_stats_${name}`;
 const keySeriesFor = (name: string) => `ndn_stats_ts_${name}`;
 const keyDailyFor = (name: string) => `ndn_stats_daily_${name}`;
+const keyMetaFor = (name: string) => `ndn_stats_meta_${name}`;
+
+type StatsMeta = { updatedAt: number };
+type UserStatsPayload = {
+  updatedAt: number;
+  allTime: AllTimeTotals;
+  series: StatEntry[];
+  daily: DailySnapshot | null;
+  gameModes: GameModeStats;
+};
+
+const syncTimers = new Map<string, number>();
+const syncInFlight = new Set<string>();
+
+function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem("authToken");
+  } catch {
+    return null;
+  }
+}
+
+function getStatsMeta(name: string): StatsMeta {
+  try {
+    const raw = localStorage.getItem(keyMetaFor(name));
+    if (!raw) return { updatedAt: 0 };
+    const parsed = JSON.parse(raw || "{}");
+    return { updatedAt: Number(parsed.updatedAt) || 0 };
+  } catch {
+    return { updatedAt: 0 };
+  }
+}
+
+function setStatsMeta(name: string, meta: StatsMeta) {
+  try {
+    localStorage.setItem(keyMetaFor(name), JSON.stringify(meta));
+  } catch {}
+}
+
+function buildStatsPayload(name: string): UserStatsPayload {
+  return {
+    updatedAt: getStatsMeta(name).updatedAt || Date.now(),
+    allTime: getAllTime(name),
+    series: getStatSeries(name),
+    daily: getDailySnapshot(name),
+    gameModes: getGameModeStats(),
+  };
+}
+
+async function pushStatsToServer(name: string) {
+  const token = getAuthToken();
+  if (!token || !name) return;
+  if (syncInFlight.has(name)) return;
+  syncInFlight.add(name);
+  try {
+    const payload = buildStatsPayload(name);
+    await apiFetch("/api/user/stats", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ stats: payload }),
+    });
+  } catch {}
+  syncInFlight.delete(name);
+}
+
+function scheduleStatsSync(name: string) {
+  if (!name) return;
+  const existing = syncTimers.get(name);
+  if (existing) window.clearTimeout(existing);
+  const id = window.setTimeout(() => {
+    syncTimers.delete(name);
+    pushStatsToServer(name);
+  }, 2500);
+  syncTimers.set(name, id);
+}
+
+export async function syncStatsFromServer(name: string) {
+  const token = getAuthToken();
+  if (!token || !name) return;
+  try {
+    const res = await apiFetch("/api/user/stats", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res?.ok) return;
+    const data = await res.json().catch(() => ({}));
+    const remote = data?.stats as UserStatsPayload | undefined;
+    if (!remote || !remote.updatedAt) return;
+    const localMeta = getStatsMeta(name);
+    if (remote.updatedAt > (localMeta.updatedAt || 0)) {
+      setAllTime(name, remote.allTime || { darts: 0, scored: 0 }, {
+        skipSync: true,
+      });
+      setSeries(name, remote.series || [], { skipSync: true });
+      if (remote.daily)
+        setDailySnapshot(name, remote.daily, { skipSync: true });
+      if (remote.gameModes)
+        setGameModeStats(remote.gameModes, { skipSync: true });
+      setStatsMeta(name, { updatedAt: remote.updatedAt });
+    } else if (localMeta.updatedAt > remote.updatedAt) {
+      scheduleStatsSync(name);
+    }
+  } catch {}
+}
 
 export function getAllTime(name: string): AllTimeTotals {
   try {
@@ -57,7 +164,11 @@ export function getAllTime(name: string): AllTimeTotals {
   }
 }
 
-export function setAllTime(name: string, totals: AllTimeTotals) {
+export function setAllTime(
+  name: string,
+  totals: AllTimeTotals,
+  opts?: { skipSync?: boolean },
+) {
   try {
     localStorage.setItem(keyFor(name), JSON.stringify(totals));
     window.dispatchEvent(
@@ -68,6 +179,10 @@ export function setAllTime(name: string, totals: AllTimeTotals) {
       broadcastMessage({ type: "statsUpdated", name, totals });
     } catch {}
   } catch {}
+  if (!opts?.skipSync) {
+    setStatsMeta(name, { updatedAt: Date.now() });
+    scheduleStatsSync(name);
+  }
 }
 
 // Clear all stored stats for a user (all-time totals, time-series, and daily snapshot)
@@ -136,13 +251,23 @@ export function getGameModeStats(allModeKeys?: string[]): GameModeStats {
   return obj;
 }
 
-export function setGameModeStats(stats: GameModeStats) {
+export function setGameModeStats(
+  stats: GameModeStats,
+  opts?: { skipSync?: boolean },
+) {
   try {
     localStorage.setItem(keyGameModes, JSON.stringify(stats));
     window.dispatchEvent(
       new CustomEvent("ndn:stats-updated", { detail: { gameModes: true } }),
     );
   } catch {}
+  if (!opts?.skipSync) {
+    const stored = localStorage.getItem("ndn:currentUser") || "";
+    if (stored) {
+      setStatsMeta(stored, { updatedAt: Date.now() });
+      scheduleStatsSync(stored);
+    }
+  }
 }
 
 export function bumpGameMode(mode: string, won: boolean) {
@@ -175,13 +300,21 @@ function getSeries(name: string): StatEntry[] {
   }
 }
 
-function setSeries(name: string, entries: StatEntry[]) {
+function setSeries(
+  name: string,
+  entries: StatEntry[],
+  opts?: { skipSync?: boolean },
+) {
   try {
     localStorage.setItem(keySeriesFor(name), JSON.stringify(entries));
     window.dispatchEvent(
       new CustomEvent("ndn:stats-updated", { detail: { name } }),
     );
   } catch {}
+  if (!opts?.skipSync) {
+    setStatsMeta(name, { updatedAt: Date.now() });
+    scheduleStatsSync(name);
+  }
 }
 
 export function getStatSeries(name: string): StatEntry[] {
@@ -262,13 +395,21 @@ function getDailySnapshot(name: string): DailySnapshot | null {
   }
 }
 
-function setDailySnapshot(name: string, snap: DailySnapshot) {
+function setDailySnapshot(
+  name: string,
+  snap: DailySnapshot,
+  opts?: { skipSync?: boolean },
+) {
   try {
     localStorage.setItem(keyDailyFor(name), JSON.stringify(snap));
     window.dispatchEvent(
       new CustomEvent("ndn:stats-updated", { detail: { name } }),
     );
   } catch {}
+  if (!opts?.skipSync) {
+    setStatsMeta(name, { updatedAt: Date.now() });
+    scheduleStatsSync(name);
+  }
 }
 
 export function getDailyAdjustedAvg(name: string): number {
