@@ -291,226 +291,265 @@ export default function StatsPanel({ user }: { user?: any }) {
         </div>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {players.map((p, idx) => (
-          <div
-            key={p.id}
-            className="p-4 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-700/6 to-indigo-900/6 shadow-sm transform transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="font-semibold">
-                {idx === 1 && !opponent
-                  ? p.name || "Opponent"
-                  : idx === 1 && opponent
-                    ? opponent
-                    : p.name}
-              </div>
-              {idx === 1 && (
-                <div className="flex gap-2 items-center overflow-x-auto py-1">
-                  <button
-                    className="text-[11px] px-3 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10"
-                    onClick={() => setShowPicker((s) => !s)}
-                    title="Search user to compare"
-                  >
-                    Select Friend 🎯
-                  </button>
-                  {friends.slice(0, 6).map((f) => {
-                    const lbl = f.username || f.email;
-                    const active = opponent === lbl;
-                    return (
-                      <button
-                        key={f.email}
-                        className={`text-[11px] px-3 py-1 rounded-full border ${active ? "bg-indigo-500/30 border-indigo-400/50" : "bg-white/6 border-white/8 hover:bg-white/10 transform hover:-translate-y-0.5 transition-all duration-150"}`}
-                        onClick={() => setOpponent(lbl)}
-                        title={`Compare vs ${lbl}`}
-                      >
-                        {lbl}
-                      </button>
-                    );
-                  })}
-                  {friends.length === 0 && (
+        {players.map((p, idx) => {
+          const playerName = p.name || `Player ${idx + 1}`;
+          const all = getAllTime(playerName);
+          const resolvedBest3 = Math.max(
+            p.bestThreeDartAvg ?? 0,
+            all.best3 ?? 0,
+          );
+          const resolvedWorst3 = (() => {
+            const values = [p.worstThreeDartAvg ?? 0, all.worst3 ?? 0].filter(
+              (v) => v > 0,
+            );
+            return values.length ? Math.min(...values) : 0;
+          })();
+          const resolvedBestLegDarts = (() => {
+            const values: number[] = [];
+            if (typeof p.bestNineDart?.darts === "number") {
+              values.push(p.bestNineDart.darts);
+            }
+            if (typeof all.bestLegDarts === "number" && all.bestLegDarts > 0) {
+              values.push(all.bestLegDarts);
+            }
+            return values.length ? Math.min(...values) : 0;
+          })();
+          const resolvedBestCheckout = Math.max(
+            p.bestCheckout ?? 0,
+            all.bestCheckout ?? 0,
+          );
+
+          return (
+            <div
+              key={p.id}
+              className="p-4 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-700/6 to-indigo-900/6 shadow-sm transform transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="font-semibold">
+                  {idx === 1 && !opponent
+                    ? p.name || "Opponent"
+                    : idx === 1 && opponent
+                      ? opponent
+                      : playerName}
+                </div>
+                {idx === 1 && (
+                  <div className="flex gap-2 items-center overflow-x-auto py-1">
                     <button
-                      className="text-[11px] px-3 py-1 rounded-full bg-white/5 border border-white/10"
-                      disabled
+                      className="text-[11px] px-3 py-1 rounded-full bg-white/5 border border-white/10 hover:bg-white/10"
+                      onClick={() => setShowPicker((s) => !s)}
+                      title="Search user to compare"
                     >
-                      Find friends to compare
+                      Select Friend 🎯
                     </button>
-                  )}
-                </div>
-              )}
-            </div>
-            {idx === 1 && showPicker && (
-              <div className="mb-2 p-2 rounded-lg bg-black/20 border border-white/10">
-                <div className="flex items-center gap-2 mb-2">
-                  <input
-                    className="input flex-1 py-1"
-                    placeholder="Search by name or email"
-                    value={q}
-                    onChange={(e) => runSearch(e.target.value)}
-                  />
-                  <button
-                    className="btn px-3 py-1 text-sm"
-                    onClick={() => runSearch(q)}
-                    disabled={searching}
-                  >
-                    Search 🎯
-                  </button>
-                </div>
-                <ul className="max-h-40 overflow-auto space-y-1">
-                  {results.map((r) => {
-                    const lbl = r.username || r.email;
-                    return (
-                      <li key={r.email}>
+                    {friends.slice(0, 6).map((f) => {
+                      const lbl = f.username || f.email;
+                      const active = opponent === lbl;
+                      return (
                         <button
-                          className="w-full text-left px-2 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-sm"
-                          onClick={() => {
-                            setOpponent(lbl);
-                            setShowPicker(false);
-                          }}
+                          key={f.email}
+                          className={`text-[11px] px-3 py-1 rounded-full border ${active ? "bg-indigo-500/30 border-indigo-400/50" : "bg-white/6 border-white/8 hover:bg-white/10 transform hover:-translate-y-0.5 transition-all duration-150"}`}
+                          onClick={() => setOpponent(lbl)}
+                          title={`Compare vs ${lbl}`}
                         >
                           {lbl}
                         </button>
-                      </li>
-                    );
-                  })}
-                  {!results.length && (
-                    <li className="text-xs opacity-70">
-                      {q.trim() ? "No results" : "Type to search…"}
-                    </li>
-                  )}
-                </ul>
+                      );
+                    })}
+                    {friends.length === 0 && (
+                      <button
+                        className="text-[11px] px-3 py-1 rounded-full bg-white/5 border border-white/10"
+                        disabled
+                      >
+                        Find friends to compare
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
-            {/* If second card and an opponent is selected, show their all-time stats; otherwise show the match/player stats */}
-            {idx === 1 && opponent ? (
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10">
-                  <div className="text-slate-300">Best 3-Dart</div>
-                  <div className="font-semibold">
-                    {formatAvg(getAllTime(opponent).best3 || 0)}
+              {idx === 1 && showPicker && (
+                <div className="mb-2 p-2 rounded-lg bg-black/20 border border-white/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <input
+                      className="input flex-1 py-1"
+                      placeholder="Search by name or email"
+                      value={q}
+                      onChange={(e) => runSearch(e.target.value)}
+                    />
+                    <button
+                      className="btn px-3 py-1 text-sm"
+                      onClick={() => runSearch(q)}
+                      disabled={searching}
+                    >
+                      Search 🎯
+                    </button>
                   </div>
+                  <ul className="max-h-40 overflow-auto space-y-1">
+                    {results.map((r) => {
+                      const lbl = r.username || r.email;
+                      return (
+                        <li key={r.email}>
+                          <button
+                            className="w-full text-left px-2 py-1 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-sm"
+                            onClick={() => {
+                              setOpponent(lbl);
+                              setShowPicker(false);
+                            }}
+                          >
+                            {lbl}
+                          </button>
+                        </li>
+                      );
+                    })}
+                    {!results.length && (
+                      <li className="text-xs opacity-70">
+                        {q.trim() ? "No results" : "Type to search…"}
+                      </li>
+                    )}
+                  </ul>
                 </div>
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10">
-                  <div className="text-slate-300">Worst 3-Dart</div>
-                  <div className="font-semibold">
-                    {formatAvg(getAllTime(opponent).worst3 || 0)}
+              )}
+              {/* If second card and an opponent is selected, show their all-time stats; otherwise show the match/player stats */}
+              {idx === 1 && opponent ? (
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-slate-300">Best 3-Dart</div>
+                    <div className="font-semibold">
+                      {formatAvg(getAllTime(opponent).best3 || 0)}
+                    </div>
                   </div>
-                </div>
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10">
-                  <div className="text-slate-300">
-                    Best 9-Dart (fewest darts)
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-slate-300">Worst 3-Dart</div>
+                    <div className="font-semibold">
+                      {formatAvg(getAllTime(opponent).worst3 || 0)}
+                    </div>
                   </div>
-                  <div className="font-semibold">
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-slate-300">
+                      Best 9-Dart (fewest darts)
+                    </div>
+                    <div className="font-semibold">
+                      {(() => {
+                        const a = getAllTime(opponent);
+                        return a.bestLegDarts ? `${a.bestLegDarts} darts` : "—";
+                      })()}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-slate-300">Best Checkout</div>
+                    <div className="font-semibold">
+                      {getAllTime(opponent).bestCheckout || "—"}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
+                    <div className="text-slate-300">
+                      Averages (All-time vs Monthly)
+                    </div>
+                    <div className="font-semibold flex flex-wrap gap-3 text-[13px]">
+                      <span>
+                        3-dart: {formatAvg(getAllTimeAvg(opponent))} ·{" "}
+                        {formatAvg(getMonthlyAvg3(opponent))}
+                      </span>
+                      <span>
+                        First 9: {formatAvg(getAllTimeFirstNineAvg(opponent))} ·{" "}
+                        {formatAvg(getMonthlyFirstNineAvg(opponent))}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
+                    <div className="text-slate-300">All-time snapshot</div>
                     {(() => {
-                      const a = getAllTime(opponent);
-                      return a.bestLegDarts ? `${a.bestLegDarts} darts` : "—";
+                      const all = getAllTime(opponent);
+                      return (
+                        <div className="font-semibold flex flex-wrap gap-3 text-[13px]">
+                          <span>Best 3-dart: {formatAvg(all.best3 || 0)}</span>
+                          <span>
+                            Worst 3-dart: {formatAvg(all.worst3 || 0)}
+                          </span>
+                          <span>Best leg: {all.bestLegDarts || 0} darts</span>
+                          <span>Best checkout: {all.bestCheckout || 0}</span>
+                        </div>
+                      );
                     })()}
                   </div>
                 </div>
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10">
-                  <div className="text-slate-300">Best Checkout</div>
-                  <div className="font-semibold">
-                    {getAllTime(opponent).bestCheckout || "—"}
-                  </div>
-                </div>
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
-                  <div className="text-slate-300">
-                    Averages (All-time vs Monthly)
-                  </div>
-                  <div className="font-semibold flex flex-wrap gap-3 text-[13px]">
-                    <span>
-                      3-dart: {formatAvg(getAllTimeAvg(opponent))} ·{" "}
-                      {formatAvg(getMonthlyAvg3(opponent))}
-                    </span>
-                    <span>
-                      First 9: {formatAvg(getAllTimeFirstNineAvg(opponent))} ·{" "}
-                      {formatAvg(getMonthlyFirstNineAvg(opponent))}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
-                  <div className="text-slate-300">All-time snapshot</div>
-                  {(() => {
-                    const all = getAllTime(opponent);
-                    return (
-                      <div className="font-semibold flex flex-wrap gap-3 text-[13px]">
-                        <span>Best 3-dart: {formatAvg(all.best3 || 0)}</span>
-                        <span>Worst 3-dart: {formatAvg(all.worst3 || 0)}</span>
-                        <span>Best leg: {all.bestLegDarts || 0} darts</span>
-                        <span>Best checkout: {all.bestCheckout || 0}</span>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10">
-                  <div className="text-slate-300">Best 3-Dart</div>
-                  <div className="font-semibold">
-                    {formatAvg(p.bestThreeDartAvg)}
-                  </div>
-                </div>
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10">
-                  <div className="text-slate-300">Worst 3-Dart</div>
-                  <div className="font-semibold">
-                    {formatAvg(p.worstThreeDartAvg)}
-                  </div>
-                </div>
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10">
-                  <div className="text-slate-300">
-                    Best 9-Dart (fewest darts)
-                  </div>
-                  <div className="font-semibold">
-                    {p.bestNineDart ? `${p.bestNineDart.darts} darts` : "—"}
-                  </div>
-                </div>
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10">
-                  <div className="text-slate-300">Best Checkout</div>
-                  <div className="font-semibold">{p.bestCheckout ?? "—"}</div>
-                </div>
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
-                  <div className="text-slate-300">
-                    Averages (All-time vs Monthly)
-                  </div>
-                  <div className="font-semibold flex flex-wrap gap-3 text-[13px]">
-                    <span>
-                      3-dart: {formatAvg(getAllTimeAvg(p.name))} ·{" "}
-                      {formatAvg(getMonthlyAvg3(p.name))}
-                    </span>
-                    <span>
-                      First 9: {formatAvg(getAllTimeFirstNineAvg(p.name))} ·{" "}
-                      {formatAvg(getMonthlyFirstNineAvg(p.name))}
-                    </span>
-                  </div>
-                </div>
-                {/* Live current three-dart average for in-progress matches */}
-                {inProgress && (
-                  <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
-                    <div className="text-slate-300">Current 3-Dart (live)</div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-slate-300">Best 3-Dart</div>
                     <div className="font-semibold">
-                      {formatAvg(p.currentThreeDartAvg)}
+                      {formatAvg(resolvedBest3)}
                     </div>
                   </div>
-                )}
-                {/* All-time snapshot */}
-                <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
-                  <div className="text-slate-300">All-time snapshot</div>
-                  {(() => {
-                    const all = getAllTime(p.name);
-                    return (
-                      <div className="font-semibold flex flex-wrap gap-3 text-[13px]">
-                        <span>Best 3-dart: {formatAvg(all.best3 || 0)}</span>
-                        <span>Worst 3-dart: {formatAvg(all.worst3 || 0)}</span>
-                        <span>Best leg: {all.bestLegDarts || 0} darts</span>
-                        <span>Best checkout: {all.bestCheckout || 0}</span>
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-slate-300">Worst 3-Dart</div>
+                    <div className="font-semibold">
+                      {formatAvg(resolvedWorst3)}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-slate-300">
+                      Best 9-Dart (fewest darts)
+                    </div>
+                    <div className="font-semibold">
+                      {resolvedBestLegDarts
+                        ? `${resolvedBestLegDarts} darts`
+                        : "—"}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10">
+                    <div className="text-slate-300">Best Checkout</div>
+                    <div className="font-semibold">
+                      {resolvedBestCheckout || "—"}
+                    </div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
+                    <div className="text-slate-300">
+                      Averages (All-time vs Monthly)
+                    </div>
+                    <div className="font-semibold flex flex-wrap gap-3 text-[13px]">
+                      <span>
+                        3-dart: {formatAvg(getAllTimeAvg(playerName))} ·{" "}
+                        {formatAvg(getMonthlyAvg3(playerName))}
+                      </span>
+                      <span>
+                        First 9: {formatAvg(getAllTimeFirstNineAvg(playerName))}{" "}
+                        · {formatAvg(getMonthlyFirstNineAvg(playerName))}
+                      </span>
+                    </div>
+                  </div>
+                  {/* Live current three-dart average for in-progress matches */}
+                  {inProgress && (
+                    <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
+                      <div className="text-slate-300">
+                        Current 3-Dart (live)
                       </div>
-                    );
-                  })()}
+                      <div className="font-semibold">
+                        {formatAvg(p.currentThreeDartAvg)}
+                      </div>
+                    </div>
+                  )}
+                  {/* All-time snapshot */}
+                  <div className="p-2 rounded-lg bg-white/5 border border-white/10 col-span-2">
+                    <div className="text-slate-300">All-time snapshot</div>
+                    {(() => {
+                      const all = getAllTime(playerName);
+                      return (
+                        <div className="font-semibold flex flex-wrap gap-3 text-[13px]">
+                          <span>Best 3-dart: {formatAvg(all.best3 || 0)}</span>
+                          <span>
+                            Worst 3-dart: {formatAvg(all.worst3 || 0)}
+                          </span>
+                          <span>Best leg: {all.bestLegDarts || 0} darts</span>
+                          <span>Best checkout: {all.bestCheckout || 0}</span>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          );
+        })}
         {/* Opponent compare card: if there are fewer than 2 players, show a selector to compare with a friend */}
         {players.length <= 1 && (
           <div className="p-3 rounded-2xl border border-purple-500/20 bg-gradient-to-r from-purple-800/6 to-pink-800/6">
