@@ -10,7 +10,6 @@ import { usePendingVisit } from "../store/pendingVisit";
 import PauseTimerBadge from "./ui/PauseTimerBadge";
 import { useUserSettings } from "../store/userSettings";
 import MatchControls from "./MatchControls";
-import { parseManualDart } from "../game/types";
 import MatchStartShowcase from "./ui/MatchStartShowcase";
 import { sayScore } from "../utils/checkout";
 import { getPreferredUserName } from "../utils/userName";
@@ -22,14 +21,6 @@ export default function MatchPage() {
   const _setControl = useMatchControl((s) => s.setPaused);
   const _control = useMatchControl();
   const [_ready, setReady] = useState(false);
-  const _setRemotePending = usePendingVisit((s) => s.setVisit);
-  const _resetRemotePending = usePendingVisit((s) => s.reset);
-  const remotePending = usePendingVisit((s) => ({
-    entries: s.entries,
-    darts: s.darts,
-    total: s.total,
-  }));
-  const pendingEntries = usePendingVisit((s) => s.entries);
   const [winningShot, setWinningShot] = useState<{
     label?: string;
     ring?: string;
@@ -522,28 +513,42 @@ export default function MatchPage() {
                     />
 
                     <div className="mt-4 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/40 to-indigo-950/40 p-3 shadow-[0_0_24px_rgba(99,102,241,0.25)]">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        className="input text-center text-lg font-semibold rounded-xl border border-indigo-500/40 bg-transparent focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30 transition-all"
-                        style={{
-                          width: "400mm",
-                          height: "30mm",
-                          maxWidth: "100%",
-                        }}
-                        value={visitTotalInput}
-                        onChange={(e) => setVisitTotalInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          className="input text-center text-lg font-semibold rounded-xl border border-indigo-500/40 bg-transparent focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30 transition-all flex-1"
+                          style={{
+                            width: "400mm",
+                            height: "30mm",
+                            maxWidth: "100%",
+                          }}
+                          value={visitTotalInput}
+                          onChange={(e) => setVisitTotalInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              const score = parseInt(visitTotalInput) || 0;
+                              commitVisit(score, 3, { visitTotal: score });
+                              setVisitTotalInput("");
+                            }
+                          }}
+                          placeholder="Tap to enter score"
+                          disabled={!match.inProgress}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn--primary px-5 py-3 rounded-xl text-sm font-semibold"
+                          onClick={() => {
                             const score = parseInt(visitTotalInput) || 0;
                             commitVisit(score, 3, { visitTotal: score });
                             setVisitTotalInput("");
-                          }
-                        }}
-                        placeholder="Tap to enter score"
-                        disabled={!match.inProgress}
-                      />
+                          }}
+                          disabled={!match.inProgress || !visitTotalInput}
+                        >
+                          Submit score
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </>
@@ -709,27 +714,41 @@ export default function MatchPage() {
                     />
 
                     <div className="mt-5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/40 to-indigo-950/40 p-4 shadow-[0_0_24px_rgba(99,102,241,0.25)]">
-                      <input
-                        type="number"
-                        className="input text-center text-lg font-semibold rounded-xl border border-indigo-500/40 bg-transparent focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30 transition-all"
-                        style={{
-                          width: "400mm",
-                          height: "30mm",
-                          maxWidth: "100%",
-                        }}
-                        value={visitTotalInput}
-                        onChange={(e) => setVisitTotalInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <input
+                          type="number"
+                          className="input text-center text-lg font-semibold rounded-xl border border-indigo-500/40 bg-transparent focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30 transition-all flex-1"
+                          style={{
+                            width: "400mm",
+                            height: "30mm",
+                            maxWidth: "100%",
+                          }}
+                          value={visitTotalInput}
+                          onChange={(e) => setVisitTotalInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              const score = parseInt(visitTotalInput) || 0;
+                              commitVisit(score, 3, { visitTotal: score });
+                              setVisitTotalInput("");
+                            }
+                          }}
+                          placeholder="Enter score"
+                          disabled={!match.inProgress}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn--primary px-5 py-3 rounded-xl text-sm font-semibold"
+                          onClick={() => {
                             const score = parseInt(visitTotalInput) || 0;
                             commitVisit(score, 3, { visitTotal: score });
                             setVisitTotalInput("");
-                          }
-                        }}
-                        placeholder="Enter score and press Enter"
-                        disabled={!match.inProgress}
-                      />
+                          }}
+                          disabled={!match.inProgress || !visitTotalInput}
+                        >
+                          Submit score
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </>
@@ -807,65 +826,6 @@ export default function MatchPage() {
                     </div>
                   </div>
                 </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-      {/* Bottom-right overlay: opponent camera thumbnail + live score */}
-      <div className="fixed right-4 bottom-4 z-50">
-        <div className="w-52 bg-slate-900/80 text-white rounded-2xl overflow-hidden shadow-2xl border border-slate-700/50 backdrop-blur-sm">
-          <div className="p-3 flex items-center gap-3">
-            <div className="w-16 h-10 bg-black rounded-lg overflow-hidden flex-shrink-0 ring-1 ring-slate-700/60">
-              {remoteFrame ? (
-                // small thumbnail from remote camera
-                <img
-                  src={remoteFrame}
-                  alt="opponent camera"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full bg-gray-800 flex items-center justify-center text-xs">
-                  No preview
-                </div>
-              )}
-            </div>
-            <div className="flex-1 text-sm">
-              <div className="font-semibold">
-                {(match.players || [])[match.currentPlayerIdx]?.name ||
-                  "Player"}
-              </div>
-              <div className="text-xs text-slate-300">
-                Remaining:
-                <span className="ml-1 font-bold text-indigo-300">
-                  {(() => {
-                    const p = (match.players || [])[match.currentPlayerIdx];
-                    const leg = p?.legs?.[p.legs?.length - 1];
-                    const remaining = leg
-                      ? leg.totalScoreRemaining
-                      : match.startingScore;
-                    const pending = (remotePending && remotePending.total) || 0;
-                    const shown =
-                      typeof remaining === "number"
-                        ? Math.max(0, remaining - pending)
-                        : remaining;
-                    return shown;
-                  })()}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="px-2 pb-2">
-            <div className="text-xs text-slate-300">Pending</div>
-            <div className="flex gap-1 mt-1">
-              {remotePending.entries?.length ? (
-                remotePending.entries.map((e: any, i: number) => (
-                  <div key={i} className="px-2 py-1 bg-white/5 rounded text-sm">
-                    {e.rawValue ?? e.value}
-                  </div>
-                ))
-              ) : (
-                <div className="px-2 py-1 text-xs text-slate-400">—</div>
               )}
             </div>
           </div>
