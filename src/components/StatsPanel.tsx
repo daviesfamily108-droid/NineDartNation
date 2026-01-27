@@ -264,7 +264,7 @@ export default function StatsPanel({ user }: { user?: any }) {
 
   return (
     <div
-      className="card ndn-game-shell ndn-page"
+      className="card ndn-game-shell ndn-page pb-6 overflow-visible"
       style={{
         background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
       }}
@@ -276,14 +276,16 @@ export default function StatsPanel({ user }: { user?: any }) {
           </h2>
           <span className="text-xs opacity-70">View 🎯</span>
         </div>
-        <TabPills
-          tabs={[
-            { key: "x01", label: "X01 🎯" },
-            { key: "other", label: "Other Modes 🎯" },
-          ]}
-          active={family}
-          onChange={(k) => setFamily(k as "x01" | "other")}
-        />
+        <div className="relative z-20 mt-2">
+          <TabPills
+            tabs={[
+              { key: "x01", label: "X01 🎯" },
+              { key: "other", label: "Other Modes 🎯" },
+            ]}
+            active={family}
+            onChange={(k) => setFamily(k as "x01" | "other")}
+          />
+        </div>
       </div>
       {inProgress && (
         <div className="mb-3 p-2 rounded-lg text-sm border border-amber-500/40 bg-amber-500/10 text-amber-200">
@@ -742,7 +744,7 @@ export default function StatsPanel({ user }: { user?: any }) {
               </div>
             )}
           </div>
-          <div className="flex flex-wrap justify-between text-[11px] text-slate-300/80">
+          <div className="flex flex-wrap justify-between text-[11px] text-slate-300/80 mb-2">
             <span>
               Most frequent:{" "}
               {distSummary
