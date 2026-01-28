@@ -203,8 +203,8 @@
   /* Position hamburger menu below the header, centered horizontally on left side */
   --ndn-mobile-menu-left: 16px; /* 16px from left edge */
   --ndn-mobile-gap-size: 8px; /* the small rectangle gap under header (keep as-is) */
-  /* Position hamburger below header with proper spacing */
-  --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size) + 8px);
+  /* Position hamburger within the small gap below the header */
+  --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size, 6px) - 2px);
   }
 
     .ndn-mobile-menu-btn {
@@ -258,13 +258,13 @@
     #ndn-header .ndn-greeting-welcome {
       transform: none !important;
       display: block;
-      white-space: nowrap !important; /* keep the welcome on one line */
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-      max-width: calc(100% - 48px) !important;
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: unset !important;
+      max-width: 100% !important;
       margin-left: 0 !important;
       margin-top: 3mm !important;
-      text-align: center !important;
+      text-align: left !important;
     }
 
   /* Move the avg left by an additional 3.5mm as requested (total left shift) and keep vertical offset */
@@ -276,9 +276,13 @@
     }
 
     /* Make room for left brand and positioned hamburger so greeting doesn't overlap */
+    #ndn-header {
+      flex-wrap: wrap !important;
+    }
+
     #ndn-header .ndn-greeting {
-      margin-left: calc(var(--ndn-mobile-menu-left) + 44px) !important;
-      margin-right: 64px !important;
+      margin-left: calc(var(--ndn-mobile-menu-left) + 32px) !important;
+      margin-right: 36px !important;
     }
   }
 

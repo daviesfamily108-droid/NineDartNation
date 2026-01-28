@@ -9,7 +9,6 @@ import {
   ChevronDown,
 } from "lucide-react";
 import CreateMatchModal from "./ui/CreateMatchModal";
-import GameCalibrationStatus from "./GameCalibrationStatus";
 import MatchStartShowcase from "./ui/MatchStartShowcase";
 import { useMatch } from "../store/match";
 import { useWS } from "./WSProvider";
@@ -859,9 +858,6 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
               </div>
               <div className="text-sm opacity-80 mb-3">
                 Created by {joinMatch.createdBy}
-              </div>
-              <div className="mb-3">
-                <GameCalibrationStatus gameMode={joinMatch.game} compact />
               </div>
               {joinMatch.startingScore && (
                 <div className="mb-3">

@@ -11,7 +11,6 @@ import { useToast } from "../store/toast";
 import { useWS } from "./WSProvider";
 import { apiFetch } from "../utils/api";
 import { useUserSettings } from "../store/userSettings";
-import GameCalibrationStatus from "./GameCalibrationStatus";
 import { launchInPlayDemo } from "../utils/inPlayDemo";
 
 type Tournament = {
@@ -1318,9 +1317,6 @@ export default function Tournaments({ user }: { user: any }) {
               </div>
               <div className="text-sm opacity-80 mb-3">
                 Created by {joinMatch.createdBy}
-              </div>
-              <div className="mb-3">
-                <GameCalibrationStatus gameMode={joinMatch.game} compact />
               </div>
               {joinMatch.startingScore && (
                 <div className="mb-3">

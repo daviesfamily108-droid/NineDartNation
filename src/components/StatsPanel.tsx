@@ -655,7 +655,7 @@ export default function StatsPanel({ user }: { user?: any }) {
 
       {/* Score distribution for X01 family OR Game Stats for Other Modes */}
       {family !== "other" ? (
-        <div className="mt-6 space-y-4">
+        <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4 space-y-4">
           <div className="mb-2 text-sm opacity-80">
             Score Distribution ({family.toUpperCase()}): Visits by scored points
           </div>
@@ -744,14 +744,14 @@ export default function StatsPanel({ user }: { user?: any }) {
               </div>
             )}
           </div>
-          <div className="flex flex-wrap justify-between text-[11px] text-slate-300/80 mb-2">
-            <span>
+          <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300/80 mb-2">
+            <span className="text-left">
               Most frequent:{" "}
               {distSummary
                 ? `${distSummary.most.label} (${distSummary.most.value})`
                 : "—"}
             </span>
-            <span>
+            <span className="text-right">
               Least frequent:{" "}
               {distSummary
                 ? `${distSummary.least.label} (${distSummary.least.value})`
@@ -770,7 +770,7 @@ export default function StatsPanel({ user }: { user?: any }) {
         </div>
       ) : selectedGameMode &&
         otherData.find((d) => d.label === selectedGameMode) ? (
-        <div className="mt-6">
+        <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
           {(() => {
             const game = otherData.find((d) => d.label === selectedGameMode)!;
             return (

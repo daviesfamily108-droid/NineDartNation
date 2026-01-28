@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { suggestCheckouts, sayScore } from "../utils/checkout";
 import { useUserSettings } from "../store/userSettings";
 import { useToast } from "../store/toast";
-import GameCalibrationStatus from "./GameCalibrationStatus";
 import CameraTile from "./CameraTile";
 import CameraView from "./CameraView";
 import React, { memo } from "react";
@@ -2471,9 +2470,6 @@ export default function OfflinePlay({ user }: { user: any }) {
               </option>
             ))}
           </select>
-
-          {/* Calibration Status - displayed below game mode selector */}
-          <GameCalibrationStatus gameMode={selectedMode} compact={true} />
 
           {selectedMode === "Treble Practice" && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
