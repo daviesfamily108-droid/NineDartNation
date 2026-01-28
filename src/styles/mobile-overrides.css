@@ -203,8 +203,9 @@
   /* Position hamburger menu below the header, centered horizontally on left side */
   --ndn-mobile-menu-left: 16px; /* 16px from left edge */
   --ndn-mobile-gap-size: 8px; /* the small rectangle gap under header (keep as-is) */
-  /* Position hamburger within the small gap below the header */
-  --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size, 6px) - 2px);
+  --ndn-mobile-menu-gap-offset: 1px; /* nudges hamburger into the gap center */
+  /* Position hamburger centered within the small gap below the header */
+  --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + (var(--ndn-mobile-gap-size, 6px) * 0.5) - var(--ndn-mobile-menu-gap-offset));
   }
 
     .ndn-mobile-menu-btn {
@@ -393,16 +394,16 @@
   /* Keep drawer panel below the fixed header on phones so header does not look overlapped */
   /* Keep drawer panel and backdrop just below the header with a small gap */
   .ndn-drawer-root .ndn-drawer-panel {
-    top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 6px);
-    height: calc(100% - (var(--ndn-header-h) + var(--ndn-safe-top) + 6px));
+    top: 0;
+    height: 100vh;
     border-top-left-radius: 0 !important;
     border-top-right-radius: 0 !important;
   }
 
-  /* Backdrop should also start below the header so header remains visible */
+  /* Backdrop should cover the full screen for full-height nav */
   .ndn-drawer-root .ndn-drawer-backdrop {
-    top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 6px);
-    height: calc(100% - (var(--ndn-header-h) + var(--ndn-safe-top) + 6px));
+    top: 0;
+    height: 100vh;
   }
 
   /* Mobile drawer scrollbar styling - always visible */
@@ -688,6 +689,11 @@
     line-height: 1.2 !important;
     margin-bottom: 8px !important;
     text-align: center !important;
+  }
+
+  /* Stats page: add extra depth on mobile only */
+  .ndn-stats-page {
+    padding-bottom: calc(4.6in + var(--ndn-safe-bottom)) !important;
   }
 
   .ndn-shell-body,
