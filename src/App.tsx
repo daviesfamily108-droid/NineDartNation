@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   useCallback,
   useEffect,
   useRef,
@@ -537,6 +537,28 @@ export default function App() {
       window.removeEventListener("orientationchange", updateHeaderHeight);
     };
   }, [isCompact]);
+
+  // On mobile, shift the hamburger when the user scrolls upward.
+  useEffect(() => {
+    if (!isMobile) return;
+    const scroller = document.getElementById("ndn-main-scroll");
+    if (!scroller) return;
+    let lastTop = scroller.scrollTop;
+    const onScroll = () => {
+      const currentTop = scroller.scrollTop;
+      if (currentTop < lastTop) {
+        document.documentElement.classList.add("ndn-menu-scrolled");
+      } else if (currentTop > lastTop) {
+        document.documentElement.classList.remove("ndn-menu-scrolled");
+      }
+      lastTop = currentTop;
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      document.documentElement.classList.remove("ndn-menu-scrolled");
+    };
+  }, [isMobile]);
 
   // Global logout handler: return to sign-in screen and clear minimal local user context
   useEffect(() => {

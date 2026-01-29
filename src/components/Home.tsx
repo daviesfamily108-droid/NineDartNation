@@ -101,7 +101,7 @@ export default function Home({ user }: { user?: any }) {
         )}
 
         <div className="w-full max-w-4xl mx-auto mb-6 sm:mb-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          <div className="home-actions-grid grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
             <button
               onClick={() => {
                 goTab("offline");
