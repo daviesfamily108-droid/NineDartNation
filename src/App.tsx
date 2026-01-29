@@ -560,6 +560,18 @@ export default function App() {
     };
   }, [isMobile]);
 
+  useEffect(() => {
+    if (!isMobile) return;
+    if (navOpen) {
+      document.documentElement.classList.add("ndn-menu-open");
+    } else {
+      document.documentElement.classList.remove("ndn-menu-open");
+    }
+    return () => {
+      document.documentElement.classList.remove("ndn-menu-open");
+    };
+  }, [isMobile, navOpen]);
+
   // Global logout handler: return to sign-in screen and clear minimal local user context
   useEffect(() => {
     const onLogout = () => {
@@ -1026,8 +1038,9 @@ export default function App() {
             <button
               className="ndn-mobile-menu-btn p-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all shrink-0 fixed z-[9999]"
               data-testid="mobile-menu-button"
-              onClick={() => setNavOpen(true)}
-              aria-label="Open Menu"
+              onClick={() => setNavOpen((prev) => !prev)}
+              aria-label={navOpen ? "Close Menu" : "Open Menu"}
+              aria-expanded={navOpen}
             >
               <Menu className="w-6 h-6" />
             </button>
