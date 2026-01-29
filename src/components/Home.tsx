@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useToast } from "../store/toast";
 import { formatAvg } from "../utils/stats";
 import { getAllTime } from "../store/profileStats";
@@ -56,7 +56,7 @@ export default function Home({ user }: { user?: any }) {
   }, []);
   return (
     <div
-      className={`${user?.fullAccess ? "premium-main" : ""} home-shell relative min-h-[600px] flex flex-col items-center justify-center overflow-hidden`}
+      className={`${user?.fullAccess ? "premium-main" : ""} home-shell relative min-h-screen flex flex-col items-center justify-start overflow-hidden px-4 pb-20`}
     >
       <div className="home-background" aria-hidden>
         <div className="home-background__gradient"></div>
@@ -64,48 +64,48 @@ export default function Home({ user }: { user?: any }) {
         <div className="home-background__pulse home-background__pulse--two"></div>
       </div>
 
-      <div className="home-content relative z-10 w-full max-w-6xl mx-auto bg-white/10 backdrop-blur-lg rounded-2xl sm:rounded-3xl shadow-2xl p-3 sm:p-6 md:p-8 lg:p-10 flex flex-col">
-        <div className="home-intro space-y-2 text-center flex flex-col items-center">
-          <div className="home-brand-row flex w-full items-center justify-between gap-3 text-[0.7rem] sm:text-sm uppercase tracking-[0.35em] text-white/80 font-semibold">
+      <div className="home-content relative z-10 w-full max-w-6xl mx-auto bg-white/10 backdrop-blur-lg rounded-2xl sm:rounded-3xl shadow-2xl p-4 sm:p-6 md:p-8 lg:p-10 flex flex-col">
+        <div className="home-intro space-y-3 text-center flex flex-col items-center">
+          <div className="home-brand-row flex w-full items-center justify-center gap-3 text-xs sm:text-sm uppercase tracking-[0.25em] text-white/80 font-semibold flex-wrap">
             <span className="home-brand-tag">Nine Dart Nation 🎯</span>
             <button
               onClick={openNotifications}
-              className="home-menu-button btn px-4 py-2 text-[0.8rem] rounded-full bg-amber-400 text-slate-900 font-bold transition hover:scale-[1.02]"
+              className="home-menu-button btn px-4 py-2 text-sm rounded-full bg-amber-400 text-slate-900 font-bold transition hover:scale-105 active:scale-95"
             >
               Notifications 🔔
             </button>
           </div>
-          <h2 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-400 to-blue-400 drop-shadow-xl leading-tight">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-purple-400 to-blue-400 drop-shadow-xl leading-tight px-2">
             Welcome to Nine Dart Nation 🎯
           </h2>
-          <p className="text-sm sm:text-lg md:text-xl lg:text-2xl text-white/80 font-semibold px-2">
+          <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-white/80 font-semibold px-2">
             Your home for competitive darts, stats, and online play.
           </p>
-          <p className="text-xs sm:text-sm md:text-base lg:text-lg text-white/60 italic px-2">
+          <p className="text-sm sm:text-base md:text-lg text-white/60 italic px-2">
             "Where every dart counts and every player matters."
           </p>
         </div>
 
-        {/* Did You Know - moved up for full visibility and randomized each mount */}
+        {/* Did You Know */}
         {fact && (
-          <div className="w-full mb-4 sm:mb-6 px-2 sm:px-0">
-            <div className="mx-auto max-w-xs sm:max-w-xl rounded-full px-3 sm:px-5 py-2 text-center text-indigo-100 bg-gradient-to-r from-indigo-600/80 to-fuchsia-600/80 shadow-md">
-              <span className="font-semibold text-sm sm:text-base">
+          <div className="w-full my-4 sm:my-6 px-2 sm:px-0">
+            <div className="mx-auto max-w-full sm:max-w-xl rounded-full px-4 sm:px-5 py-3 text-center text-indigo-100 bg-gradient-to-r from-indigo-600/80 to-fuchsia-600/80 shadow-md">
+              <span className="font-semibold text-sm sm:text-base block sm:inline">
                 Did you know? 💡
               </span>{" "}
-              <span className="opacity-90 text-sm sm:text-base">{fact}</span>
+              <span className="opacity-90 text-sm sm:text-base block sm:inline mt-1 sm:mt-0">
+                {fact}
+              </span>
             </div>
           </div>
         )}
 
-        <div className="w-full max-w-4xl mx-auto mb-5 sm:mb-6 md:mb-8">
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
+        <div className="w-full max-w-4xl mx-auto mb-6 sm:mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
             <button
               onClick={() => {
-                // Switch to Offline and auto-start using the last saved offline settings
                 goTab("offline");
                 try {
-                  // Preconfigure format and starting score
                   window.dispatchEvent(
                     new CustomEvent("ndn:offline-format", {
                       detail: {
@@ -117,7 +117,6 @@ export default function Home({ user }: { user?: any }) {
                   );
                 } catch {}
                 try {
-                  // Give the Offline tab a tick to mount, then auto-start the chosen mode
                   setTimeout(() => {
                     window.dispatchEvent(
                       new CustomEvent("ndn:auto-start", {
@@ -127,27 +126,31 @@ export default function Home({ user }: { user?: any }) {
                   }, 50);
                 } catch {}
               }}
-              className="w-full px-3 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl sm:rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 flex items-center justify-center gap-2 text-[0.95rem] sm:text-lg md:text-xl touch-manipulation"
+              className="w-full px-5 py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg touch-manipulation"
             >
-              <span aria-hidden>{sym("target")}</span> Start New Match ⚔️
+              <span aria-hidden>{sym("target")}</span>
+              <span>Start New Match ⚔️</span>
             </button>
             <button
               onClick={() => goTab("stats")}
-              className="w-full px-3 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl sm:rounded-full bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 flex items-center justify-center gap-2 text-[0.95rem] sm:text-lg md:text-xl touch-manipulation"
+              className="w-full px-5 py-4 rounded-2xl bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg touch-manipulation"
             >
-              <span aria-hidden>{sym("info")}</span> View Stats 📊
+              <span aria-hidden>{sym("info")}</span>
+              <span>View Stats 📊</span>
             </button>
             <button
               onClick={() => goTab("online")}
-              className="w-full px-3 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl sm:rounded-full bg-gradient-to-r from-green-500 to-blue-400 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 flex items-center justify-center gap-2 text-[0.95rem] sm:text-lg md:text-xl touch-manipulation"
+              className="w-full px-5 py-4 rounded-2xl bg-gradient-to-r from-green-500 to-blue-400 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg touch-manipulation"
             >
-              <span aria-hidden>{sym("ok")}</span> Join Online Match 🎯
+              <span aria-hidden>{sym("ok")}</span>
+              <span>Join Online Match 🎯</span>
             </button>
             <button
               onClick={() => setShowProfile(true)}
-              className="w-full px-3 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl sm:rounded-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 flex items-center justify-center gap-2 text-[0.95rem] sm:text-lg md:text-xl touch-manipulation"
+              className="w-full px-5 py-4 rounded-2xl bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg touch-manipulation"
             >
-              <span aria-hidden>{sym("bullet")}</span> Profile 👤
+              <span aria-hidden>{sym("bullet")}</span>
+              <span>Profile 👤</span>
             </button>
             <button
               onClick={() => {
@@ -160,12 +163,13 @@ export default function Home({ user }: { user?: any }) {
                   );
                 } catch {}
               }}
-              className="w-full px-3 sm:px-5 md:px-6 py-3 md:py-4 rounded-2xl sm:rounded-full bg-gradient-to-r from-pink-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-transform duration-150 flex items-center justify-center gap-2 text-[0.95rem] sm:text-lg md:text-xl touch-manipulation"
+              className="w-full px-5 py-4 rounded-2xl bg-gradient-to-r from-pink-500 to-indigo-500 text-white font-bold shadow-xl hover:scale-105 active:scale-95 transition-transform duration-150 flex items-center justify-center gap-2 text-base sm:text-lg touch-manipulation"
             >
-              <span aria-hidden>{sym("dash")}</span> Practice Doubles 🎯
+              <span aria-hidden>{sym("dash")}</span>
+              <span>Practice Doubles 🎯</span>
             </button>
           </div>
-          <p className="mt-2 text-center text-[0.72rem] sm:text-xs text-white/60">
+          <p className="mt-3 text-center text-xs sm:text-sm text-white/60">
             Tip: rotate your phone for more room — the buttons auto-reflow.
           </p>
         </div>
