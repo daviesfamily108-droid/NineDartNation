@@ -1,0 +1,20 @@
+{
+  "DartsWithG": {
+    "updatedAt": 1769722900916,
+    "allTime": {
+      "darts": 0,
+      "scored": 0
+    },
+    "series": [],
+    "daily": {
+      "avg": 0,
+      "ts": 1769722900914
+    },
+    "gameModes": {
+      "X01": {
+        "played": 7,
+        "won": 7
+      }
+    }
+  }
+}

@@ -1033,18 +1033,7 @@ export default function App() {
               />
             </div>
           )}
-          {/* Fixed hamburger menu button - positioned outside header to avoid glass overlay */}
-          {isMobile && (
-            <button
-              className="ndn-mobile-menu-btn p-2 rounded-xl text-slate-200 hover:bg-white/10 active:scale-95 transition-all shrink-0 fixed z-[9999]"
-              data-testid="mobile-menu-button"
-              onClick={() => setNavOpen((prev) => !prev)}
-              aria-label={navOpen ? "Close Menu" : "Open Menu"}
-              aria-expanded={navOpen}
-            >
-              <Menu className="w-6 h-6" />
-            </button>
-          )}
+          {/* Fixed hamburger menu button removed - integrated into header */}
 
           {/* Wrap header + scroller in a column so header stays static and only content scrolls below it */}
           <div className="flex flex-col h-full overflow-hidden">
@@ -1058,17 +1047,26 @@ export default function App() {
                 style={{ willChange: "transform" }}
               >
                 {isMobile && (
-                  <button
-                    className="ndn-mobile-brand shrink-0 text-sm font-black px-3 py-1 rounded-xl bg-black/40 text-white/90 hover:bg-black/50 transition-colors"
-                    onClick={() => {
-                      setTab("score");
-                      setNavOpen(false);
-                    }}
-                    aria-label="Go Home"
-                    title="Go Home"
-                  >
-                    NDN 🎯
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="p-2 rounded-xl text-slate-200 bg-white/5 hover:bg-white/10 active:scale-95 transition-all shrink-0 border border-white/5"
+                      onClick={() => setNavOpen(true)}
+                      aria-label="Open Menu"
+                    >
+                      <Menu className="w-5 h-5" />
+                    </button>
+                    <button
+                      className="ndn-mobile-brand shrink-0 text-sm font-black px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all border border-white/10"
+                      onClick={() => {
+                        setTab("score");
+                        setNavOpen(false);
+                      }}
+                      aria-label="Go Home"
+                      title="Go Home"
+                    >
+                      NDN 🎯
+                    </button>
+                  </div>
                 )}
 
                 {/* Left: Brand + Greeting - compact single-line with avg */}
@@ -1200,6 +1198,7 @@ export default function App() {
                   setNavOpen(false);
                 }}
                 user={user}
+                avatar={avatar || fallbackAvatar}
               />
             )}
             <main
@@ -1610,17 +1609,25 @@ function MobileNav({
   active,
   onChange,
   user,
+  avatar,
 }: {
   open: boolean;
   onClose: () => void;
   active: TabKey;
   onChange: (k: TabKey) => void;
   user: any;
+  avatar?: string;
 }) {
   const isAdmin = useIsAdmin(user?.email);
   const tabs = buildTabList(user, isAdmin);
   const [showDiscord, setShowDiscord] = React.useState(false);
   const [showNDNDiscord, setShowNDNDiscord] = React.useState(false);
+
+  const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    user?.username || "NDN",
+  )}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`;
+  const displayAvatar = avatar || fallback;
+  const isPremium = !!user?.fullAccess;
 
   return (
     <Drawer
@@ -1630,15 +1637,53 @@ function MobileNav({
       side="left"
       title="Navigate"
     >
-      <div
-        className="h-full overflow-y-scroll p-4 pb-20"
-        style={{
-          scrollbarWidth: "thin",
-          scrollbarColor: "rgba(139, 92, 246, 0.5) rgba(30, 41, 59, 0.3)",
-        }}
-      >
-        {/* Mobile menu tabs - explicitly render each tab */}
-        <div className="flex flex-col gap-3 min-h-full">
+      <div className="flex flex-col h-full bg-[#0f0e13]">
+        {/* User Profile Header */}
+        <div className="p-6 pt-12 border-b border-white/5 bg-gradient-to-b from-white/[0.05] to-transparent">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <img
+                src={displayAvatar}
+                alt={user.username}
+                className={`w-14 h-14 rounded-full object-cover ring-2 ${
+                  isPremium
+                    ? "ring-indigo-500 shadow-lg shadow-indigo-500/30"
+                    : "ring-white/10"
+                }`}
+              />
+              {isPremium && (
+                <div className="absolute -bottom-1 -right-1 bg-indigo-500 text-white rounded-full p-1 border border-[#0f0e13]">
+                  <Trophy className="w-3 h-3" />
+                </div>
+              )}
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-lg text-white truncate">
+                {user.username}
+              </div>
+              <div className="text-xs text-white/50 truncate">
+                {user.email || "Guest"}
+              </div>
+              {isPremium && (
+                <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-indigo-300">
+                  Premium Member
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation Items */}
+        <div
+          className="flex-1 overflow-y-auto p-4 space-y-1"
+          style={{
+            scrollbarWidth: "thin",
+            scrollbarColor: "rgba(139, 92, 246, 0.5) rgba(30, 41, 59, 0.3)",
+          }}
+        >
+          <div className="text-xs font-bold text-white/30 uppercase tracking-widest px-4 py-2 mb-2">
+            Menu
+          </div>
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = active === tab.key;
@@ -1649,36 +1694,50 @@ function MobileNav({
                   onChange(tab.key as TabKey);
                   onClose();
                 }}
-                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 border ${
                   isActive
-                    ? "bg-indigo-600 text-white shadow-lg"
-                    : "bg-white/5 text-slate-300 hover:bg-white/10"
+                    ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-900/20"
+                    : "bg-transparent border-transparent text-slate-400 hover:bg-white/5 hover:text-white"
                 }`}
               >
-                <Icon className="w-5 h-5" />
-                <span className="font-semibold text-base">{tab.label}</span>
+                <div
+                  className={`p-1 rounded-lg ${
+                    isActive ? "bg-white/20" : "bg-white/5"
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                </div>
+                <span className="font-medium text-sm tracking-wide">
+                  {tab.label}
+                </span>
+                {isActive && (
+                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white shadow-sm shadow-white/50" />
+                )}
               </button>
             );
           })}
+        </div>
 
-          {/* Discord buttons */}
-          <div className="mt-2 flex flex-col gap-2">
-            <button
-              className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] transition-all border border-[#5865F2]/30"
-              onClick={() => setShowDiscord(true)}
-            >
-              <MessageCircle className="w-5 h-5" />
-              <span className="font-semibold text-base">Bullseye League</span>
-            </button>
-
-            <button
-              className="flex items-center gap-3 px-4 py-3 rounded-lg bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] transition-all border border-[#5865F2]/30"
-              onClick={() => setShowNDNDiscord(true)}
-            >
-              <MessageCircle className="w-5 h-5" />
-              <span className="font-semibold text-base">NDN Community</span>
-            </button>
+        {/* Community / Footer */}
+        <div className="p-4 border-t border-white/5 space-y-3 bg-black/20">
+          <div className="text-xs font-bold text-white/30 uppercase tracking-widest px-1">
+            Community
           </div>
+          <button
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] hover:text-[#7f8afe] transition-all border border-[#5865F2]/20"
+            onClick={() => setShowDiscord(true)}
+          >
+            <MessageCircle className="w-5 h-5" />
+            <span className="font-semibold text-sm">Bullseye League</span>
+          </button>
+
+          <button
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] hover:text-[#7f8afe] transition-all border border-[#5865F2]/20"
+            onClick={() => setShowNDNDiscord(true)}
+          >
+            <MessageCircle className="w-5 h-5" />
+            <span className="font-semibold text-sm">NDN Community</span>
+          </button>
         </div>
       </div>
 
@@ -1686,21 +1745,21 @@ function MobileNav({
       {showDiscord && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setShowDiscord(false)}
           />
-          <div className="relative bg-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-4">
+          <div className="relative bg-[#1a1825] border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-2">
               Join Bullseye Darts League
             </h2>
-            <p className="text-slate-300 mb-6">
+            <p className="text-slate-400 text-sm mb-6 leading-relaxed">
               Connect with fellow darts enthusiasts, share tips, and compete in
               tournaments!
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowDiscord(false)}
-                className="flex-1 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition-colors"
               >
                 Cancel
               </button>
@@ -1708,7 +1767,7 @@ function MobileNav({
                 href={DISCORD_INVITE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 px-4 py-2 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-center transition-colors"
+                className="flex-1 px-4 py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-semibold text-center transition-colors shadow-lg shadow-indigo-500/20"
               >
                 Join Discord 💬
               </a>
@@ -1720,21 +1779,21 @@ function MobileNav({
       {showNDNDiscord && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
           <div
-            className="absolute inset-0 bg-black/60"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setShowNDNDiscord(false)}
           />
-          <div className="relative bg-slate-800 rounded-xl p-6 max-w-md w-full shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-4">
+          <div className="relative bg-[#1a1825] border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-2">
               NDN Community Discord
             </h2>
-            <p className="text-slate-300 mb-6">
+            <p className="text-slate-400 text-sm mb-6 leading-relaxed">
               Join the official Nine Dart Nation community! Get help, share
               scores, and stay updated.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowNDNDiscord(false)}
-                className="flex-1 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors"
+                className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition-colors"
               >
                 Cancel
               </button>
@@ -1742,7 +1801,7 @@ function MobileNav({
                 href="https://discord.gg/ninedartnation"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 px-4 py-2 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white font-semibold text-center transition-colors"
+                className="flex-1 px-4 py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-semibold text-center transition-colors shadow-lg shadow-indigo-500/20"
               >
                 Join Discord 💬
               </a>

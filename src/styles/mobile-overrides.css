@@ -11,7 +11,7 @@
 @media (max-width: 768px) {
   :root {
     /* Shared sizing tokens */
-    --ndn-header-h: 68px;
+    --ndn-header-h: 66px;
     --ndn-bottomnav-h: 64px;
     --ndn-safe-top: env(safe-area-inset-top, 0px);
     --ndn-safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -21,8 +21,8 @@
     --ndn-mobile-card-gap: 12px;
     --ndn-mobile-max-w: 920px;
     /* Hamburger menu positioning - clean and accessible */
-    --ndn-mobile-menu-left: 12px;
-    --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 12px);
+    --ndn-mobile-menu-left: 10px;
+    --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 4px);
   }
 
   /* Prevent iOS text-size auto bumping layouts */
@@ -83,17 +83,17 @@
     min-height: 100vh !important;
     justify-content: flex-start !important;
     padding: 0 !important;
-    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 8px) !important;
+    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 2px) !important;
     padding-bottom: 80px !important;
   }
 
   .home-content {
     max-width: 100% !important;
-    margin: 0 16px !important;
+    margin: 0 12px !important;
     padding: 24px 20px !important;
     border-radius: 24px !important;
     margin-top: 0 !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+    box-shadow: 0 10px 36px rgba(15, 23, 42, 0.45) !important;
   }
 
   .home-intro {
@@ -204,11 +204,12 @@
     align-items: center !important;
     justify-content: center !important;
     border-radius: 18px !important;
-    background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%) !important;
-    border: 2px solid rgba(255, 255, 255, 0.2) !important;
+    background: linear-gradient(140deg, #8b5cf6 0%, #6366f1 60%, #4f46e5 100%) !important;
+    border: 1px solid rgba(255, 255, 255, 0.22) !important;
     box-shadow:
-      0 8px 18px rgba(76, 29, 149, 0.5),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+      0 12px 24px rgba(76, 29, 149, 0.45),
+      0 0 0 1px rgba(255, 255, 255, 0.18),
+      inset 0 0 14px rgba(255, 255, 255, 0.08);
     transition: all 0.2s ease !important;
     color: white !important;
   }
@@ -247,7 +248,7 @@
     flex-direction: column !important;
     align-items: flex-start !important;
     gap: 6px !important;
-    margin-left: calc(var(--ndn-mobile-menu-left) + 56px + 1mm) !important;
+    margin-left: calc(var(--ndn-mobile-menu-left) + 56px + 2mm) !important;
     min-width: 0 !important;
     flex: 1 1 auto !important;
   }

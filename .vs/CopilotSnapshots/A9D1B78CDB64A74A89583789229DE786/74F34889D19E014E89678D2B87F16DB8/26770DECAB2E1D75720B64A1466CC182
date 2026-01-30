@@ -1,0 +1,729 @@
+﻿/* Mobile-first visual overhaul (phones + small tablets)
+   Goals:
+   - Everything is readable, tappable, and not cramped.
+   - Header stays usable but doesn't steal vertical space.
+   - Content never hides under fixed UI (header / bottom nav).
+   - Works in portrait + landscape.
+
+   NOTE: This file is loaded after Tailwind in `src/main.tsx`.
+*/
+
+@media (max-width: 768px) {
+  :root {
+    /* Shared sizing tokens */
+  --ndn-header-h: 56px;
+    --ndn-bottomnav-h: 64px;
+    --ndn-safe-top: env(safe-area-inset-top, 0px);
+    --ndn-safe-bottom: env(safe-area-inset-bottom, 0px);
+    /* per-section mobile gap (can be tweaked from JS when entering tabs) */
+    --ndn-section-gap: 0px;
+    --ndn-mobile-page-pad: 12px;
+    --ndn-mobile-card-gap: 12px;
+    --ndn-mobile-max-w: 920px;
+  }
+
+  /* Prevent iOS text-size auto bumping layouts */
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Provide a stable viewport baseline and reduce sideways scroll accidents */
+  html,
+  body {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* Simplify background to reduce visual noise on phones */
+  body {
+    background: #0f172a; /* Solid dark slate for cleaner look */
+    color: #f8fafc;
+    font-size: 16px; /* base readable size */
+    line-height: 1.35;
+  }
+
+  /* Header becomes compact and fixed */
+  .header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 300; /* ensure header stays above mobile drawer/backdrop */
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--ndn-header-h);
+    padding: 8px 10px;
+    padding-top: calc(8px + var(--ndn-safe-top));
+    border-radius: 0;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+  /* Header layout: allow left greeting block to shrink so the hamburger stays at far-left */
+  #ndn-header {
+    gap: 8px !important;
+  }
+  #ndn-header > :nth-child(2) {
+    min-width: 0 !important;
+  }
+  .logo { font-size: 1.25rem; font-weight: 800; }
+
+  /* Home page: clean separation, no overlap, professional spacing */
+  .home-shell {
+    min-height: auto !important;
+    justify-content: flex-start !important;
+    padding: 0 !important;
+    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 12px) !important;
+  }
+  
+  .home-content {
+    max-width: 720px !important;
+    margin: 0 auto !important;
+    padding: 20px !important;
+    border-radius: 18px !important;
+    margin-top: 0 !important;
+  }
+  
+  .home-intro { 
+    gap: 12px !important;
+    margin-bottom: 16px !important;
+  }
+  
+  .home-brand-row {
+    flex-wrap: wrap !important;
+    row-gap: 10px !important;
+    column-gap: 10px !important;
+    letter-spacing: 0.14em !important;
+  }
+  
+  .home-brand-tag {
+    font-size: 12px;
+    opacity: 0.9;
+  }
+  
+  .home-brand-row .home-menu-button {
+    width: auto !important;
+    border-radius: 999px !important;
+    padding: 10px 14px !important;
+    min-height: 40px;
+  }
+
+  /* Headline hierarchy (avoid giant jumps and prevent crowding) */
+  .home-content h2 {
+    font-size: 28px !important;
+    line-height: 1.1 !important;
+    letter-spacing: -0.02em;
+  }
+  .home-content p {
+    line-height: 1.35;
+  }
+
+  /* Force the home buttons grid to be 2 columns on phones for comfortable spacing */
+  .home-content .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 12px !important;
+  }
+  .home-content .grid > button {
+    border-radius: 18px !important;
+    padding: 14px 12px !important;
+    min-height: 68px;
+    font-size: 15px !important;
+    line-height: 1.2;
+    white-space: normal;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* Keep the "Did you know" pill from causing horizontal overflow */
+  .home-content .home-intro + div {
+    margin-top: 10px;
+  }
+  .home-content .home-intro + div > div {
+    max-width: 100% !important;
+    border-radius: 999px !important;
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  /* Ensure the hamburger/menu button is always visible and tappable on mobile.
+     Avoid relying on aria-label text (can change); target common patterns. */
+  #ndn-header button[aria-label],
+  #ndn-header [data-testid="mobile-menu-button"],
+  #ndn-header .ndn-mobile-menu-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 70;
+    min-width: 44px;
+    min-height: 44px;
+    margin-right: 6px;
+    flex: 0 0 auto;
+  }
+
+  /* Mobile brand pill above the hamburger */
+  .ndn-mobile-brand {
+    display: none;
+  }
+  @media (max-width: 768px) {
+    .ndn-mobile-brand {
+      display: inline-flex;
+      position: absolute;
+      /* prominent left-aligned brand pill */
+      /* move left and up by 1.8mm as requested */
+      left: calc(10px - 1.8mm);
+      top: calc(var(--ndn-safe-top) + 6px - 3.8mm);
+      z-index: 9998;
+  padding: 8px;
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 12px;
+      background: linear-gradient(90deg,#0b1220,#111827);
+      border: 1px solid rgba(255,255,255,0.06);
+      box-shadow: 0 8px 24px rgba(2,6,23,0.6);
+      color: white;
+      font-weight: 900;
+      font-size: 1rem;
+    }
+
+    /* Place the hamburger/menu button at a fixed offset (just right of the brand pill).
+       This is easier to tweak precisely than centering. Change --ndn-mobile-menu-left
+       to nudge left/right as needed. */
+   :root {
+   /* Tuneable placement to match the small bottom-gap rectangle you marked
+     in the screenshot. Adjust these values if the tick/square needs tiny
+     nudges. */
+  /* moved additional 4mm left (total 11mm left relative to 72px) */
+  /* Position hamburger menu below the header, centered horizontally on left side */
+  --ndn-mobile-menu-left: 16px; /* 16px from left edge */
+  --ndn-mobile-gap-size: 8px; /* the small rectangle gap under header (keep as-is) */
+  --ndn-mobile-menu-gap-offset: 1px; /* nudges hamburger into the gap center */
+  /* Position hamburger centered within the small gap below the header */
+  --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + (var(--ndn-mobile-gap-size, 6px) * 0.5) - var(--ndn-mobile-menu-gap-offset));
+  }
+
+    .ndn-mobile-menu-btn {
+      /* Lock the hamburger in a fixed screen position so it doesn't shift
+         when other header elements change. Using fixed ensures consistent
+         placement across scroll and layout updates. */
+      position: fixed !important;
+      left: var(--ndn-mobile-menu-left) !important;
+      transform: none !important;
+      top: var(--ndn-mobile-menu-top) !important;
+      z-index: 9999 !important;
+      min-width: 48px !important;
+      min-height: 48px !important;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      border-radius: 12px !important;
+      background: rgba(30, 41, 59, 0.95) !important;
+      backdrop-filter: blur(8px) !important;
+      border: 1px solid rgba(255, 255, 255, 0.3) !important;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important;
+      /* Prevent accidental layout shifts from transforms elsewhere */
+      will-change: left, top;
+    }
+
+    /* The dedicated hamburger slot: a visible box that stays put and makes
+       the menu button always discoverable. Pointer-events none so clicks
+       fall through to the actual button. */
+    .ndn-mobile-menu-slot {
+      position: fixed !important;
+      left: var(--ndn-mobile-menu-left) !important;
+      top: var(--ndn-mobile-menu-top) !important;
+      width: 56px !important;
+      height: 56px !important;
+      border-radius: 14px !important;
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)) !important;
+      border: 1px solid rgba(255,255,255,0.04) !important;
+      box-shadow: 0 6px 18px rgba(2,6,23,0.5) !important;
+      z-index: 9998 !important; /* below the hamburger (9999) but above header (50) */
+      pointer-events: none !important;
+      -webkit-backdrop-filter: blur(4px);
+      backdrop-filter: blur(4px);
+    }
+
+    /* Micro-adjustments for header content per request: keep hamburger locked,
+       move welcome text and logo by the requested offsets. */
+    /* Ensure the full "Welcome, (username)" is visible on mobile and place it
+       underneath the avatar (not wrapped). Move it down ~3mm under the avatar. */
+    #ndn-header .ndn-greeting { flex-direction: column !important; align-items: center !important; }
+
+    #ndn-header .ndn-greeting-welcome {
+      transform: none !important;
+      display: block;
+      white-space: normal !important;
+      overflow: visible !important;
+      text-overflow: unset !important;
+      max-width: 100% !important;
+      margin-left: 0 !important;
+      margin-top: 3mm !important;
+      text-align: left !important;
+    }
+
+  /* Move the avg left by an additional 3.5mm as requested (total left shift) and keep vertical offset */
+  #ndn-header .ndn-greeting-avg { margin-top: 6px !important; transform: translate(-10.5mm, 2.2mm) !important; }
+
+    .logo {
+      transform: translate(-9mm, -3mm) !important; /* left 9mm, up 3mm */
+      display: inline-block;
+    }
+
+    /* Make room for left brand and positioned hamburger so greeting doesn't overlap */
+    #ndn-header {
+      flex-wrap: wrap !important;
+    }
+
+    #ndn-header .ndn-greeting {
+      margin-left: calc(var(--ndn-mobile-menu-left) + 32px) !important;
+      margin-right: 36px !important;
+    }
+  }
+
+  /* Greeting area: ensure welcome + 3DA remain visible and truncate sensibly */
+  .ndn-greeting {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .ndn-greeting-welcome {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 12px;
+  }
+
+  .ndn-greeting-avg {
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0.95;
+  }
+
+  /* Compact the greeting into a single line on tight viewports so it doesn't get pushed out
+     by the menu/hamburger or notification icons. */
+  @media (max-width: 420px) {
+    .ndn-greeting { gap: 6px; }
+    .ndn-greeting-welcome { font-size: 11px; }
+    .ndn-greeting-avg { font-size: 11px; }
+  }
+
+  /* Hide large sidebar on mobile EXCEPT when explicitly shown in drawer */
+  .sidebar:not(.mobile-sidebar-visible) { 
+    display: none !important; 
+  }
+  
+  /* Drawer sidebar polish (mobile) - make it visible and styled */
+  .sidebar.mobile-sidebar-visible {
+    display: flex !important;
+    padding: 8px !important;
+    gap: 8px !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+  }
+  
+  .sidebar.mobile-sidebar-visible h3 {
+    margin: 8px 0 4px 0 !important;
+    padding-left: 8px !important;
+    letter-spacing: 0.14em !important;
+    font-size: 10px !important;
+  }
+  
+  .sidebar.mobile-sidebar-visible .tab {
+    width: 100% !important;
+    padding: 8px 10px !important;
+    border-radius: 10px !important;
+    white-space: normal !important;
+    font-size: 14px !important;
+  }
+
+  /* Mobile drawer tab list: a single-column stacked list that shows the
+     principal navigation items clearly and without vertical scrolling. Keep
+     it near the top of the drawer and reduce visual noise from the large
+     desktop sidebar header when inside the drawer. */
+  .ndn-drawer .mobile-tab-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    position: sticky;
+    top: 8px;
+    z-index: 60;
+    padding: 6px;
+    margin: 0 0 8px 0;
+    background: transparent;
+  }
+
+  .ndn-drawer .mobile-tab-list button {
+    padding: 12px 14px;
+    font-size: 15px;
+    border-radius: 12px;
+    text-align: left;
+    white-space: normal;
+    width: 100%;
+    display: block;
+  }
+
+  /* Hide the large desktop-style brand header inside the mobile drawer so the
+     compact tab list stays visible at the top without being pushed down. */
+  .sidebar.mobile-sidebar-visible .text-2xl {
+    display: none !important;
+  }
+
+  /* Let the hamburger drawer behave like a proper mobile sheet */
+  .ndn-drawer {
+    max-width: min(92vw, 420px) !important;
+  }
+
+  /* Keep drawer panel below the fixed header on phones so header does not look overlapped */
+  /* Keep drawer panel and backdrop just below the header with a small gap */
+  .ndn-drawer-root .ndn-drawer-panel {
+    top: 0;
+    height: 100vh;
+    border-top-left-radius: 0 !important;
+    border-top-right-radius: 0 !important;
+  }
+
+  /* Backdrop should cover the full screen for full-height nav */
+  .ndn-drawer-root .ndn-drawer-backdrop {
+    top: 0;
+    height: 100vh;
+  }
+
+  /* Mobile drawer scrollbar styling - always visible */
+  .ndn-drawer-root .ndn-drawer-panel > div {
+    /* Firefox */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(139, 92, 246, 0.6) rgba(30, 41, 59, 0.3);
+  }
+  
+  /* Webkit browsers (Chrome, Safari, Edge) */
+  .ndn-drawer-root .ndn-drawer-panel > div::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  .ndn-drawer-root .ndn-drawer-panel > div::-webkit-scrollbar-track {
+    background: rgba(30, 41, 59, 0.3);
+    border-radius: 4px;
+  }
+  
+  .ndn-drawer-root .ndn-drawer-panel > div::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.6);
+    border-radius: 4px;
+  }
+  
+  .ndn-drawer-root .ndn-drawer-panel > div::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.8);
+  }
+
+  /* Ensure main scroll area gets a small top padding so content sits under header with a tiny gap */
+  #ndn-main-scroll {
+    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-mobile-gap-size, 6px) + var(--ndn-section-gap, 0px)) !important;
+    padding-left: var(--ndn-mobile-page-pad) !important;
+    padding-right: var(--ndn-mobile-page-pad) !important;
+  }
+
+  /* Convert main layout to a single-column flow with proper header clearance */
+  .container, .app-shell, .main-content, .ndn-game-shell { 
+    padding: var(--ndn-mobile-page-pad) !important; 
+    box-sizing: border-box;
+  }
+
+  .ndn-game-shell,
+  .ndn-page {
+    width: 100% !important;
+    max-width: var(--ndn-mobile-max-w) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  .ndn-game-shell {
+    margin-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + var(--ndn-section-gap, 0px)); /* account for fixed header */
+  }
+
+  /* Video smoothing for mobile camera feed: apply lightweight GPU hints and
+     subtle filter adjustments so low-power devices render the feed more
+     smoothly and reduce perceived jitter. The class is added by CameraView. */
+  .ndn-video-smooth {
+    image-rendering: auto !important;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    will-change: transform, opacity;
+    filter: contrast(1) saturate(1.02);
+  }
+
+  /* Cards should be edge-to-edge with comfortable padding */
+  .card, .glass {
+    border-radius: 12px !important;
+    margin: 0 0 var(--ndn-mobile-card-gap) 0 !important;
+    padding: 16px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+    background: #1e293b !important; /* Solid card bg */
+    border: 1px solid rgba(255,255,255,0.05) !important;
+  }
+
+  .ndn-game-shell .grid,
+  .ndn-page .grid {
+    gap: var(--ndn-mobile-card-gap) !important;
+  }
+
+  .ndn-game-shell .card:last-child,
+  .ndn-page .card:last-child,
+  .ndn-game-shell .glass:last-child,
+  .ndn-page .glass:last-child {
+    margin-bottom: 0 !important;
+  }
+
+  /* Make buttons full width where appropriate and bigger tap targets */
+  .btn { width: 100% !important; padding: 14px 16px !important; font-size: 16px !important; border-radius: 10px !important; }
+  .btn-inline { width: auto !important; }
+
+  /* Forms and inputs comfortable on mobile */
+  .input, input, textarea, select { font-size: 16px !important; padding: 12px 14px !important; border-radius: 10px !important; background: #0f172a !important; border: 1px solid rgba(255,255,255,0.1) !important; }
+
+  /* Camera and video panes should be shorter and responsive */
+  .ndn-camera-tall { min-height: 200px !important; }
+  .camera-fullwidth-card { padding: 0 !important; border-radius: 10px !important; }
+
+  /* --- Camera / Calibration specific helpers --- */
+  /* Make any camera viewport fill the available vertical space cleanly */
+  .camera-fullwidth-card,
+  .calibrator-camera-card,
+  .ndn-camera-card {
+    overflow: hidden !important;
+  }
+
+  /* If a page uses an in-card camera container, keep it tall enough on phones */
+  .ndn-camera-viewport,
+  .camera-viewport {
+    width: 100% !important;
+    min-height: 42vh !important;
+    max-height: 62vh !important;
+  }
+
+  /* Inline camera selector (CameraView) sits away from notches/edges */
+  .camera-selector,
+  .ndn-camera-selector {
+    top: calc(10px + var(--ndn-safe-top)) !important;
+    right: 10px !important;
+    left: auto !important;
+    max-width: calc(100vw - 20px) !important;
+  }
+
+  /* Give camera overlays/panels safe padding around header/bottom nav */
+  .camera-page,
+  .calibrator-page,
+  .ndn-camera-page {
+    padding-bottom: calc(var(--ndn-safe-bottom) + 18px) !important;
+  }
+
+  /* A sticky bottom action bar for camera/calibration screens */
+  .ndn-action-rail {
+    position: sticky;
+    bottom: calc(var(--ndn-safe-bottom) + 8px);
+    z-index: 45;
+    padding: 10px;
+    margin: 10px 0 0 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 14px;
+  }
+
+  .ndn-action-rail .btn {
+    width: 100% !important;
+  }
+
+  /* Game controls stacked vertically and spaced */
+  .match-controls, .match-actions, .controls-row { display: flex !important; flex-direction: column !important; gap: 10px !important; }
+
+  /* Reduce footer/panels and make floating controls reachable */
+  .floating-controls { bottom: 14px !important; left: 10px !important; right: 10px !important; width: auto !important; }
+
+  /* Promote important text and increase contrast for readability */
+  h1, h2, h3 { font-weight: 700; color: #fff; }
+  p, label { color: #cbd5e1; }
+
+  /* Compact modals to fill the viewport on mobile */
+  .ndn-modal-full, .modal { border-radius: 8px !important; padding: 12px !important; }
+
+  /* Make nav tabs easier to tap (bottom tab bar) */
+  .tabs, .tab-list { display: flex !important; gap: 6px !important; justify-content: space-between; }
+  .tab { flex: 1 1 auto !important; text-align: center !important; padding: 10px 6px !important; font-weight: 700 !important; border-radius: 8px !important; }
+
+  /* Hide decorative background animation on mobile for perf */
+  .background-animated { display: none !important; }
+
+  /* Mobile scroll area: keep header clearance, but don't reserve space for a bottom tab bar */
+  #ndn-main-scroll {
+    padding-bottom: calc(var(--ndn-safe-bottom) + 18px) !important;
+    scroll-padding-bottom: calc(var(--ndn-safe-bottom) + 18px) !important;
+    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 12px) !important;
+    scroll-padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 12px) !important;
+    padding-left: var(--ndn-mobile-page-pad) !important;
+    padding-right: var(--ndn-mobile-page-pad) !important;
+  }
+
+  .card, .glass {
+    width: 100% !important;
+  }
+
+  footer { margin-bottom: 16px !important; }
+
+  /* Improve scoreboard readability: single-column items */
+  .scoreboard, .stats-panel { display: block !important; width: 100% !important; }
+  .scoreboard .row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+
+  /* Footer spacing to avoid UI overlap */
+  .ndn-shell-body { padding-bottom: calc(var(--ndn-safe-bottom) + 18px) !important; }
+
+  /* Bottom nav removed from layout; keep any leftover markup hidden just in case */
+  .ndn-bottom-nav { display: none !important; }
+
+  /* Landscape tuning: reclaim vertical space */
+  @media (orientation: landscape) {
+    :root {
+      --ndn-header-h: 48px;
+      --ndn-bottomnav-h: 56px;
+    }
+    .ndn-bottom-nav-label {
+      font-size: 10px;
+    }
+
+    /* In landscape, keep the camera viewport from being too short */
+    .ndn-camera-viewport,
+    .camera-viewport {
+      min-height: 50vh !important;
+      max-height: 70vh !important;
+    }
+  }
+
+  /* Reduce visual noise in lists */
+  .list-item { padding: 14px 12px !important; border-radius: 8px !important; background: #1e293b !important; margin-bottom: 8px !important; border: 1px solid rgba(255,255,255,0.05); }
+
+  /* Ensure overlays and popovers are full width and readable */
+  .popover, .dropdown { left: 8px !important; right: 8px !important; width: auto !important; }
+
+  /* Accessibility: increase tap target for small icons */
+  .icon-btn { padding: 12px !important; border-radius: 8px !important; }
+
+  /* --- General page helpers (other sections) --- */
+  /* Many pages use inline grids/flex. These helpers prevent side overflow on phones. */
+  .ndn-page {
+    padding-bottom: calc(var(--ndn-bottomnav-h) + var(--ndn-safe-bottom) + 16px) !important;
+  }
+
+  /* Tables and wide scoreboards: allow horizontal scroll instead of clipping */
+  .ndn-table-scroll,
+  .ndn-scoreboard-scroll,
+  .ndn-hscroll {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ndn-table-scroll > *,
+  .ndn-scoreboard-scroll > *,
+  .ndn-hscroll > * {
+    min-width: max-content;
+  }
+
+  /* Lists of cards (lobbies / tournaments / friends): one column, comfortable gaps */
+  .ndn-card-grid {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* Filter bars: wrap instead of crushing */
+  .ndn-filterbar {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    align-items: stretch !important;
+  }
+  .ndn-filterbar > * {
+    flex: 1 1 160px !important;
+    min-width: 140px !important;
+  }
+
+  /* Modal/fullscreen panels: make sure content fits and scrolls */
+  .ndn-modal,
+  .ndn-drawer {
+    max-height: calc(100vh - var(--ndn-header-h) - var(--ndn-safe-top) - 18px) !important;
+    overflow: auto !important;
+  }
+
+  /* Sidebar drawer on mobile (when explicitly shown): make it usable as a sheet */
+  .sidebar.mobile-sidebar-visible {
+    position: fixed !important;
+    top: calc(var(--ndn-header-h) + var(--ndn-safe-top)) !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: calc(var(--ndn-bottomnav-h) + var(--ndn-safe-bottom)) !important;
+    z-index: 60 !important;
+    overflow: auto !important;
+    background: rgba(15, 23, 42, 0.98) !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    padding: 10px !important;
+  }
+
+  /* Online/Offline/Settings: shrink dense headings and tighten spacing */
+  .ndn-section-title {
+    font-size: 1.05rem !important;
+    line-height: 1.2 !important;
+    margin-bottom: 8px !important;
+    text-align: center !important;
+  }
+
+  /* Stats page: add extra depth on mobile only */
+  .ndn-stats-page {
+    padding-bottom: calc(4.6in + var(--ndn-safe-bottom)) !important;
+  }
+
+  .ndn-shell-body,
+  .ndn-page .ndn-shell-body,
+  .ndn-game-shell .ndn-shell-body {
+    width: 100% !important;
+    max-width: var(--ndn-mobile-max-w) !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+
+  .ndn-game-shell .grid,
+  .ndn-page .grid {
+    justify-items: stretch !important;
+  }
+  .ndn-muted {
+    color: rgba(226, 232, 240, 0.72) !important;
+  }
+
+  /* Landscape: reduce big paddings so more content fits */
+  @media (orientation: landscape) {
+    .card, .glass {
+      padding: 12px !important;
+    }
+    .btn {
+      padding: 12px 14px !important;
+    }
+  }
+
+  /* Minor typography tuning */
+  .logo, .brand { letter-spacing: -0.02em; }
+
+}
