@@ -37,3 +37,7 @@ export function markerIdToMatrix(id: number): number[][] {
 }
 
 export default {};
+
+export function detectMarkersFromCanvas(canvas: any) {
+  return { success: false, homography: null };
+}
