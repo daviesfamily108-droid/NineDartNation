@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { suggestCheckouts, sayScore } from "../utils/checkout";
 import { useUserSettings } from "../store/userSettings";
@@ -5858,7 +5858,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                       <div className="space-y-2">
                         <div className="font-semibold">Your Turn</div>
                         <div className="flex flex-col gap-4">
-                          <div className="grid grid-cols-12 gap-4 items-start">
+                          <div className="flex flex-col-reverse md:grid md:grid-cols-12 gap-4 items-start">
                             <div className="col-span-12 md:col-span-4 space-y-3">
                               <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-4 shadow-lg">
                                 <div className="text-xs uppercase tracking-wide text-white/50 mb-2">
