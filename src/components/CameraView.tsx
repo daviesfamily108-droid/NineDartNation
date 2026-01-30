@@ -3933,9 +3933,9 @@ export default forwardRef(function CameraView(
             // IMPORTANT: errorPx should reflect real calibration quality.
             // Treat missing errorPx as *unknown* (not zero) unless calibration is locked.
             // This prevents the UI from implying "0.0px" and reduces false-positive scoring.
-            const calibrationGood = strictScoring
-              ? hasCalibration && calibrationValid
-              : hasCalibration && calibrationValidEffective;
+            // Relax strictness: use effective validity (softer check) to avoid blocking valid throws
+            // on slightly imperfect calibrations.
+            const calibrationGood = hasCalibration && calibrationValidEffective;
             const tipInVideo =
               tipRefined.x >= -TIP_MARGIN_PX &&
               tipRefined.x <= vw + TIP_MARGIN_PX &&
@@ -3954,7 +3954,9 @@ export default forwardRef(function CameraView(
             let _onBoard = false;
             if (pBoard) {
               const boardR = Math.hypot(pBoard.x, pBoard.y);
-              _onBoard = boardR <= BoardRadii.doubleOuter;
+              // Add a small tolerance (e.g. 5mm) to account for calibration drift at the edges
+              const EDGE_TOLERANCE_MM = 5;
+              _onBoard = boardR <= BoardRadii.doubleOuter + EDGE_TOLERANCE_MM;
             }
 
             // treat as ghost unless onBoard and calibrationGood
