@@ -1,4 +1,4 @@
-﻿// Very lightweight checkout suggestions. For proper coverage consider a full table.
+// Very lightweight checkout suggestions. For proper coverage consider a full table.
 // Returns up to a few route strings like "T20 T20 D20" for a given remaining.
 
 /**
@@ -226,10 +226,13 @@ export function sayScore(
     const synth = window.speechSynthesis;
     if (!synth) return;
     const msg = new SpeechSynthesisUtterance();
-    const spokenName =
-      name?.toString().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim() ||
-      name ||
-      "Player";
+    // Clean username: keep only letters and numbers, remove all special characters
+    const cleanName = name
+      ?.toString()
+      .replace(/[^a-zA-Z0-9\s]/g, "") // Remove all special chars
+      .replace(/\s+/g, " ") // Normalize spaces
+      .trim();
+    const spokenName = cleanName || name || "Player";
     const isCheckout = remaining <= 170 && remaining > 0;
     const isOneEighty = scored === 180;
     const shouldAnnounce = !opts?.checkoutOnly || isCheckout || isOneEighty;
@@ -295,17 +298,44 @@ export function sayScore(
       msg.pitch = 0.98;
     }
 
-    if (voiceName) {
-      const v = synth.getVoices().find((v) => v.name === voiceName);
-      if (v) msg.voice = v;
+    // Ensure consistent voice by waiting for voices to load
+    const setVoiceAndSpeak = () => {
+      if (voiceName) {
+        const voices = synth.getVoices();
+        const v = voices.find((v) => v.name === voiceName);
+        if (v) {
+          msg.voice = v;
+        } else {
+          // Fallback: try to find any English voice
+          const englishVoice = voices.find((v) => v.lang.startsWith("en"));
+          if (englishVoice) msg.voice = englishVoice;
+        }
+      }
+      if (typeof opts?.volume === "number")
+        msg.volume = Math.max(0, Math.min(1, opts.volume));
+      else msg.volume = 1;
+      try {
+        synth.cancel();
+      } catch {}
+      synth.speak(msg);
+    };
+
+    // Chrome/Edge need voices to load first
+    const voices = synth.getVoices();
+    if (voices.length > 0) {
+      setVoiceAndSpeak();
+    } else {
+      // Wait for voices to load
+      synth.addEventListener(
+        "voiceschanged",
+        () => {
+          setVoiceAndSpeak();
+        },
+        { once: true },
+      );
+      // Fallback timeout
+      setTimeout(setVoiceAndSpeak, 100);
     }
-    if (typeof opts?.volume === "number")
-      msg.volume = Math.max(0, Math.min(1, opts.volume));
-    else msg.volume = 1;
-    try {
-      synth.cancel();
-    } catch {}
-    synth.speak(msg);
   } catch {}
 }
 
@@ -381,17 +411,44 @@ export function sayDart(
       msg.pitch = 1.0;
     }
 
-    if (voiceName) {
-      const v = synth.getVoices().find((v) => v.name === voiceName);
-      if (v) msg.voice = v;
-    }
-    if (typeof opts?.volume === "number")
-      msg.volume = Math.max(0, Math.min(1, opts.volume));
-    else msg.volume = 1;
+    // Ensure consistent voice by waiting for voices to load
+    const setVoiceAndSpeak = () => {
+      if (voiceName) {
+        const voices = synth.getVoices();
+        const v = voices.find((v) => v.name === voiceName);
+        if (v) {
+          msg.voice = v;
+        } else {
+          // Fallback: try to find any English voice
+          const englishVoice = voices.find((v) => v.lang.startsWith("en"));
+          if (englishVoice) msg.voice = englishVoice;
+        }
+      }
+      if (typeof opts?.volume === "number")
+        msg.volume = Math.max(0, Math.min(1, opts.volume));
+      else msg.volume = 1;
 
-    try {
-      synth.cancel();
-    } catch {}
-    synth.speak(msg);
+      try {
+        synth.cancel();
+      } catch {}
+      synth.speak(msg);
+    };
+
+    // Chrome/Edge need voices to load first
+    const voices = synth.getVoices();
+    if (voices.length > 0) {
+      setVoiceAndSpeak();
+    } else {
+      // Wait for voices to load
+      synth.addEventListener(
+        "voiceschanged",
+        () => {
+          setVoiceAndSpeak();
+        },
+        { once: true },
+      );
+      // Fallback timeout
+      setTimeout(setVoiceAndSpeak, 100);
+    }
   } catch {}
 }
