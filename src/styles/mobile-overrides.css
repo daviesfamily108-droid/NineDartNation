@@ -174,22 +174,19 @@
   /* Mobile brand pill */
   .ndn-mobile-brand {
     display: inline-flex !important;
-    position: fixed !important;
-    left: 16px !important;
-    top: calc(var(--ndn-safe-top) + 16px) !important;
-    z-index: 9998 !important;
-    padding: 10px 14px !important;
-    min-width: 56px !important;
-    min-height: 44px !important;
-    border-radius: 14px !important;
+    position: static !important; /* Changed from fixed to static to flow in header */
+    padding: 8px 12px !important;
+    min-width: 0 !important; /* Allow shrinking if needed */
+    border-radius: 12px !important;
     background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
     border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4) !important;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3) !important;
     color: white !important;
-    font-weight: 900 !important;
-    font-size: 14px !important;
+    font-weight: 800 !important;
+    font-size: 13px !important;
     align-items: center !important;
     justify-content: center !important;
+    margin-right: 8px !important; /* Add spacing to greeting */
   }
 
   /* Removed hamburger menu button styles as we switched to bottom nav */
@@ -248,7 +245,7 @@
 
   /* Main content spacing - ensuring bottom nav doesn't overlap content */
   #ndn-main-scroll {
-    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 80px) !important;
+    padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 24px) !important; /* Reduced from + 80px */
     padding-bottom: 120px !important;
   }
 
