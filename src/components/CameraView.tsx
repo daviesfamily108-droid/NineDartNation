@@ -3933,9 +3933,11 @@ export default forwardRef(function CameraView(
             // IMPORTANT: errorPx should reflect real calibration quality.
             // Treat missing errorPx as *unknown* (not zero) unless calibration is locked.
             // This prevents the UI from implying "0.0px" and reduces false-positive scoring.
-            // Relax strictness: use effective validity (softer check) to avoid blocking valid throws
-            // on slightly imperfect calibrations.
-            const calibrationGood = hasCalibration && calibrationValidEffective;
+            //
+            // Decouple detection gating from quality policy. As long as we have a mapping (hasCalibration),
+            // we allow the detection to proceed to the candidate stage. The auto-commit logic (applyAutoHit)
+            // will handle policy warnings (calibrationValidEffective) as soft warnings rather than hard blocks.
+            const calibrationGood = hasCalibration;
             const tipInVideo =
               tipRefined.x >= -TIP_MARGIN_PX &&
               tipRefined.x <= vw + TIP_MARGIN_PX &&
