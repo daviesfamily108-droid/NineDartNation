@@ -279,7 +279,7 @@ const DevicePicker: React.FC<DevicePickerProps> = ({
                   onPointerDown={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
-                  📱 Phone Camera
+                  📱 Remote Device / Pair
                 </button>
               </div>
             </div>
@@ -4483,15 +4483,14 @@ export default function Calibrator() {
         <div className="space-y-5 rounded-3xl border border-indigo-400/30 bg-slate-900/70 p-6 text-slate-100 shadow-xl">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-indigo-300">
-              Mobile camera
+              Choose Mode
             </p>
             <h2 className="text-2xl font-semibold leading-tight text-white">
-              This device is ready to stream as your dartboard camera
+              How do you want to use this device?
             </h2>
             <p className="text-sm text-slate-200/80">
-              Open the lightweight mobile camera page to stream video to your
-              desktop calibrator. You can still come back here if you need the
-              full desktop tools.
+              You can stream this camera to another device (Remote Camera) or\n
+              play and calibrate directly on this screen.
             </p>
           </div>
           <div className="space-y-2">
