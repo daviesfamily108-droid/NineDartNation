@@ -246,10 +246,10 @@
     min-height: 36px !important;
   }
 
-  /* Main content spacing */
+  /* Main content spacing - ensuring bottom nav doesn't overlap content */
   #ndn-main-scroll {
     padding-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 80px) !important;
-    padding-bottom: 40px !important;
+    padding-bottom: 120px !important;
   }
 
   /* Card improvements for mobile */

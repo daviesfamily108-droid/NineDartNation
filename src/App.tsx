@@ -1617,8 +1617,8 @@ function MobileBottomNav({
   ];
 
   return (
-    <div className="shrink-0 bg-[#0f0e13] border-t border-white/5 pb-1 px-2 pt-2 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.4)]">
-      <div className="flex items-center justify-between gap-1 max-w-lg mx-auto">
+    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[360px] px-4 pointer-events-none">
+      <div className="flex items-center justify-between bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl shadow-black/50 ring-1 ring-white/5 pointer-events-auto">
         {navItems.map((item) => {
           const isActive = active === item.key;
           const Icon = item.icon;
@@ -1626,32 +1626,40 @@ function MobileBottomNav({
             <button
               key={item.key}
               onClick={() => onChange(item.key as TabKey)}
-              className={`flex-1 flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-xl transition-all duration-200 active:scale-95 ${
+              className={`relative flex flex-col items-center justify-center gap-1 w-16 h-14 rounded-xl transition-all duration-300 active:scale-90 ${
                 isActive
-                  ? "text-white bg-white/10 shadow-inner shadow-black/20"
-                  : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
+                  ? "text-white bg-indigo-600 shadow-lg shadow-indigo-500/30"
+                  : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
               }`}
             >
               <Icon
-                className={`w-6 h-6 ${isActive ? "text-indigo-400" : ""}`}
+                className={`w-5 h-5 transition-transform duration-300 ${
+                  isActive ? "-translate-y-0.5 scale-110" : ""
+                }`}
                 strokeWidth={isActive ? 2.5 : 2}
               />
               <span
-                className={`text-[10px] font-bold tracking-wide ${
-                  isActive ? "text-indigo-200" : "text-inherit"
+                className={`text-[9px] font-bold tracking-wide transition-opacity duration-300 ${
+                  isActive ? "opacity-100" : "opacity-70"
                 }`}
               >
                 {item.label}
               </span>
+              {isActive && (
+                <span className="absolute -bottom-1 w-1 h-1 bg-indigo-300 rounded-full opacity-50 blur-[1px]" />
+              )}
             </button>
           );
         })}
+        <div className="w-px h-8 bg-white/10 mx-1" />
         <button
           onClick={onMore}
-          className={`flex-1 flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-xl text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all duration-200 active:scale-95`}
+          className={`flex flex-col items-center justify-center gap-1 w-16 h-14 rounded-xl text-zinc-500 hover:text-white hover:bg-white/5 transition-all duration-200 active:scale-95`}
         >
           <Menu className="w-6 h-6" />
-          <span className="text-[10px] font-bold tracking-wide">More</span>
+          <span className="text-[9px] font-bold tracking-wide opacity-70">
+            More
+          </span>
         </button>
       </div>
     </div>
