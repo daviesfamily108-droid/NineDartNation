@@ -25,8 +25,11 @@ import { ThemeProvider } from "./components/ThemeContext";
 import {
   ArrowDownRight,
   ArrowUpRight,
+  BarChart2,
   Bell,
   CalendarDays,
+  Gamepad2,
+  Globe,
   Handshake,
   Menu,
   MessageCircle,
@@ -1047,26 +1050,17 @@ export default function App() {
                 style={{ willChange: "transform" }}
               >
                 {isMobile && (
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="p-2 rounded-xl text-slate-200 bg-white/5 hover:bg-white/10 active:scale-95 transition-all shrink-0 border border-white/5"
-                      onClick={() => setNavOpen(true)}
-                      aria-label="Open Menu"
-                    >
-                      <Menu className="w-5 h-5" />
-                    </button>
-                    <button
-                      className="ndn-mobile-brand shrink-0 text-sm font-black px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all border border-white/10"
-                      onClick={() => {
-                        setTab("score");
-                        setNavOpen(false);
-                      }}
-                      aria-label="Go Home"
-                      title="Go Home"
-                    >
-                      NDN 🎯
-                    </button>
-                  </div>
+                  <button
+                    className="ndn-mobile-brand shrink-0 text-sm font-black px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all border border-white/10"
+                    onClick={() => {
+                      setTab("score");
+                      setNavOpen(false);
+                    }}
+                    aria-label="Go Home"
+                    title="Go Home"
+                  >
+                    NDN 🎯
+                  </button>
                 )}
 
                 {/* Left: Brand + Greeting - compact single-line with avg */}
@@ -1299,12 +1293,16 @@ export default function App() {
                 </Suspense>
               )}
             </main>
+            {isMobile && (
+              <MobileBottomNav
+                active={tab}
+                onChange={setTab}
+                onMore={() => setNavOpen(true)}
+              />
+            )}
           </div>
         </div>
-        {/* Mobile bottom navigation (primary routes) */}
       </div>
-
-      {/* Mobile bottom navigation removed (hamburger drawer is primary navigation on mobile) */}
 
       {/* Floating Help Assistant - Always visible */}
       <HelpAssistant />
@@ -1599,6 +1597,64 @@ export default function App() {
         </div>
       )}
     </ThemeProvider>
+  );
+}
+
+function MobileBottomNav({
+  active,
+  onChange,
+  onMore,
+}: {
+  active: TabKey;
+  onChange: (k: TabKey) => void;
+  onMore: () => void;
+}) {
+  const navItems = [
+    { key: "score", label: "Play", icon: Gamepad2 },
+    { key: "online", label: "Online", icon: Globe },
+    { key: "tournaments", label: "Compete", icon: Trophy },
+    { key: "stats", label: "Stats", icon: BarChart2 },
+  ];
+
+  return (
+    <div className="shrink-0 bg-[#0f0e13] border-t border-white/5 pb-1 px-2 pt-2 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.4)]">
+      <div className="flex items-center justify-between gap-1 max-w-lg mx-auto">
+        {navItems.map((item) => {
+          const isActive = active === item.key;
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.key}
+              onClick={() => onChange(item.key as TabKey)}
+              className={`flex-1 flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-xl transition-all duration-200 active:scale-95 ${
+                isActive
+                  ? "text-white bg-white/10 shadow-inner shadow-black/20"
+                  : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
+              }`}
+            >
+              <Icon
+                className={`w-6 h-6 ${isActive ? "text-indigo-400" : ""}`}
+                strokeWidth={isActive ? 2.5 : 2}
+              />
+              <span
+                className={`text-[10px] font-bold tracking-wide ${
+                  isActive ? "text-indigo-200" : "text-inherit"
+                }`}
+              >
+                {item.label}
+              </span>
+            </button>
+          );
+        })}
+        <button
+          onClick={onMore}
+          className={`flex-1 flex flex-col items-center justify-center gap-1.5 py-2 px-1 rounded-xl text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-all duration-200 active:scale-95`}
+        >
+          <Menu className="w-6 h-6" />
+          <span className="text-[10px] font-bold tracking-wide">More</span>
+        </button>
+      </div>
+    </div>
   );
 }
 
