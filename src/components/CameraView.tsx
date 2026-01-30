@@ -3955,7 +3955,7 @@ export default forwardRef(function CameraView(
             if (pBoard) {
               const boardR = Math.hypot(pBoard.x, pBoard.y);
               // Add a small tolerance (e.g. 5mm) to account for calibration drift at the edges
-              const EDGE_TOLERANCE_MM = 5;
+              const EDGE_TOLERANCE_MM = 8;
               _onBoard = boardR <= BoardRadii.doubleOuter + EDGE_TOLERANCE_MM;
             }
 

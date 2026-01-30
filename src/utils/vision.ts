@@ -1,4 +1,4 @@
-﻿// Vision and calibration utilities for dartboard mapping
+// Vision and calibration utilities for dartboard mapping
 // Standard dartboard: 18 inches (457.2 mm) outer diameter
 // Board dimensions follow standard measurements (millimeters)
 // - Inner bull radius: 6.35 mm (12.7 mm diameter)
@@ -463,9 +463,12 @@ export function scoreAtBoardPoint(p: Point): {
 
   // Apply minimal tolerance for wire-shots (0.75mm is approx half a wire width)
   const tol = 0.75;
+  // Use a more generous tolerance for the board's outer edge to prevent
+  // calibration drift from rejecting valid double-drifts as MISS.
+  const outerTol = 6.0;
 
   // Outside board edge
-  if (r > doubleOuter + tol)
+  if (r > doubleOuter + outerTol)
     return { base: 0, ring: "MISS", sector: null, mult: 0 };
 
   // Double band
