@@ -3148,12 +3148,12 @@ export default function Calibrator() {
   }
 
   function compute() {
-    if (!canvasRef.current) return false;
+    if (!canvasRef.current) return null;
     if (dstPoints.length < REQUIRED_POINT_COUNT) {
       alert(
         "Please click all 5 calibration points: D20, D6, D3, D11, and Bullseye (center).",
       );
-      return false;
+      return null;
     }
     try {
       const src = canonicalRimTargets("outer"); // board space mm
@@ -3189,11 +3189,11 @@ export default function Calibrator() {
       });
       setConfidence(100);
       setPhase("computed");
-      return true;
+      return Hcalc as Homography;
     } catch (e) {
       console.error("[Calibrator] Compute failed:", e);
       alert("Calibration computation failed. Please try resetting points.");
-      return false;
+      return null;
     }
   }
 
@@ -5293,9 +5293,11 @@ export default function Calibrator() {
                           setCalibration({ locked: false });
                         } else {
                           // If not yet computed (phase != computed), try to compute first
+                          let activeH = H;
                           if (phase !== "computed") {
-                            const success = compute();
-                            if (!success) return; // Don't lock if compute failed
+                            const calculated = compute();
+                            if (!calculated) return; // Don't lock if compute failed
+                            activeH = calculated;
                           }
                           const overlaySize = overlayRef?.current
                             ? {
@@ -5314,7 +5316,7 @@ export default function Calibrator() {
                                   }
                                 : null;
                           // Apply corrections to stored H for scoring consistency
-                          let correctedH = H;
+                          let correctedH = activeH;
                           if (correctedH && correctionSx !== 1)
                             correctedH = scaleHomography(
                               correctedH,
