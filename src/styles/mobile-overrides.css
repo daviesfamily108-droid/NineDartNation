@@ -22,7 +22,7 @@
     --ndn-mobile-max-w: 920px;
     /* Hamburger menu positioning - clean and accessible */
     --ndn-mobile-menu-left: 10px;
-    --ndn-mobile-menu-top: calc(var(--ndn-header-h) + var(--ndn-safe-top) + 4px);
+    /* --ndn-mobile-menu-top removed as unused */
   }
 
   /* Prevent iOS text-size auto bumping layouts */
@@ -192,51 +192,11 @@
     justify-content: center !important;
   }
 
-  /* Hamburger menu button - fixed and always visible */
+  /* Removed hamburger menu button styles as we switched to bottom nav */
   .ndn-mobile-menu-btn {
-    position: fixed !important;
-    left: var(--ndn-mobile-menu-left) !important;
-    top: var(--ndn-mobile-menu-top) !important;
-    z-index: 9999 !important;
-    min-width: 56px !important;
-    min-height: 56px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    border-radius: 18px !important;
-    background: linear-gradient(140deg, #8b5cf6 0%, #6366f1 60%, #4f46e5 100%) !important;
-    border: 1px solid rgba(255, 255, 255, 0.22) !important;
-    box-shadow:
-      0 12px 24px rgba(76, 29, 149, 0.45),
-      0 0 0 1px rgba(255, 255, 255, 0.18),
-      inset 0 0 14px rgba(255, 255, 255, 0.08);
-    transition: all 0.2s ease !important;
-    color: white !important;
+    display: none !important;
   }
 
-  .ndn-mobile-menu-btn:active {
-    transform: scale(0.95) !important;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
-  }
-
-  .ndn-mobile-menu-btn svg {
-    width: 24px !important;
-    height: 24px !important;
-    stroke-width: 2.4 !important;
-  }
-
-  .ndn-menu-scrolled .ndn-mobile-menu-btn {
-    left: 8px !important;
-    transform: translateX(-4px);
-    box-shadow:
-      0 6px 14px rgba(76, 29, 149, 0.45),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.15);
-  }
-
-  .ndn-menu-open .ndn-mobile-menu-btn {
-    left: 8px !important;
-    transform: translateX(-4px);
-  }
 
   /* Remove the menu slot - no longer needed with new design */
   .ndn-mobile-menu-slot {
@@ -248,7 +208,7 @@
     flex-direction: column !important;
     align-items: flex-start !important;
     gap: 6px !important;
-    margin-left: calc(var(--ndn-mobile-menu-left) + 56px + 2mm) !important;
+    margin-left: 0 !important;
     min-width: 0 !important;
     flex: 1 1 auto !important;
   }
