@@ -35,6 +35,7 @@ import {
   MessageCircle,
   Trophy,
   Users,
+  X,
 } from "lucide-react";
 import { useWS } from "./components/WSProvider";
 import {
@@ -1666,7 +1667,7 @@ function MobileBottomNav({
   );
 }
 
-// Lightweight mobile drawer that reuses the same Sidebar
+// Modern grid-based mobile menu
 function MobileNav({
   open,
   onClose,
@@ -1693,61 +1694,57 @@ function MobileNav({
   const displayAvatar = avatar || fallback;
   const isPremium = !!user?.fullAccess;
 
+  if (!open) return null;
+
   return (
-    <Drawer
-      open={open}
-      onClose={onClose}
-      width={320}
-      side="left"
-      title="Navigate"
-    >
-      <div className="flex flex-col h-full bg-[#0f0e13]">
-        {/* User Profile Header */}
-        <div className="p-6 pt-12 border-b border-white/5 bg-gradient-to-b from-white/[0.05] to-transparent">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <img
-                src={displayAvatar}
-                alt={user.username}
-                className={`w-14 h-14 rounded-full object-cover ring-2 ${
-                  isPremium
-                    ? "ring-indigo-500 shadow-lg shadow-indigo-500/30"
-                    : "ring-white/10"
-                }`}
-              />
-              {isPremium && (
-                <div className="absolute -bottom-1 -right-1 bg-indigo-500 text-white rounded-full p-1 border border-[#0f0e13]">
-                  <Trophy className="w-3 h-3" />
-                </div>
-              )}
-            </div>
-            <div className="min-w-0">
-              <div className="font-bold text-lg text-white truncate">
-                {user.username}
+    <div className="fixed inset-0 z-[150] bg-[#0f0e13]/95 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between p-6 border-b border-white/5 bg-white/[0.02]">
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <img
+              src={displayAvatar}
+              className={`w-12 h-12 rounded-full object-cover ring-2 ${
+                isPremium
+                  ? "ring-indigo-500 shadow-lg shadow-indigo-500/30"
+                  : "ring-white/10"
+              }`}
+              alt={user.username}
+            />
+            {isPremium && (
+              <div className="absolute -bottom-1 -right-1 bg-indigo-500 text-white rounded-full p-1 border border-[#0f0e13]">
+                <Trophy className="w-3 h-3" />
               </div>
-              <div className="text-xs text-white/50 truncate">
-                {user.email || "Guest"}
-              </div>
-              {isPremium && (
-                <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-indigo-300">
-                  Premium Member
-                </div>
-              )}
-            </div>
+            )}
+          </div>
+          <div className="flex flex-col">
+            <span className="font-bold text-white text-xl tracking-tight">
+              {user.username}
+            </span>
+            <span
+              className={`text-xs font-medium uppercase tracking-wider ${isPremium ? "text-indigo-400" : "text-white/40"}`}
+            >
+              {isPremium ? "Premium Member" : "Free Account"}
+            </span>
           </div>
         </div>
-
-        {/* Navigation Items */}
-        <div
-          className="flex-1 overflow-y-auto p-4 space-y-1"
-          style={{
-            scrollbarWidth: "thin",
-            scrollbarColor: "rgba(139, 92, 246, 0.5) rgba(30, 41, 59, 0.3)",
-          }}
+        <button
+          onClick={onClose}
+          className="p-3 rounded-full bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-all active:scale-95 border border-white/5 shadow-lg"
         >
-          <div className="text-xs font-bold text-white/30 uppercase tracking-widest px-4 py-2 mb-2">
-            Menu
-          </div>
+          <X className="w-6 h-6" />
+        </button>
+      </div>
+
+      {/* Content */}
+      <div
+        className="flex-1 overflow-y-auto p-6"
+        style={{ WebkitOverflowScrolling: "touch" }}
+      >
+        <h3 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-4">
+          Menu
+        </h3>
+        <div className="grid grid-cols-2 gap-3 mb-8">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = active === tab.key;
@@ -1758,72 +1755,65 @@ function MobileNav({
                   onChange(tab.key as TabKey);
                   onClose();
                 }}
-                className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-200 border ${
+                className={`group flex flex-col items-start gap-3 p-4 rounded-2xl border transition-all duration-200 active:scale-95 ${
                   isActive
-                    ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-900/20"
-                    : "bg-transparent border-transparent text-slate-400 hover:bg-white/5 hover:text-white"
+                    ? "bg-indigo-600 border-indigo-500 text-white shadow-xl shadow-indigo-900/30"
+                    : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white hover:border-white/10"
                 }`}
               >
                 <div
-                  className={`p-1 rounded-lg ${
-                    isActive ? "bg-white/20" : "bg-white/5"
-                  }`}
+                  className={`p-2 rounded-xl ${isActive ? "bg-white/20" : "bg-black/20 group-hover:bg-white/10"}`}
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-6 h-6" />
                 </div>
-                <span className="font-medium text-sm tracking-wide">
-                  {tab.label}
-                </span>
-                {isActive && (
-                  <div className="ml-auto w-1.5 h-1.5 rounded-full bg-white shadow-sm shadow-white/50" />
-                )}
+                <span className="font-bold text-sm">{tab.label}</span>
               </button>
             );
           })}
         </div>
 
-        {/* Community / Footer */}
-        <div className="p-4 border-t border-white/5 space-y-3 bg-black/20">
-          <div className="text-xs font-bold text-white/30 uppercase tracking-widest px-1">
-            Community
-          </div>
+        <h3 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-4">
+          Community
+        </h3>
+        <div className="space-y-3 pb-24">
           <button
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] hover:text-[#7f8afe] transition-all border border-[#5865F2]/20"
             onClick={() => setShowDiscord(true)}
+            className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#5865F2]/10 border border-[#5865F2]/20 text-[#5865F2] hover:bg-[#5865F2]/20 transition-all active:scale-98"
           >
-            <MessageCircle className="w-5 h-5" />
-            <span className="font-semibold text-sm">Bullseye League</span>
+            <MessageCircle className="w-6 h-6" />
+            <div className="flex flex-col items-start">
+              <span className="font-bold">Bullseye League</span>
+              <span className="text-xs opacity-70">Join the competition</span>
+            </div>
           </button>
 
           <button
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-[#5865F2]/10 hover:bg-[#5865F2]/20 text-[#5865F2] hover:text-[#7f8afe] transition-all border border-[#5865F2]/20"
             onClick={() => setShowNDNDiscord(true)}
+            className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#5865F2]/10 border border-[#5865F2]/20 text-[#5865F2] hover:bg-[#5865F2]/20 transition-all active:scale-98"
           >
-            <MessageCircle className="w-5 h-5" />
-            <span className="font-semibold text-sm">NDN Community</span>
+            <MessageCircle className="w-6 h-6" />
+            <div className="flex flex-col items-start">
+              <span className="font-bold">NDN Community</span>
+              <span className="text-xs opacity-70">Get help & support</span>
+            </div>
           </button>
         </div>
       </div>
 
-      {/* Discord dialogs */}
+      {/* Discord Dialogs */}
       {showDiscord && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowDiscord(false)}
-          />
-          <div className="relative bg-[#1a1825] border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#1a1825] border border-white/10 rounded-3xl p-6 max-w-sm w-full shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-2">
-              Join Bullseye Darts League
+              Join Bullseye League
             </h2>
-            <p className="text-slate-400 text-sm mb-6 leading-relaxed">
-              Connect with fellow darts enthusiasts, share tips, and compete in
-              tournaments!
+            <p className="text-slate-400 text-sm mb-6">
+              Connect with enthusiasts and compete in tourneys!
             </p>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setShowDiscord(false)}
-                className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition-colors"
+                className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-bold"
               >
                 Cancel
               </button>
@@ -1831,9 +1821,9 @@ function MobileNav({
                 href={DISCORD_INVITE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 px-4 py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-semibold text-center transition-colors shadow-lg shadow-indigo-500/20"
+                className="px-4 py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-bold text-center"
               >
-                Join Discord 💬
+                Join
               </a>
             </div>
           </div>
@@ -1841,23 +1831,16 @@ function MobileNav({
       )}
 
       {showNDNDiscord && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowNDNDiscord(false)}
-          />
-          <div className="relative bg-[#1a1825] border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-2">
-              NDN Community Discord
-            </h2>
-            <p className="text-slate-400 text-sm mb-6 leading-relaxed">
-              Join the official Nine Dart Nation community! Get help, share
-              scores, and stay updated.
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#1a1825] border border-white/10 rounded-3xl p-6 max-w-sm w-full shadow-2xl">
+            <h2 className="text-xl font-bold text-white mb-2">NDN Community</h2>
+            <p className="text-slate-400 text-sm mb-6">
+              Official Nine Dart Nation community.
             </p>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-2 gap-3">
               <button
                 onClick={() => setShowNDNDiscord(false)}
-                className="flex-1 px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-semibold transition-colors"
+                className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-bold"
               >
                 Cancel
               </button>
@@ -1865,14 +1848,14 @@ function MobileNav({
                 href="https://discord.gg/ninedartnation"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 px-4 py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-semibold text-center transition-colors shadow-lg shadow-indigo-500/20"
+                className="px-4 py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-bold text-center"
               >
-                Join Discord 💬
+                Join
               </a>
             </div>
           </div>
         </div>
       )}
-    </Drawer>
+    </div>
   );
 }
