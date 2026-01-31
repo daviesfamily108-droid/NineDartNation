@@ -911,6 +911,7 @@ export default forwardRef(function CameraView(
     stableFrames: number;
   }>({ lastTip: null, stableFrames: 0 });
   const detectionStartRef = useRef<number>(0);
+  const detectionDurationFramesRef = useRef<number>(0);
   const frameCountRef = useRef<number>(0);
   const tickRef = useRef<(() => void) | null>(null);
   const [detectionLog, setDetectionLog] = useState<DetectionLogEntry[]>([]);
@@ -3607,7 +3608,11 @@ export default forwardRef(function CameraView(
           dlog("CameraView: raw detection", det);
           const nowPerf = performance.now();
 
+          // Track duration of continuous detection (any confidence)
+          // Used to determine if a significant object (like a hand) was present before disappearing
           if (det) {
+            detectionDurationFramesRef.current =
+              (detectionDurationFramesRef.current || 0) + 1;
             if (!detectionStartRef.current) {
               detectionStartRef.current = nowPerf;
               if (process.env.NODE_ENV === "test") {
@@ -3617,6 +3622,7 @@ export default forwardRef(function CameraView(
             }
           } else {
             detectionStartRef.current = 0;
+            // detectionDurationFramesRef reset happens after the motion check below
           }
 
           // Bounceout heuristic: if we were tracking a candidate and the detection
@@ -3674,12 +3680,17 @@ export default forwardRef(function CameraView(
           try {
             const hadStable =
               tipStabilityRef.current.stableFrames >= TIP_STABLE_MIN_FRAMES;
+            // Relaxed heuristic: if we had *any* sustained detection (e.g. hand blocking board)
+            // that disappears, it's a throw event.
+            const hadSustained = (detectionDurationFramesRef.current || 0) > 3;
             const hasNow = !!det;
-            if (!hasNow && hadStable) {
+            if (!hasNow && (hadStable || hadSustained)) {
               lastMotionLikeEventAtRef.current = nowPerf;
               // Only open the offline throw window when a stable detection
               // disappears, which is a stronger signal of a real throw or
               // dart removal than a single noisy appearance.
+              // Note: We now allow 'sustained' (but unstable) disappearances to trigger this,
+              // covering cases where the hand isn't detected as a stable dart tip.
               if (!isOnlineMatch) lastOfflineThrowAtRef.current = nowPerf;
             }
           } catch (e) {}
@@ -3687,6 +3698,7 @@ export default forwardRef(function CameraView(
           // If the detection drops out entirely, reset tip stability so the
           // next real dart appearance triggers a fresh motion window.
           if (!det) {
+            detectionDurationFramesRef.current = 0;
             tipStabilityRef.current = {
               lastTip: null,
               stableFrames: 0,
