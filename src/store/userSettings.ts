@@ -1,4 +1,4 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
 // Import logger for side-effects (initialization/patching in some builds)
 import "../utils/logger";
 
@@ -235,8 +235,7 @@ function load(): Pick<
         hideCameraOverlay: false,
         offlineLayout: "modern",
         hideInGameSidebar: true,
-        autoscoreProvider:
-          process.env.NODE_ENV === "test" ? "built-in" : "manual",
+        autoscoreProvider: "built-in",
         autoscoreWsUrl: "",
         autoCommitMode: "immediate",
         confirmUncertainDarts: false,
