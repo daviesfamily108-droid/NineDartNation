@@ -3993,8 +3993,9 @@ export default forwardRef(function CameraView(
             let _onBoard = false;
             if (pBoard) {
               const boardR = Math.hypot(pBoard.x, pBoard.y);
-              // Add a small tolerance (e.g. 5mm) to account for calibration drift at the edges
-              const EDGE_TOLERANCE_MM = 8;
+              // Add a small tolerance (e.g. 2mm) to account for calibration drift at the edges.
+              // Reduced from 8mm to 2mm to prevent scoring darts in the surround/wall.
+              const EDGE_TOLERANCE_MM = 2;
               _onBoard = boardR <= BoardRadii.doubleOuter + EDGE_TOLERANCE_MM;
             }
 
