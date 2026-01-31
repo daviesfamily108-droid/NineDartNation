@@ -538,6 +538,14 @@ export default forwardRef(function CameraView(
         Promise.resolve(v.play()).catch(() => {});
       }
     } catch (e) {}
+    try {
+      if (candidate.lastTip) {
+        lastCommittedTipRef.current = {
+          tip: { ...candidate.lastTip },
+          ts: now,
+        };
+      }
+    } catch (e) {}
   }, [cameraSession.isStreaming, cameraSession.mode, preferredCameraId]);
 
   // Auto-start local camera when enabled and not actively receiving a phone feed.
@@ -908,6 +916,7 @@ export default forwardRef(function CameraView(
   const autoCandidateRef = useRef<AutoCandidate | null>(null);
   const detectionLogRef = useRef<DetectionLogEntry[]>([]);
   const lastAutoCommitRef = useRef<number>(0);
+  const lastCommittedTipRef = useRef<{ tip: Point; ts: number } | null>(null);
   const streamingStartMsRef = useRef<number>(0);
   const detectionArmedRef = useRef<boolean>(false);
   const detectionArmTimerRef = useRef<number | null>(null);
@@ -4233,6 +4242,15 @@ export default forwardRef(function CameraView(
               }
 
               const now = performance.now();
+              if (candidate.lastTip && lastCommittedTipRef.current) {
+                const dist = Math.hypot(
+                  candidate.lastTip.x - lastCommittedTipRef.current.tip.x,
+                  candidate.lastTip.y - lastCommittedTipRef.current.tip.y,
+                );
+                if (dist < 14 && now - lastCommittedTipRef.current.ts < 1500) {
+                  return;
+                }
+              }
               // Prevent multiple synchronous applyAutoHit calls causing duplicate commits
               // (especially in test env where AUTO_COMMIT_COOLDOWN_MS may be 0).
               if (inFlightAutoCommitRef.current) return;
