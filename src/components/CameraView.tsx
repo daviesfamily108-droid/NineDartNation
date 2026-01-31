@@ -445,7 +445,7 @@ export default forwardRef(function CameraView(
   const preserveCalibrationOverlay = useUserSettings(
     (s) => s.preserveCalibrationOverlay,
   );
-  const autoscoreEnabled = false;
+  const autoscoreEnabled = true;
   const manualOnly =
     autoscoreProvider === "manual" || disableDetection || !autoscoreEnabled;
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>(
