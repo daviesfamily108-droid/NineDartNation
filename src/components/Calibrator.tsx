@@ -1444,10 +1444,14 @@ export default function Calibrator() {
       console.log(
         "[Calibrator] WebSocket connecting, will send cam-create on open",
       );
-      socket.onopen = () => {
-        console.log("[Calibrator] WebSocket now open, sending cam-create");
-        socket.send(JSON.stringify({ type: "cam-create" }));
-      };
+      socket.addEventListener(
+        "open",
+        () => {
+          console.log("[Calibrator] WebSocket now open, sending cam-create");
+          socket.send(JSON.stringify({ type: "cam-create" }));
+        },
+        { once: true },
+      );
     }
     socket.onmessage = async (ev) => {
       const data = JSON.parse(ev.data);
@@ -5055,65 +5059,12 @@ export default function Calibrator() {
                     Stage 2 · Calibration Methods
                   </h3>
 
-                  {/* MARKER CALIBRATION - PRIMARY METHOD */}
-                  <div className="mt-4">
-                    <h4 className="text-xs font-semibold text-blue-300 mb-2">
-                      Method 1: Marker Calibration (Recommended)
-                    </h4>
-                    <p className="text-xs opacity-70 mb-2">
-                      Print ArUco markers and position around your double ring
-                    </p>
-                    <div className="flex flex-col gap-2">
-                      <button
-                        className="btn bg-blue-600 hover:bg-blue-700 font-semibold text-sm"
-                        onClick={openMarkerSheet}
-                        data-testid="open-marker-sheet"
-                      >
-                        📋 Download Markers
-                      </button>
-                      <button
-                        className="btn bg-indigo-600 hover:bg-indigo-700 font-semibold text-sm"
-                        disabled={!hasSnapshot}
-                        onClick={detectMarkers}
-                        data-testid="detect-markers"
-                      >
-                        🔍 Detect Markers
-                      </button>
-                    </div>
-                    {markerResult && (
-                      <div
-                        className={`mt-2 p-2 rounded text-xs ${markerResult.success ? "bg-green-500/20 border border-green-500/30" : "bg-red-500/20 border border-red-500/30"}`}
-                      >
-                        {markerResult.success ? (
-                          <>
-                            <strong className="text-green-300">
-                              ✅ Markers detected!
-                            </strong>
-                            <div className="mt-1">
-                              Error: {markerResult.errorPx?.toFixed(2)} px
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <strong className="text-red-300">
-                              ❌ {markerResult.message || "No markers detected"}
-                            </strong>
-                            {markerResult.missing?.length > 0 && (
-                              <div className="mt-1">
-                                Missing:{" "}
-                                {markerResult.missing.join(", ").toUpperCase()}
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  {/* MARKER CALIBRATION REMOVED */}
 
                   {/* AUTO-CALIBRATE - FALLBACK METHOD */}
                   <div className="mt-4 border-t border-white/10 pt-4">
                     <h4 className="text-xs font-semibold text-emerald-300 mb-2">
-                      Method 2: Auto-Calibrate (Fallback)
+                      Method: Auto-Calibrate
                     </h4>
                     <p className="text-xs opacity-70 mb-2">
                       Automatically detect dartboard rings (no markers needed)
