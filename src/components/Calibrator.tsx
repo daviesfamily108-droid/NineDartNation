@@ -1609,6 +1609,9 @@ export default function Calibrator() {
         };
 
         try {
+          // Explicitly add a transceiver to ensure we request video capability
+          // even if the browser defaults for createOffer vary.
+          peer.addTransceiver("video", { direction: "recvonly" });
           const offer = await peer.createOffer({
             offerToReceiveAudio: false,
             offerToReceiveVideo: true,
