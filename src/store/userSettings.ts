@@ -314,15 +314,16 @@ function load(): Pick<
           ? j.calibrationUseRansac
           : true,
       autoscoreProvider: (() => {
-        const raw =
-          j.autoscoreProvider === "external-ws"
-            ? "external-ws"
-            : j.autoscoreProvider === "manual"
-              ? "manual"
-              : j.autoscoreProvider === "built-in-v2"
-                ? "built-in-v2"
-                : "built-in";
-        return process.env.NODE_ENV === "test" ? raw : "manual";
+        let val = j.autoscoreProvider;
+        if (
+          val !== "external-ws" &&
+          val !== "manual" &&
+          val !== "built-in" &&
+          val !== "built-in-v2"
+        ) {
+          val = "built-in";
+        }
+        return val;
       })(),
       autoscoreWsUrl:
         typeof j.autoscoreWsUrl === "string" ? j.autoscoreWsUrl : "",
@@ -539,7 +540,9 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     set({ cameraFitMode: v });
   },
   setAutoscoreProvider: (p) => {
-    const next = process.env.NODE_ENV === "test" ? p : "manual";
+    // Force set next to p
+    const next = p;
+    // Persist
     save({ autoscoreProvider: next });
     set({ autoscoreProvider: next });
   },
