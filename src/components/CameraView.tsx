@@ -143,6 +143,15 @@ const CAMERA_VERBOSE_LOGS =
     .trim()
     .toLowerCase() === "1";
 const cameraVerboseLog = (...args: unknown[]) => {
+  // Always log detection startup/status events to help user debug "not registering" issues
+  if (
+    typeof args[0] === "string" &&
+    (args[0].includes("starting detection") ||
+      args[0].includes("Exiting:") ||
+      args[0] === "[DETECTION] Effect running")
+  ) {
+    console.log(...args);
+  }
   if (!CAMERA_VERBOSE_LOGS) return;
   console.log(...args);
 };
@@ -3274,7 +3283,11 @@ export default forwardRef(function CameraView(
 
     if (!isDocumentVisible) return;
     if (TEST_MODE || manualOnly) {
-      cameraVerboseLog("[DETECTION] Exiting: TEST_MODE or manualOnly");
+      console.log(
+        "[DETECTION] Exiting: TEST_MODE or manualOnly (provider=" +
+          autoscoreProvider +
+          ")",
+      );
       return;
     }
     // Built-in autoscore providers are handled locally (offline CV).
@@ -3397,16 +3410,15 @@ export default forwardRef(function CameraView(
       } catch (e) {}
     }
     if (!H || !imageSize) {
-      cameraVerboseLog("[DETECTION] Exiting: no H or imageSize", {
-        hasH: !!H,
-        hasImageSize: !!imageSize,
-        hydrated: _hydrated,
-      });
+      console.log(
+        "[DETECTION] Exiting: no H or imageSize (calibration missing)",
+      );
       return;
     }
 
-    cameraVerboseLog(
-      "[DETECTION] ? All conditions met, starting detection loop!",
+    console.log(
+      "[DETECTION] ? All conditions met, starting detection loop! Provider:",
+      autoscoreProvider,
     );
 
     let canceled = false;
@@ -3597,6 +3609,14 @@ export default forwardRef(function CameraView(
           detectionArmedRef.current &&
           frameCountRef.current > DETECTION_MIN_FRAMES
         ) {
+          if (frameCountRef.current % 150 === 0) {
+            console.log("[DETECTION] Loop active & branching", {
+              paused,
+              visitHasRoom,
+              detectionArmed: detectionArmedRef.current,
+              frames: frameCountRef.current,
+            });
+          }
           dlog("CameraView: entering detection branch", {
             paused,
             pendingDarts,
@@ -3841,12 +3861,10 @@ export default forwardRef(function CameraView(
                 };
                 // If we've been detecting something (e.g. low-conf hand) for a bit, but just now
                 // locked onto a high-confidence target, treat this transition as a throw event.
-                // This handles cases where the hand was rejected by confidence gate but immediately
-                // revealed the dart without a "no detection" gap.
-                if ((detectionDurationFramesRef.current || 0) > 3) {
-                  lastMotionLikeEventAtRef.current = nowPerf;
-                  if (!isOnlineMatch) lastOfflineThrowAtRef.current = nowPerf;
-                }
+                // We trigger the throw window on ANY fresh detection to catch fast throws where
+                // the hand wasn't tracked for long (or detection dropped briefly).
+                lastMotionLikeEventAtRef.current = nowPerf;
+                if (!isOnlineMatch) lastOfflineThrowAtRef.current = nowPerf;
               } else {
                 const dist = Math.hypot(
                   tipRefined.x - prev.x,
@@ -4138,6 +4156,13 @@ export default forwardRef(function CameraView(
             } catch {}
 
             const applyAutoHit = async (candidate: AutoCandidate) => {
+              console.log(
+                "[CameraView] applyAutoHit CALLED:",
+                candidate.label,
+                candidate.ring,
+                "current-pending:",
+                pendingDartsRef.current,
+              );
               dlog(
                 "CameraView: applyAutoHit",
                 candidate.value,
@@ -5477,6 +5502,9 @@ export default forwardRef(function CameraView(
       return;
     }
     const newDarts = (pendingDartsRef.current || 0) + 1;
+    console.log(
+      `[CameraView] addDart: value=${value} ring=${ring} -> pending=${newDarts}`,
+    );
     // Apply X01 Double-In rule before scoring if enabled and not opened yet
     const countsForScore =
       !x01DoubleIn || isOpened || ring === "DOUBLE" || ring === "INNER_BULL";
