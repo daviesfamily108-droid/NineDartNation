@@ -4242,6 +4242,13 @@ export default forwardRef(function CameraView(
               }
 
               const now = performance.now();
+              const AUTO_COMMIT_COOLDOWN_AFTER_SCORE_MS = 5000;
+              if (
+                now - lastAutoCommitRef.current <
+                AUTO_COMMIT_COOLDOWN_AFTER_SCORE_MS
+              ) {
+                return;
+              }
               if (candidate.lastTip && lastCommittedTipRef.current) {
                 const dist = Math.hypot(
                   candidate.lastTip.x - lastCommittedTipRef.current.tip.x,
