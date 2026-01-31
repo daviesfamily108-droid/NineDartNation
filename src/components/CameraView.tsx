@@ -3633,10 +3633,8 @@ export default forwardRef(function CameraView(
               (detectionDurationFramesRef.current || 0) + 1;
             if (!detectionStartRef.current) {
               detectionStartRef.current = nowPerf;
-              if (process.env.NODE_ENV === "test") {
-                lastMotionLikeEventAtRef.current = nowPerf;
-                lastOfflineThrowAtRef.current = nowPerf;
-              }
+              lastMotionLikeEventAtRef.current = nowPerf;
+              lastOfflineThrowAtRef.current = nowPerf;
             }
           } else {
             detectionStartRef.current = 0;
@@ -4443,10 +4441,9 @@ export default forwardRef(function CameraView(
                 // We still require AUTO_COMMIT_MIN_FRAMES/AUTO_COMMIT_HOLD_MS AND cooldown
                 // before committing, which keeps ghost risk low.
                 const allowCommitCandidate = strictScoring
-                  ? inOfflineThrowWindow &&
-                    detectionFresh &&
-                    (settled || tipStable)
+                  ? inOfflineThrowWindow && detectionFresh && tipStable
                   : !isGhost;
+                const allowFallbackCommits = !strictScoring;
 
                 if (ring === "MISS" || value <= 0) {
                   autoCandidateRef.current = null;
@@ -4508,7 +4505,7 @@ export default forwardRef(function CameraView(
                     // near the same tip location at high confidence, commit after
                     // a short window even if settle/stability never completes.
                     try {
-                      if (!isOnlineMatch) {
+                      if (allowFallbackCommits && !isOnlineMatch) {
                         // IMPORTANT: never allow fallback commits outside the
                         // post-throw window or while a lingering detection hasn't
                         // seen real motion since it first appeared.
@@ -4602,6 +4599,7 @@ export default forwardRef(function CameraView(
                     // post-throw window.
                     try {
                       if (
+                        allowFallbackCommits &&
                         inOfflineThrowWindow &&
                         detectionFresh &&
                         !isGhost &&
