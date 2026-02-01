@@ -264,7 +264,7 @@
         if (el) el.textContent = '';
     }
 
-    // Calibration UI helpers for mobile: show banner and allow user to apply calibration
+    // Connection UI helpers for mobile: show banner and allow user to apply alignment data
     function showCalibrationBanner(payload) {
         try {
             window.__ndn_received_calibration = payload || null;
@@ -273,7 +273,7 @@
             const applyBtn = document.getElementById('applyCalib');
             const dismissBtn = document.getElementById('dismissCalib');
             if (!banner || !msg || !applyBtn || !dismissBtn) return;
-            msg.textContent = payload && payload.H ? `Calibration received (errorPx: ${payload.errorPx ?? 'n/a'})` : 'Calibration received';
+            msg.textContent = payload && payload.H ? `Connection data received (errorPx: ${payload.errorPx ?? 'n/a'})` : 'Connection data received';
             banner.style.display = 'block';
             if (diagOut) diagOut.textContent = JSON.stringify(payload || {}, null, 2);
 
@@ -288,11 +288,11 @@
 
     function applyCalibration(payload) {
         try {
-            // Persist received calibration locally on the phone so the camera app can use it later
+            // Persist received connection data locally on the phone so the camera app can use it later
             localStorage.setItem('ndn:received_calibration', JSON.stringify(payload || {}));
             if (diagOut) diagOut.textContent = JSON.stringify(payload || {}, null, 2);
-            log('Calibration applied');
-            sendDiagnostic('calibration-applied', { code: input.value || '', payloadSummary: { errorPx: payload?.errorPx } });
+            log('Connection applied');
+            sendDiagnostic('connection-applied', { code: input.value || '', payloadSummary: { errorPx: payload?.errorPx } });
         } catch (e) { console.warn('applyCalibration failed', e); }
     }
 

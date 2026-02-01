@@ -367,7 +367,7 @@ const DevicePicker: React.FC<DevicePickerProps> = ({
               }`}
             />
             <span className="text-xs">
-              {calibrationValid ? "Cal OK" : "Cal invalid"}
+              {calibrationValid ? "Connection OK" : "Connection issue"}
             </span>
           </div>
         </div>
@@ -4610,15 +4610,14 @@ export default function Calibrator() {
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-indigo-300">
-              Marker alignment
+              Camera alignment
             </p>
             <h2 className="text-2xl font-semibold leading-tight text-white">
-              Align your board with the autoscoring overlay
+              Align your board with the camera overlay
             </h2>
             <p className="max-w-2xl text-sm opacity-80">
-              Place the printable fiducial markers around the double ring,
-              capture a clear frame, and let the camera connection tool compute
-              a precise homography.
+              Align the camera view to the dartboard, capture a clear frame, and
+              lock the camera connection for all play modes.
             </p>
           </div>
           <div className="flex flex-col items-end gap-2 text-xs font-medium">
@@ -5121,7 +5120,7 @@ export default function Calibrator() {
 
                   {/* Marker alignment REMOVED */}
 
-                  {/* AUTO-CALIBRATE - FALLBACK METHOD */}
+                  {/* AUTO-ALIGN - FALLBACK METHOD */}
                   <div className="mt-4 border-t border-white/10 pt-4">
                     <h4 className="text-xs font-semibold text-emerald-300 mb-2">
                       Method: Auto-Align
@@ -5136,9 +5135,7 @@ export default function Calibrator() {
                         onClick={autoCalibrate}
                         data-testid="autocalibrate-advanced"
                       >
-                        {autoCalibrating
-                          ? "Auto-calibrating…"
-                          : "🎯 Auto-Calibrate"}
+                        {autoCalibrating ? "Auto-aligning…" : "🎯 Auto-Align"}
                       </button>
                     </div>
                   </div>
@@ -5189,7 +5186,7 @@ export default function Calibrator() {
                         }}
                         disabled={!hasSnapshot || autoCalibrating}
                       >
-                        Re-run Auto-Calibrate
+                        Re-run Auto-Align
                       </button>
                     </div>
                     {detectionMessage && (
