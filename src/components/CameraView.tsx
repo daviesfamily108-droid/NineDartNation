@@ -3637,6 +3637,7 @@ export default forwardRef(function CameraView(
           });
           const det = detector.detect(frame);
           dlog("CameraView: raw detection", det);
+          const nowPerf = performance.now();
           if (boardLockedRef.current) {
             if (!det) {
               if (!boardClearStartRef.current) {
@@ -3658,8 +3659,6 @@ export default forwardRef(function CameraView(
               boardClearStartRef.current = 0;
             }
           }
-          const nowPerf = performance.now();
-
           if (det) {
             detectionDurationFramesRef.current =
               (detectionDurationFramesRef.current || 0) + 1;
@@ -4187,6 +4186,7 @@ export default forwardRef(function CameraView(
             } catch {}
 
             const applyAutoHit = async (candidate: AutoCandidate) => {
+              if (boardLockedRef.current) return;
               console.log(
                 "[CameraView] applyAutoHit CALLED:",
                 candidate.label,
