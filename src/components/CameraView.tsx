@@ -538,14 +538,6 @@ export default forwardRef(function CameraView(
         Promise.resolve(v.play()).catch(() => {});
       }
     } catch (e) {}
-    try {
-      if (candidate.lastTip) {
-        lastCommittedTipRef.current = {
-          tip: { ...candidate.lastTip },
-          ts: now,
-        };
-      }
-    } catch (e) {}
   }, [cameraSession.isStreaming, cameraSession.mode, preferredCameraId]);
 
   // Auto-start local camera when enabled and not actively receiving a phone feed.
@@ -917,6 +909,7 @@ export default forwardRef(function CameraView(
   const detectionLogRef = useRef<DetectionLogEntry[]>([]);
   const lastAutoCommitRef = useRef<number>(0);
   const lastCommittedTipRef = useRef<{ tip: Point; ts: number } | null>(null);
+  const committedTipsRef = useRef<Array<{ tip: Point; ts: number }>>([]);
   const boardLockedRef = useRef<boolean>(false);
   const boardClearStartRef = useRef<number>(0);
   const streamingStartMsRef = useRef<number>(0);
@@ -3647,6 +3640,7 @@ export default forwardRef(function CameraView(
                 boardLockedRef.current = false;
                 boardClearStartRef.current = 0;
                 lastCommittedTipRef.current = null;
+                committedTipsRef.current = [];
                 try {
                   window.dispatchEvent(
                     new CustomEvent("ndn:darts-cleared", {
@@ -4265,14 +4259,15 @@ export default forwardRef(function CameraView(
               }
 
               const now = performance.now();
-              if (candidate.lastTip && lastCommittedTipRef.current) {
-                const dist = Math.hypot(
-                  candidate.lastTip.x - lastCommittedTipRef.current.tip.x,
-                  candidate.lastTip.y - lastCommittedTipRef.current.tip.y,
-                );
-                if (dist < 14 && now - lastCommittedTipRef.current.ts < 1500) {
-                  return;
-                }
+              if (candidate.lastTip) {
+                const isDuplicate = committedTipsRef.current.some((entry) => {
+                  const dist = Math.hypot(
+                    candidate.lastTip!.x - entry.tip.x,
+                    candidate.lastTip!.y - entry.tip.y,
+                  );
+                  return dist < 18;
+                });
+                if (isDuplicate) return;
               }
               // Prevent multiple synchronous applyAutoHit calls causing duplicate commits
               // (especially in test env where AUTO_COMMIT_COOLDOWN_MS may be 0).
@@ -5644,6 +5639,12 @@ export default forwardRef(function CameraView(
       let tipPx: Point | undefined | null = (meta as any)?.__tipVideoPx ?? null;
       if (!tipPx) tipPx = diagnosticsRef.current.lastTip ?? null;
       if (tipPx && typeof tipPx.x === "number" && typeof tipPx.y === "number") {
+        if (entryMeta.source === "camera") {
+          committedTipsRef.current = [
+            ...committedTipsRef.current,
+            { tip: { ...tipPx }, ts: Date.now() },
+          ].slice(-6);
+        }
         setVisitMarkers((prev) => [
           ...prev,
           { x: tipPx!.x, y: tipPx!.y, label },
