@@ -917,6 +917,8 @@ export default forwardRef(function CameraView(
   const detectionLogRef = useRef<DetectionLogEntry[]>([]);
   const lastAutoCommitRef = useRef<number>(0);
   const lastCommittedTipRef = useRef<{ tip: Point; ts: number } | null>(null);
+  const boardLockedRef = useRef<boolean>(false);
+  const boardClearStartRef = useRef<number>(0);
   const streamingStartMsRef = useRef<number>(0);
   const detectionArmedRef = useRef<boolean>(false);
   const detectionArmTimerRef = useRef<number | null>(null);
@@ -3635,6 +3637,27 @@ export default forwardRef(function CameraView(
           });
           const det = detector.detect(frame);
           dlog("CameraView: raw detection", det);
+          if (boardLockedRef.current) {
+            if (!det) {
+              if (!boardClearStartRef.current) {
+                boardClearStartRef.current = nowPerf;
+              }
+              if (nowPerf - boardClearStartRef.current >= 3000) {
+                boardLockedRef.current = false;
+                boardClearStartRef.current = 0;
+                lastCommittedTipRef.current = null;
+                try {
+                  window.dispatchEvent(
+                    new CustomEvent("ndn:darts-cleared", {
+                      detail: { source: "camera-view", ts: Date.now() },
+                    }),
+                  );
+                } catch {}
+              }
+            } else {
+              boardClearStartRef.current = 0;
+            }
+          }
           const nowPerf = performance.now();
 
           if (det) {
@@ -4242,13 +4265,6 @@ export default forwardRef(function CameraView(
               }
 
               const now = performance.now();
-              const AUTO_COMMIT_COOLDOWN_AFTER_SCORE_MS = 5000;
-              if (
-                now - lastAutoCommitRef.current <
-                AUTO_COMMIT_COOLDOWN_AFTER_SCORE_MS
-              ) {
-                return;
-              }
               if (candidate.lastTip && lastCommittedTipRef.current) {
                 const dist = Math.hypot(
                   candidate.lastTip.x - lastCommittedTipRef.current.tip.x,
@@ -4465,10 +4481,14 @@ export default forwardRef(function CameraView(
                 // non-ghost detection, allow the candidate to start tracking immediately.
                 // We still require AUTO_COMMIT_MIN_FRAMES/AUTO_COMMIT_HOLD_MS AND cooldown
                 // before committing, which keeps ghost risk low.
+                const boardClearReady = !boardLockedRef.current;
                 const allowCommitCandidate = strictScoring
-                  ? inOfflineThrowWindow && detectionFresh && tipStable
+                  ? boardClearReady &&
+                    inOfflineThrowWindow &&
+                    detectionFresh &&
+                    tipStable
                   : !isGhost;
-                const allowFallbackCommits = !strictScoring;
+                const allowFallbackCommits = !strictScoring && boardClearReady;
 
                 if (ring === "MISS" || value <= 0) {
                   autoCandidateRef.current = null;
@@ -5404,6 +5424,10 @@ export default forwardRef(function CameraView(
       source: "manual",
     };
 
+    if (entryMeta.source === "camera" && boardLockedRef.current) {
+      return;
+    }
+
     // Allow unit tests to bypass camera auto-dedupe/cooldown by providing a stable,
     // explicit board point. Production callers can omit it.
     if (process.env.NODE_ENV === "test") {
@@ -5526,6 +5550,10 @@ export default forwardRef(function CameraView(
       return;
     }
     const newDarts = (pendingDartsRef.current || 0) + 1;
+    if (entryMeta.source === "camera" && newDarts >= 3) {
+      boardLockedRef.current = true;
+      boardClearStartRef.current = 0;
+    }
     console.log(
       `[CameraView] addDart: value=${value} ring=${ring} -> pending=${newDarts}`,
     );
