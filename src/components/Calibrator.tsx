@@ -379,7 +379,7 @@ const DevicePicker: React.FC<DevicePickerProps> = ({
       )}
       <div className="mt-1 text-xs opacity-70">
         Tip: All camera technology is supported for autoscoring needs—select
-        your camera here and then open Calibrator to align.
+        your camera here and then open Camera Connection to align.
       </div>
     </div>
   );
@@ -512,7 +512,10 @@ export default function Calibrator() {
         .getState()
         .setPreferredCamera(undefined, "Phone Camera", true);
     } catch (e) {
-      console.warn("[Calibrator] Failed to persist phone camera selection", e);
+      console.warn(
+        "[Camera Connection] Failed to persist phone camera selection",
+        e,
+      );
     }
   }, [setMode, setPhase, setStreaming, setHasSnapshot]);
   // Track current frame (video/snapshot) size to preserve aspect ratio in the preview container
@@ -934,7 +937,7 @@ export default function Calibrator() {
           }
         }, 300);
       } catch (err) {
-        console.warn("[Calibrator] failed to start dart preview", err);
+        console.warn("[Camera Connection] failed to start dart preview", err);
       }
     }
     return () => {
@@ -1160,7 +1163,7 @@ export default function Calibrator() {
         "Camera access granted — your webcam is available and set as preferred.",
       );
     } catch (err: any) {
-      console.error("[Calibrator] testCamera failed", err);
+      console.error("[Camera Connection] testCamera failed", err);
       if (
         err &&
         (err.name === "NotAllowedError" || err.name === "PermissionDeniedError")
@@ -1255,7 +1258,7 @@ export default function Calibrator() {
           1500,
         );
       } catch (err) {
-        console.warn("[Calibrator] Copy failed:", err);
+        console.warn("[Camera Connection] Copy failed:", err);
         setCopyFeedback(null);
       }
     },
@@ -1280,7 +1283,7 @@ export default function Calibrator() {
     if (isTestEnv) return;
     const handleReconnectRequest = (event: any) => {
       console.log(
-        "[Calibrator] Received reconnect request from PhoneCameraOverlay",
+        "[Camera Connection] Received reconnect request from PhoneCameraOverlay",
       );
       // If we're in phone mode and already paired, restart the pairing
       if (mode === "phone" && paired) {
@@ -1307,49 +1310,56 @@ export default function Calibrator() {
   // Sync video element to camera session so other components can access it
   // CRITICAL: Run whenever streaming state changes to keep videoRef synced
   useEffect(() => {
-    console.log("[Calibrator] 🔄 STREAMING CHANGED:", {
+    console.log("[Camera Connection] 🔄 STREAMING CHANGED:", {
       streaming,
       videoRefAvailable: !!videoRef.current,
     });
     if (videoRef.current) {
       console.log(
-        "[Calibrator] ✅ Syncing videoElementRef on streaming change",
+        "[Camera Connection] ✅ Syncing videoElementRef on streaming change",
       );
       cameraSession.setVideoElementRef(videoRef.current);
       // Also capture media stream when available
       if (videoRef.current.srcObject instanceof MediaStream) {
-        console.log("[Calibrator] ✅ Setting mediaStream from video element");
+        console.log(
+          "[Camera Connection] ✅ Setting mediaStream from video element",
+        );
         cameraSession.setMediaStream(videoRef.current.srcObject);
       }
     } else {
       console.warn(
-        "[Calibrator] ⚠️ videoRef.current is null on streaming change!",
+        "[Camera Connection] ⚠️ videoRef.current is null on streaming change!",
       );
     }
   }, [streaming]);
 
   // Also sync on mount to capture initial videoRef
   useEffect(() => {
-    console.log("[Calibrator] 🚀 MOUNT: Initial mount - syncing videoRef");
-    console.log("[Calibrator] videoRef.current available:", !!videoRef.current);
     console.log(
-      "[Calibrator] videoRef.current type:",
+      "[Camera Connection] 🚀 MOUNT: Initial mount - syncing videoRef",
+    );
+    console.log(
+      "[Camera Connection] videoRef.current available:",
+      !!videoRef.current,
+    );
+    console.log(
+      "[Camera Connection] videoRef.current type:",
       videoRef.current?.constructor?.name,
     );
 
     if (videoRef.current) {
-      console.log("[Calibrator] ✅ Setting videoElementRef on mount");
-      console.log("[Calibrator] Video element:", {
+      console.log("[Camera Connection] ✅ Setting videoElementRef on mount");
+      console.log("[Camera Connection] Video element:", {
         tagName: videoRef.current.tagName,
         srcObject: !!videoRef.current.srcObject,
         videoWidth: videoRef.current.videoWidth,
         videoHeight: videoRef.current.videoHeight,
       });
       cameraSession.setVideoElementRef(videoRef.current);
-      console.log("[Calibrator] ✅ videoElementRef set successfully");
+      console.log("[Camera Connection] ✅ videoElementRef set successfully");
     } else {
       console.error(
-        "[Calibrator] ❌ CRITICAL: videoRef.current is NULL at mount!",
+        "[Camera Connection] ❌ CRITICAL: videoRef.current is NULL at mount!",
       );
     }
     // Do NOT clear the videoElementRef on unmount; we want the stream to persist globally
@@ -1366,7 +1376,7 @@ export default function Calibrator() {
         ws.readyState === WebSocket.CONNECTING)
     ) {
       console.log(
-        "[Calibrator] ensureWS: Reusing existing WebSocket (state:",
+        "[Camera Connection] ensureWS: Reusing existing WebSocket (state:",
         ws.readyState,
         ")",
       );
@@ -1388,18 +1398,25 @@ export default function Calibrator() {
     const renderWS = `wss://ninedartnation.onrender.com/ws`;
     const url =
       normalizedEnv || (host.endsWith("onrender.com") ? sameOrigin : renderWS);
-    console.log("[Calibrator] ensureWS: Creating new WebSocket to:", url);
+    console.log(
+      "[Camera Connection] ensureWS: Creating new WebSocket to:",
+      url,
+    );
     const socket: WebSocket = new WebSocket(url);
 
     // Set up handlers BEFORE storing the socket to avoid race conditions
     socket.onerror = (error) => {
-      console.error("[Calibrator] WebSocket connection error:", error);
+      console.error("[Camera Connection] WebSocket connection error:", error);
       alert(
         "Failed to connect to camera pairing service. Please check your internet connection and try again.",
       );
     };
     socket.onclose = (event) => {
-      console.log("[Calibrator] WebSocket closed:", event.code, event.reason);
+      console.log(
+        "[Camera Connection] WebSocket closed:",
+        event.code,
+        event.reason,
+      );
       if (pcRef.current) {
         try {
           pcRef.current.close();
@@ -1438,16 +1455,18 @@ export default function Calibrator() {
     const socket = ensureWS();
     // Send cam-create when socket is ready
     if (socket.readyState === WebSocket.OPEN) {
-      console.log("[Calibrator] WebSocket open, sending cam-create");
+      console.log("[Camera Connection] WebSocket open, sending cam-create");
       socket.send(JSON.stringify({ type: "cam-create" }));
     } else {
       console.log(
-        "[Calibrator] WebSocket connecting, will send cam-create on open",
+        "[Camera Connection] WebSocket connecting, will send cam-create on open",
       );
       socket.addEventListener(
         "open",
         () => {
-          console.log("[Calibrator] WebSocket now open, sending cam-create");
+          console.log(
+            "[Camera Connection] WebSocket now open, sending cam-create",
+          );
           socket.send(JSON.stringify({ type: "cam-create" }));
         },
         { once: true },
@@ -1484,13 +1503,13 @@ export default function Calibrator() {
               }),
             );
             console.log(
-              "[Calibrator] Sent calibration to joined phone for code",
+              "[Camera Connection] Sent calibration to joined phone for code",
               codeForSession,
             );
           }
         } catch (e) {
           console.warn(
-            "[Calibrator] Failed to send calibration on peer join",
+            "[Camera Connection] Failed to send calibration on peer join",
             e,
           );
         }
@@ -1529,7 +1548,7 @@ export default function Calibrator() {
 
         peer.ontrack = (ev) => {
           console.log(
-            "[Calibrator] WebRTC ontrack received:",
+            "[Camera Connection] WebRTC ontrack received:",
             ev.streams?.length,
             "streams, track kind:",
             ev.track?.kind,
@@ -1538,7 +1557,7 @@ export default function Calibrator() {
             const inbound = ev.streams?.[0];
             if (inbound) {
               console.log(
-                "[Calibrator] Assigning video stream (tracks:",
+                "[Camera Connection] Assigning video stream (tracks:",
                 inbound.getTracks().length,
                 ") to video element",
               );
@@ -1548,7 +1567,7 @@ export default function Calibrator() {
               setTimeout(() => {
                 if (videoRef.current) {
                   console.log(
-                    "[Calibrator] Setting srcObject and attempting play",
+                    "[Camera Connection] Setting srcObject and attempting play",
                   );
                   // Clean up any existing stream before assigning new one
                   if (videoRef.current.srcObject) {
@@ -1564,7 +1583,7 @@ export default function Calibrator() {
                     .play()
                     .then(() => {
                       console.log(
-                        "[Calibrator] Video playback started successfully",
+                        "[Camera Connection] Video playback started successfully",
                       );
                       // Mark that we're streaming from the phone and transition to capture
                       setStreaming(true);
@@ -1589,22 +1608,25 @@ export default function Calibrator() {
                       setVideoPlayBlocked(false);
                     })
                     .catch((err) => {
-                      console.error("[Calibrator] Video play failed:", err);
+                      console.error(
+                        "[Camera Connection] Video play failed:",
+                        err,
+                      );
                       // Show a friendly tap-to-play overlay so user can enable playback
                       setVideoPlayBlocked(true);
                       console.warn(
-                        "[Calibrator] video play blocked — prompting user interaction",
+                        "[Camera Connection] video play blocked — prompting user interaction",
                       );
                     });
                 }
               }, 100);
             } else {
               console.error(
-                "[Calibrator] No inbound stream received in ontrack",
+                "[Camera Connection] No inbound stream received in ontrack",
               );
             }
           } else {
-            console.error("[Calibrator] Video element not available");
+            console.error("[Camera Connection] Video element not available");
           }
         };
 
@@ -1618,7 +1640,7 @@ export default function Calibrator() {
           });
           await peer.setLocalDescription(offer);
           console.log(
-            "[Calibrator] Sending cam-offer for code:",
+            "[Camera Connection] Sending cam-offer for code:",
             codeForSession,
           );
           if (codeForSession)
@@ -1631,7 +1653,7 @@ export default function Calibrator() {
             );
           else
             console.warn(
-              "[Calibrator] Missing pairing code when sending offer",
+              "[Camera Connection] Missing pairing code when sending offer",
             );
         } catch (err) {
           console.error("Failed to create WebRTC offer:", err);
@@ -1639,24 +1661,24 @@ export default function Calibrator() {
           stopCamera(false);
         }
       } else if (data.type === "cam-answer") {
-        console.log("[Calibrator] Received cam-answer");
+        console.log("[Camera Connection] Received cam-answer");
         const peer = pcRef.current;
         if (peer) {
           try {
             await peer.setRemoteDescription(
               new RTCSessionDescription(data.payload),
             );
-            console.log("[Calibrator] Remote description set (answer)");
+            console.log("[Camera Connection] Remote description set (answer)");
 
             // Process any pending ICE candidates that arrived before the answer
             const pending = pendingIceCandidatesRef.current;
             console.log(
-              `[Calibrator] Processing ${pending.length} pending ICE candidates`,
+              `[Camera Connection] Processing ${pending.length} pending ICE candidates`,
             );
             for (const candidate of pending) {
               try {
                 await peer.addIceCandidate(candidate);
-                console.log("[Calibrator] Queued ICE candidate added");
+                console.log("[Camera Connection] Queued ICE candidate added");
               } catch (err) {
                 console.error("Failed to add queued ICE candidate:", err);
               }
@@ -1669,11 +1691,11 @@ export default function Calibrator() {
           }
         } else {
           console.warn(
-            "[Calibrator] Received cam-answer but no peer connection exists",
+            "[Camera Connection] Received cam-answer but no peer connection exists",
           );
         }
       } else if (data.type === "cam-ice") {
-        console.log("[Calibrator] Received cam-ice");
+        console.log("[Camera Connection] Received cam-ice");
         const peer = pcRef.current;
         if (peer) {
           // Only add ICE candidate if remote description is already set
@@ -1681,19 +1703,19 @@ export default function Calibrator() {
           if (peer.remoteDescription) {
             try {
               await peer.addIceCandidate(data.payload);
-              console.log("[Calibrator] ICE candidate added");
+              console.log("[Camera Connection] ICE candidate added");
             } catch (err) {
               console.error("Failed to add ICE candidate:", err);
             }
           } else {
             console.log(
-              "[Calibrator] Remote description not set yet, queuing ICE candidate",
+              "[Camera Connection] Remote description not set yet, queuing ICE candidate",
             );
             pendingIceCandidatesRef.current.push(data.payload);
           }
         } else {
           console.warn(
-            "[Calibrator] Received ICE candidate but no peer connection exists",
+            "[Camera Connection] Received ICE candidate but no peer connection exists",
           );
         }
       } else if (data.type === "cam-error") {
@@ -1707,12 +1729,12 @@ export default function Calibrator() {
       } else if (data.type === "cam-calibration") {
         // Desktop receives calibration from phone (via server) or phone receives from desktop
         console.log(
-          "[Calibrator] Received calibration from peer:",
+          "[Camera Connection] Received calibration from peer:",
           data.payload,
         );
         try {
           if (data.payload) {
-            // If payload has a homography, use it. Otherwise if we have 4 calibration points, attempt to compute H.
+            // If payload has a homography, use it. Otherwise if we have 4 connection points, attempt to compute H.
             let Hpayload = Array.isArray(data.payload.H)
               ? (data.payload.H as Homography)
               : null;
@@ -1734,7 +1756,7 @@ export default function Calibrator() {
                 );
               } catch (err) {
                 console.warn(
-                  "[Calibrator] Failed to compute homography from received calibration points",
+                  "[Camera Connection] Failed to compute homography from received connection points",
                   err,
                 );
               }
@@ -1758,11 +1780,14 @@ export default function Calibrator() {
                 overlaySize,
                 locked: true, // Assume locked since peer sent it
               });
-              console.log("[Calibrator] Applied received calibration");
+              console.log("[Camera Connection] Applied received calibration");
             }
           }
         } catch (e) {
-          console.error("[Calibrator] Failed to apply received calibration", e);
+          console.error(
+            "[Camera Connection] Failed to apply received calibration",
+            e,
+          );
         }
       }
     };
@@ -1835,7 +1860,7 @@ export default function Calibrator() {
     if (mode === "phone") return startPhonePairing();
     if (mode === "wifi") return startWifiConnection();
     console.log(
-      "[Calibrator] 🎬 START_CAMERA: mode=",
+      "[Camera Connection] 🎬 START_CAMERA: mode=",
       mode,
       "preferredCameraId=",
       preferredCameraId,
@@ -1847,7 +1872,7 @@ export default function Calibrator() {
       if (preferredCameraId) {
         try {
           console.log(
-            "[Calibrator] 📹 Attempt 1: Using preferred camera ID:",
+            "[Camera Connection] 📹 Attempt 1: Using preferred camera ID:",
             preferredCameraId,
           );
           stream = await navigator.mediaDevices.getUserMedia({
@@ -1855,13 +1880,13 @@ export default function Calibrator() {
             audio: false,
           });
           console.log(
-            "[Calibrator] ✅ SUCCESS with preferred camera:",
+            "[Camera Connection] ✅ SUCCESS with preferred camera:",
             stream.getTracks().length,
             "tracks",
           );
         } catch (err: any) {
           console.warn(
-            "[Calibrator] ⚠️ Preferred camera failed:",
+            "[Camera Connection] ⚠️ Preferred camera failed:",
             err?.name,
             err?.message,
           );
@@ -1871,19 +1896,21 @@ export default function Calibrator() {
       // Step 2: If preferred didn't work, try any camera
       if (!stream) {
         try {
-          console.log("[Calibrator] 📹 Attempt 2: Using ANY available camera");
+          console.log(
+            "[Camera Connection] 📹 Attempt 2: Using ANY available camera",
+          );
           stream = await navigator.mediaDevices.getUserMedia({
             video: true,
             audio: false,
           });
           console.log(
-            "[Calibrator] ✅ SUCCESS with fallback camera:",
+            "[Camera Connection] ✅ SUCCESS with fallback camera:",
             stream.getTracks().length,
             "tracks",
           );
         } catch (err: any) {
           console.error(
-            "[Calibrator] ❌ BOTH attempts failed:",
+            "[Camera Connection] ❌ BOTH attempts failed:",
             err?.name,
             err?.message,
           );
@@ -1900,29 +1927,29 @@ export default function Calibrator() {
         throw new Error("Video element ref is null");
       }
 
-      console.log("[Calibrator] 📺 Assigning stream to video element");
+      console.log("[Camera Connection] 📺 Assigning stream to video element");
       videoRef.current.srcObject = stream;
 
-      console.log("[Calibrator] ▶️ Calling play()");
+      console.log("[Camera Connection] ▶️ Calling play()");
       try {
         await videoRef.current.play();
-        console.log("[Calibrator] ✅ Play succeeded");
+        console.log("[Camera Connection] ✅ Play succeeded");
       } catch (playErr: any) {
         console.warn(
-          "[Calibrator] ⚠️ Play failed, retrying in 100ms:",
+          "[Camera Connection] ⚠️ Play failed, retrying in 100ms:",
           playErr?.message,
         );
         await new Promise((r) => setTimeout(r, 100));
         await videoRef.current.play();
-        console.log("[Calibrator] ✅ Play succeeded on retry");
+        console.log("[Camera Connection] ✅ Play succeeded on retry");
       }
 
-      console.log("[Calibrator] 🟢 Setting streaming = true");
+      console.log("[Camera Connection] 🟢 Setting streaming = true");
       setStreaming(true);
       setPhase("capture");
-      console.log("[Calibrator] 🟢 State updated");
+      console.log("[Camera Connection] 🟢 State updated");
     } catch (e: any) {
-      console.error("[Calibrator] 🔴 FATAL:", e?.message || e);
+      console.error("[Camera Connection] 🔴 FATAL:", e?.message || e);
       alert(`Camera failed: ${e?.message || "Unknown error"}`);
       // Clean up any partial stream
       if (videoRef.current?.srcObject) {
@@ -2042,7 +2069,7 @@ export default function Calibrator() {
     setFrameSize({ w: c.width, h: c.height });
     setPhase("select");
     // Ensure we start fresh with 0 points - log for debugging
-    console.log("[Calibrator] captureFrame: resetting dstPoints to []");
+    console.log("[Camera Connection] captureFrame: resetting dstPoints to []");
     setDstPoints([]);
     setDetected(null); // Also clear auto-detected rings
     setForceDetectedOnly(false);
@@ -2237,7 +2264,7 @@ export default function Calibrator() {
       }
       setAligningRing(null);
       console.log(
-        "[Calibrator] Aligned ",
+        "[Camera Connection] Aligned ",
         aligningRing,
         " adjust=",
         newAdjust.toFixed(4),
@@ -2815,7 +2842,7 @@ export default function Calibrator() {
   };
 
   function onClickOverlay(e: React.PointerEvent<HTMLCanvasElement>) {
-    console.debug("[Calibrator] onClickOverlay entry", phase, e.type);
+    console.debug("[Camera Connection] onClickOverlay entry", phase, e.type);
     e.stopPropagation();
     e.preventDefault();
     // For selection mode allow adding anchor points, but for computed mode we interpret as a test click
@@ -2840,7 +2867,7 @@ export default function Calibrator() {
         : 1;
     const x = cssX * scaleX;
     const y = cssY * scaleY;
-    console.debug("[Calibrator] onClickOverlay css/x/y", {
+    console.debug("[Camera Connection] onClickOverlay css/x/y", {
       cssX,
       cssY,
       scaleX,
@@ -2850,14 +2877,14 @@ export default function Calibrator() {
     });
     if (phase === "select") {
       console.log(
-        "[Calibrator] Adding point. Current dstPoints.length:",
+        "[Camera Connection] Adding point. Current dstPoints.length:",
         dstPoints.length,
         "New point:",
         { x, y },
       );
       const pts = [...dstPoints, { x, y }];
       console.log(
-        "[Calibrator] After add, pts.length:",
+        "[Camera Connection] After add, pts.length:",
         pts.length,
         "REQUIRED:",
         REQUIRED_POINT_COUNT,
@@ -2903,7 +2930,10 @@ export default function Calibrator() {
           : undefined;
         const Hcur = calibState?.H ?? H;
         const imgSize = calibState?.imageSize ?? imageSize;
-        console.debug("[Calibrator] onClickOverlay state", { Hcur, imgSize });
+        console.debug("[Camera Connection] onClickOverlay state", {
+          Hcur,
+          imgSize,
+        });
         if (!Hcur || !overlayRef.current || !imgSize) return;
         const o = overlayRef.current;
         // Some test environments may not set canvas width/height; fall back to CSS bounding rect
@@ -2924,7 +2954,7 @@ export default function Calibrator() {
           o.height && imgSize.h
             ? o.height / imgSize.h
             : fallbackHeight / imgSize.h;
-        console.debug("[Calibrator] onClickOverlay dims", {
+        console.debug("[Camera Connection] onClickOverlay dims", {
           oWidth: o.width,
           oHeight: o.height,
           rectWidth: rect2.width,
@@ -2940,10 +2970,14 @@ export default function Calibrator() {
         const fracY = clientHeight ? cssY / clientHeight : 0;
         const pCal = { x: fracX * imgSize.w, y: fracY * imgSize.h };
         const pBoard = imageToBoard(Hcur as any, pCal);
-        console.debug("[Calibrator] onClickOverlay pCal/pBoard", pCal, pBoard);
+        console.debug(
+          "[Camera Connection] onClickOverlay pCal/pBoard",
+          pCal,
+          pBoard,
+        );
         if (!pBoard) {
           console.warn(
-            "[Calibrator] Failed to map point to board - homography inversion failed",
+            "[Camera Connection] Failed to map point to board - homography inversion failed",
           );
           return;
         }
@@ -2958,7 +2992,10 @@ export default function Calibrator() {
         if (scoreObj.ring === "BULL" || scoreObj.ring === "INNER_BULL") {
           setBullHint(pCal);
         }
-        console.debug("[Calibrator] autoCommitTestMode", autoCommitTestMode);
+        console.debug(
+          "[Camera Connection] autoCommitTestMode",
+          autoCommitTestMode,
+        );
         if (autoCommitTestMode && val === 0) {
           val = 25;
         }
@@ -2966,7 +3003,7 @@ export default function Calibrator() {
       }
       if (val == null) return;
       setLastDetectedValue(val);
-      console.debug("[Calibrator] onClickOverlay detected", val, label);
+      console.debug("[Camera Connection] onClickOverlay detected", val, label);
       setLastDetectedLabel(label);
       try {
         const calibSt = (useCalibration as any).getState
@@ -3003,12 +3040,12 @@ export default function Calibrator() {
               calibSt2.errorPx <= ERROR_PX_MAX));
         if (!calibrationValidSt2) {
           console.debug(
-            "[Calibrator] immediate autocommit skipped due to invalid calibration",
+            "[Camera Connection] immediate autocommit skipped due to invalid calibration",
             { calibrationValidSt2 },
           );
         } else {
           const isOnline = useMatch.getState().roomId !== "";
-          console.debug("[Calibrator] immediate-branch conditions", {
+          console.debug("[Camera Connection] immediate-branch conditions", {
             autoCommitTestMode,
             autoCommitImmediate,
             inProgress: useMatch.getState().inProgress,
@@ -3040,12 +3077,12 @@ export default function Calibrator() {
           } else if (allowAutocommitInOnline) {
             if (!detectionMeta) {
               console.debug(
-                "[Calibrator] immediate autocommit skipped, detection metadata missing",
+                "[Camera Connection] immediate autocommit skipped, detection metadata missing",
               );
             } else {
               const { pBoard, scoreObj } = detectionMeta;
               try {
-                console.debug("[Calibrator] sending auto-visit", {
+                console.debug("[Camera Connection] sending auto-visit", {
                   roomId: useMatch.getState().roomId,
                   allowAutocommitInOnline,
                 });
@@ -3061,7 +3098,7 @@ export default function Calibrator() {
                 });
               } catch (e) {
                 console.debug(
-                  "[Calibrator] immediate autocommit remote send failed",
+                  "[Camera Connection] immediate autocommit remote send failed",
                   e,
                 );
               }
@@ -3077,7 +3114,7 @@ export default function Calibrator() {
   function doCommit(val?: number) {
     try {
       const v = typeof val === "number" ? val : lastDetectedValue;
-      console.debug("[Calibrator] doCommit invoked", {
+      console.debug("[Camera Connection] doCommit invoked", {
         v,
         inProgress: useMatch.getState().inProgress,
       });
@@ -3105,7 +3142,7 @@ export default function Calibrator() {
           lastAutoSigRef.current = sig;
           lastAutoSigAtRef.current = now;
           inFlightAutoCommitRef.current = true;
-          console.debug("[Calibrator] doCommit: committing visit", v, {
+          console.debug("[Camera Connection] doCommit: committing visit", v, {
             calState,
             curCalValid,
           });
@@ -3121,15 +3158,18 @@ export default function Calibrator() {
             );
           } catch (e) {}
         } else {
-          console.debug("[Calibrator] doCommit: deduped commit skipped", {
-            v,
-            curCalValid,
-            sig,
-          });
+          console.debug(
+            "[Camera Connection] doCommit: deduped commit skipped",
+            {
+              v,
+              curCalValid,
+              sig,
+            },
+          );
         }
       } else {
         console.debug(
-          "[Calibrator] doCommit: NOT committing (invalid cal or no match)",
+          "[Camera Connection] doCommit: NOT committing (invalid cal or no match)",
           {
             v,
             inProgress: useMatch.getState().inProgress,
@@ -3158,7 +3198,7 @@ export default function Calibrator() {
     if (!canvasRef.current) return null;
     if (dstPoints.length < REQUIRED_POINT_COUNT) {
       alert(
-        "Please click all 5 calibration points: D20, D6, D3, D11, and Bullseye (center).",
+        "Please click all 5 connection points: D20, D6, D3, D11, and Bullseye (center).",
       );
       return null;
     }
@@ -3198,7 +3238,7 @@ export default function Calibrator() {
       setPhase("computed");
       return Hcalc as Homography;
     } catch (e) {
-      console.error("[Calibrator] Compute failed:", e);
+      console.error("[Camera Connection] Compute failed:", e);
       alert("Calibration computation failed. Please try resetting points.");
       return null;
     }
@@ -3224,7 +3264,9 @@ export default function Calibrator() {
     const overlayCanvas = overlayRef.current;
     const ctx = overlayCanvas.getContext("2d");
     if (!ctx) {
-      console.warn("[Calibrator] Overlay context missing for verification");
+      console.warn(
+        "[Camera Connection] Overlay context missing for verification",
+      );
       return;
     }
     drawOverlay(pointsToVerify, H);
@@ -3335,7 +3377,7 @@ export default function Calibrator() {
       };
     });
     setVerificationResults(results);
-    console.log(`[Calibrator] Verification complete:`, results);
+    console.log(`[Camera Connection] Verification complete:`, results);
     // Trigger PASS/FAIL flash for user feedback
     const allPass = results.every((r) => r.match);
     triggerFlash(allPass, 1500);
@@ -3350,7 +3392,7 @@ export default function Calibrator() {
 
     if (verificationResults.length === 0) {
       console.log(
-        "[Calibrator] Verification not run yet, running now before resize...",
+        "[Camera Connection] Verification not run yet, running now before resize...",
       );
       runVerification();
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -3361,12 +3403,12 @@ export default function Calibrator() {
       anchors?.dst && anchors.dst.length >= 4 ? anchors.dst : dstPoints;
 
     if (pointsToVerify.length < 5) {
-      alert("Need at least 5 calibration points to resize.");
+      alert("Need at least 5 connection points to resize.");
       return;
     }
 
     console.log(
-      `[Calibrator] Starting AGGRESSIVE resize: Recomputing homography from all 5 points`,
+      `[Camera Connection] Starting AGGRESSIVE resize: Recomputing homography from all 5 points`,
     );
 
     // NUCLEAR OPTION: Recompute homography using all 5 points directly
@@ -3379,7 +3421,7 @@ export default function Calibrator() {
       // This will find the H that best fits all 5 points
       const newH = computeHomographyDLT(src, dst);
 
-      console.log(`[Calibrator] Recomputed homography from 5 points`);
+      console.log(`[Camera Connection] Recomputed homography from 5 points`);
 
       // Verify the new homography
       const verifyResults = VERIFICATION_ANCHORS.map((anchor) => {
@@ -3438,7 +3480,7 @@ export default function Calibrator() {
       const totalCount = verifyResults.length;
 
       console.log(
-        `[Calibrator] Result: ${passCount}/${totalCount} anchors pass`,
+        `[Camera Connection] Result: ${passCount}/${totalCount} anchors pass`,
       );
 
       // Save the recalibrated homography
@@ -3469,20 +3511,20 @@ export default function Calibrator() {
       runVerificationWithH(newH);
 
       if (passCount === totalCount) {
-        console.log(`[Calibrator] ✅ PERFECT! All 5 anchors pass!`);
+        console.log(`[Camera Connection] ✅ PERFECT! All 5 anchors pass!`);
         alert(
           `✅ PERFECT CALIBRATION!\n\nAll 5 anchors pass! Your dartboard is perfectly calibrated.`,
         );
       } else {
         console.warn(
-          `[Calibrator] Only ${passCount}/5 anchors pass. Anchors may be clicked incorrectly.`,
+          `[Camera Connection] Only ${passCount}/5 anchors pass. Anchors may be clicked incorrectly.`,
         );
         alert(
           `⚠️ Resize Result: ${passCount}/5 anchors pass.\n\nThe anchors showing red "Adjust" may have been clicked on the wrong ring.\n\nPlease re-click those anchors more carefully, then try Resize again.`,
         );
       }
     } catch (e) {
-      console.error(`[Calibrator] Error recomputing homography:`, e);
+      console.error(`[Camera Connection] Error recomputing homography:`, e);
       alert(
         `❌ Error: Could not recompute calibration.\n\nYour anchor clicks may be invalid.\n\nPlease recalibrate from scratch.`,
       );
@@ -3620,7 +3662,7 @@ export default function Calibrator() {
   // --- Auto-detect the double rim from the current snapshot and compute homography ---
   async function autoDetectRings() {
     try {
-      console.debug("[Calibrator] autoDetectRings invoked");
+      console.debug("[Camera Connection] autoDetectRings invoked");
       if (!canvasRef.current) {
         alert("Load a photo or capture a frame first.");
         setAutoCalibrating(false);
@@ -3629,7 +3671,9 @@ export default function Calibrator() {
       const testAutoDetectResult = (globalThis as any)
         .__TEST_AUTO_DETECT_RESULT as TestAutoDetectResult | undefined;
       if (testAutoDetectResult) {
-        console.debug("[Calibrator] testAutoDetectResult detected (legacy)");
+        console.debug(
+          "[Camera Connection] testAutoDetectResult detected (legacy)",
+        );
         applyTestAutoDetectResult(testAutoDetectResult);
         return;
       }
@@ -3647,7 +3691,7 @@ export default function Calibrator() {
       );
 
       console.log(
-        "[Calibrator] detectBoard returned:",
+        "[Camera Connection] detectBoard returned:",
         {
           success: refined.success,
           confidence: refined.confidence,
@@ -3658,7 +3702,7 @@ export default function Calibrator() {
       );
 
       if (!refined.success || !refined.homography || refined.confidence < 40) {
-        console.warn("[Calibrator] Auto-detect failed, result:", {
+        console.warn("[Camera Connection] Auto-detect failed, result:", {
           success: refined.success,
           confidence: refined.confidence,
           hasHomography: !!refined.homography,
@@ -3756,13 +3800,13 @@ export default function Calibrator() {
         const stable = stableCount >= Math.ceil(runs * 0.66);
         if (stable) {
           // Don't auto-lock yet - let user verify first
-          console.log("[Calibrator] Detection is stable");
+          console.log("[Camera Connection] Detection is stable");
         }
       } catch (err) {
-        console.warn("[Calibrator] Legacy stability check failed:", err);
+        console.warn("[Camera Connection] Legacy stability check failed:", err);
       }
     } catch (err) {
-      console.error("[Calibrator] autoDetectRings failed:", err);
+      console.error("[Camera Connection] autoDetectRings failed:", err);
       setDetectionMessage(
         `❌ Auto-detect failed: ${err instanceof Error ? err.message : String(err)}`,
       );
@@ -3792,7 +3836,7 @@ export default function Calibrator() {
         boardPoint = imageToBoard(H, imgPoint);
       } catch (err) {
         console.warn(
-          "[Calibrator] Failed to convert image point to board space:",
+          "[Camera Connection] Failed to convert image point to board space:",
           err,
         );
       }
@@ -3838,7 +3882,10 @@ export default function Calibrator() {
             match = deltaMm <= anchor.toleranceMm;
           }
         } catch (err) {
-          console.warn("[Calibrator] Failed to score detected point:", err);
+          console.warn(
+            "[Camera Connection] Failed to score detected point:",
+            err,
+          );
         }
       }
 
@@ -3878,10 +3925,10 @@ export default function Calibrator() {
         { type: "module" } as any,
       );
       workerRef.current = w;
-      console.log("[Calibrator] Board detection worker created");
+      console.log("[Camera Connection] Board detection worker created");
     } catch (err) {
       console.warn(
-        "[Calibrator] Failed to create board detection worker, will fallback to main thread: ",
+        "[Camera Connection] Failed to create board detection worker, will fallback to main thread: ",
         err,
       );
       workerRef.current = null;
@@ -3893,7 +3940,7 @@ export default function Calibrator() {
     };
   }, []);
 
-  // Advanced auto-calibration: detect board features without markers or manual clicking
+  // Advanced auto-alignment: detect board features without markers or manual clicking
   async function autoCalibrate() {
     if (!canvasRef.current) {
       alert("Capture a frame or upload a photo first.");
@@ -3913,7 +3960,7 @@ export default function Calibrator() {
         bitmap = await createImageBitmap(canvasRef.current);
       } catch (err) {
         console.warn(
-          "[Calibrator] createImageBitmap failed; falling back to main thread detection",
+          "[Camera Connection] createImageBitmap failed; falling back to main thread detection",
           err,
         );
         bitmap = null;
@@ -3932,8 +3979,8 @@ export default function Calibrator() {
           const onMessage = async (ev: MessageEvent) => {
             try {
               if (ev.data && ev.data.error) {
-                const errMsg = ev.data.error || "Auto-calibration failed";
-                alert(`Auto-calibration failed: ${errMsg}`);
+                const errMsg = ev.data.error || "Auto-alignment failed";
+                alert(`Auto-alignment failed: ${errMsg}`);
                 setDetectionMessage(errMsg);
                 setAutoCalibrating(false);
                 if (timeoutId) clearTimeout(timeoutId);
@@ -3973,7 +4020,7 @@ export default function Calibrator() {
                       );
                     } catch (err) {
                       console.warn(
-                        "[Calibrator] Worker homography compute failed",
+                        "[Camera Connection] Worker homography compute failed",
                         err,
                       );
                     }
@@ -3985,7 +4032,7 @@ export default function Calibrator() {
                   (!forceConfidence && boardDetection.confidence < 40)
                 ) {
                   alert(
-                    `❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click the 4 double-ring points: D20, D6, D3, D11)`,
+                    `❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual alignment instead (click the 4 double-ring points: D20, D6, D3, D11)`,
                   );
                   setAutoCalibrating(false);
                   if (timeoutId) clearTimeout(timeoutId);
@@ -3993,7 +4040,7 @@ export default function Calibrator() {
                   resolve();
                   return;
                 }
-                // Apply the calibration
+                // Apply the connection
                 setDetected({
                   cx: boardDetection.cx,
                   cy: boardDetection.cy,
@@ -4006,11 +4053,11 @@ export default function Calibrator() {
                 });
                 setDstPoints(boardDetection.calibrationPoints);
                 console.log(
-                  "[Calibrator] Auto-detect: Drawing overlay at detected center (",
+                  "[Camera Connection] Auto-detect: Drawing overlay at detected center (",
                   Math.round(boardDetection.cx),
                   ",",
                   Math.round(boardDetection.cy),
-                  ") with calibration points:",
+                  ") with connection points:",
                   boardDetection.calibrationPoints
                     .map((p) => `(${Math.round(p.x)},${Math.round(p.y)})`)
                     .join(" "),
@@ -4101,7 +4148,7 @@ export default function Calibrator() {
                 });
                 setDetectionMessage(
                   boardDetection.message ??
-                    `Auto-calibration success (confidence ${Math.round(boardDetection.confidence)}%)`,
+                    `Auto-alignment success (confidence ${Math.round(boardDetection.confidence)}%)`,
                 );
                 setPhase("computed");
                 setConfidence(
@@ -4115,7 +4162,7 @@ export default function Calibrator() {
               }
             } catch (err) {
               console.warn(
-                "[Calibrator] Worker message processing failed",
+                "[Camera Connection] Worker message processing failed",
                 err,
               );
               setAutoCalibrating(false);
@@ -4130,14 +4177,14 @@ export default function Calibrator() {
           timeoutId = setTimeout(() => {
             if (autoCalibrating) {
               console.warn(
-                "[Calibrator] Worker timed out, attempting sync fallback",
+                "[Camera Connection] Worker timed out, attempting sync fallback",
               );
               setAutoCalibrating(false);
               if (timeoutId) clearTimeout(timeoutId);
               worker.removeEventListener("message", onMessage);
               autoCalibrateSync().catch((err) =>
                 console.error(
-                  "[Calibrator] Fallback sync detection failed:",
+                  "[Camera Connection] Fallback sync detection failed:",
                   err,
                 ),
               );
@@ -4145,7 +4192,10 @@ export default function Calibrator() {
           }, 8000);
         });
       } catch (err) {
-        console.warn("[Calibrator] AutoCalibrate worker payload failed", err);
+        console.warn(
+          "[Camera Connection] AutoCalibrate worker payload failed",
+          err,
+        );
         setAutoCalibrating(false);
         return await autoCalibrateSync();
       }
@@ -4198,7 +4248,7 @@ export default function Calibrator() {
           }
         } catch (err) {
           console.warn(
-            "[Calibrator] sync forced homography compute failed",
+            "[Camera Connection] sync forced homography compute failed",
             err,
           );
         }
@@ -4263,7 +4313,7 @@ export default function Calibrator() {
         (!forceConfidence && boardDetection.confidence < 50)
       ) {
         alert(
-          `❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual calibration instead (click the 4 double-ring points: D20, D6, D3, D11)`,
+          `❌ Board Detection Failed\n\nConfidence: ${Math.round(boardDetection.confidence)}%\n\n${boardDetection.message}\n\nTry:\n• Better lighting\n• Closer camera angle\n• Make sure entire board is visible\n• Use manual alignment instead (click the 4 double-ring points: D20, D6, D3, D11)`,
         );
         setDetectionMessage(boardDetection.message ?? null);
         setAutoCalibrating(false);
@@ -4359,9 +4409,9 @@ export default function Calibrator() {
       setDetectionMessage(boardDetection.message ?? null);
       setAutoCalibrating(false);
     } catch (err) {
-      console.error("[Calibrator] autoCalibrateSync failed:", err);
+      console.error("[Camera Connection] autoConnectSync failed:", err);
       const errorMsg = err instanceof Error ? err.message : String(err);
-      setDetectionMessage(`❌ Auto-calibration failed: ${errorMsg}`);
+      setDetectionMessage(`❌ Auto-alignment failed: ${errorMsg}`);
       setAutoCalibrating(false);
     }
   }
@@ -4379,7 +4429,7 @@ export default function Calibrator() {
         result.markersFound.length > 0
           ? `\n\nDetected ${result.markersFound.length} markers with IDs: ${result.markersFound.map((m) => m.id).join(", ")}`
           : "\n\nNo markers detected. Make sure markers are on white paper, fully visible, and well-lit.";
-      const fullMsg = `${result.message}${missingMsg}${foundMsg}\n\nYou can still use manual calibration: click the 4 double-ring points (D20, D6, D3, D11).`;
+      const fullMsg = `${result.message}${missingMsg}${foundMsg}\n\nYou can still use manual alignment: click the 4 double-ring points (D20, D6, D3, D11).`;
       alert(fullMsg);
       return;
     }
@@ -4428,12 +4478,12 @@ export default function Calibrator() {
     return () => cancelAnimationFrame(raf);
   }, [liveDetect, streaming]);
 
-  // When calibration is locked and we have a pairing code, publish calibration to server
+  // When connection is locked and we have a pairing code, publish connection to server
   useEffect(() => {
     (async () => {
       try {
         if (!locked || !pairCode) return;
-        // Build a compact calibration payload including current canvas size if available
+        // Build a compact connection payload including current canvas size if available
         const imgSize = canvasRef.current
           ? { w: canvasRef.current.width, h: canvasRef.current.height }
           : null;
@@ -4449,11 +4499,14 @@ export default function Calibrator() {
             headers: { "Content-Type": "application/json" },
             body: bodyStr,
           });
-          console.log("[Calibrator] Posted calibration for code", pairCode);
+          console.log(
+            "[Camera Connection] Posted connection for code",
+            pairCode,
+          );
         } catch (err) {
-          console.warn("[Calibrator] Upload calibration failed", err);
+          console.warn("[Camera Connection] Upload connection failed", err);
         }
-        // If user is authenticated, persist calibration to their account (Supabase-backed)
+        // If user is authenticated, persist connection to their account (Supabase-backed)
         try {
           const token = localStorage.getItem("authToken");
           if (token) {
@@ -4465,10 +4518,12 @@ export default function Calibrator() {
               },
               body: bodyStr,
             });
-            console.log("[Calibrator] Synced calibration to user account");
+            console.log(
+              "[Camera Connection] Synced connection to user account",
+            );
           }
         } catch (err) {
-          console.warn("[Calibrator] User calibration sync failed", err);
+          console.warn("[Camera Connection] User connection sync failed", err);
         }
       } catch (e) {
         /* ignore */
@@ -4516,9 +4571,9 @@ export default function Calibrator() {
             </button>
           </div>
           <p className="text-xs text-slate-300/70">
-            On a desktop, open Calibrator and generate a pairing code. Then tap{" "}
-            <span className="font-semibold">Pair with Desktop</span> from the
-            mobile camera page to connect this device.
+            On a desktop, open Camera Connection and generate a pairing code.
+            Then tap <span className="font-semibold">Pair with Desktop</span>{" "}
+            from the mobile camera page to connect this device.
           </p>
         </div>
         <button
@@ -4526,7 +4581,7 @@ export default function Calibrator() {
           className="self-center text-xs font-medium text-indigo-200 underline decoration-dotted decoration-indigo-300/70 transition hover:text-indigo-100"
           onClick={() => setMobileLandingOverride(true)}
         >
-          Continue to desktop calibrator
+          Continue to desktop connection
         </button>
       </div>
     );
@@ -4555,15 +4610,15 @@ export default function Calibrator() {
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-indigo-300">
-              Marker calibration
+              Marker alignment
             </p>
             <h2 className="text-2xl font-semibold leading-tight text-white">
               Align your board with the autoscoring overlay
             </h2>
             <p className="max-w-2xl text-sm opacity-80">
               Place the printable fiducial markers around the double ring,
-              capture a clear frame, and let the calibrator compute a precise
-              homography.
+              capture a clear frame, and let the camera connection tool compute
+              a precise homography.
             </p>
           </div>
           <div className="flex flex-col items-end gap-2 text-xs font-medium">
@@ -4594,11 +4649,11 @@ export default function Calibrator() {
                     </div>
                     <div>
                       <h4 className="font-semibold text-emerald-100">
-                        Calibration active
+                        Connection locked
                       </h4>
                       <p className="text-xs opacity-80">
-                        Your calibration is saved and active across all game
-                        modes. It will be used in Online, Offline, and
+                        Your camera connection is saved and active across all
+                        game modes. It will be used in Online, Offline, and
                         Tournaments.
                       </p>
                     </div>
@@ -4606,7 +4661,7 @@ export default function Calibrator() {
                   <button
                     className="btn btn--ghost px-2 py-1 text-xs whitespace-nowrap"
                     onClick={() => setCalibration({ locked: false })}
-                    title="Unlock to recalibrate"
+                    title="Unlock to realign"
                   >
                     Unlock
                   </button>
@@ -4640,7 +4695,7 @@ export default function Calibrator() {
                           DROPDOWN_DEBUG
                         )
                           console.debug(
-                            "[Calibrator] setMode(local)",
+                            "[Camera Connection] setMode(local)",
                             Date.now(),
                           );
                         stopCamera(false);
@@ -4659,7 +4714,7 @@ export default function Calibrator() {
                           DROPDOWN_DEBUG
                         )
                           console.debug(
-                            "[Calibrator] setMode(phone)",
+                            "[Camera Connection] setMode(phone)",
                             Date.now(),
                           );
                         stopCamera(false);
@@ -4678,7 +4733,7 @@ export default function Calibrator() {
                           DROPDOWN_DEBUG
                         )
                           console.debug(
-                            "[Calibrator] setMode(wifi)",
+                            "[Camera Connection] setMode(wifi)",
                             Date.now(),
                           );
                         stopCamera(false);
@@ -4686,7 +4741,7 @@ export default function Calibrator() {
                           startWifiConnection();
                         } catch (e) {
                           console.debug(
-                            "[Calibrator] startWifiConnection failed",
+                            "[Camera Connection] startWifiConnection failed",
                             e,
                           );
                         }
@@ -4731,7 +4786,7 @@ export default function Calibrator() {
                   onClick={() => setToolsPopoverOpen(!toolsPopoverOpen)}
                   data-testid="cal-tools-popper-button"
                 >
-                  <span className="font-semibold">Cal. Tools</span>
+                  <span className="font-semibold">Cam Tools</span>
                   {preserveCalibrationOverlay && (
                     <span className="ml-2 text-xs opacity-70">
                       (overlay preserved)
@@ -4744,7 +4799,9 @@ export default function Calibrator() {
                     data-testid="cal-tools-popover"
                     role="dialog"
                   >
-                    <div className="text-xs mb-2">Calibrator quick tools</div>
+                    <div className="text-xs mb-2">
+                      Camera connection quick tools
+                    </div>
                     <div className="flex items-center gap-2 mb-2">
                       <input
                         id="hdr-show-darts"
@@ -4908,13 +4965,13 @@ export default function Calibrator() {
                           className="btn btn--small"
                           onClick={() => {
                             console.debug(
-                              "[Calibrator] popover Commit click (onClick)",
+                              "[Camera Connection] popover Commit click (onClick)",
                             ); // eslint-disable-line no-console
                             doCommit();
                           }}
                           onPointerDown={() => {
                             console.debug(
-                              "[Calibrator] popover Commit click (onPointerDown)",
+                              "[Camera Connection] popover Commit click (onPointerDown)",
                             ); // eslint-disable-line no-console
                             doCommit();
                           }}
@@ -5007,7 +5064,7 @@ export default function Calibrator() {
                 Show preferred-view guide overlay
               </label>
 
-              {/* Stage cards in the main free space — quick access to the three calibration stages */}
+              {/* Stage cards in the main free space — quick access to the three connection stages */}
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 overflow-visible">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4 overflow-visible">
                   <h3 className="text-sm font-semibold">Stage 1 · Capture</h3>
@@ -5059,15 +5116,15 @@ export default function Calibrator() {
 
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <h3 className="text-sm font-semibold">
-                    Stage 2 · Calibration Methods
+                    Stage 2 - Connection Methods
                   </h3>
 
-                  {/* MARKER CALIBRATION REMOVED */}
+                  {/* Marker alignment REMOVED */}
 
                   {/* AUTO-CALIBRATE - FALLBACK METHOD */}
                   <div className="mt-4 border-t border-white/10 pt-4">
                     <h4 className="text-xs font-semibold text-emerald-300 mb-2">
-                      Method: Auto-Calibrate
+                      Method: Auto-Align
                     </h4>
                     <p className="text-xs opacity-70 mb-2">
                       Automatically detect dartboard rings (no markers needed)
@@ -5182,9 +5239,7 @@ export default function Calibrator() {
                           onClick={() => {
                             setPhase("computed");
                             setCalibration({ locked: true });
-                            setDetectionMessage(
-                              "✅ Calibration accepted and locked!",
-                            );
+                            setDetectionMessage("✅ Connection locked!");
                           }}
                         >
                           ✅ Accept & Lock
@@ -5227,7 +5282,7 @@ export default function Calibrator() {
                     Stage 3 · Align & lock
                   </h3>
                   <p className="text-xs opacity-70">
-                    Click the board points, refine edges and lock calibration
+                    Click the board points, refine edges and lock connection
                     when satisfied.
                   </p>
                   <div className="mt-3 flex flex-col gap-2">
@@ -5299,13 +5354,13 @@ export default function Calibrator() {
                       <div className="text-xs opacity-70 mt-1">
                         Overlay preservation{" "}
                         <span className="font-semibold">enabled</span> — locked
-                        calibration will preserve display size
+                        connection will preserve display size
                       </div>
                     ) : (
                       <div className="text-xs opacity-70 mt-1">
                         Overlay preservation{" "}
                         <span className="font-semibold">disabled</span> — locked
-                        calibration uses current canvas size
+                        connection uses current canvas size
                       </div>
                     )}
                     {locked && preserveCalibrationOverlay && overlaySize && (
@@ -5488,7 +5543,7 @@ export default function Calibrator() {
             {/* Pro tip section */}
             <div className="mt-4 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
               <div className="text-xs font-semibold text-blue-300 mb-1">
-                💡 Pro Tip for Perfect Calibration
+                💡 Pro Tip for Perfect Alignment
               </div>
               <div className="text-xs opacity-80">
                 Click the 4 corners of the double ring at{" "}
@@ -5528,13 +5583,13 @@ export default function Calibrator() {
                 {!calibrationValid && (
                   <div className="mt-2 flex items-center justify-between gap-2 text-xs">
                     <span className="opacity-70">
-                      Calibration not valid (max {ERROR_PX_MAX}px). You can
+                      Connection not verified (max {ERROR_PX_MAX}px). You can
                       still force-lock to proceed.
                     </span>
                     <button
                       className="btn btn--ghost btn-sm"
                       onClick={() => setCalibration({ locked: true })}
-                      title="Force accept calibration"
+                      title="Force accept connection"
                     >
                       Force lock
                     </button>

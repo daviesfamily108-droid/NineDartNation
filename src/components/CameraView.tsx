@@ -5778,7 +5778,7 @@ export default forwardRef(function CameraView(
       alert("Enter like T20, D16, 5, 25, 50");
       return;
     }
-    // If autoscore didn't register recently, count toward recalibration
+    // If autoscore didn't register recently, count toward realignment
     if (
       !hadRecentAuto ||
       !lastAutoScore ||
@@ -5946,7 +5946,7 @@ export default forwardRef(function CameraView(
     const val = num * (mult === "S" ? 1 : mult === "D" ? 2 : 3);
     const ring: Ring =
       mult === "S" ? "SINGLE" : mult === "D" ? "DOUBLE" : "TRIPLE";
-    // If autoscore didn't register recently, count toward recalibration
+    // If autoscore didn't register recently, count toward realignment
     if (
       !hadRecentAuto ||
       !lastAutoScore ||
@@ -6150,8 +6150,8 @@ export default forwardRef(function CameraView(
                             Phone camera selected
                           </div>
                           <p className="text-sm text-slate-300">
-                            Start streaming from the Calibrator tab or reconnect
-                            below.
+                            Start streaming from the Camera Connection tab or
+                            reconnect below.
                           </p>
                           <div className="flex items-center justify-center gap-2 flex-wrap">
                             <button
@@ -7002,7 +7002,11 @@ export default forwardRef(function CameraView(
                       <span
                         className={`inline-block w-2.5 h-2.5 rounded-full ${calibrationValid ? "bg-emerald-400" : "bg-rose-500"}`}
                       />
-                      <span>{calibrationValid ? "Cal OK" : "Cal invalid"}</span>
+                      <span>
+                        {calibrationValid
+                          ? "Connection OK"
+                          : "Connection issue"}
+                      </span>
                     </div>
                   </div>
                   <div className="text-sm opacity-80 mb-2">
