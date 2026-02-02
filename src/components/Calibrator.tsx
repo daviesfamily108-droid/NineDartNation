@@ -71,7 +71,7 @@ type DevicePickerProps = {
   autoCommitTestMode: boolean;
   doCommit: () => void;
   lastDetectedValue: number | null;
-  calibrationValid: boolean;
+  cameraConnected: boolean;
   sectorOffset: number | null;
   onNudgeSectorOffset: (delta: number) => void;
   onResetSectorOffset: () => void;
@@ -87,7 +87,7 @@ const DevicePicker: React.FC<DevicePickerProps> = ({
   autoCommitTestMode,
   doCommit,
   lastDetectedValue,
-  calibrationValid,
+  cameraConnected,
   sectorOffset,
   onNudgeSectorOffset,
   onResetSectorOffset,
@@ -808,7 +808,7 @@ export default function Calibrator() {
                   const ERROR_PX_MAX = 6;
                   const TIP_MARGIN_PX = 3;
                   const PCAL_MARGIN_PX = 3;
-                  const calibrationGood =
+                  const cameraGood =
                     !!H &&
                     !!imageSize &&
                     (locked ||
@@ -831,16 +831,11 @@ export default function Calibrator() {
                     onBoard =
                       boardR <= BoardRadii.doubleOuter + BOARD_MARGIN_MM;
                   }
-                  if (
-                    !calibrationGood ||
-                    !tipInVideo ||
-                    !pCalInImage ||
-                    !onBoard
-                  ) {
+                  if (!cameraGood || !tipInVideo || !pCalInImage || !onBoard) {
                     // ignore ghost detection
                     console.debug(
                       "Calibrator: ignoring ghost preview detection",
-                      calibrationGood,
+                      cameraGood,
                       tipInVideo,
                       pCalInImage,
                     );
@@ -3198,7 +3193,7 @@ export default function Calibrator() {
     if (!canvasRef.current) return null;
     if (dstPoints.length < REQUIRED_POINT_COUNT) {
       alert(
-        "Please click all 5 connection points: D20, D6, D3, D11, and Bullseye (center).",
+        "Click the 5 alignment points: D20, D6, D3, D11, and Bullseye (center).",
       );
       return null;
     }
@@ -3239,16 +3234,14 @@ export default function Calibrator() {
       return Hcalc as Homography;
     } catch (e) {
       console.error("[Camera Connection] Compute failed:", e);
-      alert("Calibration computation failed. Please try resetting points.");
+      alert("Alignment failed. Try clearing points and clicking them again.");
       return null;
     }
   }
 
   function runVerification() {
     if (!H || !overlayRef.current) {
-      alert(
-        "Please compute calibration first (lock) before running verification.",
-      );
+      alert("Lock the camera connection before running this check.");
       return;
     }
     // Prefer using the locked anchors from calibration store if available, to ensure we verify what was actually computed
@@ -3257,7 +3250,7 @@ export default function Calibrator() {
 
     if (pointsToVerify.length < 4) {
       alert(
-        "Select at least the four double-ring anchors before running verification.",
+        "Select at least the four double-ring points before running this check.",
       );
       return;
     }
@@ -5060,26 +5053,28 @@ export default function Calibrator() {
                   checked={calibrationGuide}
                   onChange={(e) => setCalibrationGuide(e.target.checked)}
                 />
-                Show preferred-view guide overlay
+                Show camera framing guide
               </label>
 
-              {/* Stage cards in the main free space — quick access to the three connection stages */}
+              {/* Connection stages */}
               <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 overflow-visible">
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4 overflow-visible">
-                  <h3 className="text-sm font-semibold">Stage 1 · Capture</h3>
+                  <h3 className="text-sm font-semibold">
+                    Step 1 · Start Camera
+                  </h3>
                   <p className="text-xs opacity-70">
-                    Start your camera or upload a photo to capture the board.
+                    Turn on your camera (or upload a photo).
                   </p>
                   <div className="mt-3 flex flex-col gap-2">
                     {mode === "local" && (
                       <button className="btn" onClick={startCamera}>
-                        Enable camera
+                        Start camera
                       </button>
                     )}
                     {mode === "phone" && (
                       <button
                         className="btn"
-                        title="Enable camera on this device"
+                        title="Start camera on this device"
                         onClick={() => {
                           try {
                             window.dispatchEvent(
@@ -5092,12 +5087,12 @@ export default function Calibrator() {
                           }
                         }}
                       >
-                        Enable camera
+                        Start camera
                       </button>
                     )}
                     {mode === "wifi" && (
                       <button className="btn" onClick={startWifiConnection}>
-                        Connect wifi camera
+                        Connect Wi‑Fi camera
                       </button>
                     )}
                     <button
@@ -5276,11 +5271,11 @@ export default function Calibrator() {
 
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                   <h3 className="text-sm font-semibold">
-                    Stage 3 · Align & lock
+                    Step 3 · Align & Lock
                   </h3>
                   <p className="text-xs opacity-70">
-                    Click the board points, refine edges and lock connection
-                    when satisfied.
+                    Align the overlay and lock the connection when it looks
+                    right.
                   </p>
                   <div className="mt-3 flex flex-col gap-2">
                     <button
@@ -5288,7 +5283,7 @@ export default function Calibrator() {
                       disabled={dstPoints.length < REQUIRED_POINT_COUNT}
                       onClick={compute}
                     >
-                      Compute
+                      Apply alignment
                     </button>
                     <button
                       className={`btn ${locked ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}

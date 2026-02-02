@@ -1,4 +1,4 @@
-﻿import {
+import {
   Camera,
   LayoutDashboard,
   Lock,
@@ -42,7 +42,7 @@ export function getTabs(user: any): TabDefinition[] {
     { key: "tournaments", label: "Tournaments 🏟️", icon: Trophy },
     { key: "friends", label: "Friends 👥", icon: Users },
     { key: "stats", label: "Stats 📊", icon: Trophy },
-    { key: "calibrate", label: "Calibration 🎯", icon: Camera },
+    { key: "calibrate", label: "Camera Connection 📷", icon: Camera },
     { key: "settings", label: "Settings ⚙️", icon: Settings },
   ];
   // Admin tab visibility handled in Sidebar via hook (client-side fetch)

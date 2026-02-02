@@ -701,15 +701,15 @@ export default function OnlinePlay({ user }: { user?: any }) {
         setLobby(Array.isArray(data.matches) ? data.matches : [])
       } else if (data.type === 'invite') {
         setPendingInvite({ matchId: data.matchId, fromId: data.fromId, fromName: data.fromName, calibrated: !!data.calibrated, boardPreview: data.boardPreview || null, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore })
-  } else if (data.type === 'match-start') {
+      } else if (data.type === 'match-start') {
         // Both parties received a room id to join
-  setRoomId(data.roomId)
-  // update local room autocommit flag if server sends it (default false otherwise)
-  try { setRoomAutocommit(!!data.match?.allowAutocommit) } catch {}
-  // Auto-join the room
+        setRoomId(data.roomId)
+        // update local room autocommit flag if server sends it (default false otherwise)
+        try { setRoomAutocommit(!!data.match?.allowAutocommit) } catch {}
+        // Auto-join the room
         ws.send(JSON.stringify({ type: 'join', roomId: data.roomId }))
-  // remember creator id for host-only toggles
-  if (data.match?.creatorId) setRoomCreatorId(String(data.match.creatorId))
+        // remember creator id for host-only toggles
+        if (data.match?.creatorId) setRoomCreatorId(String(data.match.creatorId))
         setShowMatchModal(true)
         setShowCreate(false)
         if (data.match?.game) setCurrentGame(data.match.game)

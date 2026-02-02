@@ -659,11 +659,18 @@ export default function App() {
             // Also set a small per-tab section gap variable so specific pages
             // can have precise spacing below the header on mobile.
             const tabGapMap: Record<string, string> = {
-              online: "8mm",
-              tournaments: "10mm",
-              calibrate: "12mm",
+              score: "1mm",
+              online: "1mm",
+              offline: "1mm",
+              tournaments: "1mm",
+              friends: "1mm",
+              stats: "1mm",
+              calibrate: "1mm",
+              settings: "1mm",
+              admin: "1mm",
+              fullaccess: "1mm",
             };
-            const gap = tabGapMap[tab] || "0px";
+            const gap = tabGapMap[tab] || "1mm";
             document.documentElement.style.setProperty(
               "--ndn-section-gap",
               gap,

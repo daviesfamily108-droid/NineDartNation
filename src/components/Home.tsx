@@ -378,15 +378,23 @@ export default function Home({ user }: { user?: any }) {
 
       {/* Profile Modal */}
       {showProfile && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-start justify-center z-50 overflow-y-auto py-8">
-          <div className="relative w-full max-w-4xl mx-4 bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-white/10">
-            <button
-              className="absolute top-4 right-4 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-              onClick={() => setShowProfile(false)}
-            >
-              ✕
-            </button>
-            <ProfilePanel user={user} onClose={() => setShowProfile(false)} />
+        <div className="fixed inset-0 z-50">
+          <button
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            aria-label="Close profile"
+            onClick={() => setShowProfile(false)}
+          />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="relative w-full max-w-4xl bg-gradient-to-br from-slate-900 to-slate-800 rounded-2xl shadow-2xl border border-white/10 max-h-[90vh] overflow-y-auto">
+              <button
+                className="absolute top-3 right-3 z-10 w-10 h-10 flex items-center justify-center rounded-full bg-rose-600 hover:bg-rose-700 text-white transition-colors"
+                aria-label="Close"
+                onClick={() => setShowProfile(false)}
+              >
+                ✕
+              </button>
+              <ProfilePanel user={user} onClose={() => setShowProfile(false)} />
+            </div>
           </div>
         </div>
       )}

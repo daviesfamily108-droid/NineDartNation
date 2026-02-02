@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { AlertTriangle, CheckCircle, AlertCircle, Zap } from "lucide-react";
 import { useCalibration } from "../store/calibration";
 import {
@@ -91,10 +91,10 @@ export default function GameCalibrationStatus({
         <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
         <div className="flex-1">
           <div className="font-medium text-red-300">
-            Calibration Required ⚠️
+            Camera connection required ⚠️
           </div>
           <div className="text-xs opacity-80">
-            Please calibrate before playing {gameMode}
+            Please connect your camera before playing {gameMode}
           </div>
         </div>
         {onRecalibrate && (
@@ -102,7 +102,7 @@ export default function GameCalibrationStatus({
             className="btn px-2 py-1 text-xs bg-red-600 hover:bg-red-700"
             onClick={onRecalibrate}
           >
-            Calibrate 📍
+            Open Camera 📷
           </button>
         )}
       </div>
@@ -127,10 +127,10 @@ export default function GameCalibrationStatus({
           <AlertCircle className="w-4 h-4 text-amber-300 flex-shrink-0" />
           <div className="flex-1">
             <div className="font-medium text-emerald-300">
-              Calibration for {gameMode}
+              Camera for {gameMode}
             </div>
             <div className="text-xs opacity-80">
-              Calibrated, but quality is unknown (re-check recommended)
+              Camera is connected, but quality is unknown (re-check recommended)
             </div>
           </div>
         </div>
@@ -188,7 +188,7 @@ export default function GameCalibrationStatus({
           <div
             className={`font-medium ${isPerfect ? "text-indigo-300" : suitable ? "text-emerald-300" : "text-amber-300"}`}
           >
-            Calibration for {gameMode}
+            Camera for {gameMode}
           </div>
           <div className="text-xs opacity-80 flex flex-wrap gap-x-2 gap-y-1">
             <span>
@@ -237,7 +237,7 @@ export default function GameCalibrationStatus({
         {!suitable && (
           <div className="text-xs px-2 py-1 rounded bg-amber-900/30 text-amber-200 border border-amber-600/20 flex items-center gap-1">
             <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-            Calibration quality is below minimum for {gameMode}
+            Camera quality is below minimum for {gameMode}
           </div>
         )}
 
@@ -254,7 +254,7 @@ export default function GameCalibrationStatus({
           className="w-full btn px-2 py-1 text-sm mt-2 bg-amber-600 hover:bg-amber-700"
           onClick={onRecalibrate}
         >
-          Recalibrate for {gameMode}
+          Reconnect camera for {gameMode}
         </button>
       )}
     </div>

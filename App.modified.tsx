@@ -756,15 +756,14 @@ export default function App() {
                     </button>
                   )}
                 </div>
-                {/* Calibration Status - visible across all tabs */}
+                {/* Camera connection status - visible across all tabs */}
                 {calibLocked && calibH && (
                   <button
                     onClick={() => setTab("calibrate")}
                     className="order-4 sm:order-4 md:order-3 px-3 py-1 text-xs sm:text-sm rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-100 border border-emerald-400/50 transition-colors"
-                    title="Click to adjust calibration"
+                    title="Open camera connection"
                   >
-                    ✓ Calibration Active ✅{" "}
-                    {errorPx != null && `• ${errorPx.toFixed(1)}px`}
+                    ✓ Camera Connected ✅
                   </button>
                 )}
                 {/* Right: Status + Actions */}
