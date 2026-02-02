@@ -363,11 +363,11 @@ const DevicePicker: React.FC<DevicePickerProps> = ({
             )}
             <span
               className={`inline-block h-2.5 w-2.5 rounded-full ${
-                calibrationValid ? "bg-emerald-400" : "bg-rose-500"
+                cameraConnected ? "bg-emerald-400" : "bg-rose-500"
               }`}
             />
             <span className="text-xs">
-              {calibrationValid ? "Connection OK" : "Connection issue"}
+              {cameraConnected ? "Camera Connected" : "Camera not connected"}
             </span>
           </div>
         </div>
@@ -5109,19 +5109,17 @@ export default function Calibrator() {
                 </div>
 
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <h3 className="text-sm font-semibold">
-                    Stage 2 - Connection Methods
-                  </h3>
+                  <h3 className="text-sm font-semibold">Step 2 · Connect</h3>
 
                   {/* Marker alignment REMOVED */}
 
                   {/* AUTO-ALIGN - FALLBACK METHOD */}
                   <div className="mt-4 border-t border-white/10 pt-4">
                     <h4 className="text-xs font-semibold text-emerald-300 mb-2">
-                      Method: Auto-Align
+                      Auto connect
                     </h4>
                     <p className="text-xs opacity-70 mb-2">
-                      Automatically detect dartboard rings (no markers needed)
+                      Automatically detect the board and align the overlay.
                     </p>
                     <div className="flex flex-col gap-2">
                       <button
@@ -5130,7 +5128,7 @@ export default function Calibrator() {
                         onClick={autoCalibrate}
                         data-testid="autocalibrate-advanced"
                       >
-                        {autoCalibrating ? "Auto-aligning…" : "🎯 Auto-Align"}
+                        {autoCalibrating ? "Connecting…" : "Connect"}
                       </button>
                     </div>
                   </div>
