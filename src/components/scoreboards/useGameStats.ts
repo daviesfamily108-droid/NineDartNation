@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Hook to convert OfflinePlay game state to GameScoreboard format
  */
 
@@ -76,6 +76,7 @@ export function useOfflineGameStats(
         legsWon: playerLegs || 0,
         score: playerScore || 0,
         lastScore: resolvedPlayerLastScore,
+        avg: playerMatchAvg,
         checkoutRate:
           playerDoublesAtt && playerDoublesAtt > 0
             ? Math.round(((playerDoublesHit || 0) / playerDoublesAtt) * 100)
@@ -105,6 +106,7 @@ export function useOfflineGameStats(
           legsWon: aiLegs || 0,
           score: aiScore || 0,
           lastScore: resolvedAiLastScore,
+          avg: undefined,
           checkoutRate:
             aiDoublesAtt && aiDoublesAtt > 0
               ? Math.round(((aiDoublesHit || 0) / aiDoublesAtt) * 100)
