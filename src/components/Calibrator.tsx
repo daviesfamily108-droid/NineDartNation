@@ -5,7 +5,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import DartLoader from "./DartLoader";
 import { DartDetector } from "../utils/dartDetector";
 
 import { useCalibration } from "../store/calibration";
@@ -4984,11 +4983,13 @@ export default function Calibrator() {
                     : "16 / 9",
                 }}
               >
-                {(mode === "phone" ? !streaming || !paired : !streaming) && (
-                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-gradient-to-br from-black/40 to-black/10">
-                    <DartLoader calibrationComplete={phase === "computed"} />
-                  </div>
-                )}
+                <div className="absolute top-2 right-2 z-40 flex items-center gap-2 rounded-full bg-black/40 px-2 py-1 text-[11px] text-white backdrop-blur">
+                  <span
+                    className={`inline-block h-2 w-2 rounded-full ${hasSnapshot ? "bg-emerald-400" : "bg-rose-500"}`}
+                    aria-hidden="true"
+                  />
+                  <span>{hasSnapshot ? "Connected" : "Disconnected"}</span>
+                </div>
                 <div
                   className="absolute inset-0"
                   style={{
