@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Universal Game Scoreboard Component
  * Displays game-specific stats based on the game mode and current game state
  * Works for Online, Offline, and Tournament modes
@@ -71,25 +71,25 @@ export default function GameScoreboard({
   if (!players || players.length === 0) return null;
 
   return (
-    <div className="grid w-full grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+    <div className="grid w-full grid-cols-1 gap-3 mb-3">
       {players.map((player, idx) => (
         <div
           key={idx}
-          className={`w-full rounded-lg border p-3 ${
+          className={`w-full rounded-xl border p-4 ${
             player.isCurrentTurn
               ? "border-emerald-500/40 bg-emerald-500/10"
               : "border-slate-500/40 bg-slate-500/10"
           }`}
         >
           <div
-            className={`text-sm font-semibold mb-2 uppercase tracking-wide ${
+            className={`text-sm font-semibold mb-3 uppercase tracking-wide ${
               player.isCurrentTurn ? "text-emerald-300" : "text-slate-300"
             }`}
           >
             {player.name}
           </div>
 
-          <div className="space-y-1 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-sm">
             {/* X01 specific */}
             {gameMode === "X01" && (
               <>
@@ -98,12 +98,25 @@ export default function GameScoreboard({
                   value={`● ${player.legsWon || 0}`}
                   highlight
                 />
-                <ScoreRow label="Score" value={player.score || 0} mono bold />
+                <ScoreRow
+                  label="Remaining"
+                  value={player.score || 0}
+                  mono
+                  bold
+                />
                 <ScoreRow
                   label="Last Score"
                   value={player.lastScore || "0"}
                   mono
                 />
+                {player.avg !== undefined && (
+                  <ScoreRow
+                    label="3-Dart Avg"
+                    value={Number(player.avg || 0).toFixed(2)}
+                    mono
+                    bold
+                  />
+                )}
                 <ScoreRow
                   label="C/Out Rate"
                   value={`${player.checkoutRate || 0}%`}
