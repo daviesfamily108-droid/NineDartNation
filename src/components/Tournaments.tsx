@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   getModeOptionsForGame,
   labelForMode,
@@ -12,6 +12,7 @@ import { useWS } from "./WSProvider";
 import { apiFetch } from "../utils/api";
 import { useUserSettings } from "../store/userSettings";
 import { launchInPlayDemo } from "../utils/inPlayDemo";
+import { openMatchWindow } from "../utils/matchWindow";
 
 type Tournament = {
   id: string;
@@ -82,6 +83,23 @@ export default function Tournaments({ user }: { user: any }) {
   const [showDemoStart, setShowDemoStart] = useState(false);
   const [showStartShowcase, setShowStartShowcase] = useState(false);
   const _startedShowcasedRef = useRef(false);
+
+  const inProgress = useMatch((s) => s.inProgress);
+  const roomId = useMatch((s) => s.roomId);
+
+  useEffect(() => {
+    if (!inProgress) return;
+    try {
+      const st = useMatch.getState();
+      const game = ((st as any)?.game || "X01") as string;
+      if (game !== "X01") return;
+      if (!st.roomId) return;
+      const flagKey = `ndn:matchWindowOpened:${st.roomId}`;
+      if (window.sessionStorage.getItem(flagKey) === "1") return;
+      window.sessionStorage.setItem(flagKey, "1");
+      openMatchWindow();
+    } catch {}
+  }, [inProgress, roomId]);
 
   const [form, setForm] = useState({
     title: "",

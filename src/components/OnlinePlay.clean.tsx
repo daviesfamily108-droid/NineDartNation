@@ -1,4 +1,4 @@
-﻿import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Search,
   Zap,
@@ -13,6 +13,7 @@ import MatchStartShowcase from "./ui/MatchStartShowcase";
 import { useMatch } from "../store/match";
 import { useWS } from "./WSProvider";
 import { launchInPlayDemo } from "../utils/inPlayDemo";
+import { openMatchWindow } from "../utils/matchWindow";
 
 export default function OnlinePlayClean({ user }: { user?: any }) {
   const username = user?.username || "You";
@@ -56,6 +57,22 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     if (startedShowcasedRef.current) return;
     startedShowcasedRef.current = true;
     setShowStartShowcase(true);
+  }, [inProgress]);
+
+  // Auto-open the dedicated match window for online X01 matches.
+  useEffect(() => {
+    if (!inProgress) return;
+    try {
+      const st = useMatch.getState();
+      const game = ((st as any)?.game || "X01") as string;
+      if (game !== "X01") return;
+      if (!st.roomId) return;
+
+      const flagKey = `ndn:matchWindowOpened:${st.roomId}`;
+      if (window.sessionStorage.getItem(flagKey) === "1") return;
+      window.sessionStorage.setItem(flagKey, "1");
+      openMatchWindow();
+    } catch {}
   }, [inProgress]);
 
   // Allow the overlay to show again the next time a match starts.

@@ -17,6 +17,7 @@ import {
   isDoubleHit,
   parseManualDart,
 } from "../game/types";
+import { openMatchWindow } from "../utils/matchWindow";
 import { ATC_ORDER } from "../game/aroundTheClock";
 import {
   createCricketState,
@@ -1357,6 +1358,11 @@ export default function OfflinePlay({ user }: { user: any }) {
     const aiName = ai !== "None" ? `AI (${ai})` : "Opponent";
     const players = ai !== "None" ? [humanName, aiName] : [humanName];
     match.newMatch(players, x01Score, `offline-${Date.now()}`);
+
+    try {
+      // Always open the match window for X01 offline so the camera + scoreboard can be maximized.
+      openMatchWindow();
+    } catch {}
   }
 
   function startNextLeg() {

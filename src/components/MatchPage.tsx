@@ -13,7 +13,7 @@ import MatchControls from "./MatchControls";
 import MatchStartShowcase from "./ui/MatchStartShowcase";
 import { sayScore } from "../utils/checkout";
 import { getPreferredUserName } from "../utils/userName";
-import InGameSpectatorOverlay from "./ui/InGameSpectatorOverlay";
+import LetterboxScoreboardOverlay from "./ui/LetterboxScoreboardOverlay";
 
 export default function MatchPage() {
   const match = useMatch();
@@ -48,14 +48,14 @@ export default function MatchPage() {
   const localLeg = localPlayer?.legs?.[localPlayer.legs.length - 1];
   const localRemaining =
     localLeg?.totalScoreRemaining ?? match.startingScore ?? lastOfflineStart;
-  const opponentLegsWon = (match.players || []).reduce(
-    (acc: number, p: any, idx: number) => {
-      if (idx === localPlayerIndex) return acc;
-      return acc + (p?.legsWon || 0);
-    },
-    0,
+  const awayIdx = (match.players || []).findIndex(
+    (_p: any, idx: number) => idx !== localPlayerIndex,
   );
-  const legsLabel = `${localPlayer?.legsWon || 0}-${opponentLegsWon}`;
+  const awayPlayer = (match.players || [])[awayIdx >= 0 ? awayIdx : 0];
+  const awayLeg = awayPlayer?.legs?.[awayPlayer.legs.length - 1];
+  const awayRemaining =
+    awayLeg?.totalScoreRemaining ?? match.startingScore ?? lastOfflineStart;
+
   const opponentPlayers = (match.players || []).filter(
     (_p: any, idx: number) => idx !== localPlayerIndex,
   );
@@ -446,9 +446,20 @@ export default function MatchPage() {
             <div className="relative aspect-video sm:aspect-[16/9] w-full">
               <CameraView hideInlinePanels={true} forceAutoStart={true} />
             </div>
-            <InGameSpectatorOverlay
-              remaining={localRemaining}
-              legsLabel={legsLabel}
+            <LetterboxScoreboardOverlay
+              checkoutRemaining={localRemaining}
+              away={{
+                side: "Away",
+                name: awayPlayer?.name || "Away",
+                legsWon: awayPlayer?.legsWon || 0,
+                remaining: awayRemaining,
+              }}
+              home={{
+                side: "Home",
+                name: localPlayer?.name || "Home",
+                legsWon: localPlayer?.legsWon || 0,
+                remaining: localRemaining,
+              }}
             />
           </div>
         ) : (
