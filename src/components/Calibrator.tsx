@@ -5704,7 +5704,7 @@ export default function Calibrator() {
         </div>
 
         {mode === "wifi" && !streaming && (
-          <div className="space-y-3 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
+          <section className="space-y-3 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
             <div className="font-semibold">Wifi scoring devices</div>
             {discoveringWifi ? (
               <div className="flex items-center gap-2">
@@ -5762,7 +5762,7 @@ export default function Calibrator() {
                 </button>
               </div>
             )}
-          </div>
+          </section>
         )}
       </div>
     </div>
