@@ -4133,7 +4133,15 @@ export default function Calibrator() {
             }
           };
           worker.addEventListener("message", onMessage);
-          worker.postMessage({ type: "detect", bitmap }, [bitmap]);
+          // TypeScript's postMessage overloads are picky about transfer lists;
+          // ensure we only transfer non-null bitmaps.
+          if (bitmap) {
+            worker.postMessage({ type: "detect", bitmap }, undefined, [
+              bitmap,
+            ] as unknown as Transferable[]);
+          } else {
+            worker.postMessage({ type: "detect", bitmap });
+          }
           // safety timeout - fallback to sync after 8s
           timeoutId = setTimeout(() => {
             if (autoCalibrating) {

@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   createContext,
   useContext,
   useEffect,
@@ -13,16 +13,21 @@ export type ThemeName =
   | "summer"
   | "christmas";
 
+export type ColorMode = "system" | "dark" | "light";
+
 type ThemeContextShape = {
   theme: ThemeName;
   setTheme: (t: ThemeName) => void;
   auto: boolean;
   setAuto: (v: boolean) => void;
+  colorMode: ColorMode;
+  setColorMode: (m: ColorMode) => void;
 };
 
 const ThemeContext = createContext<ThemeContextShape | null>(null);
 
 const STORAGE_KEY = "ndn:theme";
+const COLOR_MODE_KEY = "ndn:colorMode";
 
 function detectSeasonalTheme(date = new Date()): ThemeName {
   const m = date.getMonth(); // 0-based
@@ -58,6 +63,55 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return detectSeasonalTheme();
   });
 
+  const [colorMode, setColorModeState] = useState<ColorMode>(() => {
+    try {
+      const raw = localStorage.getItem(COLOR_MODE_KEY);
+      if (raw === "dark" || raw === "light" || raw === "system") return raw;
+    } catch {
+      /* ignore */
+    }
+    return "system";
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(COLOR_MODE_KEY, colorMode);
+    } catch {}
+  }, [colorMode]);
+
+  useEffect(() => {
+    const applyAttr = (m: Exclude<ColorMode, "system">) => {
+      try {
+        document.documentElement.setAttribute("data-color-mode", m);
+      } catch {}
+    };
+
+    if (colorMode === "dark") {
+      applyAttr("dark");
+      return;
+    }
+    if (colorMode === "light") {
+      applyAttr("light");
+      return;
+    }
+
+    // system
+    const mq =
+      typeof window !== "undefined"
+        ? window.matchMedia?.("(prefers-color-scheme: dark)")
+        : null;
+    const sync = () => applyAttr(mq?.matches ? "dark" : "light");
+    sync();
+    try {
+      mq?.addEventListener?.("change", sync);
+    } catch {}
+    return () => {
+      try {
+        mq?.removeEventListener?.("change", sync);
+      } catch {}
+    };
+  }, [colorMode]);
+
   useEffect(() => {
     try {
       localStorage.setItem(`${STORAGE_KEY}:auto`, JSON.stringify(auto));
@@ -81,9 +135,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     setThemeState(t);
   };
 
+  const setColorMode = (m: ColorMode) => {
+    try {
+      localStorage.setItem(COLOR_MODE_KEY, m);
+    } catch {}
+    setColorModeState(m);
+  };
+
   const value = useMemo(
-    () => ({ theme, setTheme, auto, setAuto }),
-    [theme, auto],
+    () => ({ theme, setTheme, auto, setAuto, colorMode, setColorMode }),
+    [theme, auto, colorMode],
   );
 
   return (

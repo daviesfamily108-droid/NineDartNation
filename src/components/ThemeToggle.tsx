@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { useTheme, ThemeName } from "../contexts/ThemeProvider";
 
 const ALL_THEMES: ThemeName[] = [
@@ -47,7 +47,8 @@ const THEME_META: Record<
 };
 
 export default function ThemeToggle() {
-  const { theme, setTheme, auto, setAuto } = useTheme();
+  const { theme, setTheme, auto, setAuto, colorMode, setColorMode } =
+    useTheme();
 
   return (
     <div
@@ -55,6 +56,32 @@ export default function ThemeToggle() {
       role="group"
       aria-label="Theme selector"
     >
+      {/* Light / Dark selector */}
+      <div className="space-y-2">
+        <div className="text-sm font-medium">Color mode</div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { key: "system" as const, label: "System" },
+            { key: "dark" as const, label: "Dark" },
+            { key: "light" as const, label: "Light" },
+          ].map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              aria-pressed={colorMode === m.key}
+              onClick={() => setColorMode(m.key)}
+              className={`btn btn--ghost px-3 py-1 text-sm ${
+                colorMode === m.key
+                  ? "ring-2 ring-indigo-400/70 bg-white/10"
+                  : "bg-white/5"
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Auto toggle */}
       <label className="flex items-center gap-3 cursor-pointer select-none">
         <div

@@ -1,12 +1,25 @@
-/* Theme tokens (CSS variables). Default theme is neutral; other themes override via [data-theme] on <html>. */
+/* Theme tokens (CSS variables).
+   - Color mode (light/dark) is controlled by [data-color-mode] on <html>.
+   - Seasonal themes override token values via [data-theme] on <html>.
+*/
 :root{
-  --bg: #0f172a; /* slate-900 */
+  --bg: #0f172a; /* slate-900 (dark default) */
   --surface: #0b1220;
   --text: #e6eef8;
   --accent: #06b6d4; /* teal-400 */
   --muted: #9aa6b2;
   --gradient-start: #06b6d4;
   --gradient-end: #8b5cf6;
+}
+
+[data-color-mode="light"]{
+  --bg: #f8fafc; /* slate-50 */
+  --surface: #ffffff;
+  --text: #0f172a; /* slate-900 */
+  --accent: #2563eb; /* blue-600 */
+  --muted: #475569; /* slate-600 */
+  --gradient-start: #2563eb;
+  --gradient-end: #7c3aed;
 }
 
 /* Apply theme colors to html and body - overrides Tailwind bg-slate-50 */
