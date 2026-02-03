@@ -3807,22 +3807,22 @@ export default function Calibrator() {
     }
   }
 
-  // Verify that auto-detected calibration matches the actual dartboard
+  // Check that auto-detected camera connection matches the actual dartboard
   function verifyCalibration(
     H: Homography,
-    calibrationPoints: Point[],
+    connectionPoints: Point[],
   ): VerificationResult[] {
     const results: VerificationResult[] = [];
 
-    if (!H || !calibrationPoints || calibrationPoints.length === 0) {
+    if (!H || !connectionPoints || connectionPoints.length === 0) {
       return results;
     }
 
     // Check each verification anchor point
     for (const anchor of VERIFICATION_ANCHORS) {
-      if (anchor.idx >= calibrationPoints.length) continue;
+      if (anchor.idx >= connectionPoints.length) continue;
 
-      const imgPoint = calibrationPoints[anchor.idx];
+      const imgPoint = connectionPoints[anchor.idx];
       let boardPoint: Point | null = null;
 
       try {
@@ -5433,7 +5433,7 @@ export default function Calibrator() {
                       </div>
                     </div>
                     <button className="btn" onClick={() => runVerification()}>
-                      Verify
+                      Camera Check
                     </button>
                   </div>
                 </div>
@@ -5445,12 +5445,12 @@ export default function Calibrator() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h4 className="text-sm font-semibold text-emerald-100">
-                      Verification measurements
+                      Camera check
                     </h4>
                     <p className="text-xs text-emerald-100/70">
-                      Anchors must land within a few millimeters of the
-                      canonical board targets. Anything highlighted in red
-                      should be adjusted before relying on autoscoring.
+                      These checks confirm the camera overlay lines up with your
+                      board. If anything is highlighted in red, adjust the
+                      connection before relying on autoscoring.
                     </p>
                   </div>
                   <div className="flex gap-2">

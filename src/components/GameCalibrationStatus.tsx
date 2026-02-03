@@ -13,7 +13,7 @@ import {
 interface GameCalibrationStatusProps {
   gameMode: string;
   compact?: boolean; // Show minimal version
-  onRecalibrate?: () => void; // Optional callback for recalibrate button
+  onRecalibrate?: () => void; // Optional callback for opening camera connection
 }
 
 export default function GameCalibrationStatus({
@@ -91,10 +91,10 @@ export default function GameCalibrationStatus({
         <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
         <div className="flex-1">
           <div className="font-medium text-red-300">
-            Camera connection required ⚠️
+            Camera not connected ⚠️
           </div>
           <div className="text-xs opacity-80">
-            Please connect your camera before playing {gameMode}
+            Connect your camera to enable autoscoring in {gameMode}
           </div>
         </div>
         {onRecalibrate && (
@@ -102,7 +102,7 @@ export default function GameCalibrationStatus({
             className="btn px-2 py-1 text-xs bg-red-600 hover:bg-red-700"
             onClick={onRecalibrate}
           >
-            Open Camera 📷
+            Camera Connection 📷
           </button>
         )}
       </div>
