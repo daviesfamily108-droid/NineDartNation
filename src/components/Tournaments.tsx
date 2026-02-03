@@ -221,7 +221,6 @@ export default function Tournaments({ user }: { user: any }) {
   }, [joinMatch]);
 
   // Watch for match start (inProgress)
-  const inProgress = useMatch((s) => s.inProgress);
   const match = useMatch((s) => ({
     players: s.players,
     currentPlayerIdx: s.currentPlayerIdx,
