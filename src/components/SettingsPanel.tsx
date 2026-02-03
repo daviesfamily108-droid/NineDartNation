@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   User,
   Settings,
@@ -1138,42 +1138,6 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       >
                         Calibration Guide 📖
                       </button>
-                      <div className="flex items-center gap-3 mt-3">
-                        <input
-                          type="checkbox"
-                          id="preserveOverlaySize"
-                          checked={preserveCalibrationOverlay}
-                          onChange={(e) =>
-                            setPreserveCalibrationOverlay(e.target.checked)
-                          }
-                          className="w-4 h-4"
-                        />
-                        <label
-                          htmlFor="preserveOverlaySize"
-                          className="text-sm"
-                        >
-                          Preserve overlay display size when locking calibration
-                        </label>
-                      </div>
-                      <div className="flex items-center gap-3 mt-3">
-                        <input
-                          type="checkbox"
-                          id="preserveCalOnCamChange"
-                          checked={!!preserveCalibrationOnCameraChange}
-                          onChange={(e) =>
-                            setPreserveCalibrationOnCameraChange(
-                              e.target.checked,
-                            )
-                          }
-                          className="w-4 h-4"
-                        />
-                        <label
-                          htmlFor="preserveCalOnCamChange"
-                          className="text-sm"
-                        >
-                          Preserve calibration when switching camera devices
-                        </label>
-                      </div>
                       <div>
                         <label
                           htmlFor="autoscoreProvider"
@@ -1195,20 +1159,12 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           value={autoscoreProvider || "manual"}
                           onChange={(e) =>
                             setAutoscoreProvider(
-                              e.target.value as
-                                | "manual"
-                                | "built-in"
-                                | "built-in-v2"
-                                | "external-ws",
+                              e.target.value as "manual" | "external-ws",
                             )
                           }
                           className="input w-full"
                         >
                           <option value="manual">Manual Scoring</option>
-                          <option value="built-in">Built-in Vision</option>
-                          <option value="built-in-v2">
-                            Built-in Vision (v2)
-                          </option>
                           <option value="external-ws">
                             External (WebSocket)
                           </option>

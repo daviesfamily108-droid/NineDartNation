@@ -1,10 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DartDetector } from "../utils/dartDetector";
 
 import { useCalibration } from "../store/calibration";
@@ -71,9 +65,6 @@ type DevicePickerProps = {
   doCommit: () => void;
   lastDetectedValue: number | null;
   cameraConnected: boolean;
-  sectorOffset: number | null;
-  onNudgeSectorOffset: (delta: number) => void;
-  onResetSectorOffset: () => void;
 };
 
 const DevicePicker: React.FC<DevicePickerProps> = ({
@@ -87,9 +78,6 @@ const DevicePicker: React.FC<DevicePickerProps> = ({
   doCommit,
   lastDetectedValue,
   cameraConnected,
-  sectorOffset,
-  onNudgeSectorOffset,
-  onResetSectorOffset,
 }) => {
   const {
     preferredCameraId,
@@ -323,27 +311,6 @@ const DevicePicker: React.FC<DevicePickerProps> = ({
           >
             Test
           </button>
-          <div className="mt-2 flex items-center justify-end gap-2 text-xs">
-            <span>Sector offset: {sectorOffset ?? 0}</span>
-            <button
-              className="btn btn--ghost btn-sm"
-              onClick={() => onNudgeSectorOffset(-1)}
-            >
-              -1
-            </button>
-            <button
-              className="btn btn--ghost btn-sm"
-              onClick={() => onNudgeSectorOffset(+1)}
-            >
-              +1
-            </button>
-            <button
-              className="btn btn--ghost btn-sm"
-              onClick={() => onResetSectorOffset()}
-            >
-              Reset
-            </button>
-          </div>
           <div className="mt-2 flex items-center justify-end gap-2 text-xs opacity-70">
             <span data-testid="device-picker-detected">
               {lastDetectedLabel
@@ -377,8 +344,7 @@ const DevicePicker: React.FC<DevicePickerProps> = ({
         </div>
       )}
       <div className="mt-1 text-xs opacity-70">
-        Tip: All camera technology is supported for autoscoring needs—select
-        your camera here and then open Camera Connection to align.
+        Tip: Select a camera here for manual scoring.
       </div>
     </div>
   );
@@ -571,6 +537,8 @@ export default function Calibrator() {
     allowAutocommitInOnline,
     setAllowAutocommitInOnline,
   } = useUserSettings();
+
+  const manualOnly = true;
   // Detected ring data (from auto-detect) in image pixels
   const [detected, setDetected] = useState<null | {
     cx: number;
@@ -727,6 +695,7 @@ export default function Calibrator() {
     if (isTestEnv) return;
     let interval: number | null = null;
     if (
+      !manualOnly &&
       showDartPreview &&
       streaming &&
       videoRef.current &&
@@ -940,7 +909,7 @@ export default function Calibrator() {
       }
       dartDetectorRef.current = null;
     };
-  }, [showDartPreview, streaming, detected]);
+  }, [manualOnly, showDartPreview, streaming, detected]);
 
   useEffect(() => {
     if (isTestEnv) return;
@@ -4605,11 +4574,11 @@ export default function Calibrator() {
               Camera alignment
             </p>
             <h2 className="text-2xl font-semibold leading-tight text-white">
-              Align your board with the camera overlay
+              Camera connection
             </h2>
             <p className="max-w-2xl text-sm opacity-80">
-              Align the camera view to the dartboard, capture a clear frame, and
-              lock the camera connection for all play modes.
+              Select and test your camera. Manual scoring mode does not require
+              calibration.
             </p>
           </div>
           <div className="flex flex-col items-end gap-2 text-xs font-medium">
@@ -4985,10 +4954,10 @@ export default function Calibrator() {
               >
                 <div className="absolute top-2 right-2 z-40 flex items-center gap-2 rounded-full bg-black/40 px-2 py-1 text-[11px] text-white backdrop-blur">
                   <span
-                    className={`inline-block h-2 w-2 rounded-full ${hasSnapshot ? "bg-emerald-400" : "bg-rose-500"}`}
+                    className={`inline-block h-2 w-2 rounded-full ${streaming ? "bg-emerald-400" : "bg-rose-500"}`}
                     aria-hidden="true"
                   />
-                  <span>{hasSnapshot ? "Connected" : "Disconnected"}</span>
+                  <span>{streaming ? "Connected" : "Disconnected"}</span>
                 </div>
                 <div
                   className="absolute inset-0"
@@ -5038,554 +5007,22 @@ export default function Calibrator() {
                     ref={canvasRef}
                     className={`absolute inset-0 h-full w-full transition-opacity duration-300 ${hasSnapshot ? "opacity-100 z-10" : "opacity-0 -z-10"}`}
                   />
-                  <canvas
-                    ref={overlayRef}
-                    data-testid="calibrator-overlay"
-                    onPointerDown={onClickOverlay}
-                    className="absolute inset-0 z-30 h-full w-full cursor-crosshair"
-                  />
                 </div>
               </div>
 
-              <label className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  className="accent-indigo-600"
-                  checked={calibrationGuide}
-                  onChange={(e) => setCalibrationGuide(e.target.checked)}
-                />
-                Show camera framing guide
-              </label>
-
-              {/* Connection stages */}
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3 overflow-visible">
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 overflow-visible">
-                  <h3 className="text-sm font-semibold">
-                    Step 1 · Start Camera
-                  </h3>
-                  <p className="text-xs opacity-70">
-                    Turn on your camera (or upload a photo).
-                  </p>
-                  <div className="mt-3 flex flex-col gap-2">
-                    {mode === "local" && (
-                      <button className="btn" onClick={startCamera}>
-                        Start camera
-                      </button>
-                    )}
-                    {mode === "phone" && (
-                      <button
-                        className="btn"
-                        title="Start camera on this device"
-                        onClick={() => {
-                          try {
-                            window.dispatchEvent(
-                              new CustomEvent("ndn:start-camera", {
-                                detail: { mode: "phone" },
-                              }),
-                            );
-                          } catch {
-                            startPhonePairing();
-                          }
-                        }}
-                      >
-                        Start camera
-                      </button>
-                    )}
-                    {mode === "wifi" && (
-                      <button className="btn" onClick={startWifiConnection}>
-                        Connect Wi‑Fi camera
-                      </button>
-                    )}
-                    <button
-                      className="btn"
-                      onClick={captureFrame}
-                      disabled={!streaming}
-                    >
-                      Capture frame
-                    </button>
-                    <button className="btn" onClick={triggerUpload}>
-                      Upload photo
-                    </button>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <h3 className="text-sm font-semibold">Step 2 · Connect</h3>
-
-                  {/* Marker alignment REMOVED */}
-
-                  {/* AUTO-ALIGN - FALLBACK METHOD */}
-                  <div className="mt-4 border-t border-white/10 pt-4">
-                    <h4 className="text-xs font-semibold text-emerald-300 mb-2">
-                      Auto connect
-                    </h4>
-                    <p className="text-xs opacity-70 mb-2">
-                      Automatically detect the board and align the overlay.
-                    </p>
-                    <div className="flex flex-col gap-2">
-                      <button
-                        className="btn bg-emerald-600 hover:bg-emerald-700 font-semibold text-sm"
-                        disabled={!hasSnapshot || autoCalibrating}
-                        onClick={autoCalibrate}
-                        data-testid="autocalibrate-advanced"
-                      >
-                        {autoCalibrating ? "Connecting…" : "Connect"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 border-t border-white/10 pt-4">
-                    <div className="text-xs opacity-70">
-                      Confidence: {forceConfidence ? 100 : confidence}%
-                    </div>
-                    <div className="mt-2 text-xs opacity-70">
-                      Scoring image size:{" "}
-                      {imageSize ? `${imageSize.w} x ${imageSize.h}` : "—"}
-                    </div>
-                    <div className="mt-2 text-xs opacity-70">
-                      Overlay display size:{" "}
-                      {overlaySize
-                        ? `${overlaySize.w} x ${overlaySize.h}`
-                        : "—"}
-                    </div>
-                    {detected && (
-                      <div className="mt-2 text-xs opacity-70 bg-black/30 rounded p-2">
-                        <div className="font-semibold mb-1">
-                          Detected Ring Sizes:
-                        </div>
-                        <div>
-                          Double: {Math.round(detected.doubleInner)} -{" "}
-                          {Math.round(detected.doubleOuter)} px
-                        </div>
-                        <div>
-                          Treble: {Math.round(detected.trebleInner)} -{" "}
-                          {Math.round(detected.trebleOuter)} px
-                        </div>
-                        <div>
-                          Bull: {Math.round(detected.bullInner)} -{" "}
-                          {Math.round(detected.bullOuter)} px
-                        </div>
-                        <div>
-                          Center: ({Math.round(detected.cx + correctionTx)},{" "}
-                          {Math.round(detected.cy + correctionTy)})
-                        </div>
-                      </div>
-                    )}
-                    <div className="mt-2">
-                      <button
-                        className="btn btn-secondary text-xs"
-                        onClick={() => {
-                          if (autoCalibrating) return;
-                          autoCalibrate();
-                        }}
-                        disabled={!hasSnapshot || autoCalibrating}
-                      >
-                        Re-run Auto-Align
-                      </button>
-                    </div>
-                    {detectionMessage && (
-                      <div className="mt-2 text-xs text-yellow-300">
-                        {detectionMessage}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Verification stage - appears after auto-detect */}
-                  {phase === "verify" && (
-                    <div className="mt-4 rounded-lg border-2 border-yellow-500/50 bg-yellow-500/10 p-3">
-                      <div className="text-sm font-bold text-yellow-300 mb-2">
-                        ⚠️ VERIFY RING ALIGNMENT
-                      </div>
-                      <div className="text-xs text-yellow-200 mb-3">
-                        Look at the overlay on your dartboard. Do the colored
-                        rings match exactly with the treble and double rings?
-                      </div>
-
-                      {/* Show verification results table */}
-                      {verificationResults.length > 0 && (
-                        <div className="mb-3 text-xs bg-black/30 rounded p-2">
-                          <div className="grid grid-cols-2 gap-1 mb-2 font-semibold border-b border-white/10 pb-1">
-                            <div>Location</div>
-                            <div>Status</div>
-                          </div>
-                          {verificationResults.map((vr, i) => (
-                            <div
-                              key={i}
-                              className="grid grid-cols-2 gap-1 py-1 border-b border-white/10 last:border-0"
-                            >
-                              <div className="text-[10px]">{vr.label}</div>
-                              <div
-                                className={`text-[10px] font-bold ${vr.match ? "text-emerald-400" : "text-rose-400"}`}
-                              >
-                                {vr.note}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex gap-2">
-                        <button
-                          className="btn bg-emerald-600 hover:bg-emerald-700 text-sm flex-1"
-                          onClick={() => {
-                            setPhase("computed");
-                            setCalibration({ locked: true });
-                            setDetectionMessage("✅ Connection locked!");
-                          }}
-                        >
-                          ✅ Accept & Lock
-                        </button>
-                        <button
-                          className="btn bg-orange-600 hover:bg-orange-700 text-sm flex-1"
-                          onClick={() => {
-                            setPhase("capture");
-                            setDetectionMessage(null);
-                            setVerificationResults([]);
-                            setAutoCalibrating(false);
-                          }}
-                        >
-                          🔄 Retry
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="mt-2 text-xs opacity-70 flex items-center gap-2">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="accent-indigo-600"
-                        checked={forceConfidence}
-                        onChange={(e) => setForceConfidence(e.target.checked)}
-                      />
-                      <span className="text-xs">Force 100% Confidence</span>
-                    </label>
-                    {forceConfidence && (
-                      <span className="text-xs text-yellow-300">
-                        ⚠️ For testing only — may produce mis-registrations
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <h3 className="text-sm font-semibold">
-                    Step 3 · Align & Lock
-                  </h3>
-                  <p className="text-xs opacity-70">
-                    Align the overlay and lock the connection when it looks
-                    right.
-                  </p>
-                  <div className="mt-3 flex flex-col gap-2">
-                    <button
-                      className="btn"
-                      disabled={dstPoints.length < REQUIRED_POINT_COUNT}
-                      onClick={compute}
-                    >
-                      Apply alignment
-                    </button>
-                    <button
-                      className={`btn ${locked ? "bg-emerald-600 hover:bg-emerald-700" : ""}`}
-                      onClick={() => {
-                        const newLocked = !locked;
-                        if (!newLocked) {
-                          setCalibration({ locked: false });
-                        } else {
-                          // If not yet computed (phase != computed), try to compute first
-                          let activeH = H;
-                          if (phase !== "computed") {
-                            const calculated = compute();
-                            if (!calculated) return; // Don't lock if compute failed
-                            activeH = calculated;
-                          }
-                          const overlaySize = overlayRef?.current
-                            ? {
-                                w: overlayRef.current.width,
-                                h: overlayRef.current.height,
-                              }
-                            : videoRef?.current
-                              ? {
-                                  w: videoRef.current.clientWidth,
-                                  h: videoRef.current.clientHeight,
-                                }
-                              : canvasRef?.current
-                                ? {
-                                    w: canvasRef.current.width,
-                                    h: canvasRef.current.height,
-                                  }
-                                : null;
-                          // Apply corrections to stored H for scoring consistency
-                          let correctedH = activeH;
-                          if (correctedH && correctionSx !== 1)
-                            correctedH = scaleHomography(
-                              correctedH,
-                              correctionSx,
-                              1,
-                            );
-                          if (
-                            correctedH &&
-                            (correctionTx !== 0 || correctionTy !== 0)
-                          )
-                            correctedH = translateHomography(
-                              correctedH,
-                              correctionTx,
-                              correctionTy,
-                            );
-                          setCalibration({
-                            H: correctedH,
-                            locked: true,
-                            overlaySize,
-                          });
-                        }
-                      }}
-                    >
-                      {locked ? "Unlock" : "Lock in"}
-                    </button>
-                    {preserveCalibrationOverlay ? (
-                      <div className="text-xs opacity-70 mt-1">
-                        Overlay preservation{" "}
-                        <span className="font-semibold">enabled</span> — locked
-                        connection will preserve display size
-                      </div>
-                    ) : (
-                      <div className="text-xs opacity-70 mt-1">
-                        Overlay preservation{" "}
-                        <span className="font-semibold">disabled</span> — locked
-                        connection uses current canvas size
-                      </div>
-                    )}
-                    {locked && preserveCalibrationOverlay && overlaySize && (
-                      <div className="text-xs opacity-60 mt-1">
-                        Overlay display size preserved: {overlaySize.w} x{" "}
-                        {overlaySize.h}
-                      </div>
-                    )}
-                    <div className="mt-4 border-t border-white/10 pt-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-xs font-semibold">
-                          Fine-tune Corrections
-                        </h4>
-                        <div className="text-xs opacity-70">
-                          Applied: Sx:{correctionSx.toFixed(3)} Tx:
-                          {correctionTx.toFixed(1)} Ty:{correctionTy.toFixed(1)}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between mb-2">
-                        <button
-                          className="btn btn--ghost btn-sm text-xs"
-                          onClick={() => {
-                            setCorrectionSx(1.0);
-                            setCorrectionTx(0);
-                            setCorrectionTy(0);
-                          }}
-                        >
-                          Reset to 1.0, 0, 0
-                        </button>
-                      </div>
-                      <div className="space-y-2">
-                        <div>
-                          <label className="text-xs">
-                            Scale X: {correctionSx.toFixed(3)}
-                          </label>
-                          <input
-                            type="range"
-                            min="0.9"
-                            max="1.1"
-                            step="0.001"
-                            value={correctionSx}
-                            onChange={(e) =>
-                              setCorrectionSx(Number(e.target.value))
-                            }
-                            className="w-full"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs">
-                            Translate X: {correctionTx.toFixed(1)}
-                          </label>
-                          <input
-                            type="range"
-                            min="-200"
-                            max="200"
-                            step="0.1"
-                            value={correctionTx}
-                            onChange={(e) =>
-                              setCorrectionTx(Number(e.target.value))
-                            }
-                            className="w-full"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs">
-                            Translate Y: {correctionTy.toFixed(1)}
-                          </label>
-                          <input
-                            type="range"
-                            min="-200"
-                            max="200"
-                            step="0.1"
-                            value={correctionTy}
-                            onChange={(e) =>
-                              setCorrectionTy(Number(e.target.value))
-                            }
-                            className="w-full"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <button className="btn" onClick={() => runVerification()}>
-                      Camera Check
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {verificationResults.length > 0 && (
-              <div className="mt-4 rounded-2xl border border-emerald-400/30 bg-emerald-500/5 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-sm font-semibold text-emerald-100">
-                      Camera check
-                    </h4>
-                    <p className="text-xs text-emerald-100/70">
-                      These checks confirm the camera overlay lines up with your
-                      board. If anything is highlighted in red, adjust the
-                      connection before relying on autoscoring.
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    {verificationResults.some((r) => !r.match) && (
-                      <button
-                        className="btn btn-sm bg-orange-500/20 text-orange-200 hover:bg-orange-500/30 border border-orange-500/50"
-                        onClick={() => autoResizeBoard()}
-                      >
-                        🔧 Resize
-                      </button>
-                    )}
-                    <button
-                      className="btn btn--ghost btn-sm"
-                      onClick={() => setVerificationResults([])}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-3 overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-left text-emerald-100/70">
-                        <th className="py-2 pr-3 font-semibold">Anchor</th>
-                        <th className="py-2 pr-3 font-semibold">Expected</th>
-                        <th className="py-2 pr-3 font-semibold">Detected</th>
-                        <th className="py-2 pr-3 font-semibold">Δ mm</th>
-                        <th className="py-2 pr-3 font-semibold">Δ px</th>
-                        <th className="py-2 pr-3 font-semibold">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {verificationResults.map((res) => (
-                        <tr
-                          key={res.label}
-                          className="border-t border-white/10"
-                        >
-                          <td className="py-2 pr-3 font-medium text-white">
-                            {res.label}
-                          </td>
-                          <td className="py-2 pr-3 text-emerald-100/80">
-                            {describeScoreTarget(
-                              res.expected.ring,
-                              res.expected.sector,
-                            )}
-                          </td>
-                          <td className="py-2 pr-3">
-                            {formatScoreLabel(res.detected)}
-                          </td>
-                          <td className="py-2 pr-3">
-                            {typeof res.deltaMm === "number"
-                              ? `${res.deltaMm.toFixed(1)} mm`
-                              : "—"}
-                          </td>
-                          <td className="py-2 pr-3">
-                            {typeof res.deltaPx === "number"
-                              ? `${res.deltaPx.toFixed(1)} px`
-                              : "—"}
-                          </td>
-                          <td className="py-2 pr-3">
-                            <span
-                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${res.match ? "bg-emerald-500/20 text-emerald-200" : "bg-rose-500/30 text-rose-100"}`}
-                            >
-                              {res.match ? "Pass" : "Adjust"}
-                            </span>
-                            {res.note && (
-                              <div className="mt-1 text-[11px] text-white/70">
-                                {res.note}
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* Pro tip section */}
-            <div className="mt-4 rounded-lg border border-blue-500/30 bg-blue-500/10 p-3">
-              <div className="text-xs font-semibold text-blue-300 mb-1">
-                💡 Pro Tip for Perfect Alignment
-              </div>
-              <div className="text-xs opacity-80">
-                Click the 4 corners of the double ring at{" "}
-                <span className="font-semibold">D20, D6, D3, and D11</span>.
-                These evenly-spaced doubles lock the board orientation and yield
-                a perfect (100%) confidence score.
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                <div className="uppercase tracking-wide opacity-60">Phase</div>
-                <div className="text-sm font-semibold capitalize">{phase}</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                <div className="uppercase tracking-wide opacity-60">
-                  Points selected
-                </div>
-                <div className="text-sm font-semibold">
-                  {dstPoints.length} / {REQUIRED_POINT_COUNT}
-                </div>
-                {phase === "select" &&
-                  dstPoints.length < REQUIRED_POINT_COUNT && (
-                    <div className="mt-1 text-yellow-400 font-bold">
-                      → Click on {CALIBRATION_POINT_LABELS[dstPoints.length]}{" "}
-                      next
-                    </div>
-                  )}
-              </div>
-              <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
-                <div className="uppercase tracking-wide opacity-60">
-                  Fit error
-                </div>
-                <div className="text-sm font-semibold">
-                  {errorPx != null ? `${errorPx.toFixed(2)} px` : "—"}
-                </div>
-                {!calibrationValid && (
-                  <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-                    <span className="opacity-70">
-                      Connection not verified (max {ERROR_PX_MAX}px). You can
-                      still force-lock to proceed.
-                    </span>
-                    <button
-                      className="btn btn--ghost btn-sm"
-                      onClick={() => setCalibration({ locked: true })}
-                      title="Force accept connection"
-                    >
-                      Force lock
-                    </button>
-                  </div>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {streaming ? (
+                  <button className="btn" onClick={() => stopCamera(true)}>
+                    Disconnect
+                  </button>
+                ) : (
+                  <button className="btn" onClick={startCamera}>
+                    Connect
+                  </button>
                 )}
+                <span className="text-xs opacity-70">
+                  {streaming ? "Camera connected" : "Camera not connected"}
+                </span>
               </div>
             </div>
           </section>
@@ -5601,10 +5038,7 @@ export default function Calibrator() {
               autoCommitTestMode={autoCommitTestMode}
               doCommit={doCommit}
               lastDetectedValue={lastDetectedValue}
-              calibrationValid={calibrationValid}
-              sectorOffset={sectorOffset ?? 0}
-              onNudgeSectorOffset={(delta) => nudgeSectorOffset(delta)}
-              onResetSectorOffset={() => setCalibration({ sectorOffset: 0 })}
+              cameraConnected={streaming}
             />
 
             {mode === "phone" && (

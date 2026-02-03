@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { useUserSettings } from "./userSettings";
+import type { Homography } from "../utils/vision";
 
 /**
  * Simplified Calibration Store for Manual-Only Mode
@@ -27,6 +27,21 @@ type CalibrationState = CameraViewLock & {
   // Simple calibration metadata
   createdAt: number | null;
   _hydrated: boolean;
+
+  // Legacy calibration fields (kept for type-compat with existing components).
+  // Manual-only mode keeps these as null by default.
+  H: Homography | null;
+  imageSize: { w: number; h: number } | null;
+  overlaySize: { w: number; h: number } | null;
+  theta: number | null;
+  rotationOffsetRad: number | null;
+  sectorOffset: number | null;
+  errorPx: number | null;
+  confidence: number | null;
+  anchors: { src: any[]; dst: any[] } | null;
+
+  // Legacy setter used across the app
+  setCalibration: (partial: Partial<CalibrationState>) => void;
   // Actions
   lockCameraView: (
     scale: number,
@@ -48,6 +63,18 @@ export const useCalibration = create<CalibrationState>()((set) => ({
   cameraId: null,
   createdAt: null,
   _hydrated: true,
+
+  H: null,
+  imageSize: null,
+  overlaySize: null,
+  theta: null,
+  rotationOffsetRad: null,
+  sectorOffset: null,
+  errorPx: null,
+  confidence: null,
+  anchors: null,
+
+  setCalibration: (partial) => set(partial as any),
 
   lockCameraView: (scale, aspect, fitMode, cameraId) =>
     set({

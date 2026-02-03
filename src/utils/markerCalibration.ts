@@ -1,4 +1,4 @@
-﻿// Minimal marker calibration utilities retained for test compatibility
+// Minimal marker calibration utilities retained for test compatibility
 // Provides tiny helpers to convert marker IDs to 7x7 bit-grid matrices
 // and simple canonical marker order + targets used by the calibrator tests.
 
@@ -6,7 +6,8 @@ export const MARKER_ORDER = ["top", "right", "bottom", "left", "bull"] as const;
 
 // Provide deterministic 10-bit IDs for the five targets. These are arbitrary
 // but stable values used only in tests and calibration placeholder logic.
-export const MARKER_TARGETS: Record<(typeof MARKER_ORDER)[number], number> = {
+export const MARKER_TARGETS: Record<string, number> &
+  Record<(typeof MARKER_ORDER)[number], number> = {
   top: 0b0001100011, // 195
   right: 0b0010011010, // 154
   bottom: 0b0011110001, // 241
@@ -38,6 +39,25 @@ export function markerIdToMatrix(id: number): number[][] {
 
 export default {};
 
-export function detectMarkersFromCanvas(canvas: any) {
-  return { success: false, homography: null };
+export type MarkerDetection = {
+  success: boolean;
+  homography: any | null;
+  points: Array<{ x: number; y: number }>;
+  errorPx?: number | null;
+  markerSize?: number;
+  markersFound: Array<{ id: number; x: number; y: number }>;
+  missing: string[];
+  message: string;
+};
+
+export function detectMarkersFromCanvas(_canvas: any): MarkerDetection {
+  return {
+    success: false,
+    homography: null,
+    points: [],
+    errorPx: null,
+    markersFound: [],
+    missing: [],
+    message: "Marker detection not available",
+  };
 }

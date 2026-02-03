@@ -10,6 +10,12 @@ type LastOffline = {
 };
 
 type SettingsState = {
+  user?: {
+    username?: string;
+    name?: string;
+    displayName?: string;
+    email?: string;
+  } | null;
   favoriteDouble: string;
   callerEnabled: boolean;
   callerVoice: string; // voice name
