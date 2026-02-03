@@ -74,7 +74,12 @@ export function useOfflineGameStats(
         name: "You",
         isCurrentTurn: !!isPlayerTurn,
         legsWon: playerLegs || 0,
-        score: playerScore || 0,
+        score:
+          typeof playerScore === "number"
+            ? playerScore
+            : typeof x01Score === "number"
+              ? x01Score
+              : 0,
         lastScore: resolvedPlayerLastScore,
         avg: playerMatchAvg,
         checkoutRate:
@@ -104,7 +109,12 @@ export function useOfflineGameStats(
           name: `${ai} AI`,
           isCurrentTurn: !isPlayerTurn,
           legsWon: aiLegs || 0,
-          score: aiScore || 0,
+          score:
+            typeof aiScore === "number"
+              ? aiScore
+              : typeof x01Score === "number"
+                ? x01Score
+                : 0,
           lastScore: resolvedAiLastScore,
           avg: undefined,
           checkoutRate:
