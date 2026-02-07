@@ -182,12 +182,6 @@ export default function OfflinePlay({ user }: { user: any }) {
     rememberLastOffline,
     setLastOffline,
     autoStartOffline,
-    cameraScale,
-    setCameraScale,
-    cameraAspect = "wide",
-    setCameraAspect,
-    cameraFitMode = "fill",
-    setCameraFitMode,
     cameraEnabled,
     textSize,
     boxSize,
@@ -267,11 +261,6 @@ export default function OfflinePlay({ user }: { user: any }) {
   // Never force fullscreen – open as a normal resizable window
   const [maximized, setMaximized] = useState(false);
   const [fitAll, setFitAll] = useState(false);
-  useEffect(() => {
-    if (cameraFitMode !== "fit") {
-      setCameraFitMode("fit");
-    }
-  }, [cameraFitMode, setCameraFitMode]);
   const [fitScale, setFitScale] = useState(1);
   const [_fitOverflowing, setFitOverflowing] = useState(false);
   const [isPlayerTurn, setIsPlayerTurn] = useState(true);
@@ -2612,7 +2601,7 @@ export default function OfflinePlay({ user }: { user: any }) {
             className={`fixed inset-0 z-[1000] ${maximized ? "" : "flex items-center justify-center p-3 sm:p-4"}`}
           >
             <ResizableModal
-              storageKey="ndn:modal:offline-match"
+              storageKey="ndn:modal:offline-match:v2"
               className={`${maximized ? "w-full h-full ndn-modal-tight" : ""} relative flex flex-col overflow-hidden`}
               fullScreen={maximized}
               defaultWidth={1100}
@@ -2638,130 +2627,93 @@ export default function OfflinePlay({ user }: { user: any }) {
                     (scrollerRef as any).current = el;
                   }}
                 >
-                  <div
-                    ref={(el) => {
-                      (headerBarRef as any).current = el;
-                    }}
-                  >
-                    <GameHeaderBar
-                      className="w-full"
-                      left={
-                        <>
-                          <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">
-                            Game Mode
-                          </span>
-                          <span className="font-medium whitespace-nowrap">
-                            {selectedMode}
-                            {selectedMode === "X01" ? ` / ${x01Score}` : ""}
-                          </span>
-                          <span className="opacity-80 whitespace-nowrap">
-                            First to {firstTo} · Legs {playerLegs}-{aiLegs}
-                          </span>
-                          <span
-                            className={`ml-2 px-2 py-0.5 rounded-full border text-[10px] sm:text-xs ${offlineLayout === "modern" ? "bg-emerald-500/15 text-emerald-200 border-emerald-400/30" : "bg-white/10 text-white/70 border-white/20"}`}
-                          >
-                            {offlineLayout === "modern"
-                              ? "Modern layout"
-                              : "Classic layout"}
-                          </span>
-                        </>
-                      }
-                      right={
-                        <>
-                          {/* Camera scale controls (match Online UI) */}
-                          <div className="flex items-center gap-2 mr-2 text-xs">
-                            <span className="opacity-80">Cam</span>
-                            <button
-                              className="btn btn--ghost px-2 py-1"
-                              onClick={() =>
-                                setCameraScale(
-                                  Math.max(
-                                    0.5,
-                                    Math.round((cameraScale - 0.05) * 100) /
-                                      100,
-                                  ),
-                                )
-                              }
-                              title="Decrease camera size"
-                            >
-                              −
-                            </button>
-                            <span className="w-9 text-center">
-                              {Math.round(cameraScale * 100)}%
-                            </span>
-                            <button
-                              className="btn btn--ghost px-2 py-1"
-                              onClick={() =>
-                                setCameraScale(
-                                  Math.min(
-                                    1.25,
-                                    Math.round((cameraScale + 0.05) * 100) /
-                                      100,
-                                  ),
-                                )
-                              }
-                              title="Increase camera size"
-                            >
-                              +
-                            </button>
-                          </div>
-                          <button
-                            className="btn btn--ghost px-3 py-1 text-sm"
-                            title={fitAll ? "Actual Size" : "Fit All"}
-                            onClick={() => setFitAll((v) => !v)}
-                          >
-                            {fitAll ? "Actual Size" : "Fit All"}
-                          </button>
-                          <button
-                            className="btn btn--ghost px-3 py-1 text-sm"
-                            title={maximized ? "Restore" : "Maximize"}
-                            onClick={() => setMaximized((m) => !m)}
-                          >
-                            {maximized ? "Restore" : "Maximize"}
-                          </button>
-                          <button
-                            className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
-                            onClick={() => {
-                              startMatch();
-                            }}
-                          >
-                            Restart
-                          </button>
-                          <button
-                            className="btn bg-rose-600 hover:bg-rose-700 px-3 py-1 text-sm"
-                            onClick={() => setShowQuitPause(true)}
-                          >
-                            Quit
-                          </button>
-                        </>
-                      }
-                    />
-                  </div>
-                  {showQuitPause && (
-                    <PauseQuitModal
-                      onClose={() => setShowQuitPause(false)}
-                      onQuit={() => {
-                        if (ai === "None") {
-                          setShowQuitPause(false);
-                          setQuitVotes({ player: true, opponent: false });
-                          setShowQuitConfirm(true);
-                          return;
-                        }
-                        finalizeQuitMatch();
-                      }}
-                      onPause={(minutes) => {
-                        const endsAt = Date.now() + minutes * 60 * 1000;
-                        try {
-                          setPaused(true, endsAt);
-                          broadcastMessage({
-                            type: "pause",
-                            pauseEndsAt: endsAt,
-                            pauseStartedAt: Date.now(),
-                          });
-                        } catch {}
-                        setShowQuitPause(false);
-                      }}
-                    />
+                  {offlineLayout !== "modern" && (
+                    <>
+                      <div
+                        ref={(el) => {
+                          (headerBarRef as any).current = el;
+                        }}
+                      >
+                        <GameHeaderBar
+                          className="w-full"
+                          left={
+                            <>
+                              <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">
+                                Game Mode
+                              </span>
+                              <span className="font-medium whitespace-nowrap">
+                                {selectedMode}
+                                {selectedMode === "X01" ? ` / ${x01Score}` : ""}
+                              </span>
+                              <span className="opacity-80 whitespace-nowrap">
+                                First to {firstTo} · Legs {playerLegs}-{aiLegs}
+                              </span>
+                              <span className="ml-2 px-2 py-0.5 rounded-full border text-[10px] sm:text-xs bg-white/10 text-white/70 border-white/20">
+                                Classic layout
+                              </span>
+                            </>
+                          }
+                          right={
+                            <>
+                              <button
+                                className="btn btn--ghost px-3 py-1 text-sm"
+                                title={fitAll ? "Actual Size" : "Fit All"}
+                                onClick={() => setFitAll((v) => !v)}
+                              >
+                                {fitAll ? "Actual Size" : "Fit All"}
+                              </button>
+                              <button
+                                className="btn btn--ghost px-3 py-1 text-sm"
+                                title={maximized ? "Restore" : "Maximize"}
+                                onClick={() => setMaximized((m) => !m)}
+                              >
+                                {maximized ? "Restore" : "Maximize"}
+                              </button>
+                              <button
+                                className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
+                                onClick={() => {
+                                  startMatch();
+                                }}
+                              >
+                                Restart
+                              </button>
+                              <button
+                                className="btn bg-rose-600 hover:bg-rose-700 px-3 py-1 text-sm"
+                                onClick={() => setShowQuitPause(true)}
+                              >
+                                Quit
+                              </button>
+                            </>
+                          }
+                        />
+                      </div>
+                      {showQuitPause && (
+                        <PauseQuitModal
+                          onClose={() => setShowQuitPause(false)}
+                          onQuit={() => {
+                            if (ai === "None") {
+                              setShowQuitPause(false);
+                              setQuitVotes({ player: true, opponent: false });
+                              setShowQuitConfirm(true);
+                              return;
+                            }
+                            finalizeQuitMatch();
+                          }}
+                          onPause={(minutes) => {
+                            const endsAt = Date.now() + minutes * 60 * 1000;
+                            try {
+                              setPaused(true, endsAt);
+                              broadcastMessage({
+                                type: "pause",
+                                pauseEndsAt: endsAt,
+                                pauseStartedAt: Date.now(),
+                              });
+                            } catch {}
+                            setShowQuitPause(false);
+                          }}
+                        />
+                      )}
+                    </>
                   )}
                   {showQuitConfirm && (
                     <div className="fixed inset-0 z-[170] flex items-center justify-center bg-black/70 p-4">
@@ -3506,8 +3458,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                       </div>
                     ) : offlineLayout === "modern" ? (
                       <div className="space-y-3 mb-2">
-                        {!manualScoring ? (
-                          <>
+                        <>
                             <div className="relative">
                               <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
                                 <div className="flex-1 min-w-0 space-y-2.5">
@@ -3576,18 +3527,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   </div>
                                 )}
                             </div>
-                          </>
-                        ) : (
-                          <div className="card">
-                            <div className="text-sm font-semibold mb-1">
-                              Manual scoring active
-                            </div>
-                            <div className="text-xs opacity-70">
-                              Camera previews are disabled. Use the manual entry
-                              controls below to record your turn.
-                            </div>
-                          </div>
-                        )}
+                        </>
                         {isMobileScreen &&
                           cameraEnabled &&
                           mobileCameraOpen && (
