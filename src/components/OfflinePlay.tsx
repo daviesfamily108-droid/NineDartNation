@@ -2603,6 +2603,8 @@ export default function OfflinePlay({ user }: { user: any }) {
           >
             <ResizableModal
               storageKey="ndn:modal:offline-match:v2"
+              frameClassName="relative"
+              frameFullScreenClassName="relative ndn-modal-full"
               className={`${maximized ? "w-full h-full ndn-modal-tight" : ""} relative flex flex-col overflow-hidden`}
               fullScreen={maximized}
               defaultWidth={1100}

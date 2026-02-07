@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   useEffect,
   useRef,
   useState,
@@ -11,6 +11,8 @@ type Props = {
   storageKey: string;
   children: ReactNode;
   className?: string;
+  frameClassName?: string;
+  frameFullScreenClassName?: string;
   defaultWidth?: number;
   defaultHeight?: number;
   minWidth?: number;
@@ -28,6 +30,8 @@ export default function ResizableModal({
   storageKey,
   children,
   className,
+  frameClassName,
+  frameFullScreenClassName,
   defaultWidth = 520,
   defaultHeight,
   minWidth = 360,
@@ -221,8 +225,8 @@ export default function ResizableModal({
       };
 
   const baseClass = fullScreen
-    ? "card relative ndn-modal-full"
-    : "card relative";
+    ? frameFullScreenClassName ?? "card relative ndn-modal-full"
+    : frameClassName ?? "card relative";
   return (
     <div
       ref={containerRef}
