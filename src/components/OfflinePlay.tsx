@@ -3683,159 +3683,20 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   </div>
 
                                   {(selectedMode as any) === "X01" && (
-                                    <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-4 text-slate-100 shadow-lg backdrop-blur-sm">
-                                      <div className="text-xs uppercase tracking-wide text-white/50">
-                                        Manual Scoreboard Override
-                                      </div>
-                                      <p className="mt-1 text-xs text-white/40">
-                                        Adjust the live totals if a dart was
-                                        misread. Values are clamped between 0
-                                        and {x01Score}.
-                                      </p>
-                                      <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                                        <div className="space-y-3">
-                                          <div className="text-sm font-semibold text-white">
-                                            {humanName}
-                                          </div>
-                                          <div className="space-y-2">
-                                            <label className="text-xs uppercase tracking-wide text-white/50">
-                                              Commit Visit
-                                            </label>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                              <MatchControls
-                                                inProgress={true}
-                                                startingScore={x01Score}
-                                                onAddVisit={makeOfflineAddVisitAdapter(
-                                                  commitManualVisitTotal,
-                                                )}
-                                                quickButtons={[
-                                                  180, 140, 100, 60,
-                                                ]}
-                                                onNextPlayer={() =>
-                                                  matchActions?.nextPlayer()
-                                                }
-                                                onEndLeg={() => {
-                                                  /* End leg handled via commitManualVisitTotal / addVisitTotal */
-                                                }}
-                                                onUndo={() => {
-                                                  /* offline undo not implemented here; optionally reset pending visit */
-                                                }}
-                                                showDartsSelect={true}
-                                              />
-                                            </div>
-                                          </div>
-                                          <div className="space-y-2">
-                                            <label className="text-xs uppercase tracking-wide text-white/50">
-                                              Legs Override
-                                            </label>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                              <input
-                                                className="input w-20 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
-                                                type="number"
-                                                min={0}
-                                                value={manualPlayerLegsInput}
-                                                onChange={(e) =>
-                                                  setManualPlayerLegsInput(
-                                                    e.target.value,
-                                                  )
-                                                }
-                                                onKeyDown={(e) => {
-                                                  if (e.key === "Enter")
-                                                    handleManualLegsOverride(
-                                                      "player",
-                                                    );
-                                                }}
-                                                placeholder={`${playerLegs}`}
-                                              />
-                                              <button
-                                                className="btn px-3 py-1 text-sm"
-                                                onClick={() =>
-                                                  handleManualLegsOverride(
-                                                    "player",
-                                                  )
-                                                }
-                                              >
-                                                Set
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </div>
-                                        <div className="space-y-3">
-                                          <div className="text-sm font-semibold text-white">
-                                            {aiDisplayName}
-                                          </div>
-                                          <div className="space-y-2">
-                                            <label className="text-xs uppercase tracking-wide text-white/50">
-                                              Three Dart Edit
-                                            </label>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                              <input
-                                                className="input w-24 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
-                                                type="number"
-                                                min={0}
-                                                max={x01Score}
-                                                value={manualOpponentScoreInput}
-                                                onChange={(e) =>
-                                                  setManualOpponentScoreInput(
-                                                    e.target.value,
-                                                  )
-                                                }
-                                                onKeyDown={(e) => {
-                                                  if (e.key === "Enter")
-                                                    handleManualScoreOverride(
-                                                      "ai",
-                                                    );
-                                                }}
-                                                placeholder={`${aiScore}`}
-                                              />
-                                              <button
-                                                className="btn px-3 py-1 text-sm"
-                                                onClick={() =>
-                                                  handleManualScoreOverride(
-                                                    "ai",
-                                                  )
-                                                }
-                                              >
-                                                Set
-                                              </button>
-                                            </div>
-                                          </div>
-                                          <div className="space-y-2">
-                                            <label className="text-xs uppercase tracking-wide text-white/50">
-                                              Legs Override
-                                            </label>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                              <input
-                                                className="input w-20 bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-emerald-400/60 focus:ring-emerald-500/40"
-                                                type="number"
-                                                min={0}
-                                                value={manualOpponentLegsInput}
-                                                onChange={(e) =>
-                                                  setManualOpponentLegsInput(
-                                                    e.target.value,
-                                                  )
-                                                }
-                                                onKeyDown={(e) => {
-                                                  if (e.key === "Enter")
-                                                    handleManualLegsOverride(
-                                                      "ai",
-                                                    );
-                                                }}
-                                                placeholder={`${aiLegs}`}
-                                              />
-                                              <button
-                                                className="btn px-3 py-1 text-sm"
-                                                onClick={() =>
-                                                  handleManualLegsOverride("ai")
-                                                }
-                                              >
-                                                Set
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
+                                    <MatchControls
+                                      inProgress={true}
+                                      startingScore={x01Score}
+                                      onAddVisit={makeOfflineAddVisitAdapter(
+                                        commitManualVisitTotal,
+                                      )}
+                                      quickButtons={[180, 140, 100, 60]}
+                                      onNextPlayer={() =>
+                                        matchActions?.nextPlayer()
+                                      }
+                                      onEndLeg={() => {}}
+                                      onUndo={() => {}}
+                                      showDartsSelect={true}
+                                    />
                                   )}
                                 </div>
 
