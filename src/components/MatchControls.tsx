@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+import React, { useState } from "react";
 import { Undo2 } from "lucide-react";
 import ScoreNumberPad from "./ui/ScoreNumberPad";
 
@@ -13,6 +13,9 @@ interface MatchControlsProps {
   onEndGame?: () => void;
   showDartsSelect?: boolean;
   showCheckoutSelectors?: boolean;
+  showActionButtons?: boolean;
+  showQuickButtons?: boolean;
+  showUndo?: boolean;
   quickButtons?: number[];
 }
 
@@ -27,6 +30,9 @@ export default function MatchControls({
   onEndGame,
   showDartsSelect = true,
   showCheckoutSelectors = true,
+  showActionButtons = true,
+  showQuickButtons = true,
+  showUndo = true,
   quickButtons = [180, 140, 100, 60],
 }: MatchControlsProps) {
   const [scoreInput, setScoreInput] = useState<string>("0");
@@ -74,15 +80,17 @@ export default function MatchControls({
         <button className="btn" onClick={commitScore}>
           Add Visit ➕
         </button>
-        <button
-          className="px-3 py-2 rounded-xl border border-slate-200"
-          onClick={() => onUndo && onUndo()}
-          title="Undo"
-        >
-          <Undo2 className="w-4 h-4" />
-        </button>
+        {showUndo && (
+          <button
+            className="px-3 py-2 rounded-xl border border-slate-200"
+            onClick={() => onUndo && onUndo()}
+            title="Undo"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+        )}
       </div>
-      {quickButtons && quickButtons.length > 0 && (
+      {showQuickButtons && quickButtons && quickButtons.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
           <span className="opacity-70">Quick:</span>
           {quickButtons.map((v) => (
@@ -102,34 +110,36 @@ export default function MatchControls({
         onSubmit={commitScore}
         helperText="Tap numbers then press Enter to submit."
       />
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          className="btn"
-          onClick={() => {
-            onEndLeg &&
-              onEndLeg(Math.max(0, safeScore), checkoutDarts, {
-                doubleDarts,
-              });
-            setScoreInput("0");
-          }}
-        >
-          End Leg (Checkout {safeScore || 0}) �
-        </button>
-        <button
-          className="btn bg-slate-700 hover:bg-slate-800"
-          onClick={() => onNextPlayer && onNextPlayer()}
-        >
-          Next Player 👤
-        </button>
-        <button
-          className="btn bg-emerald-600 hover:bg-emerald-700"
-          onClick={() => {
-            onEndGame && onEndGame();
-          }}
-        >
-          End Game �
-        </button>
-      </div>
+      {showActionButtons && (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            className="btn"
+            onClick={() => {
+              onEndLeg &&
+                onEndLeg(Math.max(0, safeScore), checkoutDarts, {
+                  doubleDarts,
+                });
+              setScoreInput("0");
+            }}
+          >
+            End Leg (Checkout {safeScore || 0}) �
+          </button>
+          <button
+            className="btn bg-slate-700 hover:bg-slate-800"
+            onClick={() => onNextPlayer && onNextPlayer()}
+          >
+            Next Player 👤
+          </button>
+          <button
+            className="btn bg-emerald-600 hover:bg-emerald-700"
+            onClick={() => {
+              onEndGame && onEndGame();
+            }}
+          >
+            End Game �
+          </button>
+        </div>
+      )}
       {showCheckoutSelectors && (
         <div className="grid gap-3 text-sm">
           <div>

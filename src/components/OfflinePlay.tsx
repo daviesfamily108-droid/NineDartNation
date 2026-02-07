@@ -2410,7 +2410,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   // no external overlay: we render the match modal as absolute inset-0 inside this card
 
   return (
-    <div className="card ndn-game-shell ndn-page relative overflow-hidden md:overflow-hidden overflow-y-auto">
+    <div className="ndn-game-shell ndn-page relative overflow-hidden md:overflow-hidden overflow-y-auto bg-transparent shadow-none rounded-none">
       {showStartShowcase && (
         <MatchStartShowcase
           players={(match.players || []) as any}
@@ -3470,13 +3470,16 @@ export default function OfflinePlay({ user }: { user: any }) {
                                       onAddVisit={makeOfflineAddVisitAdapter(
                                         commitManualVisitTotal,
                                       )}
-                                      quickButtons={[180, 140, 100, 60]}
                                       onNextPlayer={() =>
                                         matchActions?.nextPlayer()
                                       }
                                       onEndLeg={() => {}}
                                       onUndo={() => {}}
                                       showDartsSelect={true}
+                                      showCheckoutSelectors={false}
+                                      showActionButtons={false}
+                                      showQuickButtons={false}
+                                      showUndo={false}
                                     />
                                   )}
                                 </div>
