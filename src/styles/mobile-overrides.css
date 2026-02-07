@@ -294,9 +294,13 @@
     margin-top: 24px !important;
   }
 
-  /* Stats page: extra drop so content clears the fixed header on mobile */
+  /* Stats page: extra drop so content clears the fixed header on mobile.
+     Override height:100% from .ndn-game-shell so the div grows with its
+     content and the background gradient covers everything. */
   .ndn-stats-page {
     padding-top: 85px !important;
+    height: auto !important;
+    min-height: 100% !important;
   }
 
   /* Footer positioning */
