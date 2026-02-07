@@ -139,7 +139,19 @@ export async function syncStatsFromServer(name: string) {
   try {
     const data = await res.json().catch(() => ({}));
     const remote = data?.stats as UserStatsPayload | undefined;
-    if (!remote || !remote.updatedAt) return;
+
+    // If the server has no stats but we have local stats, push ours up so
+    // other devices can pull them.  This covers the case where stats were
+    // recorded before the sync fix was deployed.
+    if (!remote || !remote.updatedAt) {
+      const local = getAllTime(name);
+      if (local && (local.darts > 0 || local.scored > 0)) {
+        setStatsMeta(name, { updatedAt: Date.now() });
+        pushStatsToServer(name);
+      }
+      return;
+    }
+
     const localMeta = getStatsMeta(name);
     if (remote.updatedAt > (localMeta.updatedAt || 0)) {
       setAllTime(name, remote.allTime || { darts: 0, scored: 0 }, {
