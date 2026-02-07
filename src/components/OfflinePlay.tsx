@@ -196,6 +196,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   } = useUserSettings();
   const manualScoring = autoscoreProvider === "manual";
   const cameraToolbarVisible = cameraEnabled && !manualScoring;
+  const effectiveLayout: "classic" | "modern" = "modern";
   const waitForBoardClear =
     cameraEnabled && !manualScoring && autoCommitMode !== "immediate";
   const [selectedMode, setSelectedMode] = useState<string>("X01");
@@ -2419,7 +2420,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       )}
       <h2 className="text-3xl font-bold text-brand-700 mb-4 ndn-section-title">
         Offline Mode �{" "}
-        {offlineLayout === "classic" ? (
+        {effectiveLayout === "classic" ? (
           <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">
             Classic layout
           </span>
@@ -2627,7 +2628,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                     (scrollerRef as any).current = el;
                   }}
                 >
-                  {offlineLayout !== "modern" && (
+                  {effectiveLayout !== "modern" && (
                     <>
                       <div
                         ref={(el) => {
@@ -3456,7 +3457,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                           </>
                         )}
                       </div>
-                    ) : offlineLayout === "modern" ? (
+                    ) : effectiveLayout === "modern" ? (
                       <div className="space-y-3 mb-2">
                         <>
                             <div className="relative">
@@ -5881,7 +5882,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                       aiHighestCheckout={aiHighestCheckout}
                       onClose={() => setShowCameraManager(false)}
                       onOpen={() => setShowCameraManager(true)}
-                      layout={offlineLayout}
+                      layout={effectiveLayout}
                     />
                   </div>
                 </ResizableModal>
