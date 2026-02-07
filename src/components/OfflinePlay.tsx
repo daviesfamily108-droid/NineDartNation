@@ -2431,7 +2431,8 @@ export default function OfflinePlay({ user }: { user: any }) {
         )}
       </h2>
       <div className="ndn-shell-body">
-        <div className="mb-4 flex flex-col gap-3">
+        {!showMatchModal && (
+          <div className="mb-4 flex flex-col gap-3">
           <select
             onPointerDown={(e) => {
               (e as any).stopPropagation();
@@ -2585,8 +2586,9 @@ export default function OfflinePlay({ user }: { user: any }) {
               X01 settings don't apply.
             </div>
           )}
-        </div>
-        {!inMatch && (
+          </div>
+        )}
+        {!showMatchModal && !inMatch && (
           <button
             className="btn"
             disabled={lockedPremium}
