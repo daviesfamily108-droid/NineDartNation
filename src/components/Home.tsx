@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useToast } from "../store/toast.js";
-import { formatAvg } from "../utils/stats.js";
-import { getAllTime } from "../store/profileStats.js";
-import { useUserSettings } from "../store/userSettings.js";
-import ProfilePanel from "./ProfilePanel.js";
-import { sym } from "../ui/icons.js";
-import { getApiBaseUrl } from "../utils/api.js";
-import { dispatchOpenNotifications } from "../utils/events.js";
+import { useToast } from "../store/toast";
+import { formatAvg } from "../utils/stats";
+import { getAllTime } from "../store/profileStats";
+import { useUserSettings } from "../store/userSettings";
+import ProfilePanel from "./ProfilePanel";
+import { sym } from "../ui/icons";
+import { getApiBaseUrl } from "../utils/api";
+import { dispatchOpenNotifications } from "../utils/events";
 
 function goTab(tab: string) {
   try {
@@ -19,12 +19,21 @@ function goTab(tab: string) {
 const API_URL = getApiBaseUrl();
 
 export default function Home({ user }: { user?: any }) {
-  const [showLegal, setShowLegal] = useState(false);
-  const [showHowTo, setShowHowTo] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
-  const [fact, setFact] = useState<string>("");
-  const { lastOffline } = useUserSettings();
-  const toast = useToast();
+const [showLegal, setShowLegal] = useState(false);
+const [showHowTo, setShowHowTo] = useState(false);
+const [showProfile, setShowProfile] = useState(false);
+const [fact, setFact] = useState<string>("");
+const { lastOffline } = useUserSettings();
+const toast = useToast();
+
+// Force re-render when stats are synced from the server so the BEST/WORST
+// table updates without a full page reload.
+const [, setStatsRev] = useState(0);
+useEffect(() => {
+  const onStatsUpdated = () => setStatsRev((r) => r + 1);
+  window.addEventListener("ndn:stats-updated", onStatsUpdated as any);
+  return () => window.removeEventListener("ndn:stats-updated", onStatsUpdated as any);
+}, []);
 
   const openNotifications = () => {
     dispatchOpenNotifications();
@@ -56,7 +65,7 @@ export default function Home({ user }: { user?: any }) {
   }, []);
   return (
     <div
-      className={`${user?.fullAccess ? "premium-main" : ""} home-shell relative min-h-screen flex flex-col items-center justify-start overflow-hidden px-4 pb-20 pt-0 sm:pt-0`}
+      className={`${user?.fullAccess ? "premium-main" : ""} home-shell relative min-h-screen flex flex-col items-center justify-start overflow-hidden px-4 pb-20`}
     >
       <div className="home-background" aria-hidden>
         <div className="home-background__gradient"></div>
@@ -286,7 +295,7 @@ export default function Home({ user }: { user?: any }) {
               <Row
                 label="Checkout"
                 left={String(all.bestCheckout || 0)}
-                right={String(all.worstCheckout || 0)}
+                right={"—"}
                 lock={!isPremium}
               />
             </div>

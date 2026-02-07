@@ -1,6 +1,6 @@
-import { broadcastMessage } from "../utils/broadcast.js";
-import { apiFetch } from "../utils/api.js";
-import type { Player, Leg } from "./match.js";
+import { broadcastMessage } from "../utils/broadcast";
+import { resolveApiUrl } from "../utils/api";
+import type { Player, Leg } from "./match";
 
 export type AllTimeTotals = {
   darts: number;
@@ -12,12 +12,10 @@ export type AllTimeTotals = {
   worst3?: number; // lowest 3-dart avg achieved in a finished leg
   bestLegDarts?: number; // fewest darts to finish a winning leg
   bestCheckout?: number; // highest checkout score achieved
-  worstCheckout?: number; // lowest checkout score achieved (positive)
   worstLegDarts?: number; // most darts in a winning leg (optional)
   bestFNAvg?: number; // best per-leg first-nine average
   worstFNAvg?: number; // worst per-leg first-nine average
   num180s?: number;
-  scoreFreq?: Record<string, number>; // visit score frequency (e.g. {"60": 10, "100": 4})
 };
 export type StatEntry = {
   t: number;
@@ -88,7 +86,8 @@ async function pushStatsToServer(name: string) {
   syncInFlight.add(name);
   try {
     const payload = buildStatsPayload(name);
-    await apiFetch("/api/user/stats", {
+    const url = resolveApiUrl("/api/user/stats");
+    await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -114,11 +113,30 @@ function scheduleStatsSync(name: string) {
 export async function syncStatsFromServer(name: string) {
   const token = getAuthToken();
   if (!token || !name) return;
+
+  // Retry up to 3 times with exponential back-off so a cold-starting
+  // server or brief network hiccup doesn't cause a permanent miss.
+  const MAX_RETRIES = 3;
+  let res: Response | null = null;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const url = resolveApiUrl("/api/user/stats");
+      res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res?.ok) break;
+      res = null;
+    } catch {
+      res = null;
+    }
+    // Wait before retrying (1s, 2s, 4s)
+    if (attempt < MAX_RETRIES - 1) {
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)));
+    }
+  }
+
+  if (!res || !res.ok) return;
   try {
-    const res = await apiFetch("/api/user/stats", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res?.ok) return;
     const data = await res.json().catch(() => ({}));
     const remote = data?.stats as UserStatsPayload | undefined;
     if (!remote || !remote.updatedAt) return;
@@ -155,49 +173,15 @@ export function getAllTime(name: string): AllTimeTotals {
         typeof parsed.bestLegDarts === "number" ? parsed.bestLegDarts : 0,
       bestCheckout:
         typeof parsed.bestCheckout === "number" ? parsed.bestCheckout : 0,
-      worstCheckout:
-        typeof parsed.worstCheckout === "number" ? parsed.worstCheckout : 0,
       worstLegDarts:
         typeof parsed.worstLegDarts === "number" ? parsed.worstLegDarts : 0,
       bestFNAvg: typeof parsed.bestFNAvg === "number" ? parsed.bestFNAvg : 0,
       worstFNAvg: typeof parsed.worstFNAvg === "number" ? parsed.worstFNAvg : 0,
       num180s: typeof parsed.num180s === "number" ? parsed.num180s : 0,
-      scoreFreq:
-        parsed.scoreFreq && typeof parsed.scoreFreq === "object"
-          ? (parsed.scoreFreq as Record<string, number>)
-          : {},
     };
   } catch {
     return { darts: 0, scored: 0 };
   }
-}
-
-export function addScoreFrequencies(
-  name: string,
-  freq: Record<number, number> | Map<number, number>,
-) {
-  if (!name) return;
-  const obj: Record<string, number> =
-    freq instanceof Map
-      ? Object.fromEntries(
-          Array.from(freq.entries()).map(([k, v]) => [String(k), Number(v)]),
-        )
-      : Object.fromEntries(
-          Object.entries(freq).map(([k, v]) => [String(k), Number(v)]),
-        );
-  const hasAny = Object.values(obj).some((v) => (Number(v) || 0) > 0);
-  if (!hasAny) return;
-
-  const prev = getAllTime(name);
-  const prevFreq =
-    prev.scoreFreq && typeof prev.scoreFreq === "object" ? prev.scoreFreq : {};
-  const nextFreq: Record<string, number> = { ...prevFreq };
-  for (const [k, v] of Object.entries(obj)) {
-    const add = Number(v) || 0;
-    if (add <= 0) continue;
-    nextFreq[k] = (Number(nextFreq[k]) || 0) + add;
-  }
-  setAllTime(name, { ...prev, scoreFreq: nextFreq });
 }
 
 export function setAllTime(
@@ -519,12 +503,10 @@ export function addMatchToAllTime(
     let matchWorst3 = 0;
     let matchBestLegDarts = 0; // track fewest darts on a winning leg only
     let matchBestCheckout = 0;
-    let matchWorstCheckout = 0;
     let matchWorstLegDarts = 0; // most darts on a winning leg
     let matchBestFNAvg = 0;
     let matchWorstFNAvg = 0;
     let match180s = 0;
-    const scoreFreq = new Map<number, number>();
     for (const leg of p.legs) {
       if (!leg.finished) continue;
       darts += leg.dartsThrown;
@@ -562,10 +544,6 @@ export function addMatchToAllTime(
         const co =
           typeof leg.checkoutScore === "number" ? leg.checkoutScore : 0;
         if (co > matchBestCheckout) matchBestCheckout = co;
-        if (co > 0) {
-          matchWorstCheckout =
-            matchWorstCheckout === 0 ? co : Math.min(matchWorstCheckout, co);
-        }
       }
       // Track time window for this match (for rolling stats backfill)
       const legStart = Number(leg.startTime || 0);
@@ -576,8 +554,6 @@ export function addMatchToAllTime(
       try {
         for (const v of leg.visits || []) {
           if (Number(v.score || 0) === 180) match180s += 1;
-          const s = Math.max(0, Math.min(180, Number(v.score || 0)));
-          scoreFreq.set(s, (scoreFreq.get(s) ?? 0) + 1);
         }
       } catch {}
     }
@@ -604,12 +580,6 @@ export function addMatchToAllTime(
           return Math.min(prior, matchBestLegDarts);
         })(),
         bestCheckout: Math.max(prev.bestCheckout || 0, matchBestCheckout || 0),
-        worstCheckout: (() => {
-          const prior = prev.worstCheckout || 0;
-          if (prior === 0) return matchWorstCheckout || 0;
-          if (matchWorstCheckout === 0) return prior;
-          return Math.min(prior, matchWorstCheckout);
-        })(),
         worstLegDarts: (() => {
           const prior = prev.worstLegDarts || 0;
           if (prior === 0) return matchWorstLegDarts || 0;
@@ -624,19 +594,6 @@ export function addMatchToAllTime(
           return Math.min(prior, matchWorstFNAvg);
         })(),
         num180s: (prev.num180s || 0) + (match180s || 0),
-        scoreFreq: (() => {
-          const prevFreq =
-            prev.scoreFreq && typeof prev.scoreFreq === "object"
-              ? prev.scoreFreq
-              : {};
-          const nextFreq: Record<string, number> = { ...prevFreq };
-          for (const [k, v] of scoreFreq.entries()) {
-            if (v <= 0) continue;
-            const key = String(k);
-            nextFreq[key] = (Number(nextFreq[key]) || 0) + v;
-          }
-          return nextFreq;
-        })(),
       };
       setAllTime(p.name, next);
       // Also add a time-series sample for rolling averages (avoid double

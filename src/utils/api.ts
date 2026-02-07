@@ -1,4 +1,4 @@
-﻿export type ApiPath = string;
+export type ApiPath = string;
 
 let cachedBaseUrl: string | null = null;
 const fallbackRemoteEnv =
@@ -66,16 +66,24 @@ export function apiFetch(path: ApiPath, init?: RequestInit) {
 
   // If a previous probe determined the remote API is unreachable, short-circuit
   // and return a fake Response-like object so callers don't trigger repeated
-  // network requests or unhandled promise rejections. We store the flag on
-  // window so it survives hot-reloads during development.
+  // network requests or unhandled promise rejections. The disable flag now
+  // expires after 60 seconds so the app can self-recover when the server comes
+  // back online (e.g., after a Render cold-start).
   try {
     const anyWin = window as any;
     if (anyWin.__ndnApiDisabled) {
-      return Promise.resolve({
-        ok: false,
-        status: 503,
-        json: async () => ({}),
-      } as any);
+      const disabledAt = Number(anyWin.__ndnApiDisabledAt) || 0;
+      if (disabledAt && Date.now() - disabledAt > 60_000) {
+        // Expired – allow requests again
+        anyWin.__ndnApiDisabled = false;
+        anyWin.__ndnApiDisabledAt = 0;
+      } else {
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          json: async () => ({}),
+        } as any);
+      }
     }
   } catch (_) {}
 
@@ -86,6 +94,7 @@ export function apiFetch(path: ApiPath, init?: RequestInit) {
     .catch((err) => {
       try {
         (window as any).__ndnApiDisabled = true;
+        (window as any).__ndnApiDisabledAt = Date.now();
       } catch (_) {}
       return { ok: false, status: 503, json: async () => ({}) } as any;
     })
@@ -100,6 +109,7 @@ export function apiFetch(path: ApiPath, init?: RequestInit) {
           host !== window.location.hostname
         ) {
           (window as any).__ndnApiDisabled = true;
+          (window as any).__ndnApiDisabledAt = Date.now();
         }
       } catch (_) {}
       return res;

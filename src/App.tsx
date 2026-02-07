@@ -5,23 +5,23 @@ import React, {
   useState,
   Suspense,
 } from "react";
-import { Sidebar, TabKey, buildTabList } from "./components/Sidebar.js";
-import { useIsAdmin } from "./utils/admin.js";
-const Home = React.lazy(() => import("./components/Home.js"));
-import ScrollFade from "./components/ScrollFade.js";
-import Calibrator from "./components/Calibrator.js";
+import { Sidebar, TabKey, buildTabList } from "./components/Sidebar";
+import { useIsAdmin } from "./utils/admin";
+const Home = React.lazy(() => import("./components/Home"));
+import ScrollFade from "./components/ScrollFade";
+import Calibrator from "./components/Calibrator";
 // Lazy-load CameraView to avoid importing a large camera module at app
 // bootstrap time. This prevents the component module from executing during
 // initial module evaluation which can avoid TDZ issues when other modules
 // import shared stores during startup.
-const CameraView = React.lazy(() => import("./components/CameraView.js"));
-const OfflinePlay = React.lazy(() => import("./components/OfflinePlay.js"));
-const Friends = React.lazy(() => import("./components/Friends.js"));
-import Toaster from "./components/Toaster.js";
-import AdminDashboard from "./components/AdminDashboard.js";
-import SettingsPanel from "./components/SettingsPanel.js";
-import Auth from "./components/Auth.js";
-import { ThemeProvider } from "./components/ThemeContext.js";
+const CameraView = React.lazy(() => import("./components/CameraView"));
+const OfflinePlay = React.lazy(() => import("./components/OfflinePlay"));
+const Friends = React.lazy(() => import("./components/Friends"));
+import Toaster from "./components/Toaster";
+import AdminDashboard from "./components/AdminDashboard";
+import SettingsPanel from "./components/SettingsPanel";
+import Auth from "./components/Auth";
+import { ThemeProvider } from "./components/ThemeContext";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -37,39 +37,39 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useWS } from "./components/WSProvider.js";
+import { useWS } from "./components/WSProvider";
 import {
   getMonthlyAvg3,
   getAllTimeAvg,
   syncStatsFromServer,
-} from "./store/profileStats.js";
-import { useMatch } from "./store/match.js";
-import { useUserSettings } from "./store/userSettings.js";
-import { useCalibration } from "./store/calibration.js";
-import { apiFetch, getApiBaseUrl } from "./utils/api.js";
-import { DISCORD_INVITE_URL } from "./utils/config.js";
+} from "./store/profileStats";
+import { useMatch } from "./store/match";
+import { useUserSettings } from "./store/userSettings";
+import { useCalibration } from "./store/calibration";
+import { apiFetch, getApiBaseUrl } from "./utils/api";
+import { DISCORD_INVITE_URL } from "./utils/config";
 import "./styles/premium.css";
 import "./styles/themes.css";
-const OnlinePlay = React.lazy(() => import("./components/OnlinePlay.clean.js"));
-const StatsPanel = React.lazy(() => import("./components/StatsPanel.js"));
-const Tournaments = React.lazy(() => import("./components/Tournaments.js"));
-const AdminAccess = React.lazy(() => import("./components/AdminAccess.js"));
+const OnlinePlay = React.lazy(() => import("./components/OnlinePlay.clean"));
+const StatsPanel = React.lazy(() => import("./components/StatsPanel"));
+const Tournaments = React.lazy(() => import("./components/Tournaments"));
+const AdminAccess = React.lazy(() => import("./components/AdminAccess"));
 // AdminAccess already imported above
-import Drawer from "./components/ui/Drawer.js";
-const OpsDashboard = React.lazy(() => import("./components/OpsDashboard.js"));
-import HelpAssistant from "./components/HelpAssistant.js";
-import GlobalCameraLogger from "./components/GlobalCameraLogger.js";
-import GlobalPhoneVideoSink from "./components/GlobalPhoneVideoSink.js";
-import GlobalCameraWatchdog from "./components/GlobalCameraWatchdog.js";
-import GlobalCameraRecoveryToasts from "./components/GlobalCameraRecoveryToasts.js";
-import InstallPicker from "./components/InstallPicker.js";
-import AddToHomeButton from "./components/AddToHomeButton.js";
-import Footer from "./components/Footer.js";
-import AutoPauseManager from "./components/AutoPauseManager.js";
-import MatchPage from "./components/MatchPage.js";
-import { useToast } from "./store/toast.js";
-import { NDN_OPEN_NOTIFICATIONS_EVENT } from "./utils/events.js";
-import WSConnectionDot from "./components/WSConnectionDot.js";
+import Drawer from "./components/ui/Drawer";
+const OpsDashboard = React.lazy(() => import("./components/OpsDashboard"));
+import HelpAssistant from "./components/HelpAssistant";
+import GlobalCameraLogger from "./components/GlobalCameraLogger";
+import GlobalPhoneVideoSink from "./components/GlobalPhoneVideoSink";
+import GlobalCameraWatchdog from "./components/GlobalCameraWatchdog";
+import GlobalCameraRecoveryToasts from "./components/GlobalCameraRecoveryToasts";
+import InstallPicker from "./components/InstallPicker";
+import AddToHomeButton from "./components/AddToHomeButton";
+import Footer from "./components/Footer";
+import AutoPauseManager from "./components/AutoPauseManager";
+import MatchPage from "./components/MatchPage";
+import { useToast } from "./store/toast";
+import { NDN_OPEN_NOTIFICATIONS_EVENT } from "./utils/events";
+import WSConnectionDot from "./components/WSConnectionDot";
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -114,8 +114,8 @@ export default function App() {
   const [allTimeAvg, setAllTimeAvg] = useState<number>(0);
   const [avgDelta, setAvgDelta] = useState<number>(0);
   const { avgMode } = useUserSettings();
-  const _cameraEnabled = useUserSettings((s: any) => s.cameraEnabled);
-  const matchInProgress = useMatch((s: any) => s.inProgress);
+  const _cameraEnabled = useUserSettings((s) => s.cameraEnabled);
+  const matchInProgress = useMatch((s) => s.inProgress);
   const isCompact = matchInProgress && tab !== "score";
   const toast = useToast();
   const normalizedDelta = Math.abs(avgDelta) >= 0.05 ? avgDelta : 0;
@@ -252,6 +252,11 @@ export default function App() {
     try {
       syncStatsFromServer(user.username);
     } catch {}
+    // Delayed retry: if the server is cold-starting the first sync may fail.
+    // Retry after 5 seconds so stats still appear without a manual reload.
+    const retryTimer = setTimeout(() => {
+      try { syncStatsFromServer(user.username); } catch {}
+    }, 5000);
     const refresh = () => {
       const nextAvg =
         avgMode === "24h"
@@ -322,10 +327,36 @@ export default function App() {
     window.addEventListener("ndn:stats-updated", onUpdate as any);
     window.addEventListener("storage", onStorage);
     return () => {
+      clearTimeout(retryTimer);
       window.removeEventListener("ndn:stats-updated", onUpdate as any);
       window.removeEventListener("storage", onStorage);
     };
   }, [user?.username, avgMode]);
+
+  // Re-sync stats from server when the tab/window regains focus so stats
+  // recorded on another device (e.g., desktop) appear on mobile immediately.
+  useEffect(() => {
+    if (!user?.username) return;
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        syncStatsFromServer(user.username).then(() => {
+          // After sync, refresh the displayed average
+          window.dispatchEvent(new CustomEvent("ndn:stats-updated", { detail: { name: user.username } }));
+        }).catch(() => {});
+      }
+    };
+    const handleFocus = () => {
+      syncStatsFromServer(user.username).then(() => {
+        window.dispatchEvent(new CustomEvent("ndn:stats-updated", { detail: { name: user.username } }));
+      }).catch(() => {});
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [user?.username]);
 
   // Load avatar from localStorage when user changes
   useEffect(() => {
@@ -456,23 +487,8 @@ export default function App() {
 
   // Keep full-screen state in sync when the user enters/exits full screen mode.
   useEffect(() => {
-    const onFullscreenChange = () => {
-      const fs = !!document.fullscreenElement;
-      setIsFullscreen(fs);
-      // If we entered fullscreen without an explicit user click on our FULL button,
-      // immediately exit. This prevents mobile/UA quirks from forcing fullscreen.
-      try {
-        const allowedUntil = (window as any).__ndnAllowFullscreenUntil as
-          | number
-          | undefined;
-        if (fs) {
-          const now = Date.now();
-          if (!allowedUntil || allowedUntil < now) {
-            document.exitFullscreen?.().catch(() => {});
-          }
-        }
-      } catch {}
-    };
+    const onFullscreenChange = () =>
+      setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onFullscreenChange);
     // initialize
     setIsFullscreen(!!document.fullscreenElement);
@@ -1045,19 +1061,18 @@ export default function App() {
   return (
     <ThemeProvider>
       <div
-        id="ndn-root-shell"
         ref={appRef}
         className={`${user?.fullAccess ? "premium-body" : ""} h-screen overflow-hidden pt-1 pb-0 px-1 xs:pt-2 xs:pb-0 xs:px-2 sm:pt-3 sm:pb-0 sm:px-3 md:pt-4 md:pb-0 md:px-4`}
       >
         <Toaster />
-        <div id="ndn-root-grid" className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-4 sm:gap-6 h-full overflow-hidden">
+        <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-4 sm:gap-6 h-full overflow-hidden">
           {/* Desktop sidebar; hidden on mobile/tablet */}
           {!isMobile && (
-            <div id="ndn-sidebar-wrapper" className="relative hidden lg:block w-72">
+            <div className="relative hidden lg:block w-72">
               <Sidebar
                 className="w-full h-full"
                 active={tab}
-                  onChange={(k: any) => {
+                onChange={(k) => {
                   setTab(k);
                 }}
                 user={user}
@@ -1068,7 +1083,7 @@ export default function App() {
 
           {/* Wrap header + scroller in a column so header stays static and only content scrolls below it */}
           <div className="flex flex-col h-full overflow-hidden">
-            <div id="ndn-header-wrapper" className="pt-1 xs:pt-2 relative z-50">
+            <div className="pt-1 xs:pt-2 relative z-50">
               <header
                 id="ndn-header"
                 data-testid="ndn-header"
@@ -1182,23 +1197,13 @@ export default function App() {
                   <div className="flex items-center gap-1 sm:gap-2 bg-black/20 p-1 rounded-full border border-white/5">
                     <button
                       className="px-2 sm:px-3 py-1 text-[10px] font-bold uppercase tracking-wider rounded-full bg-white/5 hover:bg-white/10 text-white transition-all"
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                          if (isMobile) return;
+                      onClick={() => {
                         const el = appRef.current;
                         if (!el) return;
-                          if (!document.fullscreenElement) {
-                            (window as any).__ndnAllowFullscreenUntil =
-                              Date.now() + 1500;
-                            el.requestFullscreen().catch(() => {});
-                          }
+                        if (!document.fullscreenElement)
+                          el.requestFullscreen().catch(() => {});
                         else document.exitFullscreen().catch(() => {});
                       }}
-                        disabled={isMobile}
-                        aria-disabled={isMobile}
-                        title={isMobile ? "Fullscreen is disabled on mobile" : undefined}
                     >
                       {isFullscreen ? "Exit" : "Full"}
                     </button>
@@ -1782,7 +1787,7 @@ function MobileNav({
           Menu
         </h3>
         <div className="grid grid-cols-2 gap-3 mb-8">
-          {tabs.map((tab: any) => {
+          {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = active === tab.key;
             return (
@@ -1818,8 +1823,8 @@ function MobileNav({
             className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#5865F2]/10 border border-[#5865F2]/20 text-[#5865F2] hover:bg-[#5865F2]/20 transition-all active:scale-98"
           >
             <MessageCircle className="w-6 h-6" />
-             <div className="flex flex-col items-start">
-              <span className="font-bold">Bullseye Darts League</span>
+            <div className="flex flex-col items-start">
+              <span className="font-bold">Bullseye League</span>
               <span className="text-xs opacity-70">Join the competition</span>
             </div>
           </button>
@@ -1842,7 +1847,7 @@ function MobileNav({
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-[#1a1825] border border-white/10 rounded-3xl p-6 max-w-sm w-full shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-2">
-              Join Bullseye Darts League
+              Join Bullseye League
             </h2>
             <p className="text-slate-400 text-sm mb-6">
               Connect with enthusiasts and compete in tourneys!
