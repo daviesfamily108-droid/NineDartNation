@@ -2431,7 +2431,7 @@ export default function OfflinePlay({ user }: { user: any }) {
         )}
       </h2>
       <div className="ndn-shell-body">
-        {!showMatchModal && (
+        {!showMatchModal && !inMatch && (
           <div className="mb-4 flex flex-col gap-3">
           <select
             onPointerDown={(e) => {
@@ -2888,112 +2888,115 @@ export default function OfflinePlay({ user }: { user: any }) {
                         : undefined
                     }
                   >
-                    <h3 className="text-xl font-bold mb-2 mt-1 leading-tight">
-                      {selectedMode === "X01"
-                        ? "X01 Match ⚔️"
-                        : `${selectedMode} ⚔️`}
-                    </h3>
-                    <div className="flex items-center gap-2 mb-2 text-xs flex-wrap">
-                      <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">
-                        Mode: {selectedMode}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">
-                        Start: {x01Score}
-                      </span>
-                      <div
-                        ref={formatRef}
-                        className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full bg-white/10 border border-white/10"
-                      >
-                        <span>Format:</span>
-                        {(() => {
-                          const disabled =
-                            playerScore !== x01Score ||
-                            aiScore !== x01Score ||
-                            playerVisitDarts > 0;
-                          const pillCls = `pill ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} `;
-                          return (
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-1">
-                                <button
-                                  type="button"
-                                  className={`${pillCls} ${formatType === "first" ? "pill--filled" : "pill--ghost"}`}
-                                  onClick={() => {
-                                    if (!disabled) setFormatType("first");
-                                  }}
-                                  title="First to N"
-                                >
-                                  First to
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`${pillCls} ${formatType === "best" ? "pill--filled" : "pill--ghost"}`}
-                                  onClick={() => {
-                                    if (!disabled) setFormatType("best");
-                                  }}
-                                  title="Best of N (wins = ceil(N/2)"
-                                >
-                                  Best of
-                                </button>
-                              </div>
-                              <input
-                                className={`input w-16 text-center ${disabled ? "opacity-50" : ""}`}
-                                type="number"
-                                min={1}
-                                step={1}
-                                value={formatCount}
-                                onChange={(e) =>
-                                  setFormatCount(
-                                    Math.max(
-                                      1,
-                                      Math.floor(Number(e.target.value) || 1),
-                                    ),
-                                  )
-                                }
-                                disabled={disabled}
-                                title={
-                                  formatType === "first"
-                                    ? "First to N"
-                                    : "Best of N (wins = ceil(N/2))"
-                                }
-                              />
-                            </div>
-                          );
-                        })()}
-                      </div>
-                      <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">
-                        Legs: {playerLegs}–{aiLegs}
-                      </span>
-                      {/* Move match type and team names to the right of Legs for a single-row header */}
-                      <div className="ml-auto flex items-center gap-1 text-[10px] flex-wrap">
-                        <span className="opacity-70">Match</span>
-                        <select
-                          className={`input input-compact font-bold ${buttonSizeClass}`}
-                          value={matchType}
-                          onChange={(e) =>
-                            setMatchType(
-                              e.target.value as "singles" | "doubles",
-                            )
-                          }
-                        >
-                          <option value="singles">Singles</option>
-                          <option value="doubles">Doubles</option>
-                        </select>
-                        <input
-                          className={`input ${buttonSizeClass} w-[7.5rem]`}
-                          value={teamAName}
-                          onChange={(e) => setTeamAName(e.target.value)}
-                          placeholder="Team A"
-                        />
-                        <span className="opacity-50">vs</span>
-                        <input
-                          className={`input ${buttonSizeClass} w-[7.5rem]`}
-                          value={teamBName}
-                          onChange={(e) => setTeamBName(e.target.value)}
-                          placeholder="Team B"
-                        />
-                      </div>
-                    </div>
-                    {selectedMode !== "X01" ? (
+                    {effectiveLayout !== "modern" && (
+                      <>
+                        <h3 className="text-xl font-bold mb-2 mt-1 leading-tight">
+                          {selectedMode === "X01"
+                            ? "X01 Match ⚔️"
+                            : `${selectedMode} ⚔️`}
+                        </h3>
+                        <div className="flex items-center gap-2 mb-2 text-xs flex-wrap">
+                          <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">
+                            Mode: {selectedMode}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">
+                            Start: {x01Score}
+                          </span>
+                          <div
+                            ref={formatRef}
+                            className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full bg-white/10 border border-white/10"
+                          >
+                            <span>Format:</span>
+                            {(() => {
+                              const disabled =
+                                playerScore !== x01Score ||
+                                aiScore !== x01Score ||
+                                playerVisitDarts > 0;
+                              const pillCls = `pill ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} `;
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      className={`${pillCls} ${formatType === "first" ? "pill--filled" : "pill--ghost"}`}
+                                      onClick={() => {
+                                        if (!disabled) setFormatType("first");
+                                      }}
+                                      title="First to N"
+                                    >
+                                      First to
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`${pillCls} ${formatType === "best" ? "pill--filled" : "pill--ghost"}`}
+                                      onClick={() => {
+                                        if (!disabled) setFormatType("best");
+                                      }}
+                                      title="Best of N (wins = ceil(N/2)"
+                                    >
+                                      Best of
+                                    </button>
+                                  </div>
+                                  <input
+                                    className={`input w-16 text-center ${disabled ? "opacity-50" : ""}`}
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={formatCount}
+                                    onChange={(e) =>
+                                      setFormatCount(
+                                        Math.max(
+                                          1,
+                                          Math.floor(Number(e.target.value) || 1),
+                                        ),
+                                      )
+                                    }
+                                    disabled={disabled}
+                                    title={
+                                      formatType === "first"
+                                        ? "First to N"
+                                        : "Best of N (wins = ceil(N/2))"
+                                    }
+                                  />
+                                </div>
+                              );
+                            })()}
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">
+                            Legs: {playerLegs}–{aiLegs}
+                          </span>
+                          <div className="ml-auto flex items-center gap-1 text-[10px] flex-wrap">
+                            <span className="opacity-70">Match</span>
+                            <select
+                              className={`input input-compact font-bold ${buttonSizeClass}`}
+                              value={matchType}
+                              onChange={(e) =>
+                                setMatchType(
+                                  e.target.value as "singles" | "doubles",
+                                )
+                              }
+                            >
+                              <option value="singles">Singles</option>
+                              <option value="doubles">Doubles</option>
+                            </select>
+                            <input
+                              className={`input ${buttonSizeClass} w-[7.5rem]`}
+                              value={teamAName}
+                              onChange={(e) => setTeamAName(e.target.value)}
+                              placeholder="Team A"
+                            />
+                            <span className="opacity-50">vs</span>
+                            <input
+                              className={`input ${buttonSizeClass} w-[7.5rem]`}
+                              value={teamBName}
+                              onChange={(e) => setTeamBName(e.target.value)}
+                              placeholder="Team B"
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                    {effectiveLayout !== "modern" && selectedMode !== "X01" ? (
                       <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col h-full mb-2">
                         {selectedMode === "Double Practice" && (
                           <>
@@ -3467,6 +3470,71 @@ export default function OfflinePlay({ user }: { user: any }) {
                             <div className="relative">
                               <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
                                 <div className="flex-1 min-w-0 space-y-2.5">
+                                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/80">
+                                    <span className="px-2 py-1 rounded-full bg-white/10 border border-white/10">
+                                      {selectedMode}
+                                    </span>
+                                    <span className="px-2 py-1 rounded-full bg-white/10 border border-white/10">
+                                      Start {x01Score}
+                                    </span>
+                                    <span className="px-2 py-1 rounded-full bg-white/10 border border-white/10">
+                                      Legs {playerLegs}-{aiLegs}
+                                    </span>
+                                    <div
+                                      ref={formatRef}
+                                      className="flex flex-wrap items-center gap-2 px-2 py-1 rounded-full bg-white/10 border border-white/10"
+                                    >
+                                      <span className="opacity-80">Format</span>
+                                      {(() => {
+                                        const disabled =
+                                          playerScore !== x01Score ||
+                                          aiScore !== x01Score ||
+                                          playerVisitDarts > 0;
+                                        const pillCls = `pill ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} `;
+                                        return (
+                                          <div className="flex items-center gap-1">
+                                            <button
+                                              type="button"
+                                              className={`${pillCls} ${formatType === "first" ? "pill--filled" : "pill--ghost"}`}
+                                              onClick={() => {
+                                                if (!disabled) setFormatType("first");
+                                              }}
+                                            >
+                                              First to
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className={`${pillCls} ${formatType === "best" ? "pill--filled" : "pill--ghost"}`}
+                                              onClick={() => {
+                                                if (!disabled) setFormatType("best");
+                                              }}
+                                            >
+                                              Best of
+                                            </button>
+                                            <input
+                                              className={`input w-14 text-center ${disabled ? "opacity-50" : ""}`}
+                                              type="number"
+                                              min={1}
+                                              step={1}
+                                              value={formatCount}
+                                              onChange={(e) =>
+                                                setFormatCount(
+                                                  Math.max(
+                                                    1,
+                                                    Math.floor(
+                                                      Number(e.target.value) ||
+                                                        1,
+                                                    ),
+                                                  ),
+                                                )
+                                              }
+                                              disabled={disabled}
+                                            />
+                                          </div>
+                                        );
+                                      })()}
+                                    </div>
+                                  </div>
                                   {(selectedMode as any) === "X01" && (
                                     <MatchControls
                                       inProgress={true}
