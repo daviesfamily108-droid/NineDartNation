@@ -264,14 +264,9 @@ export default function OfflinePlay({ user }: { user: any }) {
       } catch {}
     };
   }, []);
-  // Mirror Online layout defaults when in modern layout, otherwise keep classic feel
-  const [maximized, setMaximized] = useState(offlineLayout === "modern");
-  const [fitAll, setFitAll] = useState(offlineLayout === "modern");
-  // React to layout changes at runtime
-  useEffect(() => {
-    setMaximized(offlineLayout === "modern");
-    setFitAll(offlineLayout === "modern");
-  }, [offlineLayout]);
+  // Never force fullscreen – open as a normal resizable window
+  const [maximized, setMaximized] = useState(false);
+  const [fitAll, setFitAll] = useState(false);
   useEffect(() => {
     if (cameraFitMode !== "fit") {
       setCameraFitMode("fit");
@@ -3513,175 +3508,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                       <div className="space-y-3 mb-2">
                         {!manualScoring ? (
                           <>
-                            <div className="flex items-center flex-wrap gap-1.5 mt-1">
-                              <div className="ml-auto flex items-center gap-1 text-[10px]">
-                                <span className="opacity-70">Cam</span>
-                                <button
-                                  className={`btn ${buttonSizeClass}`}
-                                  onClick={() =>
-                                    setCameraScale(
-                                      Math.max(
-                                        0.5,
-                                        Math.round((cameraScale - 0.05) * 100) /
-                                          100,
-                                      ),
-                                    )
-                                  }
-                                >
-                                  −
-                                </button>
-                                <span
-                                  className={`btn ${buttonSizeClass} min-w-[2.5rem] text-center`}
-                                >
-                                  {Math.round(cameraScale * 100)}%
-                                </span>
-                                <button
-                                  className={`btn ${buttonSizeClass}`}
-                                  onClick={() =>
-                                    setCameraScale(
-                                      Math.min(
-                                        1.25,
-                                        Math.round((cameraScale + 0.05) * 100) /
-                                          100,
-                                      ),
-                                    )
-                                  }
-                                >
-                                  +
-                                </button>
-                                <span className="opacity-50">|</span>
-                                <button
-                                  className={`btn ${buttonSizeClass}`}
-                                  title="Toggle fit/fill"
-                                  onClick={() =>
-                                    setCameraFitMode(
-                                      cameraFitMode === "fill" ? "fit" : "fill",
-                                    )
-                                  }
-                                >
-                                  {cameraFitMode === "fill" ? "Fill" : "Fit"}
-                                </button>
-                                <span className="opacity-50">|</span>
-                                <button
-                                  className={`btn ${buttonSizeClass}`}
-                                  title="Toggle camera aspect"
-                                  onClick={() =>
-                                    setCameraAspect(
-                                      cameraAspect === "square"
-                                        ? "wide"
-                                        : "square",
-                                    )
-                                  }
-                                >
-                                  {cameraAspect === "square"
-                                    ? "Square"
-                                    : "Wide"}
-                                </button>
-                              </div>
-                            </div>
                             <div className="relative">
                               <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
                                 <div className="flex-1 min-w-0 space-y-2.5">
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div
-                                      data-testid="offline-current-shooter"
-                                      className="rounded-2xl bg-slate-900/60 border border-white/10 p-4 text-slate-100 shadow-lg backdrop-blur-sm"
-                                    >
-                                      <div className="text-xs uppercase tracking-wide text-white/50">
-                                        Current Shooter
-                                      </div>
-                                      <div className="mt-1 flex items-center gap-4">
-                                        <div className="text-xl font-semibold text-white">
-                                          {activePlayerName}
-                                        </div>
-                                        <div className="ml-auto text-sm text-slate-300">
-                                          3-Dart Avg (Live)
-                                        </div>
-                                      </div>
-                                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/80">
-                                        <div>
-                                          <div className="text-xs uppercase tracking-wide text-white/40">
-                                            Remaining
-                                          </div>
-                                          <div className="font-mono text-lg text-white">
-                                            {activeRemaining}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <div className="text-xs uppercase tracking-wide text-white/40">
-                                            Last Dart
-                                          </div>
-                                          <div className="font-mono text-lg text-white">
-                                            {activeLastScore || 0}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <div className="text-xs uppercase tracking-wide text-white/40">
-                                            Match Legs
-                                          </div>
-                                          <div className="font-semibold text-white">
-                                            {playerLegs}-{aiLegs}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <div className="text-xs uppercase tracking-wide text-white/40">
-                                            Next Up
-                                          </div>
-                                          <div className="font-medium text-white">
-                                            {inactivePlayerName}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    <div className="space-y-3">
-                                      <div
-                                        data-testid="offline-live-avg"
-                                        className="rounded-xl bg-slate-900/60 border border-white/10 p-3 text-white/80"
-                                      >
-                                        <div className="text-xs uppercase tracking-wide text-white/40">
-                                          3-Dart Avg (Live)
-                                        </div>
-                                        <div className="mt-1 text-lg font-semibold">
-                                          {formatAvg(
-                                            match.players?.[
-                                              match.currentPlayerIdx
-                                            ]?.currentThreeDartAvg ?? 0,
-                                          )}
-                                        </div>
-                                      </div>
-
-                                      <div
-                                        data-testid="offline-player-stats"
-                                        className="rounded-lg border p-3 bg-slate-900/50 border-white/10 text-white/80"
-                                      >
-                                        <div className="text-xs uppercase tracking-wide text-white/40">
-                                          You
-                                        </div>
-                                        <div className="mt-2 text-sm">
-                                          <div>
-                                            Legs Won:{" "}
-                                            <span className="font-semibold">
-                                              {playerLegs}
-                                            </span>
-                                          </div>
-                                          <div>
-                                            Score:{" "}
-                                            <span className="font-mono">
-                                              {activeRemaining}
-                                            </span>
-                                          </div>
-                                          <div>
-                                            Last Score:{" "}
-                                            <span className="font-mono">
-                                              {activeLastScore || 0}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-
                                   {(selectedMode as any) === "X01" && (
                                     <MatchControls
                                       inProgress={true}
@@ -3700,8 +3529,13 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   )}
                                 </div>
 
-                                <div className="hidden md:flex md:w-[320px] md:flex-shrink-0 md:flex-col md:gap-3">
-                                  <div className="rounded-2xl overflow-hidden bg-black border border-white/10">
+                                <div className="flex flex-col gap-3 md:w-[340px] md:flex-shrink-0">
+                                  <GameScoreboard
+                                    gameMode={selectedMode as any}
+                                    players={singlePlayerScoreboard}
+                                    matchScore={`${playerLegs}-${aiLegs}`}
+                                  />
+                                  <div className="hidden md:block rounded-2xl overflow-hidden bg-black border border-white/10">
                                     {cameraEnabled ? (
                                       <CameraView
                                         scoringMode={
@@ -3715,9 +3549,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                         onAddVisit={makeOfflineAddVisitAdapter(
                                           commitManualVisitTotal,
                                         )}
-                                        onAutoDart={() => {
-                                          /* Camera owns commits; parent handles manual flow when needed */
-                                        }}
+                                        onAutoDart={() => {}}
                                       />
                                     ) : (
                                       <div className="p-4 text-sm text-slate-200 text-center">
@@ -3725,20 +3557,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                       </div>
                                     )}
                                   </div>
-                                  <GameScoreboard
-                                    gameMode={selectedMode as any}
-                                    players={singlePlayerScoreboard}
-                                    matchScore={`${playerLegs}-${aiLegs}`}
-                                  />
                                 </div>
-                              </div>
-
-                              <div className="md:hidden">
-                                <GameScoreboard
-                                  gameMode={selectedMode as any}
-                                  players={singlePlayerScoreboard}
-                                  matchScore={`${playerLegs}-${aiLegs}`}
-                                />
                               </div>
 
                               {isMobileScreen &&
