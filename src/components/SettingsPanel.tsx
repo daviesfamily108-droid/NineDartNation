@@ -14,9 +14,9 @@ import {
   Send,
   ChevronDown,
 } from "lucide-react";
-import { useUserSettings } from "../store/userSettings.js";
-import ThemeToggle from "./ThemeToggle.js";
-import { apiFetch } from "../utils/api.js";
+import { useUserSettings } from "../store/userSettings";
+import ThemeToggle from "./ThemeToggle";
+import { apiFetch } from "../utils/api";
 
 export default function SettingsPanel({ user }: { user?: any }) {
   const __TEST_MODE__ =
@@ -215,7 +215,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
   useEffect(() => {
     if (!user?.email) return;
     apiFetch(`/api/subscription?email=${encodeURIComponent(user.email)}`)
-      .then((r: any) => r.json())
+      .then((r) => r.json())
       .then(setSubscription)
       .catch(() => {});
   }, [user?.email]);
@@ -1025,7 +1025,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           type="range"
                           id="cameraScale"
                           min="0.5"
-                          max="1.8"
+                          max="3"
                           step="0.1"
                           value={cameraScale || 1}
                           onChange={(e) =>
@@ -1132,15 +1132,233 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           <option value="fit">Fit (letterbox)</option>
                         </select>
                       </div>
-                      <div className="pt-2 border-t border-white/10">
-                        <div className="font-semibold mb-2 text-sm">
-                          Manual scoring
-                        </div>
-                        <p className="text-xs opacity-70">
-                          Calibration + auto-scoring settings have been moved
-                          to Camera Connection. This panel is manual-only.
-                        </p>
+                      <button
+                        onClick={() => {}}
+                        className="btn bg-indigo-600 hover:bg-indigo-700 w-full"
+                      >
+                        Calibration Guide 📖
+                      </button>
+                      <div>
+                        <label
+                          htmlFor="autoscoreProvider"
+                          className="block text-sm mb-2"
+                        >
+                          Auto-score Provider
+                        </label>
+                        <select
+                          onPointerDown={(e) => {
+                            (e as any).stopPropagation();
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                          }}
+                          onTouchStart={(e) => {
+                            (e as any).stopPropagation?.();
+                          }}
+                          id="autoscoreProvider"
+                          value={autoscoreProvider || "manual"}
+                          onChange={(e) =>
+                            setAutoscoreProvider(
+                              e.target.value as "manual" | "external-ws",
+                            )
+                          }
+                          className="input w-full"
+                        >
+                          <option value="manual">Manual Scoring</option>
+                          <option value="external-ws">
+                            External (WebSocket)
+                          </option>
+                        </select>
                       </div>
+                      {autoscoreProvider === "external-ws" && (
+                        <input
+                          type="text"
+                          placeholder="WebSocket URL"
+                          value={autoscoreWsUrl || ""}
+                          onChange={(e) => setAutoscoreWsUrl(e.target.value)}
+                          className="input w-full text-xs"
+                        />
+                      )}
+                      {autoscoreProvider !== "manual" && (
+                        <div>
+                          <label
+                            htmlFor="autoCommitMode"
+                            className="block text-sm mb-2"
+                          >
+                            Turn Advance
+                          </label>
+                          <select
+                            onPointerDown={(e) => {
+                              (e as any).stopPropagation();
+                            }}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                            }}
+                            onTouchStart={(e) => {
+                              (e as any).stopPropagation?.();
+                            }}
+                            id="autoCommitMode"
+                            value={autoCommitMode || "wait-for-clear"}
+                            onChange={(e) =>
+                              setAutoCommitMode(
+                                e.target.value as
+                                  | "wait-for-clear"
+                                  | "immediate",
+                              )
+                            }
+                            className="input w-full"
+                          >
+                            <option value="wait-for-clear">
+                              Wait for darts to be removed
+                            </option>
+                            <option value="immediate">
+                              Advance immediately after 3 darts/bust
+                            </option>
+                          </select>
+                          <p className="text-xs opacity-70 mt-1">
+                            Waiting prevents the turn from rotating until you
+                            clear the board (or 6.5s pass).
+                          </p>
+                        </div>
+                      )}
+
+                      {autoscoreProvider !== "manual" && (
+                        <div className="pt-2 border-t border-white/10">
+                          <div className="font-semibold mb-2 text-sm">
+                            Auto-score quality
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              id="confirmUncertainDarts"
+                              checked={confirmUncertainDarts ?? true}
+                              onChange={(e) =>
+                                setConfirmUncertainDarts(e.target.checked)
+                              }
+                              className="w-4 h-4"
+                            />
+                            <label
+                              htmlFor="confirmUncertainDarts"
+                              className="text-sm"
+                            >
+                              Confirm uncertain darts
+                            </label>
+                          </div>
+                          <p className="text-xs opacity-70 mt-1">
+                            If the system isn’t confident enough, it’ll pause
+                            and ask you to accept/reject (Omni/Scolia-style).
+                          </p>
+
+                          <div className="mt-3">
+                            <label
+                              htmlFor="autoScoreConfidenceThreshold"
+                              className="block text-sm mb-2"
+                            >
+                              Confidence threshold:{" "}
+                              {(autoScoreConfidenceThreshold ?? 0.85).toFixed(
+                                2,
+                              )}
+                            </label>
+                            <input
+                              type="range"
+                              id="autoScoreConfidenceThreshold"
+                              min="0.5"
+                              max="0.99"
+                              step="0.01"
+                              value={autoScoreConfidenceThreshold ?? 0.85}
+                              onChange={(e) =>
+                                setAutoScoreConfidenceThreshold(
+                                  parseFloat(e.target.value),
+                                )
+                              }
+                              className="w-full"
+                            />
+                            <p className="text-xs opacity-70 mt-1">
+                              Higher = fewer confirmations, but higher risk of
+                              accepting a wrong hit.
+                            </p>
+                          </div>
+
+                          <details className="mt-4">
+                            <summary className="text-sm cursor-pointer select-none opacity-90">
+                              Advanced detector tuning
+                            </summary>
+
+                            <div className="mt-3 space-y-3">
+                              <div>
+                                <label className="block text-sm mb-2">
+                                  Min blob area:{" "}
+                                  {autoscoreDetectorMinArea ?? 30}
+                                </label>
+                                <input
+                                  type="range"
+                                  min="5"
+                                  max="200"
+                                  step="1"
+                                  value={autoscoreDetectorMinArea ?? 30}
+                                  onChange={(e) =>
+                                    setAutoscoreDetectorMinArea(
+                                      parseInt(e.target.value, 10),
+                                    )
+                                  }
+                                  className="w-full"
+                                />
+                                <p className="text-xs opacity-70 mt-1">
+                                  Lower = more sensitive (can increase false
+                                  positives).
+                                </p>
+                              </div>
+
+                              <div>
+                                <label className="block text-sm mb-2">
+                                  Foreground threshold:{" "}
+                                  {autoscoreDetectorThresh ?? 15}
+                                </label>
+                                <input
+                                  type="range"
+                                  min="5"
+                                  max="40"
+                                  step="1"
+                                  value={autoscoreDetectorThresh ?? 15}
+                                  onChange={(e) =>
+                                    setAutoscoreDetectorThresh(
+                                      parseInt(e.target.value, 10),
+                                    )
+                                  }
+                                  className="w-full"
+                                />
+                                <p className="text-xs opacity-70 mt-1">
+                                  Lower = more motion counts as a dart.
+                                </p>
+                              </div>
+
+                              <div>
+                                <label className="block text-sm mb-2">
+                                  Stable frames required:{" "}
+                                  {autoscoreDetectorRequireStableN ?? 2}
+                                </label>
+                                <input
+                                  type="range"
+                                  min="1"
+                                  max="6"
+                                  step="1"
+                                  value={autoscoreDetectorRequireStableN ?? 2}
+                                  onChange={(e) =>
+                                    setAutoscoreDetectorRequireStableN(
+                                      parseInt(e.target.value, 10),
+                                    )
+                                  }
+                                  className="w-full"
+                                />
+                                <p className="text-xs opacity-70 mt-1">
+                                  Higher = fewer false triggers, but slower.
+                                </p>
+                              </div>
+                            </div>
+                          </details>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

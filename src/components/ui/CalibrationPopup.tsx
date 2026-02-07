@@ -1,6 +1,6 @@
-import React from "react";
-import type { Player } from "../../store/match.js";
-import { getCalibrationStatus } from "../../utils/gameCalibrationRequirements.js";
+﻿import React from "react";
+import type { Player } from "../../store/match";
+import { getCalibrationStatus } from "../../utils/gameCalibrationRequirements";
 
 export default function CalibrationPopup({
   players,
@@ -51,7 +51,7 @@ export default function CalibrationPopup({
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-blue-500 flex items-center justify-center text-lg font-bold text-white">
                   {player.name
                     .split(" ")
-                    .map((n: string) => n[0])
+                    .map((n) => n[0])
                     .join("")
                     .toUpperCase()
                     .slice(0, 2)}

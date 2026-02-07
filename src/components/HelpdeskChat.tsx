@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useRef, useCallback } from "react";
-import { useWS } from "./WSProvider.js";
+﻿import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useWS } from "./WSProvider";
 import { X, Send, Zap, User } from "lucide-react";
-import { analyzeUserQuestion, getEstimatedWaitTime } from "../utils/helpDeskAI.js";
+import { analyzeUserQuestion, getEstimatedWaitTime } from "../utils/helpDeskAI";
 
 export default function HelpdeskChat({
   request,

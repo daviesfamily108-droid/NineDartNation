@@ -1,30 +1,26 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import CameraView from "./CameraView.js";
-import GameScoreboard from "./scoreboards/GameScoreboard.js";
-import { useOnlineGameStats } from "./scoreboards/useGameStats.js";
-import { useMatch } from "../store/match.js";
-import { useMatchControl } from "../store/matchControl.js";
-import { readMatchSnapshot } from "../utils/matchSync.js";
-import { subscribeMatchSync, broadcastMessage } from "../utils/broadcast.js";
-import { usePendingVisit } from "../store/pendingVisit.js";
-import PauseTimerBadge from "./ui/PauseTimerBadge.js";
-import PauseQuitModal from "./ui/PauseQuitModal.js";
-import { useUserSettings } from "../store/userSettings.js";
-import MatchStartShowcase from "./ui/MatchStartShowcase.js";
-import { suggestCheckouts, sayScore } from "../utils/checkout.js";
-import { getPreferredUserName } from "../utils/userName.js";
-import LetterboxScoreboardOverlay from "./ui/LetterboxScoreboardOverlay.js";
-import { openMatchWindow } from "../utils/matchWindow.js";
+import React, { useCallback, useEffect, useState } from "react";
+import CameraView from "./CameraView";
+import GameHeaderBar from "./ui/GameHeaderBar";
+import GameScoreboard from "./scoreboards/GameScoreboard";
+import { useMatch } from "../store/match";
+import { useMatchControl } from "../store/matchControl";
+import { readMatchSnapshot } from "../utils/matchSync";
+import { subscribeMatchSync } from "../utils/broadcast";
+import { usePendingVisit } from "../store/pendingVisit";
+import PauseTimerBadge from "./ui/PauseTimerBadge";
+import { useUserSettings } from "../store/userSettings";
+import MatchControls from "./MatchControls";
+import MatchStartShowcase from "./ui/MatchStartShowcase";
+import { sayScore } from "../utils/checkout";
+import { getPreferredUserName } from "../utils/userName";
+import LetterboxScoreboardOverlay from "./ui/LetterboxScoreboardOverlay";
 
 export default function MatchPage() {
   const match = useMatch();
-  useUserSettings((s: any) => s.hideInGameSidebar ?? true);
+  useUserSettings((s) => s.hideInGameSidebar ?? true);
   const _setMatchState = useMatch().importState;
-  const setPaused = useMatchControl((s: any) => s.setPaused);
-  const paused = useMatchControl((s: any) => s.paused);
-  const pauseEndsAt = useMatchControl((s: any) => s.pauseEndsAt);
-  const pauseInitiator = useMatchControl((s: any) => s.pauseInitiator);
-  const [pauseNow, setPauseNow] = useState(Date.now());
+  const _setControl = useMatchControl((s) => s.setPaused);
+  const _control = useMatchControl();
   const [_ready, setReady] = useState(false);
   const [winningShot, setWinningShot] = useState<{
     label?: string;
@@ -34,9 +30,9 @@ export default function MatchPage() {
   } | null>(null);
   const [remoteFrame, setRemoteFrame] = useState<string | null>(null);
   const lastOfflineStart = useUserSettings(
-    (s: any) => s.lastOffline?.x01Start || 501,
+    (s) => s.lastOffline?.x01Start || 501,
   );
-  const user = useUserSettings((s: any) => s.user);
+  const user = useUserSettings((s) => s.user);
   const localPlayerName =
     user?.username ||
     user?.name ||
@@ -63,32 +59,22 @@ export default function MatchPage() {
   const opponentPlayers = (match.players || []).filter(
     (_p: any, idx: number) => idx !== localPlayerIndex,
   );
-  const callerEnabled = useUserSettings((s: any) => s.callerEnabled);
-  const callerVoice = useUserSettings((s: any) => s.callerVoice);
-  const callerVolume = useUserSettings((s: any) => s.callerVolume);
-  const speakCheckoutOnly = useUserSettings((s: any) => s.speakCheckoutOnly);
+  const callerEnabled = useUserSettings((s) => s.callerEnabled);
+  const callerVoice = useUserSettings((s) => s.callerVoice);
+  const callerVolume = useUserSettings((s) => s.callerVolume);
+  const speakCheckoutOnly = useUserSettings((s) => s.speakCheckoutOnly);
+  const [playerVisitDarts, setPlayerVisitDarts] = useState(0);
+  const [playerDartPoints, setPlayerDartPoints] = useState<number>(0);
   const [visitTotalInput, setVisitTotalInput] = useState<string>("");
-  const [showQuitPause, setShowQuitPause] = useState(false);
+  const [manualBox, setManualBox] = useState("");
+  const [multiEntry, setMultiEntry] = useState("");
+  const [manualEntries, setManualEntries] = useState<number[]>([]);
   const [showStartShowcase, setShowStartShowcase] = useState<boolean>(true);
   const showcaseLockedOpenRef = React.useRef(true);
-
-  const gameMode = (((match as any)?.game || "X01") as any) ?? "X01";
-  const scoreboardPlayers = useOnlineGameStats(gameMode, match as any);
-
-  const checkoutRoutes = useMemo(() => {
-    if (gameMode !== "X01" || localRemaining > 170 || localRemaining <= 0) return null;
-    const routes = suggestCheckouts(localRemaining);
-    return routes && routes.length > 0 ? routes : null;
-  }, [gameMode, localRemaining]);
-
-  const legsInfo = useMemo(() => {
-    const players = match.players || [];
-    return players.map((p: any) => ({
-      name: p.name || "Player",
-      legsWon: p.legsWon || 0,
-    }));
-  }, [match.players]);
-  // Mobile camera view state was used by older layouts; current mobile layout is inline.
+  const [showMobileCamera, setShowMobileCamera] = useState(false);
+  const [mobileViewMode, setMobileViewMode] = useState<"controls" | "camera">(
+    "controls",
+  );
 
   // In the match pop-out window we want the same pre-game build-up overlay
   // (and camera preview) that exists on the main pre-game screen.
@@ -101,19 +87,6 @@ export default function MatchPage() {
     if (!showcaseLockedOpenRef.current) return;
     setShowStartShowcase(true);
   }, []);
-
-  // Tick the pause countdown timer
-  useEffect(() => {
-    if (!paused || !pauseEndsAt) return;
-    const t = setInterval(() => {
-      const now = Date.now();
-      setPauseNow(now);
-      if (now >= pauseEndsAt) {
-        setPaused(false, null);
-      }
-    }, 250);
-    return () => clearInterval(t);
-  }, [paused, pauseEndsAt, setPaused]);
 
   useEffect(() => {
     // Ensure camera is enabled for the pop-out so the feed can start immediately
@@ -179,7 +152,7 @@ export default function MatchPage() {
         };
         if (msg.type === "pause") {
           try {
-            useMatchControl.getState().setPaused(true, msg.pauseEndsAt ?? null, msg.pauseInitiator ?? null);
+            useMatchControl.getState().setPaused(true, msg.pauseEndsAt ?? null);
           } catch {}
         }
         if (msg.type === "unpause") {
@@ -325,6 +298,49 @@ export default function MatchPage() {
     }
   };
 
+  const resetManualState = () => {
+    setManualEntries([]);
+    setPlayerVisitDarts(0);
+    setPlayerDartPoints(0);
+    setVisitTotalInput("");
+    setManualBox("");
+  };
+
+  const addManualEntry = (value: number) => {
+    const dart = Math.max(0, Math.min(60, Math.round(value)));
+    const nextEntries = [...manualEntries, dart].slice(0, 3);
+    const darts = nextEntries.length;
+    setManualEntries(nextEntries);
+    setPlayerVisitDarts(darts);
+    if (darts >= 3) {
+      const sum = nextEntries.reduce((acc, v) => acc + v, 0);
+      commitVisit(sum, darts, { visitTotal: sum });
+      resetManualState();
+    }
+  };
+
+  const replaceLast = () => {
+    if (manualEntries.length === 0) return;
+    const next = manualEntries.slice(0, -1);
+    setManualEntries(next);
+    setPlayerVisitDarts(next.length);
+  };
+
+  const addDartNumeric = () => {
+    addManualEntry(Number(playerDartPoints) || 0);
+  };
+
+  const handleVisitTotalChange = (val: string) => {
+    setVisitTotalInput(val);
+  };
+
+  const addVisitTotal = () => {
+    const total = Math.max(0, Math.round(Number(visitTotalInput) || 0));
+    if (!Number.isFinite(total)) return;
+    commitVisit(total, 3, { visitTotal: total });
+    resetManualState();
+  };
+
   // Derive a finishing label from match state (fallback when no camera meta is available)
   const deriveWinningLabel = useCallback(() => {
     try {
@@ -369,12 +385,6 @@ export default function MatchPage() {
 
   return (
     <div className="card ndn-game-shell ndn-page relative overflow-hidden md:overflow-hidden overflow-y-auto">
-      {/* ── Ambient background glow ── */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/10 blur-[120px]" />
-        <div className="absolute -bottom-32 -right-32 w-96 h-96 rounded-full bg-amber-500/8 blur-[120px]" />
-      </div>
-
       {showStartShowcase && (
         <MatchStartShowcase
           open={showStartShowcase}
@@ -390,391 +400,511 @@ export default function MatchPage() {
           showCalibrationDefault={true}
         />
       )}
-
-      {/* ── Premium sticky header ── */}
-      <div className="sticky top-0 z-20 mb-3">
-        <div className="relative flex items-center justify-between gap-2 px-3 sm:px-5 py-2.5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg">
-          <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-transparent to-amber-500/10" />
-          <div className="flex items-center gap-3 text-sm leading-none z-10">
-            <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-xs font-semibold tracking-wide">
-              {gameMode}{gameMode === "X01" ? ` / ${match.startingScore || lastOfflineStart}` : ""}
-            </span>
-            {legsInfo.length >= 2 && (
-              <span className="font-bold text-white/90 text-sm tabular-nums">
-                Legs: {legsInfo[0].legsWon} – {legsInfo[1].legsWon}
-              </span>
-            )}
-            {winningShot?.label && (
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-xs">
-                🏆 {winningShot.label}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2 z-10">
-            <PauseTimerBadge />
-            <button
-              className="px-4 py-1.5 rounded-xl text-sm font-semibold bg-rose-600/90 hover:bg-rose-500 text-white border border-rose-400/30 shadow-lg shadow-rose-500/20 transition-all"
-              onClick={() => setShowQuitPause(true)}
-            >
-              ⏸ Quit / Pause
-            </button>
-          </div>
-        </div>
+      <div className="flex items-center gap-3 mb-4 ndn-section-title">
+        <button
+          className="btn btn--ghost px-3 py-1"
+          onClick={() => {
+            try {
+              if (window.opener && !(window.opener as any).closed) {
+                try {
+                  (window.opener as any).focus();
+                } catch {}
+              }
+              window.close();
+            } catch {}
+          }}
+          aria-label="Return to app and close match window"
+        >
+          Return
+        </button>
+        <h2 className="text-3xl font-bold text-brand-700">Match 🎯</h2>
+        {winningShot?.label && (
+          <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">
+            Winning double: {winningShot.label}
+          </span>
+        )}
       </div>
-
-      {/* ── Hero scoreboard banner — big remaining scores ── */}
-      <div className="relative mb-4 rounded-2xl border border-white/10 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-amber-950/80" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.03),transparent_70%)]" />
-
-        <div className="relative grid grid-cols-[1fr_auto_1fr] items-center py-4 sm:py-6 px-3 sm:px-8">
-          {/* Player 1 (local) */}
-          <div className="flex flex-col items-center gap-1">
-            <div className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${isUsersTurn ? "text-emerald-400" : "text-slate-400"}`}>
-              {localPlayer?.name || "You"}
+      <div
+        className="ndn-shell-body"
+        style={{
+          paddingBottom:
+            "calc(var(--ndn-bottomnav-h, 0px) + env(safe-area-inset-bottom, 0px) + 16px)",
+        }}
+      >
+        <GameHeaderBar
+          left={
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Camera view</span>
             </div>
-            <div className={`font-mono text-5xl sm:text-7xl md:text-8xl font-black tabular-nums leading-none ${isUsersTurn ? "text-white" : "text-white/60"}`}>
-              {localRemaining}
+          }
+          right={<PauseTimerBadge />}
+        />
+
+        {/* X01: Spectator-style full-screen camera when it's not the local user's turn */}
+        {((match as any)?.game || "X01") === "X01" && !isUsersTurn ? (
+          <div className="relative w-full rounded-3xl border border-slate-800/60 bg-black shadow-2xl overflow-hidden">
+            <div className="relative aspect-video sm:aspect-[16/9] w-full">
+              <CameraView hideInlinePanels={true} forceAutoStart={true} />
             </div>
-            {isUsersTurn && (
-              <div className="mt-1 px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
-                ● Throwing
+            <LetterboxScoreboardOverlay
+              checkoutRemaining={localRemaining}
+              away={{
+                side: "Away",
+                name: awayPlayer?.name || "Away",
+                legsWon: awayPlayer?.legsWon || 0,
+                remaining: awayRemaining,
+              }}
+              home={{
+                side: "Home",
+                name: localPlayer?.name || "Home",
+                legsWon: localPlayer?.legsWon || 0,
+                remaining: localRemaining,
+              }}
+            />
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-slate-800/60 bg-gradient-to-br from-slate-900/80 via-slate-900/60 to-slate-950/90 p-4 sm:p-6 shadow-2xl">
+            <div className="grid grid-cols-1 gap-5 items-start">
+              {/* Mobile: Turn-based layout */}
+              <div className="lg:hidden min-w-0 space-y-4">
+                {isUsersTurn ? (
+                  <>
+                    <div className="card p-3 rounded-2xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                      <div className="text-sm font-semibold mb-3 flex items-center justify-between">
+                        <span>Your Camera</span>
+                        <span className="text-xs text-emerald-300">
+                          Your turn
+                        </span>
+                      </div>
+                      <div className="relative h-56 rounded-2xl overflow-hidden bg-black shadow-inner">
+                        <CameraView
+                          hideInlinePanels={true}
+                          forceAutoStart={true}
+                          onAddVisit={commitVisit}
+                          onEndLeg={(score) => {
+                            try {
+                              match.endLeg(score ?? 0);
+                            } catch {}
+                          }}
+                          onVisitCommitted={(
+                            _score,
+                            _darts,
+                            finished,
+                            meta,
+                          ) => {
+                            if (!finished) return;
+                            const frame = meta?.frame ?? remoteFrame ?? null;
+                            setWinningShot({
+                              label:
+                                meta?.label ||
+                                deriveWinningLabel() ||
+                                undefined,
+                              ring: meta?.ring,
+                              frame,
+                              ts: Date.now(),
+                            });
+                            try {
+                              match.endGame();
+                            } catch {}
+                          }}
+                        />
+                        {winningShot?.frame && !match.inProgress && (
+                          <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
+                            <img
+                              src={winningShot.frame}
+                              alt="Winning double zoom"
+                              className="w-full h-full object-cover scale-125"
+                            />
+                            <div className="absolute bottom-2 left-2 right-2 text-xs text-white bg-black/60 rounded-md px-2 py-1 flex items-center justify-between gap-2">
+                              <span className="font-semibold">
+                                Winning dart zoom
+                              </span>
+                              {winningShot.label && (
+                                <span className="text-emerald-200">
+                                  {winningShot.label}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="card p-4 rounded-2xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-semibold">
+                          Your Scoreboard
+                        </h3>
+                      </div>
+                      <GameScoreboard
+                        gameMode={((match as any)?.game || "X01") as any}
+                        players={(match.players || []).map(
+                          (p: any, idx: number) => ({
+                            name: p.name || `Player ${idx + 1}`,
+                            isCurrentTurn:
+                              idx === (match.currentPlayerIdx || 0),
+                            legsWon: p.legsWon || 0,
+                            score:
+                              p.legs?.[p.legs.length - 1]
+                                ?.totalScoreRemaining ??
+                              match.startingScore ??
+                              lastOfflineStart,
+                            lastScore:
+                              p.legs && p.legs.length
+                                ? p.legs[p.legs.length - 1].visits.slice(-1)[0]
+                                    ?.score || 0
+                                : 0,
+                          }),
+                        )}
+                      />
+
+                      <div className="mt-4 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/40 to-indigo-950/40 p-3 shadow-[0_0_24px_rgba(99,102,241,0.25)]">
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            className="input text-center text-lg font-semibold rounded-xl border border-indigo-500/40 bg-transparent focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30 transition-all flex-1"
+                            style={{
+                              width: "400mm",
+                              height: "30mm",
+                              maxWidth: "100%",
+                            }}
+                            value={visitTotalInput}
+                            onChange={(e) => setVisitTotalInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const score = parseInt(visitTotalInput) || 0;
+                                commitVisit(score, 3, { visitTotal: score });
+                                setVisitTotalInput("");
+                              }
+                            }}
+                            placeholder="Tap to enter score"
+                            disabled={!match.inProgress}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn--primary px-5 py-3 rounded-xl text-sm font-semibold"
+                            onClick={() => {
+                              const score = parseInt(visitTotalInput) || 0;
+                              commitVisit(score, 3, { visitTotal: score });
+                              setVisitTotalInput("");
+                            }}
+                            disabled={!match.inProgress || !visitTotalInput}
+                          >
+                            Submit score
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="card p-4 rounded-2xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-semibold">Opponent</h3>
+                        <span className="text-xs text-amber-300 font-semibold px-2 py-1 rounded-full bg-amber-500/10 border border-amber-400/30">
+                          Waiting
+                        </span>
+                      </div>
+                      <GameScoreboard
+                        gameMode={((match as any)?.game || "X01") as any}
+                        players={(opponentPlayers.length
+                          ? opponentPlayers
+                          : match.players || []
+                        ).map((p: any, idx: number) => ({
+                          name: p.name || `Player ${idx + 1}`,
+                          isCurrentTurn:
+                            p === (match.players || [])[match.currentPlayerIdx],
+                          legsWon: p.legsWon || 0,
+                          score:
+                            p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
+                            match.startingScore ??
+                            lastOfflineStart,
+                          lastScore:
+                            p.legs && p.legs.length
+                              ? p.legs[p.legs.length - 1].visits.slice(-1)[0]
+                                  ?.score || 0
+                              : 0,
+                        }))}
+                      />
+                    </div>
+
+                    <div className="card p-3 rounded-2xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                      <div className="text-sm font-semibold mb-3 flex items-center justify-between">
+                        <span>Opponent Camera</span>
+                        <span className="text-xs text-slate-300">
+                          Live feed
+                        </span>
+                      </div>
+                      <div className="relative h-56 rounded-2xl overflow-hidden bg-black shadow-inner">
+                        <CameraView
+                          hideInlinePanels={true}
+                          forceAutoStart={true}
+                          onAddVisit={commitVisit}
+                          onEndLeg={(score) => {
+                            try {
+                              match.endLeg(score ?? 0);
+                            } catch {}
+                          }}
+                          onVisitCommitted={(
+                            _score,
+                            _darts,
+                            finished,
+                            meta,
+                          ) => {
+                            if (!finished) return;
+                            const frame = meta?.frame ?? remoteFrame ?? null;
+                            setWinningShot({
+                              label:
+                                meta?.label ||
+                                deriveWinningLabel() ||
+                                undefined,
+                              ring: meta?.ring,
+                              frame,
+                              ts: Date.now(),
+                            });
+                            try {
+                              match.endGame();
+                            } catch {}
+                          }}
+                        />
+                        {winningShot?.frame && !match.inProgress && (
+                          <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
+                            <img
+                              src={winningShot.frame}
+                              alt="Winning double zoom"
+                              className="w-full h-full object-cover scale-125"
+                            />
+                            <div className="absolute bottom-2 left-2 right-2 text-xs text-white bg-black/60 rounded-md px-2 py-1 flex items-center justify-between gap-2">
+                              <span className="font-semibold">
+                                Winning dart zoom
+                              </span>
+                              {winningShot.label && (
+                                <span className="text-emerald-200">
+                                  {winningShot.label}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-            )}
-            <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
-              Legs: {localPlayer?.legsWon || 0}
-            </div>
-          </div>
 
-          {/* Centre divider — VS */}
-          <div className="flex flex-col items-center gap-1 px-3 sm:px-6">
-            <div className="w-px h-8 sm:h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-            <div className="text-lg sm:text-2xl font-black text-white/30 tracking-widest">VS</div>
-            <div className="w-px h-8 sm:h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-          </div>
+              {/* Desktop: Turn-based layout */}
+              <div className="hidden lg:block min-w-0 space-y-5">
+                {isUsersTurn ? (
+                  <>
+                    <div className="card p-4 rounded-3xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                      <div className="text-sm font-semibold mb-3 flex items-center justify-between">
+                        <span>Your Camera</span>
+                        <span className="text-xs text-emerald-300">
+                          Your turn
+                        </span>
+                      </div>
+                      <div className="relative h-[360px] rounded-2xl overflow-hidden bg-black shadow-inner">
+                        <CameraView
+                          hideInlinePanels={true}
+                          forceAutoStart={true}
+                          onAddVisit={commitVisit}
+                          onEndLeg={(score) => {
+                            try {
+                              match.endLeg(score ?? 0);
+                            } catch {}
+                          }}
+                          onVisitCommitted={(
+                            _score,
+                            _darts,
+                            finished,
+                            meta,
+                          ) => {
+                            if (!finished) return;
+                            const frame = meta?.frame ?? remoteFrame ?? null;
+                            setWinningShot({
+                              label:
+                                meta?.label ||
+                                deriveWinningLabel() ||
+                                undefined,
+                              ring: meta?.ring,
+                              frame,
+                              ts: Date.now(),
+                            });
+                            try {
+                              match.endGame();
+                            } catch {}
+                          }}
+                        />
+                        {winningShot?.frame && !match.inProgress && (
+                          <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
+                            <img
+                              src={winningShot.frame}
+                              alt="Winning double zoom"
+                              className="w-full h-full object-cover scale-125"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-          {/* Player 2 (away) */}
-          <div className="flex flex-col items-center gap-1">
-            <div className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${!isUsersTurn ? "text-amber-400" : "text-slate-400"}`}>
-              {awayPlayer?.name || "Opponent"}
-            </div>
-            <div className={`font-mono text-5xl sm:text-7xl md:text-8xl font-black tabular-nums leading-none ${!isUsersTurn ? "text-white" : "text-white/60"}`}>
-              {awayRemaining}
-            </div>
-            {!isUsersTurn && (
-              <div className="mt-1 px-3 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
-                ● Throwing
+                    <div className="card p-5 rounded-3xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-semibold">
+                          Your Scoreboard
+                        </h3>
+                      </div>
+                      <GameScoreboard
+                        gameMode={((match as any)?.game || "X01") as any}
+                        players={(match.players || []).map(
+                          (p: any, idx: number) => ({
+                            name: p.name || `Player ${idx + 1}`,
+                            isCurrentTurn:
+                              idx === (match.currentPlayerIdx || 0),
+                            legsWon: p.legsWon || 0,
+                            score:
+                              p.legs?.[p.legs.length - 1]
+                                ?.totalScoreRemaining ??
+                              match.startingScore ??
+                              lastOfflineStart,
+                            lastScore:
+                              p.legs && p.legs.length
+                                ? p.legs[p.legs.length - 1].visits.slice(-1)[0]
+                                    ?.score || 0
+                                : 0,
+                          }),
+                        )}
+                      />
+
+                      <div className="mt-5 rounded-2xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/40 via-purple-950/40 to-indigo-950/40 p-4 shadow-[0_0_24px_rgba(99,102,241,0.25)]">
+                        <div className="flex flex-col sm:flex-row gap-3">
+                          <input
+                            type="number"
+                            className="input text-center text-lg font-semibold rounded-xl border border-indigo-500/40 bg-transparent focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/30 transition-all flex-1"
+                            style={{
+                              width: "400mm",
+                              height: "30mm",
+                              maxWidth: "100%",
+                            }}
+                            value={visitTotalInput}
+                            onChange={(e) => setVisitTotalInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const score = parseInt(visitTotalInput) || 0;
+                                commitVisit(score, 3, { visitTotal: score });
+                                setVisitTotalInput("");
+                              }
+                            }}
+                            placeholder="Enter score"
+                            disabled={!match.inProgress}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn--primary px-5 py-3 rounded-xl text-sm font-semibold"
+                            onClick={() => {
+                              const score = parseInt(visitTotalInput) || 0;
+                              commitVisit(score, 3, { visitTotal: score });
+                              setVisitTotalInput("");
+                            }}
+                            disabled={!match.inProgress || !visitTotalInput}
+                          >
+                            Submit score
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="card p-5 rounded-3xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-base font-semibold">Opponent</h3>
+                        <span className="text-xs text-amber-300 font-semibold px-2 py-1 rounded-full bg-amber-500/10 border border-amber-400/30">
+                          Opponent turn
+                        </span>
+                      </div>
+                      <GameScoreboard
+                        gameMode={((match as any)?.game || "X01") as any}
+                        players={(opponentPlayers.length
+                          ? opponentPlayers
+                          : match.players || []
+                        ).map((p: any, idx: number) => ({
+                          name: p.name || `Player ${idx + 1}`,
+                          isCurrentTurn:
+                            p === (match.players || [])[match.currentPlayerIdx],
+                          legsWon: p.legsWon || 0,
+                          score:
+                            p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
+                            match.startingScore ??
+                            lastOfflineStart,
+                          lastScore:
+                            p.legs && p.legs.length
+                              ? p.legs[p.legs.length - 1].visits.slice(-1)[0]
+                                  ?.score || 0
+                              : 0,
+                        }))}
+                      />
+                    </div>
+
+                    <div className="card p-4 rounded-3xl border border-slate-800/60 bg-slate-950/60 shadow-xl ring-1 ring-white/5">
+                      <div className="text-sm font-semibold mb-3 flex items-center justify-between">
+                        <span>Opponent Camera</span>
+                        <span className="text-xs text-slate-300">
+                          Live feed
+                        </span>
+                      </div>
+                      <div className="relative h-[360px] rounded-2xl overflow-hidden bg-black shadow-inner">
+                        <CameraView
+                          hideInlinePanels={true}
+                          forceAutoStart={true}
+                          onAddVisit={commitVisit}
+                          onEndLeg={(score) => {
+                            try {
+                              match.endLeg(score ?? 0);
+                            } catch {}
+                          }}
+                          onVisitCommitted={(
+                            _score,
+                            _darts,
+                            finished,
+                            meta,
+                          ) => {
+                            if (!finished) return;
+                            const frame = meta?.frame ?? remoteFrame ?? null;
+                            setWinningShot({
+                              label:
+                                meta?.label ||
+                                deriveWinningLabel() ||
+                                undefined,
+                              ring: meta?.ring,
+                              frame,
+                              ts: Date.now(),
+                            });
+                            try {
+                              match.endGame();
+                            } catch {}
+                          }}
+                        />
+                        {winningShot?.frame && !match.inProgress && (
+                          <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
+                            <img
+                              src={winningShot.frame}
+                              alt="Winning double zoom"
+                              className="w-full h-full object-cover scale-125"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-            )}
-            <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
-              Legs: {awayPlayer?.legsWon || 0}
-            </div>
-          </div>
-        </div>
-
-        {/* Checkout suggestion strip */}
-        {checkoutRoutes && (
-          <div className="relative border-t border-emerald-400/20 bg-emerald-500/10 px-4 py-2 flex items-center gap-3">
-            <span className="text-[10px] sm:text-xs uppercase tracking-wider text-emerald-300/80 font-semibold whitespace-nowrap">
-              Checkout {localRemaining}:
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {checkoutRoutes.map((route: string, i: number) => (
-                <span key={i} className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs sm:text-sm font-medium">
-                  {route}
-                </span>
-              ))}
             </div>
           </div>
         )}
       </div>
-
-      {/* ── Main content: Camera + Scoreboard + Controls ── */}
-      <div className="ndn-shell-body">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-3 md:gap-4 items-stretch">
-          {/* Left column: Camera */}
-          <div className="min-w-0">
-            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 h-full flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${isUsersTurn ? "bg-emerald-400 shadow-lg shadow-emerald-400/50" : "bg-amber-400 shadow-lg shadow-amber-400/50"}`} />
-                  <span className="text-xs sm:text-sm font-semibold text-white/80">
-                    {isUsersTurn ? "Your Camera" : "Opponent Camera"}
-                  </span>
-                </div>
-                <span className={`text-[10px] sm:text-xs font-medium ${isUsersTurn ? "text-emerald-300" : "text-amber-300"}`}>
-                  {isUsersTurn ? "LIVE — Your turn" : "Waiting…"}
-                </span>
-              </div>
-              <div className="relative min-h-[10rem] max-h-[40vh] md:max-h-none md:flex-1 bg-black">
-                {isUsersTurn ? (
-                  <CameraView
-                    hideInlinePanels={true}
-                    forceAutoStart={true}
-                    onAddVisit={commitVisit}
-                    onEndLeg={(score: any) => {
-                      try { match.endLeg(score ?? 0); } catch {}
-                    }}
-                    onVisitCommitted={(
-                      _score: any,
-                      _darts: any,
-                      finished: any,
-                      meta: any,
-                    ) => {
-                      if (!finished) return;
-                      const frame = meta?.frame ?? remoteFrame ?? null;
-                      setWinningShot({
-                        label: meta?.label || deriveWinningLabel() || undefined,
-                        ring: meta?.ring,
-                        frame,
-                        ts: Date.now(),
-                      });
-                      try { match.endGame(); } catch {}
-                    }}
-                  />
-                ) : (
-                  <CameraView hideInlinePanels={true} forceAutoStart={true} />
-                )}
-                {gameMode === "X01" && !isUsersTurn && (
-                  <LetterboxScoreboardOverlay
-                    checkoutRemaining={localRemaining}
-                    away={{
-                      side: "Away",
-                      name: awayPlayer?.name || "Away",
-                      legsWon: awayPlayer?.legsWon || 0,
-                      remaining: awayRemaining,
-                    }}
-                    home={{
-                      side: "Home",
-                      name: localPlayer?.name || "Home",
-                      legsWon: localPlayer?.legsWon || 0,
-                      remaining: localRemaining,
-                    }}
-                  />
-                )}
-                {winningShot?.frame && !match.inProgress && (
-                  <div className="absolute inset-2 rounded-lg overflow-hidden border border-emerald-400/40 shadow-lg bg-black/70">
-                    <img
-                      src={winningShot.frame}
-                      alt="Winning double zoom"
-                      className="w-full h-full object-cover scale-125"
-                    />
-                    <div className="absolute bottom-2 left-2 right-2 text-xs text-white bg-black/60 rounded-md px-2 py-1 flex items-center justify-between gap-2">
-                      <span className="font-semibold">Winning dart</span>
-                      {winningShot.label && (
-                        <span className="text-emerald-200">{winningShot.label}</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Right column: Scoreboard + Score Entry */}
-          <div className="min-w-0 flex flex-col gap-3">
-            {/* Scoreboard card */}
-            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent" />
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">Match Stats</h3>
-                <div className={`px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
-                  isUsersTurn
-                    ? "bg-emerald-500/20 border border-emerald-400/30 text-emerald-300"
-                    : "bg-amber-500/20 border border-amber-400/30 text-amber-300"
-                }`}>
-                  {isUsersTurn ? "Your turn" : "Opponent's turn"}
-                </div>
-              </div>
-              <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
-            </div>
-
-            {/* Score Entry card — always visible, locked when opponent's turn */}
-            <div className={`relative rounded-2xl border shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden transition-all ${
-              isUsersTurn
-                ? "border-white/10 bg-slate-950/70"
-                : "border-white/5 bg-slate-950/40 opacity-60"
-            }`}>
-              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${isUsersTurn ? "from-emerald-500/[0.03]" : "from-slate-500/[0.02]"} to-transparent`} />
-              <div className="flex items-center justify-between mb-3">
-                <div className={`text-xs font-semibold uppercase tracking-wider ${isUsersTurn ? "text-emerald-300/60" : "text-slate-400/60"}`}>
-                  Score Entry
-                </div>
-                {!isUsersTurn && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-500/10 border border-slate-400/20">
-                    <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <rect x="5" y="11" width="14" height="11" rx="2" />
-                      <path d="M12 3a4 4 0 0 0-4 4v4h8V7a4 4 0 0 0-4-4z" />
-                    </svg>
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Waiting for opponent</span>
-                  </div>
-                )}
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  className={`flex-1 text-center text-xl sm:text-2xl font-bold rounded-xl border bg-white/5 placeholder-white/30 transition-all px-4 py-3 sm:py-4 ${
-                    isUsersTurn
-                      ? "border-white/10 text-white focus:border-emerald-400/50 focus:ring-2 focus:ring-emerald-500/20"
-                      : "border-white/5 text-white/30 cursor-not-allowed"
-                  }`}
-                  value={visitTotalInput}
-                  onChange={(e) => isUsersTurn && setVisitTotalInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (!isUsersTurn) return;
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const score = parseInt(visitTotalInput) || 0;
-                      commitVisit(score, 3, { visitTotal: score });
-                      setVisitTotalInput("");
-                    }
-                  }}
-                  placeholder={isUsersTurn ? "Enter score" : "Locked"}
-                  disabled={!isUsersTurn || !match.inProgress}
-                  readOnly={!isUsersTurn}
-                />
-                <button
-                  type="button"
-                  className={`px-6 py-3 sm:py-4 rounded-xl text-sm sm:text-base font-bold border transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                    isUsersTurn
-                      ? "bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400/30 shadow-lg shadow-emerald-500/20"
-                      : "bg-slate-700 text-white/40 border-white/5 cursor-not-allowed"
-                  }`}
-                  onClick={() => {
-                    if (!isUsersTurn) return;
-                    const score = parseInt(visitTotalInput) || 0;
-                    commitVisit(score, 3, { visitTotal: score });
-                    setVisitTotalInput("");
-                  }}
-                  disabled={!isUsersTurn || !match.inProgress || !visitTotalInput}
-                >
-                  Submit Score
-                </button>
-              </div>
-              {/* Quick-score buttons */}
-              <div className="flex flex-wrap gap-2 mt-3">
-                <span className="text-[10px] text-white/40 uppercase tracking-wider self-center">Quick:</span>
-                {[180, 140, 100, 85, 60, 45, 26].map((v) => (
-                  <button
-                    key={v}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                      isUsersTurn
-                        ? "border-white/10 bg-white/5 hover:bg-white/10 text-white/80 hover:text-white"
-                        : "border-white/5 bg-white/[0.02] text-white/20 cursor-not-allowed"
-                    }`}
-                    onClick={() => {
-                      if (!isUsersTurn) return;
-                      commitVisit(v, 3, { visitTotal: v });
-                      setVisitTotalInput("");
-                    }}
-                    disabled={!isUsersTurn}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Quit / Pause modal ── */}
-      {showQuitPause && (
-        <PauseQuitModal
-          onClose={() => setShowQuitPause(false)}
-          onQuit={() => {
-            setShowQuitPause(false);
-            try { match.endGame(); } catch {}
-            try { window.dispatchEvent(new Event("ndn:match-quit")); } catch {}
-            try { broadcastMessage({ type: "quit" }); } catch {}
-          }}
-          onPause={(minutes: number) => {
-            const endsAt = Date.now() + minutes * 60 * 1000;
-            try { setPaused(true, endsAt, localPlayerName); } catch {}
-            try {
-              broadcastMessage({
-                type: "pause",
-                pauseEndsAt: endsAt,
-                pauseStartedAt: Date.now(),
-                pauseInitiator: localPlayerName,
-              });
-            } catch {}
-            setShowQuitPause(false);
-          }}
-        />
-      )}
-
-      {/* ── Glass pause overlay — blocks all interaction while paused ── */}
-      {paused && pauseEndsAt && (() => {
-        const remaining = Math.max(0, pauseEndsAt - pauseNow);
-        const secs = Math.ceil(remaining / 1000);
-        const mm = Math.floor(secs / 60).toString().padStart(2, "0");
-        const ss = (secs % 60).toString().padStart(2, "0");
-        const started = useMatchControl.getState().pauseStartedAt ?? pauseNow;
-        const total = Math.max(1, pauseEndsAt - started);
-        const pct = Math.max(0, Math.min(100, (remaining / total) * 100));
-        const isInitiator = !pauseInitiator || pauseInitiator === localPlayerName;
-        return (
-          <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/80 backdrop-blur-md">
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="w-80 h-80 rounded-full bg-amber-500/10 blur-[100px]" />
-            </div>
-
-            <div className="relative rounded-3xl border border-amber-400/20 bg-slate-900/95 p-8 sm:p-10 shadow-2xl shadow-amber-500/10 max-w-sm w-full mx-4">
-              <div className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-b from-white/[0.04] to-transparent" />
-
-              <div className="relative flex flex-col items-center gap-5">
-                <div className="flex items-center gap-3">
-                  <div className="w-5 h-14 sm:w-6 sm:h-16 rounded-md bg-amber-400 shadow-lg shadow-amber-400/30" />
-                  <div className="w-5 h-14 sm:w-6 sm:h-16 rounded-md bg-amber-400 shadow-lg shadow-amber-400/30" />
-                </div>
-
-                <div className="text-amber-300 text-lg sm:text-xl font-bold uppercase tracking-[0.2em]">
-                  Match Paused
-                </div>
-
-                {pauseInitiator && (
-                  <div className="text-sm text-amber-200/60">
-                    Paused by <span className="font-semibold text-amber-200/90">{pauseInitiator}</span>
-                  </div>
-                )}
-
-                <div className="font-mono text-6xl sm:text-7xl font-black text-white tabular-nums leading-none">
-                  {mm}:{ss}
-                </div>
-
-                <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-300"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-
-                <div className="text-[10px] sm:text-xs text-amber-200/40 uppercase tracking-wider">
-                  Resuming when timer expires
-                </div>
-
-                {isInitiator ? (
-                  <button
-                    className="mt-1 px-8 py-3 rounded-2xl text-base font-bold bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/30 shadow-lg shadow-emerald-500/20 transition-all"
-                    onClick={() => {
-                      setPaused(false, null);
-                      try { broadcastMessage({ type: "unpause" }); } catch {}
-                    }}
-                  >
-                    ▶ Resume Match
-                  </button>
-                ) : (
-                  <div className="mt-1 text-sm text-amber-200/50 italic">
-                    Only <span className="font-semibold text-amber-200/80">{pauseInitiator}</span> can resume
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }

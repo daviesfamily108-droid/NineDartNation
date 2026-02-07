@@ -8,12 +8,12 @@ import {
   Clock,
   ChevronDown,
 } from "lucide-react";
-import CreateMatchModal from "./ui/CreateMatchModal.js";
-import MatchStartShowcase from "./ui/MatchStartShowcase.js";
-import { useMatch } from "../store/match.js";
-import { useWS } from "./WSProvider.js";
-import { launchInPlayDemo } from "../utils/inPlayDemo.js";
-import { openMatchWindow } from "../utils/matchWindow.js";
+import CreateMatchModal from "./ui/CreateMatchModal";
+import MatchStartShowcase from "./ui/MatchStartShowcase";
+import { useMatch } from "../store/match";
+import { useWS } from "./WSProvider";
+import { launchInPlayDemo } from "../utils/inPlayDemo";
+import { openMatchWindow } from "../utils/matchWindow";
 
 export default function OnlinePlayClean({ user }: { user?: any }) {
   const username = user?.username || "You";
@@ -29,8 +29,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     }
   })();
   const [serverMatches, setServerMatches] = useState<any[]>([]);
-  const inProgress = useMatch((s: any) => s.inProgress);
-  const players = useMatch((s: any) => s.players);
+  const inProgress = useMatch((s) => s.inProgress);
+  const players = useMatch((s) => s.players);
   const [focusMode, setFocusMode] = useState(false);
   const matchesRef = useRef<HTMLDivElement | null>(null);
   const showDemoControls =
@@ -346,7 +346,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   useEffect(() => {
     if (!wsGlobal) return;
     if (wsGlobal.connected) wsGlobal.send({ type: "list-matches" });
-    const unsub = wsGlobal.addListener((msg: any) => {
+    const unsub = wsGlobal.addListener((msg) => {
       try {
         if (msg?.type === "joined") {
           if (msg.id) setSelfId(msg.id);
@@ -851,7 +851,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         <CreateMatchModal
           open={showCreateModal}
           onClose={() => setShowCreateModal(false)}
-          onCreate={(p: any) => {
+          onCreate={(p) => {
             handleCreateMatch(p);
             setShowCreateModal(false);
           }}
@@ -937,7 +937,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   {joinChoice === "skip" &&
                     Object.values(remoteChoices).some((c) => c === "skip") && (
                       <div className="text-sm font-semibold mt-2">
-                        Both players skipped — Host/creator throws first
+                        Both players skipped — Left player throws first
                       </div>
                     )}
                   {bullActive && (

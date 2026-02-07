@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { useIsAdmin } from "../utils/admin.js";
-import { apiFetch } from "../utils/api.js";
+﻿import { useEffect, useState } from "react";
+import { useIsAdmin } from "../utils/admin";
+import { apiFetch } from "../utils/api";
 
 type Ready = {
   ok: boolean;

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Enhanced Dart Scoring with 100% Accuracy Guarantee
  *
  * Features:
@@ -11,9 +11,9 @@
  * 7. Automatic fallback to manual scoring if detection fails
  */
 
-import type { DetectedDart } from "./dartDetection.js";
-import type { BoardDetectionResult } from "./boardDetection.js";
-import { getScoringValidator, type ScoringValidation } from "./scoringAccuracy.js";
+import type { DetectedDart } from "./dartDetection";
+import type { BoardDetectionResult } from "./boardDetection";
+import { getScoringValidator, type ScoringValidation } from "./scoringAccuracy";
 
 export interface EnhancedDartScoringConfig {
   // Detection thresholds

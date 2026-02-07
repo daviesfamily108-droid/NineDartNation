@@ -31,7 +31,7 @@ export default defineConfig({
         try { hosts.push(new URL(envUrl).hostname) } catch {}
       }
       const extra = process.env.VITE_ALLOWED_HOSTS
-      if (extra) hosts.push(...extra.split(',').map((s: string) => s.trim()).filter(Boolean))
+      if (extra) hosts.push(...extra.split(',').map(s => s.trim()).filter(Boolean))
       return hosts
     })(),
     proxy: {

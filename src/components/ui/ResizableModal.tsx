@@ -1,13 +1,11 @@
-import React, {
+﻿import React, {
   useEffect,
   useRef,
   useState,
   type ReactNode,
   type CSSProperties,
 } from "react";
-import * as FocusLockModule from "react-focus-lock";
-
-const FocusLock = (FocusLockModule as any).default ?? (FocusLockModule as any);
+import FocusLock from "react-focus-lock";
 
 type Props = {
   storageKey: string;

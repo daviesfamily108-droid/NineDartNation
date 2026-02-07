@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { useCameraSession } from "../store/cameraSession.js";
+﻿import React, { useEffect, useRef, useState } from "react";
+import { useCameraSession } from "../store/cameraSession";
 
 /**
  * PhoneCameraOverlay - Displays the phone camera stream in a floating preview

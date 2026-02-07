@@ -1,5 +1,5 @@
 import React from "react";
-import { useWS } from "./WSProvider.js";
+import { useWS } from "./WSProvider";
 
 type Props = {
   /** Optional extra classes for positioning. */

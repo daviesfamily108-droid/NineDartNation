@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
-import { dlog } from "../utils/logger.js";
-import { useCameraSession } from "../store/cameraSession.js";
+﻿import { useEffect, useRef } from "react";
+import { dlog } from "../utils/logger";
+import { useCameraSession } from "../store/cameraSession";
 
 // GlobalCameraLogger: attaches to the camera session and emits detailed logs
 // about video element, media stream, and peer connection state so logs are

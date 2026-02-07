@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+﻿import React, { useEffect, useState, useRef } from "react";
 import {
   User,
   Trophy,
@@ -24,15 +24,15 @@ import {
   Percent,
   Hash,
 } from "lucide-react";
-import { useUserSettings } from "../store/userSettings.js";
+import { useUserSettings } from "../store/userSettings";
 import {
   getAllTime,
   getRollingAvg,
   getAllTimeAvg,
   getGameModeStats,
-} from "../store/profileStats.js";
-import { formatAvg } from "../utils/stats.js";
-import { apiFetch } from "../utils/api.js";
+} from "../store/profileStats";
+import { formatAvg } from "../utils/stats";
+import { apiFetch } from "../utils/api";
 
 // Section component - defined outside to avoid recreation on every render
 const Section = ({
@@ -270,7 +270,7 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
   useEffect(() => {
     if (!user?.email) return;
     apiFetch(`/api/subscription?email=${encodeURIComponent(user.email)}`)
-      .then((r: any) => r.json())
+      .then((r) => r.json())
       .then(setSubscription)
       .catch(() => {});
   }, [user?.email]);
@@ -302,11 +302,11 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
 
   // Calculate derived stats
   const totalGames = Object.values(gameModeStats).reduce(
-    (sum: number, s: any) => sum + Number(s?.played || 0),
+    (sum, s) => sum + (s.played || 0),
     0,
   );
   const totalWins = Object.values(gameModeStats).reduce(
-    (sum: number, s: any) => sum + Number(s?.won || 0),
+    (sum, s) => sum + (s.won || 0),
     0,
   );
 

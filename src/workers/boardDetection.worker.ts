@@ -1,4 +1,4 @@
-import { detectBoard, refineRingDetection } from "../utils/boardDetection.js";
+import { detectBoard, refineRingDetection } from "../utils/boardDetection";
 
 type DetectMessage = {
   type: "detect";

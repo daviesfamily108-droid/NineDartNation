@@ -1,5 +1,5 @@
 import React from "react";
-import { useTheme, ThemeName } from "../contexts/ThemeProvider.js";
+import { useTheme, ThemeName } from "../contexts/ThemeProvider";
 
 const ALL_THEMES: ThemeName[] = [
   "default",

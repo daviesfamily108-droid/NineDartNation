@@ -1,6 +1,6 @@
-import React, { useState } from "react";
-import ResizableModal from "./ui/ResizableModal.js";
-import InstallAppButton from "./InstallAppButton.js";
+﻿import React, { useState } from "react";
+import ResizableModal from "./ui/ResizableModal";
+import InstallAppButton from "./InstallAppButton";
 
 export default function Footer() {
   const [show, setShow] = useState(false);

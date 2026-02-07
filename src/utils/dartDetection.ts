@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Dart Detection System
  *
  * Detects red dart tips in the camera image using:
@@ -8,13 +8,13 @@
  * 4. Confidence scoring
  */
 
-import type { Point, Homography } from "./vision.js";
+import type { Point, Homography } from "./vision";
 import {
   imageToBoard,
   scoreAtBoardPoint,
   scoreAtBoardPointTheta,
   isPointOnBoard,
-} from "./vision.js";
+} from "./vision";
 
 export interface DartDetectionConfig {
   minConfidence?: number; // 0-1, default 0.7 (we'll override to 0.8 for stricter)

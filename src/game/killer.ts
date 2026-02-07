@@ -1,4 +1,4 @@
-export type KillerState = {
+﻿export type KillerState = {
   number: number; // assigned sector 1..20
   lives: number; // start with 3
   isKiller: boolean; // became killer by hitting own double
@@ -38,12 +38,6 @@ export function applyKillerDart(
   if (!me.isKiller && ring === "DOUBLE" && sector === me.number) {
     me.isKiller = true;
     return { becameKiller: true };
-  }
-  // Self-hit penalty: killer hitting own double loses a life
-  if (me.isKiller && ring === "DOUBLE" && sector === me.number) {
-    me.lives = Math.max(0, me.lives - 1);
-    if (me.lives === 0) me.eliminated = true;
-    return { becameKiller: false, victimId: selfId, livesRemoved: 1 };
   }
   // If already killer, hitting opponents' doubles/triples removes lives
   if (me.isKiller && (ring === "DOUBLE" || ring === "TRIPLE")) {

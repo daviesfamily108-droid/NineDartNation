@@ -1,48 +1,47 @@
 // Online play screen (renders CameraView)
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import CameraView from './CameraView.js'
-import ResizablePanel from './ui/ResizablePanel.js'
-import { suggestCheckouts, sayScore } from '../utils/checkout.js'
-import { addSample, getAllTimeAvg } from '../store/profileStats.js'
-import MatchStartShowcase from './ui/MatchStartShowcase.js'
-import { getFreeRemaining, incOnlineUsage } from '../utils/quota.js'
-import { useUserSettings } from '../store/userSettings.js'
-import { useCalibration } from '../store/calibration.js'
-import { useMatch } from '../store/match.js'
-import GameCalibrationStatus from './GameCalibrationStatus.js'
-import MatchSummaryModal from './MatchSummaryModal.js'
-import { freeGames, premiumGames, allGames, type GameKey } from '../utils/games.js'
-import { getUserCurrency, formatPriceInCurrency } from '../utils/config.js'
-import ResizableModal from './ui/ResizableModal.js'
-import GameHeaderBar from './ui/GameHeaderBar.js'
-import { useToast } from '../store/toast.js'
+import CameraView from './CameraView'
+import ResizablePanel from './ui/ResizablePanel'
+import { suggestCheckouts, sayScore } from '../utils/checkout'
+import { addSample, getAllTimeAvg } from '../store/profileStats'
+import MatchStartShowcase from './ui/MatchStartShowcase'
+import { getFreeRemaining, incOnlineUsage } from '../utils/quota'
+import { useUserSettings } from '../store/userSettings'
+import { useCalibration } from '../store/calibration'
+import { useMatch } from '../store/match'
+import GameCalibrationStatus from './GameCalibrationStatus'
+import MatchSummaryModal from './MatchSummaryModal'
+import { freeGames, premiumGames, allGames, type GameKey } from '../utils/games'
+import { getUserCurrency, formatPriceInCurrency } from '../utils/config'
+import ResizableModal from './ui/ResizableModal'
+import GameHeaderBar from './ui/GameHeaderBar'
+import { useToast } from '../store/toast'
 // import { TabKey } from './Sidebar'
-import { useWS } from './WSProvider.js'
-import { useMessages } from '../store/messages.js'
-import { censorProfanity, containsProfanity } from '../utils/profanity.js'
-import { useBlocklist } from '../store/blocklist.js'
-import TabPills from './ui/TabPills.js'
-import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart, ringSectorToDart } from '../game/types.js'
-import { ATC_ORDER } from '../game/aroundTheClock.js'
-import { createCricketState, applyCricketDart, CRICKET_NUMBERS, hasClosedAll as cricketClosedAll, cricketWinner } from '../game/cricket.js'
-import { createShanghaiState, getRoundTarget as shanghaiTarget, applyShanghaiDart, endShanghaiTurn } from '../game/shanghai.js'
-import { createDefaultHalveIt, getCurrentHalveTarget, applyHalveItDart, endHalveItTurn } from '../game/halveIt.js'
-import { createHighLow, applyHighLowDart, endHighLowTurn } from '../game/highLow.js'
-import { assignKillerNumbers, createKillerState, applyKillerDart, killerWinner } from '../game/killer.js'
-import { apiFetch } from '../utils/api.js'
+import { useWS } from './WSProvider'
+import { useMessages } from '../store/messages'
+import { censorProfanity, containsProfanity } from '../utils/profanity'
+import { useBlocklist } from '../store/blocklist'
+import TabPills from './ui/TabPills'
+import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart, ringSectorToDart } from '../game/types'
+import { ATC_ORDER } from '../game/aroundTheClock'
+import { createCricketState, applyCricketDart, CRICKET_NUMBERS, hasClosedAll as cricketClosedAll, cricketWinner } from '../game/cricket'
+import { createShanghaiState, getRoundTarget as shanghaiTarget, applyShanghaiDart, endShanghaiTurn } from '../game/shanghai'
+import { createDefaultHalveIt, getCurrentHalveTarget, applyHalveItDart, endHalveItTurn } from '../game/halveIt'
+import { createHighLow, applyHighLowDart, endHighLowTurn } from '../game/highLow'
+import { assignKillerNumbers, createKillerState, applyKillerDart, killerWinner } from '../game/killer'
+import { apiFetch } from '../utils/api'
 // Phase 2 premium games (Online support)
-import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS } from '../game/americanCricket.js'
-import { createBaseball, applyBaseballDart } from '../game/baseball.js'
-import { createGolf, applyGolfDart, GOLF_TARGETS } from '../game/golf.js'
-import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe.js'
-import { useMatchControl } from '../store/matchControl.js'
-import GameScoreboard from './scoreboards/GameScoreboard.js'
-import { makeOnlineAddVisitAdapter } from './matchControlAdapters.js'
-import { applyVisitCommit } from '../logic/applyVisitCommit.js'
-import { useOnlineGameStats } from './scoreboards/useGameStats.js'
-import { getWsCandidates } from '../utils/ws.js'
-import { getPreferredUserName } from '../utils/userName.js'
-import InGameShell from './InGameShell.js'
+import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS } from '../game/americanCricket'
+import { createBaseball, applyBaseballDart } from '../game/baseball'
+import { createGolf, applyGolfDart, GOLF_TARGETS } from '../game/golf'
+import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
+import { useMatchControl } from '../store/matchControl'
+import GameScoreboard from './scoreboards/GameScoreboard'
+import { makeOnlineAddVisitAdapter } from './matchControlAdapters'
+import { applyVisitCommit } from '../logic/applyVisitCommit'
+import { useOnlineGameStats } from './scoreboards/useGameStats'
+import { getWsCandidates } from '../utils/ws'
+import { getPreferredUserName } from '../utils/userName'
 
 export default function OnlinePlay({ user }: { user?: any }) {
   const toast = useToast();
@@ -111,7 +110,6 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale, cameraFitMode = 'fill', setCameraFitMode, cameraEnabled, textSize, boxSize, autoscoreProvider, matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName, x01DoubleIn: defaultX01DoubleIn } = useUserSettings()
   const setCameraEnabled = useUserSettings.getState().setCameraEnabled
   const manualScoring = autoscoreProvider === 'manual'
-
   useEffect(() => {
     if (cameraFitMode !== 'fit') {
       setCameraFitMode('fit')
@@ -263,7 +261,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [pauseAcceptedBy, setPauseAcceptedBy] = useState<Record<string, boolean>>({})
   const [pauseEndsAt, setPauseEndsAt] = useState<number | null>(null)
   const [pauseDurationSec, setPauseDurationSec] = useState<number>(300)
-  const setPausedGlobal = useMatchControl((s: any) => s.setPaused)
+  const setPausedGlobal = useMatchControl(s => s.setPaused)
   // View mode: compact player-by-player (mobile) vs full overview (desktop)
   const [compactView, setCompactView] = useState<boolean>(() => {
     try { const ua = navigator.userAgent || ''; return /Android|iPhone|iPad|iPod|Mobile/i.test(ua) } catch { return false }
@@ -277,7 +275,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
     const prev = endSummaryPrevRef.current
     const now = !!match.inProgress
     if (prev && !now) {
-      const hasFinished = (match.players || []).some((p: any) => (p.legs||[]).some((L: any) => L.finished))
+      const hasFinished = (match.players || []).some(p => (p.legs||[]).some(L => L.finished))
       if (hasFinished) setShowX01EndSummary(true)
     }
     endSummaryPrevRef.current = now
@@ -430,7 +428,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [avgTolerance, setAvgTolerance] = useState<number>(10)
   const { H: calibH } = useCalibration()
   const myAvg = user?.username ? getAllTimeAvg(user.username) : 0
-  const unread = useMessages((s: any) => s.unread)
+  const unread = useMessages(s => s.unread)
   const containsIntegrationMarker = (value: unknown) => {
     if (typeof value === "string") {
       return value.toLowerCase().includes("integration");
@@ -854,7 +852,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
           // Points: sum of scored points this leg
           pts += (L.totalScoreStart - L.totalScoreRemaining)
           // Darts: sum visits darts, subtract pre-open darts (Double-In) if any
-      const legDarts = (L.visits || []).reduce((a: number, v: any) => a + (v.darts || 0) - (v.preOpenDarts || 0), 0)
+          const legDarts = (L.visits || []).reduce((a, v) => a + (v.darts || 0) - (v.preOpenDarts || 0), 0)
           darts += legDarts
         }
       }
@@ -866,10 +864,10 @@ export default function OnlinePlay({ user }: { user?: any }) {
     if (players.length === 2) {
       matchScore = `${players[0]?.legsWon || 0}-${players[1]?.legsWon || 0}`
     } else if (players.length > 2) {
-      matchScore = players.map((p: any) => `${p.name}:${p.legsWon||0}`).join(' = ')
+      matchScore = players.map(p => `${p.name}:${p.legsWon||0}`).join(' = ')
     }
     const best = match.bestLegThisMatch
-    const bestText = best ? `${best.darts} darts${(() => { const p = players.find((x: any)=>x.id===best.playerId); return p?` (${p.name})`:'' })()}` : '-'
+    const bestText = best ? `${best.darts} darts${(() => { const p = players.find(x=>x.id===best.playerId); return p?` (${p.name})`:'' })()}` : '-'
     
     // Text size classes
     const getTextSizeClasses = (size: string) => {
@@ -1054,9 +1052,9 @@ export default function OnlinePlay({ user }: { user?: any }) {
 
   // Compute whether all opponents have closed a cricket number
   function allOpponentsClosed(num: 15|16|17|18|19|20|25, selfId: string): boolean {
-    const opps = match.players.filter((p: any) => p.id !== selfId)
+    const opps = match.players.filter(p => p.id !== selfId)
     if (opps.length === 0) return false
-    return opps.every((p: any) => (cricketById[p.id]?.marks?.[num] || 0) >= 3)
+    return opps.every(p => (cricketById[p.id]?.marks?.[num] || 0) >= 3)
   }
 
   function applyCricketAuto(value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
@@ -1065,7 +1063,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
     setCricketById(prev => {
       const copy = { ...prev }
       const st = { ...(copy[pid] || createCricketState()) }
-      const pts = applyCricketDart(st, value, ring, sector, (n: any)=>allOpponentsClosed(n, pid))
+      const pts = applyCricketDart(st, value, ring, sector, (n)=>allOpponentsClosed(n, pid))
       copy[pid] = st
       return copy
     })
@@ -1176,7 +1174,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
   function applyKillerAuto(ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
     const pid = currentPlayerId()
     // Ensure every player has an assignment before applying
-    match.players.forEach((p: any) => ensureKiller(p.id))
+    match.players.forEach(p => ensureKiller(p.id))
     setKillerById(prev => {
       const copy: Record<string, ReturnType<typeof createKillerState>> = {}
       for (const [id, st] of Object.entries(prev)) copy[id] = { ...st }
@@ -1184,7 +1182,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       // Trigger simple winner check
       const win = killerWinner(copy)
       if (win) {
-        try { triggerCelebration('leg', match.players.find((p: any)=>p.id===win)?.name || 'Player') } catch {}
+        try { triggerCelebration('leg', match.players.find(p=>p.id===win)?.name || 'Player') } catch {}
       }
       return copy
     })
@@ -1208,7 +1206,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
       const copy = { ...prev }
       const base = (copy[pid] || createAmCricketState())
       const st: ReturnType<typeof createAmCricketState> = { ...(base as any) }
-      const oppClosed = (n: 12|13|14|15|16|17|18|19|20|25) => match.players.filter((p: any)=>p.id!==pid).every((p: any) => (((amCricketById[p.id]?.marks as any)?.[n]||0) >= 3))
+      const oppClosed = (n: 12|13|14|15|16|17|18|19|20|25) => match.players.filter(p=>p.id!==pid).every(p => (((amCricketById[p.id]?.marks as any)?.[n]||0) >= 3))
       applyAmCricketDart(st, value, ring, sector, oppClosed)
       copy[pid] = st
       return copy
@@ -1273,7 +1271,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
   }
 
   function applyTttAuto(cell: number, value: number, ring?: 'SINGLE'|'DOUBLE'|'TRIPLE'|'BULL'|'INNER_BULL', sector?: number | null) {
-    setTTT((prev: any) => {
+    setTTT(prev => {
       const cp = { ...prev, board: [...prev.board] as any }
       tryClaimCell(cp as any, (cell as any), value, ring as any, sector)
       return cp as any
@@ -1430,12 +1428,6 @@ export default function OnlinePlay({ user }: { user?: any }) {
     }
   }
 
-  // When a match is running, render the same in-game UI shell used by the
-  // offline match window.
-  if ((match as any)?.inProgress) {
-    return <InGameShell user={user} showStartShowcase={showStartShowcase} onShowStartShowcaseChange={setShowStartShowcase} />
-  }
-
   return (
     <div className="card ndn-game-shell relative overflow-hidden">
       <h2 className="text-3xl font-bold text-brand-700 mb-4">Online Play</h2>
@@ -1456,28 +1448,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
               <button className="btn shrink-0" onClick={sendState} disabled={!connected}>Sync</button>
             </div>
 
-            <div
-              className={`mt-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 ${(!connected || locked) ? 'opacity-60' : ''}`}
-              role="button"
-              tabIndex={0}
-              aria-disabled={!connected || locked}
-              title={!connected ? 'Connect to the lobby first' : (locked ? 'Weekly free games used' : 'Create a new match')}
-              onClick={() => {
-                if (!connected || locked) return;
-                setShowCreate(true);
-                if (wsGlobal) wsGlobal.send({ type: 'list-matches' });
-                else wsRef.current?.send(JSON.stringify({ type: 'list-matches' }));
-              }}
-              onKeyDown={(e) => {
-                if (!connected || locked) return;
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setShowCreate(true);
-                  if (wsGlobal) wsGlobal.send({ type: 'list-matches' });
-                  else wsRef.current?.send(JSON.stringify({ type: 'list-matches' }));
-                }
-              }}
-            >
+            <div className={`mt-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 ${(!connected || locked) ? 'opacity-60' : ''}`} role="button" title={!connected ? 'Connect to the lobby first' : (locked ? 'Weekly free games used' : 'Create a new match')} onClick={() => { if (!connected || locked) return; setShowCreate(true); if (wsGlobal) wsGlobal.send({ type: 'list-matches' }); else wsRef.current?.send(JSON.stringify({ type: 'list-matches' })) }}>
               <button className="btn" disabled={!connected || locked}>Create Match +</button>
             </div>
 

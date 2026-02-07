@@ -1,4 +1,4 @@
-import { writeMatchSnapshot } from "./matchSync.js";
+import { writeMatchSnapshot } from "./matchSync";
 
 export function openMatchWindow() {
   if (typeof window === "undefined") return;

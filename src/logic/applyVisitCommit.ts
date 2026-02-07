@@ -1,4 +1,4 @@
-import { useMatch } from "../store/match.js";
+import { useMatch } from "../store/match";
 
 // Helper to apply a server-originated visit commit to the local match store.
 // Ensures the visit total and darts are applied atomically and avoids

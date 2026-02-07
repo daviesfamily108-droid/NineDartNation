@@ -1,6 +1,6 @@
-import { useEffect } from "react";
-import { useCameraSession } from "../store/cameraSession.js";
-import { sym } from "../ui/icons.js";
+﻿import { useEffect } from "react";
+import { useCameraSession } from "../store/cameraSession";
+import { sym } from "../ui/icons";
 
 /**
  * CameraStatusBadge

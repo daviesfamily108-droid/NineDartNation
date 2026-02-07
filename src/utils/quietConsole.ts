@@ -1,4 +1,4 @@
-import { isDev } from "./logger.js";
+import { isDev } from "./logger";
 
 /**
  * Suppresses known-noisy console output that can flood the console in dev and

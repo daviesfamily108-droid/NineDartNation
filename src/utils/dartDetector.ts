@@ -1,5 +1,5 @@
-// High-accuracy dart detector for built-in autoscore
-import { dlog } from "./logger.js";
+﻿// High-accuracy dart detector for built-in autoscore
+import { dlog } from "./logger";
 // Strategy:
 // - Maintain a grayscale background model (running average) when no darts are present
 // - For each frame, compute abs-diff mask vs background and apply a 3x3 morphological closing to reduce noise

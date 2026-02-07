@@ -6,13 +6,13 @@ import React, {
   useMemo,
   CSSProperties,
 } from "react";
-import { useCameraSession, CameraStreamMode } from "../store/cameraSession.js";
-import { useUserSettings } from "../store/userSettings.js";
-import { apiFetch } from "../utils/api.js";
-import { getPreferredWsUrl } from "../utils/ws.js";
-import { ensureVideoPlays } from "../utils/ensureVideoPlays.js";
+import { useCameraSession, CameraStreamMode } from "../store/cameraSession";
+import { useUserSettings } from "../store/userSettings";
+import { apiFetch } from "../utils/api";
+import { getPreferredWsUrl } from "../utils/ws";
+import { ensureVideoPlays } from "../utils/ensureVideoPlays";
 import { Camera, Smartphone } from "lucide-react";
-import { dinfo } from "../utils/logger.js";
+import { dinfo } from "../utils/logger";
 
 function clsx(...args: any[]) {
   return args.filter(Boolean).join(" ");
@@ -129,10 +129,10 @@ export default function CameraTile(props: CameraTileProps) {
   }, [mode]);
 
   useEffect(() => {
-      const h = window.location.hostname;
+    const h = window.location.hostname;
     if (h === "localhost" || h === "127.0.0.1") {
       apiFetch("/api/hosts")
-          .then((r: any) => r.json())
+        .then((r) => r.json())
         .then((j: any) => {
           const ip = Array.isArray(j?.hosts) && j.hosts.find((x: string) => x);
           if (ip) setLanHost(ip);
@@ -140,7 +140,7 @@ export default function CameraTile(props: CameraTileProps) {
         .catch(() => {});
     }
     apiFetch("/api/https-info")
-      .then((r: any) => r.json())
+      .then((r) => r.json())
       .then((j: any) => {
         if (j && typeof j.https === "boolean")
           setHttpsInfo({ https: !!j.https, port: Number(j.port) || 8788 });

@@ -1,10 +1,10 @@
-import { useMatch } from "../store/match.js";
-import { formatAvg } from "../utils/stats.js";
+﻿import { useMatch } from "../store/match";
+import { formatAvg } from "../utils/stats";
 // Icons not used directly in Scoreboard; MatchControls has its own icons
-import MatchControls from "./MatchControls.js";
-import { usePendingVisit } from "../store/pendingVisit.js";
-import type { UnifiedMatchActions } from "../logic/matchActions.js";
-import ResizableModal from "./ui/ResizableModal.js";
+import MatchControls from "./MatchControls";
+import { usePendingVisit } from "../store/pendingVisit";
+import type { UnifiedMatchActions } from "../logic/matchActions";
+import ResizableModal from "./ui/ResizableModal";
 
 export default function Scoreboard({
   matchActions,
@@ -21,7 +21,7 @@ export default function Scoreboard({
     startingScore,
     bestLegThisMatch,
   } = useMatch();
-  const pendingEntries = usePendingVisit((s: any) => s.entries);
+  const pendingEntries = usePendingVisit((s) => s.entries);
 
   // Prefer authoritative per-dart entries from the most recent committed visit
   // (already stored in match state) when available. Fallback to the pendingVisit
@@ -42,12 +42,12 @@ export default function Scoreboard({
     try {
       const summary = {
         ts: Date.now(),
-        players: players.map((p: any) => {
+        players: players.map((p) => {
           const totals = p.legs.reduce(
-            (acc: any, L: any) => {
+            (acc, L) => {
               acc.points += L.totalScoreStart - L.totalScoreRemaining;
               const legDarts = (L.visits || []).reduce(
-                (a: number, v: any) => a + (v.darts || 0),
+                (a, v) => a + (v.darts || 0),
                 0,
               );
               acc.darts += legDarts;
@@ -66,7 +66,7 @@ export default function Scoreboard({
           };
         }),
         winner: players.reduce(
-          (best: any, p: any) => (p.legsWon > (best?.legsWon || 0) ? p : best),
+          (best, p) => (p.legsWon > (best?.legsWon || 0) ? p : best),
           players[0],
         )?.name,
       };
@@ -100,7 +100,7 @@ export default function Scoreboard({
                   inProgress={inProgress}
                   startingScore={startingScore}
                   pendingEntries={pendingEntries}
-                  onAddVisit={(score: any, darts: any) => {
+                  onAddVisit={(score, darts) => {
                     // Compute remaining before we update store, to decide auto-advance
                     const p = players[currentPlayerIdx];
                     const leg = p.legs[p.legs.length - 1];
@@ -129,7 +129,7 @@ export default function Scoreboard({
                     }
                   }}
                   onUndo={() => (matchActions?.undoVisit ?? undoVisit)()}
-                  onEndLeg={(score: any, darts: any, meta: any) => {
+                  onEndLeg={(score, darts, meta) => {
                     const numericScore = typeof score === "number" ? score : 0;
                     const finalDarts =
                       typeof darts === "number" ? Math.max(0, darts) : 0;
@@ -157,17 +157,17 @@ export default function Scoreboard({
               )}
 
               <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-                {players.map((p: any, idx: number) => {
+                {players.map((p, idx) => {
                   const currentLeg = p.legs[p.legs.length - 1];
                   const remaining = currentLeg
                     ? currentLeg.totalScoreRemaining
                     : startingScore;
                   // TV-style 3-dart avg across the entire match (all legs): sum(points)/sum(darts)*3
                   const totals = p.legs.reduce(
-                    (acc: any, L: any) => {
+                    (acc, L) => {
                       acc.points += L.totalScoreStart - L.totalScoreRemaining;
                       const legDarts = (L.visits || []).reduce(
-                        (a: number, v: any) => a + (v.darts || 0),
+                        (a, v) => a + (v.darts || 0),
                         0,
                       );
                       acc.darts += legDarts;
@@ -270,7 +270,7 @@ export default function Scoreboard({
                 <div className="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
                   <strong>Best Leg (this match):</strong> Player{" "}
                   {
-                    players.find((p: any) => p.id === bestLegThisMatch.playerId)
+                    players.find((p) => p.id === bestLegThisMatch.playerId)
                       ?.name
                   }{" "}
                   in {bestLegThisMatch.darts} darts

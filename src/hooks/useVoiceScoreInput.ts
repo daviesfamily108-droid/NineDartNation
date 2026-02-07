@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { parseVoiceInput, VoiceResult } from "../utils/voiceScoring.js";
+import { parseVoiceInput, VoiceResult } from "../utils/voiceScoring";
 
 export function useVoiceScoreInput(onResult: (result: VoiceResult) => void) {
   const [isListening, setIsListening] = useState(false);

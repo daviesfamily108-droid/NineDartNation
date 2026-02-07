@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import * as FocusLockModule from "react-focus-lock";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import FocusLock from "react-focus-lock";
 import { createPortal } from "react-dom";
-import CameraTile from "../CameraTile.js";
-import type { Player } from "../../store/match.js";
-import { useCameraSession } from "../../store/cameraSession.js";
+import CameraTile from "../CameraTile";
+import type { Player } from "../../store/match";
+import { useCameraSession } from "../../store/cameraSession";
 import {
   getAllTime,
   getAllTime180s,
@@ -11,10 +11,8 @@ import {
   getAllTimeBestCheckout,
   getAllTimeBestLeg,
   getAllTimeFirstNineAvg,
-} from "../../store/profileStats.js";
-import { useUserSettings } from "../../store/userSettings.js";
-
-const FocusLock = (FocusLockModule as any).default ?? (FocusLockModule as any);
+} from "../../store/profileStats";
+import { useUserSettings } from "../../store/userSettings";
 
 interface StatProps {
   label: string;
@@ -56,8 +54,8 @@ export default function MatchStartShowcase({
     typeof document !== "undefined" ? document.createElement("div") : null,
   );
   const goTimeoutRef = useRef<number | null>(null);
-  const cameraEnabled = useUserSettings((s: any) => s.cameraEnabled);
-  const setCameraEnabled = useUserSettings((s: any) => s.setCameraEnabled);
+  const cameraEnabled = useUserSettings((s) => s.cameraEnabled);
+  const setCameraEnabled = useUserSettings((s) => s.setCameraEnabled);
   const cameraSession = useCameraSession();
 
   // Create portal container
@@ -165,10 +163,10 @@ export default function MatchStartShowcase({
           const lifetimeScored = all.scored || 0;
           const lifetimeDarts = all.darts || 0;
           const career180s = getAllTime180s(p.name);
-            const match180s = (p.legs || []).reduce((sum: number, leg: any) => {
-              const legCount = (leg.visits || []).filter((visit: any) =>
-                Number(visit?.visitTotal ?? visit?.score) === 180,
-              ).length;
+          const match180s = (p.legs || []).reduce((sum, leg) => {
+            const legCount = (leg.visits || []).filter(
+              (visit) => Number(visit.visitTotal ?? visit.score) === 180,
+            ).length;
             return sum + legCount;
           }, 0);
           return {

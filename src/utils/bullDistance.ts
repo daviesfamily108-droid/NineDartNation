@@ -1,4 +1,4 @@
-import type { Point } from "./vision.js";
+import type { Point } from "./vision";
 
 // The physical dartboard dimensions are standardized.
 // Source: World Darts Federation / common dartboard specs.

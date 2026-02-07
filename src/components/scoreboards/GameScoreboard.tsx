@@ -75,22 +75,17 @@ export default function GameScoreboard({
       {players.map((player, idx) => (
         <div
           key={idx}
-          className={`relative w-full rounded-2xl border p-4 overflow-hidden transition-all ${
+          className={`w-full rounded-xl border p-4 ${
             player.isCurrentTurn
-              ? "border-emerald-500/40 bg-emerald-500/10 shadow-lg shadow-emerald-500/5"
-              : "border-white/10 bg-white/[0.03]"
+              ? "border-emerald-500/40 bg-emerald-500/10"
+              : "border-slate-500/40 bg-slate-500/10"
           }`}
         >
-          {/* Subtle top-edge glow for active player */}
-          {player.isCurrentTurn && (
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/60 to-transparent" />
-          )}
           <div
-            className={`text-sm font-bold mb-3 uppercase tracking-wider flex items-center gap-2 ${
+            className={`text-sm font-semibold mb-3 uppercase tracking-wide ${
               player.isCurrentTurn ? "text-emerald-300" : "text-slate-300"
             }`}
           >
-            {player.isCurrentTurn && <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />}
             {player.name}
           </div>
 
@@ -343,13 +338,11 @@ function ScoreRow({
   highlight?: boolean;
 }) {
   return (
-    <div className="flex justify-between items-center py-0.5">
-      <span className="text-white/50 text-xs sm:text-sm">{label}:</span>
+    <div className="flex justify-between">
+      <span className="opacity-70">{label} 🎯:</span>
       <span
-        className={`${
-          mono ? "font-mono tabular-nums" : ""
-        } ${bold ? "font-bold" : "font-medium"} ${
-          highlight ? "text-emerald-300" : "text-white/90"
+        className={`${mono ? "font-mono" : ""} ${bold ? "font-semibold" : ""} ${
+          highlight ? "text-emerald-300" : ""
         }`}
       >
         {value}
@@ -374,20 +367,20 @@ function AvgDifferenceRow({
   let diffColor = "text-slate-300";
 
   if (isNeutral) {
-    diffText = "= All-time";
+    diffText = "= All-time 🎯";
     diffColor = "text-slate-300";
   } else if (isPositive) {
-    diffText = `+${diff.toFixed(2)} vs avg`;
+    diffText = `+${diff.toFixed(2)} vs avg 🎯`;
     diffColor = "text-emerald-400";
   } else {
-    diffText = `${diff.toFixed(2)} vs avg`;
+    diffText = `${diff.toFixed(2)} vs avg 🎯`;
     diffColor = "text-orange-400";
   }
 
   return (
-    <div className="flex justify-between items-center py-0.5">
-      <span className="text-white/50 text-xs sm:text-sm">AVG ±:</span>
-      <span className={`font-mono tabular-nums font-bold ${diffColor}`}>{diffText}</span>
+    <div className="flex justify-between">
+      <span className="opacity-70">AVG vs Avg 🎯:</span>
+      <span className={`font-mono font-semibold ${diffColor}`}>{diffText}</span>
     </div>
   );
 }

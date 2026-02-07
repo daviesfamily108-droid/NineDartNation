@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Advanced Dartboard Auto-Calibration
  *
  * Detects dartboard features automatically without markers or manual clicking:
@@ -22,9 +22,9 @@ import {
   ransacHomography,
   type Homography,
   type Point,
-} from "./vision.js";
-import { getGlobalCalibrationConfidence } from "./gameCalibrationRequirements.js";
-import { useUserSettings } from "../store/userSettings.js";
+} from "./vision";
+import { getGlobalCalibrationConfidence } from "./gameCalibrationRequirements";
+import { useUserSettings } from "../store/userSettings";
 
 const isFinitePoint = (p: Point | undefined): p is Point =>
   !!p && Number.isFinite(p.x) && Number.isFinite(p.y);

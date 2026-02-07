@@ -1,7 +1,7 @@
-import { useMatch } from "../store/match.js";
-import { formatAvg } from "../utils/stats.js";
+﻿import { useMatch } from "../store/match";
+import { formatAvg } from "../utils/stats";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import BarChart from "./BarChart.js";
+import BarChart from "./BarChart";
 import {
   getGameModeStats,
   getMonthlyAvg3,
@@ -12,9 +12,9 @@ import {
   getDailyAdjustedAvg,
   getRollingAvg,
   getStatSeries,
-} from "../store/profileStats.js";
-import { allGames } from "../utils/games.js";
-import TabPills from "./ui/TabPills.js";
+} from "../store/profileStats";
+import { allGames } from "../utils/games";
+import TabPills from "./ui/TabPills";
 
 export default function StatsPanel({ user }: { user?: any }) {
   const {
@@ -23,7 +23,7 @@ export default function StatsPanel({ user }: { user?: any }) {
     startingScore: _startingScore,
     newMatch: _newMatch,
   } = useMatch();
-  const [family, setFamily] = useState<"x01" | "other" | "tourney">("x01");
+  const [family, setFamily] = useState<"x01" | "other">("x01");
   const [_playersText, _setPlayersText] = useState("Player 1, Player 2");
   const [_start, _setStart] = useState(501);
   const [selectedGameMode, setSelectedGameMode] = useState<string>("");
@@ -39,13 +39,7 @@ export default function StatsPanel({ user }: { user?: any }) {
   >([]);
   const [searching, setSearching] = useState<boolean>(false);
   const searchTimerRef = useRef<number | null>(null);
-  const me = useMemo(() => {
-    try {
-      const cur = localStorage.getItem("ndn:currentUser");
-      if (cur) return String(cur).trim();
-    } catch {}
-    return String(user?.email || "").toLowerCase();
-  }, [user?.email]);
+  const me = String(user?.email || "").toLowerCase();
   const timeframeOptions = ["Daily", "Monthly", "All-Time"] as const;
   type TimeframeOption = (typeof timeframeOptions)[number];
   const [selectedTimeframe, setSelectedTimeframe] =
@@ -136,53 +130,32 @@ export default function StatsPanel({ user }: { user?: any }) {
   }, []);
 
   // Build a score-frequency distribution for the selected family.
-  // X01: use per-visit scores and bucket them into "+" bands so players can compare ranges.
+  // For now, we only have X01 in the match store; "other" is a placeholder that would read other game stats when added.
   const dist = useMemo(() => {
-    if (family !== "x01") return [] as Array<{ label: number; value: number }>;
-
-    // Requested bands (inclusive lower-bounds). Keep sorted ascending.
-    const BANDS: number[] = [
-      0, 26, 41, 45, 55, 60, 81, 85, 95, 100, 120, 140, 160, 180,
-    ];
-
-    const out: Map<number, number> = new Map(BANDS.map((b) => [b, 0]));
-
-    const addScore = (rawScore: any, n: number = 1) => {
-      const s = Math.max(0, Math.min(180, Number(rawScore) || 0));
-      // Find band as highest lower-bound <= score.
-      let band = BANDS[0];
-      for (let i = 0; i < BANDS.length; i++) {
-        if (s >= BANDS[i]) band = BANDS[i];
-        else break;
-      }
-      out.set(band, (out.get(band) ?? 0) + Math.max(0, Number(n) || 0));
-    };
-
-    if (inProgress) {
-      // Current match (live)
+    const freq = new Map<number, number>();
+    if (family === "x01") {
       for (const p of players) {
         for (const leg of p.legs) {
           for (const v of leg.visits) {
-            addScore(v.score, 1);
+            const s = Math.max(0, Math.min(180, v.score));
+            freq.set(s, (freq.get(s) ?? 0) + 1);
           }
         }
       }
     }
-
-    // Persisted all-time stats for signed-in user.
-    const name = (me || "").trim();
-    if (name) {
-      const all = getAllTime(name);
-      const stored = all?.scoreFreq || {};
-      for (const [k, v] of Object.entries(stored)) {
-        addScore(k, v);
-      }
+    // Convert to sorted array (by score asc) and limit to reasonable width
+    const arr = Array.from(freq.entries()).sort((a, b) => a[0] - b[0]);
+    // If very sparse, still show common x01 bands
+    if (arr.length === 0 && family === "x01") {
+      [0, 26, 41, 60, 81, 100, 120, 140, 160, 180].forEach((k) =>
+        freq.set(k, 0),
+      );
+      return Array.from(freq.entries())
+        .sort((a, b) => a[0] - b[0])
+        .map(([label, value]) => ({ label, value }));
     }
-
-    return Array.from(out.entries())
-      .sort((a, b) => a[0] - b[0])
-      .map(([label, value]) => ({ label, value }));
-  }, [players, family, inProgress, me]);
+    return arr.map(([label, value]) => ({ label, value }));
+  }, [players, family]);
 
   // Build Other Modes dataset: one bar per mode with value = played, label = mode name, and show played/won in label
   const otherData = useMemo(() => {
@@ -206,19 +179,6 @@ export default function StatsPanel({ user }: { user?: any }) {
     }
     return { total, most, least };
   }, [dist]);
-
-  const distChart = useMemo(() => {
-    if (family !== "x01") return dist as any;
-    return dist.map((d: any) => ({
-      ...d,
-      label:
-        typeof d.label === "number"
-          ? d.label >= 180
-            ? "180"
-            : `${d.label}+`
-          : d.label,
-    }));
-  }, [dist, family]);
 
   const statSeries = useMemo(() => {
     if (!me) return [];
@@ -252,19 +212,19 @@ export default function StatsPanel({ user }: { user?: any }) {
           : Number.POSITIVE_INFINITY;
     const filtered = statSeries
       .filter(
-        (entry: any) =>
+        (entry) =>
           windowMs === Number.POSITIVE_INFINITY || now - entry.t <= windowMs,
       )
-      .map((entry: any) => ({
+      .map((entry) => ({
         t: entry.t,
         value: entry.darts ? (entry.scored / entry.darts) * 3 : 0,
       }))
-      .sort((a: any, b: any) => a.t - b.t);
+      .sort((a, b) => a.t - b.t);
     if (!filtered.length) return [];
     const maxPoints = 32;
     const step = Math.max(1, Math.floor(filtered.length / maxPoints));
     return filtered.filter(
-      (_: any, idx: number) => idx % step === 0 || idx === filtered.length - 1,
+      (_, idx) => idx % step === 0 || idx === filtered.length - 1,
     );
   }, [statSeries, selectedTimeframe]);
 
@@ -272,13 +232,13 @@ export default function StatsPanel({ user }: { user?: any }) {
     if (!sparklineData.length) return "";
     const width = 220;
     const height = 40;
-    const values = sparklineData.map((point: any) => point.value);
+    const values = sparklineData.map((point) => point.value);
     const minVal = Math.min(...values);
     const maxVal = Math.max(...values);
     const range = maxVal - minVal || 1;
     const count = sparklineData.length;
     return sparklineData
-      .map((point: any, idx: number) => {
+      .map((point, idx) => {
         const x = count === 1 ? width / 2 : (idx / (count - 1)) * width;
         const normalized = (point.value - minVal) / range;
         const y = height - normalized * height;
@@ -303,16 +263,12 @@ export default function StatsPanel({ user }: { user?: any }) {
   // Mobile layout hooks: ensure content is fully visible above bottom nav
 
   return (
-    <div className="card ndn-game-shell ndn-page ndn-stats-page pb-24 overflow-visible relative">
-      <div
-        className="absolute top-0 left-0 right-0 -bottom-[155px] -z-10 rounded-[inherit]"
-        style={{
-          background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
-          backgroundRepeat: "no-repeat",
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-        }}
-      />
+    <div
+      className="card ndn-game-shell ndn-page ndn-stats-page pb-6 overflow-visible"
+      style={{
+        background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
+      }}
+    >
       <div className="mb-4">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-2xl font-extrabold text-white ndn-section-title">
@@ -325,10 +281,9 @@ export default function StatsPanel({ user }: { user?: any }) {
             tabs={[
               { key: "x01", label: "X01 🎯" },
               { key: "other", label: "Other Modes 🎯" },
-              { key: "tourney", label: "Tourneys 🎯" },
             ]}
             active={family}
-            onChange={(k) => setFamily(k as any)}
+            onChange={(k) => setFamily(k as "x01" | "other")}
           />
         </div>
       </div>
@@ -337,15 +292,8 @@ export default function StatsPanel({ user }: { user?: any }) {
           Note: Detailed leg stats are finalized at the end of the game.
         </div>
       )}
-
-      {family === "tourney" && (
-        <div className="mb-4 p-3 rounded-xl border border-slate-800/60 bg-slate-950/40 text-slate-200">
-          Tournament stats view is enabled. Next step is wiring tournament-only
-          stat recording so this tab shows only tournament matches.
-        </div>
-      )}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {players.map((p: any, idx: number) => {
+        {players.map((p, idx) => {
           const playerName = p.name || `Player ${idx + 1}`;
           const all = getAllTime(playerName);
           const resolvedBest3 = Math.max(
@@ -800,24 +748,24 @@ export default function StatsPanel({ user }: { user?: any }) {
             <span className="text-left">
               Most frequent:{" "}
               {distSummary
-                ? `${distSummary.most.label >= 180 ? "180" : `${distSummary.most.label}+`} (${distSummary.most.value})`
+                ? `${distSummary.most.label} (${distSummary.most.value})`
                 : "—"}
             </span>
             <span className="text-right">
               Least frequent:{" "}
               {distSummary
-                ? `${distSummary.least.label >= 180 ? "180" : `${distSummary.least.label}+`} (${distSummary.least.value})`
+                ? `${distSummary.least.label} (${distSummary.least.value})`
                 : "—"}
             </span>
           </div>
           <div
-            className="rounded-xl border border-indigo-500/20 p-3 pb-1 min-h-[220px] transform transition-shadow duration-200 hover:shadow-lg overflow-y-auto"
+            className="rounded-xl border border-indigo-500/20 p-3 min-h-[220px] transform transition-shadow duration-200 hover:shadow-lg overflow-y-auto"
             style={{
               background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
               scrollbarColor: "#8F43EE #18122B",
             }}
           >
-            <BarChart data={distChart as any} showValues={false} />
+            <BarChart data={dist} showValues={false} />
           </div>
         </div>
       ) : selectedGameMode &&

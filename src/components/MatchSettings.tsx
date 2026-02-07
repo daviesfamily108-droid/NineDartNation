@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMatch } from "../store/match.js";
+﻿import { useState } from "react";
+import { useMatch } from "../store/match";
 
 export default function MatchSettings() {
   const [playersText, setPlayersText] = useState("Player 1, Player 2");

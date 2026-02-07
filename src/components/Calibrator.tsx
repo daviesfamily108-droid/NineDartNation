@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DartDetector } from "../utils/dartDetector.js";
+import { DartDetector } from "../utils/dartDetector";
 
-import { useCalibration } from "../store/calibration.js";
-import { useCameraSession } from "../store/cameraSession.js";
+import { useCalibration } from "../store/calibration";
+import { useCameraSession } from "../store/cameraSession";
 import {
   BoardRadii,
   CalibrationGuideRadii,
@@ -24,32 +24,32 @@ import {
   estimateSectorOffsetFromHomography,
   type Homography,
   type Point,
-} from "../utils/vision.js";
+} from "../utils/vision";
 import {
   detectMarkersFromCanvas,
   MARKER_TARGETS,
   markerIdToMatrix,
   type MarkerDetection,
-} from "../utils/markerCalibration.js";
+} from "../utils/markerCalibration";
 import {
   detectBoard,
   refineRingDetection,
   type BoardDetectionResult,
-} from "../utils/boardDetection.js";
-import { useUserSettings } from "../store/userSettings.js";
+} from "../utils/boardDetection";
+import { useUserSettings } from "../store/userSettings";
 import {
   discoverNetworkDevices,
   connectToNetworkDevice,
   type NetworkDevice,
-} from "../utils/networkDevices.js";
-import { apiFetch } from "../utils/api.js";
-import { useMatch } from "../store/match.js";
-import { useWS } from "./WSProvider.js";
-
-declare const process: any;
+} from "../utils/networkDevices";
+import { apiFetch } from "../utils/api";
+import { useMatch } from "../store/match";
+import { useWS } from "./WSProvider";
 
 declare const DROPDOWN_DEBUG: boolean | undefined;
-const isTestEnv = (globalThis as any).__VITEST__ === true;
+const isTestEnv =
+  process.env.NODE_ENV === "test" ||
+  (typeof import.meta !== "undefined" && import.meta.env?.MODE === "test");
 
 type Phase = "idle" | "camera" | "capture" | "select" | "verify" | "computed";
 type CamMode = "local" | "phone" | "wifi";
@@ -67,7 +67,7 @@ type DevicePickerProps = {
   cameraConnected: boolean;
 };
 
-function DevicePicker({
+const DevicePicker: React.FC<DevicePickerProps> = ({
   videoDevices,
   streaming,
   refreshVideoDevices,
@@ -78,7 +78,7 @@ function DevicePicker({
   doCommit,
   lastDetectedValue,
   cameraConnected,
-}: DevicePickerProps) {
+}) => {
   const {
     preferredCameraId,
     preferredCameraLabel,
@@ -348,7 +348,7 @@ function DevicePicker({
       </div>
     </div>
   );
-}
+};
 
 const CALIBRATION_POINT_LABELS = ["D20", "D6", "D3", "D11", "BULL"] as const;
 const REQUIRED_POINT_COUNT = CALIBRATION_POINT_LABELS.length;
@@ -4136,10 +4136,9 @@ export default function Calibrator() {
           // TypeScript's postMessage overloads are picky about transfer lists;
           // ensure we only transfer non-null bitmaps.
           if (bitmap) {
-            worker.postMessage(
-              { type: "detect", bitmap },
-              [bitmap] as unknown as Transferable[],
-            );
+            worker.postMessage({ type: "detect", bitmap }, undefined, [
+              bitmap,
+            ] as unknown as Transferable[]);
           } else {
             worker.postMessage({ type: "detect", bitmap });
           }
@@ -4576,16 +4575,16 @@ export default function Calibrator() {
           </div>
         </div>
       )}
-      <div className="card ndn-mobile-fullwidth space-y-4 sm:space-y-6 p-3 sm:p-6">
-        <header className="flex flex-wrap items-start justify-between gap-2 sm:gap-4">
-          <div className="space-y-1 sm:space-y-2">
+      <div className="card space-y-6 p-6">
+        <header className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-indigo-300">
               Camera alignment
             </p>
-            <h2 className="text-lg sm:text-2xl font-semibold leading-tight text-white">
+            <h2 className="text-2xl font-semibold leading-tight text-white">
               Camera connection
             </h2>
-            <p className="hidden sm:block max-w-2xl text-sm opacity-80">
+            <p className="max-w-2xl text-sm opacity-80">
               Select and test your camera. Manual scoring mode does not require
               calibration.
             </p>
@@ -4645,9 +4644,9 @@ export default function Calibrator() {
           </div>
         </header>
 
-        <div className="grid gap-3 sm:gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
-          <section className="space-y-3 sm:space-y-4">
-            <div className="space-y-3 sm:space-y-4 rounded-2xl border border-white/10 bg-black/40 p-2 sm:p-4">
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+          <section className="space-y-4">
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-black/40 p-4">
               <div className="flex flex-wrap items-center justify-between gap-4 text-xs">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="uppercase tracking-wide opacity-60">

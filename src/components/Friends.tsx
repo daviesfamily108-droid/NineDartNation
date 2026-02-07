@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useToast } from "../store/toast.js";
-import { useMessages } from "../store/messages.js";
-import { censorProfanity } from "../utils/profanity.js";
-import TabPills from "./ui/TabPills.js";
-import { labelForMode } from "../utils/games.js";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useToast } from "../store/toast";
+import { useMessages } from "../store/messages";
+import { censorProfanity } from "../utils/profanity";
+import TabPills from "./ui/TabPills";
+import { labelForMode } from "../utils/games";
 
 type Friend = {
   email: string;
@@ -76,15 +76,6 @@ export default function Friends({ user }: { user?: any }) {
     replyTo?: string;
   }>({ show: false });
 
-  const [statusPopup, setStatusPopup] = useState<{
-    show: boolean;
-    filter: "online" | "offline" | "ingame";
-  } | null>(null);
-  const [friendActionPopup, setFriendActionPopup] = useState<{
-    show: boolean;
-    friend: Friend;
-  } | null>(null);
-
   const loadThread = useCallback(
     async (otherEmail: string) => {
       const other = String(otherEmail || "").toLowerCase();
@@ -111,9 +102,9 @@ export default function Friends({ user }: { user?: any }) {
     if (Array.isArray(thread) && thread.length) return thread;
     // Fallback: Backend may still only return inbound messages.
     return msgs.inbox
-      .filter((m: any) => String(m.from || "").toLowerCase() === other)
+      .filter((m) => String(m.from || "").toLowerCase() === other)
       .slice()
-      .sort((a: any, b: any) => a.ts - b.ts);
+      .sort((a, b) => a.ts - b.ts);
   }, [activeChat?.email, msgs.inbox, msgs.threads]);
 
   const threadPreviewByEmail = useMemo(() => {
@@ -349,15 +340,6 @@ export default function Friends({ user }: { user?: any }) {
     return summary;
   }, [friends]);
 
-  const friendsByStatus = useMemo(() => {
-    const online = friends.filter((f) => (f.status || "offline") === "online");
-    const offline = friends.filter(
-      (f) => (f.status || "offline") === "offline",
-    );
-    const ingame = friends.filter((f) => (f.status || "offline") === "ingame");
-    return { online, offline, ingame };
-  }, [friends]);
-
   async function spectate(roomId?: string | null) {
     if (!roomId) {
       toast("Room unavailable", { type: "error" });
@@ -408,26 +390,7 @@ export default function Friends({ user }: { user?: any }) {
         ].map((stat) => (
           <div
             key={stat.label}
-            className={`rounded-2xl border px-3 py-2 text-center ${stat.accent} ${stat.label !== "Requests" ? "cursor-pointer hover:brightness-110" : ""}`}
-            role={stat.label !== "Requests" ? "button" : undefined}
-            tabIndex={stat.label !== "Requests" ? 0 : undefined}
-            onClick={() => {
-              if (stat.label === "Online")
-                setStatusPopup({ show: true, filter: "online" });
-              else if (stat.label === "Offline")
-                setStatusPopup({ show: true, filter: "offline" });
-              else if (stat.label === "In-Game")
-                setStatusPopup({ show: true, filter: "ingame" });
-            }}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter" && e.key !== " ") return;
-              if (stat.label === "Online")
-                setStatusPopup({ show: true, filter: "online" });
-              else if (stat.label === "Offline")
-                setStatusPopup({ show: true, filter: "offline" });
-              else if (stat.label === "In-Game")
-                setStatusPopup({ show: true, filter: "ingame" });
-            }}
+            className={`rounded-2xl border px-3 py-2 text-center ${stat.accent}`}
           >
             <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
               {stat.label}
@@ -438,176 +401,6 @@ export default function Friends({ user }: { user?: any }) {
           </div>
         ))}
       </div>
-
-      {statusPopup?.show && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setStatusPopup(null);
-          }}
-        >
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-950/90 p-4 shadow-2xl">
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
-                  {statusPopup.filter === "online"
-                    ? "Online friends"
-                    : statusPopup.filter === "offline"
-                      ? "Offline friends"
-                      : "In-game friends"}
-                </div>
-                <div className="text-sm text-white/80">
-                  Tap a friend to see actions.
-                </div>
-              </div>
-              <button
-                className="btn btn--ghost px-3 py-1 text-xs"
-                onClick={() => setStatusPopup(null)}
-              >
-                Close
-              </button>
-            </div>
-
-            <ul className="space-y-2 max-h-[60vh] overflow-auto pr-1">
-              {(
-                statusPopup.filter === "online"
-                  ? friendsByStatus.online
-                  : statusPopup.filter === "offline"
-                    ? friendsByStatus.offline
-                    : friendsByStatus.ingame
-              ).map((f) => (
-                <li key={`${statusPopup.filter}-${f.email}`}>
-                  <button
-                    className="w-full text-left p-3 rounded-2xl border border-white/10 bg-slate-900/40 hover:bg-slate-900/60 transition"
-                    onClick={() => setFriendActionPopup({ show: true, friend: f })}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-semibold text-white truncate">
-                          {f.username || f.email}
-                        </div>
-                        <div className="text-xs text-slate-400 truncate">
-                          {f.email}
-                        </div>
-                      </div>
-                      <div className="shrink-0 text-[11px] text-slate-300/80">
-                        {(f.status || "offline") === "online"
-                          ? "Online"
-                          : (f.status || "offline") === "ingame"
-                            ? "In-Game"
-                            : f.lastSeen
-                              ? `Last seen ${timeAgo(f.lastSeen)}`
-                              : "Offline"}
-                      </div>
-                    </div>
-                    {f.status === "ingame" && f.match && (
-                      <div className="mt-2 text-[11px] text-slate-300/70">
-                        {labelForMode(f.match.mode)} · {f.match.game} · {f.match.value}
-                      </div>
-                    )}
-                  </button>
-                </li>
-              ))}
-              {(statusPopup.filter === "online" &&
-                friendsByStatus.online.length === 0) ||
-              (statusPopup.filter === "offline" &&
-                friendsByStatus.offline.length === 0) ||
-              (statusPopup.filter === "ingame" &&
-                friendsByStatus.ingame.length === 0) ? (
-                <li className="text-xs text-slate-400 p-3">
-                  No friends in this category.
-                </li>
-              ) : null}
-            </ul>
-          </div>
-        </div>
-      )}
-
-      {friendActionPopup?.show && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget) setFriendActionPopup(null);
-          }}
-        >
-          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-950/95 p-4 shadow-2xl">
-            <div className="mb-3">
-              <div className="font-semibold text-white">
-                {friendActionPopup.friend.username || friendActionPopup.friend.email}
-              </div>
-              <div className="text-xs text-slate-400">
-                {friendActionPopup.friend.email}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              {friendActionPopup.friend.status === "ingame" && (
-                <button
-                  className="w-full btn px-3 py-2 justify-start"
-                  onClick={() => {
-                    const roomId = friendActionPopup.friend.roomId;
-                    setFriendActionPopup(null);
-                    spectate(roomId);
-                  }}
-                >
-                  Spectate game
-                </button>
-              )}
-
-              <button
-                className="w-full btn px-3 py-2 justify-start"
-                onClick={() => {
-                  const friend = friendActionPopup.friend;
-                  setFriendActionPopup(null);
-                  setStatusPopup(null);
-                  setActiveChat({ email: friend.email, username: friend.username });
-                }}
-              >
-                Message
-              </button>
-
-              {friendActionPopup.friend.status !== "ingame" && (
-                <>
-                  <button
-                    className="w-full btn btn--ghost px-3 py-2 justify-start"
-                    onClick={() => {
-                      toast("Compare is not wired yet", { type: "info" });
-                      setFriendActionPopup(null);
-                    }}
-                  >
-                    Compare
-                  </button>
-
-                  <button
-                    className="w-full btn btn--ghost px-3 py-2 justify-start text-rose-300"
-                    onClick={async () => {
-                      const friend = friendActionPopup.friend;
-                      const ok = confirm(
-                        `Remove ${friend.username || friend.email} from your friends?`,
-                      );
-                      if (!ok) return;
-                      setFriendActionPopup(null);
-                      setStatusPopup(null);
-                      await removeFriend(friend.email);
-                    }}
-                  >
-                    Delete friend
-                  </button>
-                </>
-              )}
-            </div>
-
-            <div className="mt-3 flex justify-end">
-              <button
-                className="btn btn--ghost px-3 py-1 text-xs"
-                onClick={() => setFriendActionPopup(null)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-4">
         {/* Friends (master list) */}

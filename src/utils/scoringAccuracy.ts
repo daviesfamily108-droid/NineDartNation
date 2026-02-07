@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Dart Scoring Accuracy & Reliability System
  *
  * Ensures 100% accuracy by:
@@ -9,10 +9,10 @@
  * 5. Providing fallback strategies for edge cases
  */
 
-import type { Homography } from "./vision.js";
-import { isPointOnBoard } from "./vision.js";
-import type { DetectedDart } from "./dartDetection.js";
-import type { BoardDetectionResult } from "./boardDetection.js";
+import type { Homography } from "./vision";
+import { isPointOnBoard } from "./vision";
+import type { DetectedDart } from "./dartDetection";
+import type { BoardDetectionResult } from "./boardDetection";
 
 export interface ScoringAccuracyConfig {
   // Calibration validation
