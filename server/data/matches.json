@@ -598,5 +598,17 @@
     "game": "X01",
     "requireCalibration": false,
     "createdAt": 1768509147481
+  },
+  {
+    "id": "Iw9qszoh7R",
+    "creatorId": "lnXyXRQ7",
+    "creatorName": "DartsWithG",
+    "mode": "bestof",
+    "value": 7,
+    "startingScore": 501,
+    "creatorAvg": 5,
+    "game": "X01",
+    "requireCalibration": false,
+    "createdAt": 1770291496950
   }
 ]

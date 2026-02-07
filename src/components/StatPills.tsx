@@ -1,6 +1,6 @@
-﻿import React from "react";
+import React from "react";
 import { Lock } from "lucide-react";
-import { useUserSettings } from "../store/userSettings";
+import { useUserSettings } from "../store/userSettings.js";
 
 export type StatItem = {
   key: string;

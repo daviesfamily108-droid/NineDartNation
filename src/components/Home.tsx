@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useToast } from "../store/toast";
-import { formatAvg } from "../utils/stats";
-import { getAllTime } from "../store/profileStats";
-import { useUserSettings } from "../store/userSettings";
-import ProfilePanel from "./ProfilePanel";
-import { sym } from "../ui/icons";
-import { getApiBaseUrl } from "../utils/api";
-import { dispatchOpenNotifications } from "../utils/events";
+import { useToast } from "../store/toast.js";
+import { formatAvg } from "../utils/stats.js";
+import { getAllTime } from "../store/profileStats.js";
+import { useUserSettings } from "../store/userSettings.js";
+import ProfilePanel from "./ProfilePanel.js";
+import { sym } from "../ui/icons.js";
+import { getApiBaseUrl } from "../utils/api.js";
+import { dispatchOpenNotifications } from "../utils/events.js";
 
 function goTab(tab: string) {
   try {
@@ -56,7 +56,7 @@ export default function Home({ user }: { user?: any }) {
   }, []);
   return (
     <div
-      className={`${user?.fullAccess ? "premium-main" : ""} home-shell relative min-h-screen flex flex-col items-center justify-start overflow-hidden px-4 pb-20`}
+      className={`${user?.fullAccess ? "premium-main" : ""} home-shell relative min-h-screen flex flex-col items-center justify-start overflow-hidden px-4 pb-20 pt-0 sm:pt-0`}
     >
       <div className="home-background" aria-hidden>
         <div className="home-background__gradient"></div>
@@ -286,7 +286,7 @@ export default function Home({ user }: { user?: any }) {
               <Row
                 label="Checkout"
                 left={String(all.bestCheckout || 0)}
-                right={"—"}
+                right={String(all.worstCheckout || 0)}
                 lock={!isPremium}
               />
             </div>

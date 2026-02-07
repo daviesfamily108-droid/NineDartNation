@@ -8,13 +8,15 @@ import {
   Trophy,
   Users,
 } from "lucide-react";
-import FocusLock from "react-focus-lock";
+import * as FocusLockModule from "react-focus-lock";
+
+const FocusLock = (FocusLockModule as any).default ?? (FocusLockModule as any);
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { getFreeRemaining } from "../utils/quota";
-import { useIsAdmin } from "../utils/admin";
-import { DISCORD_INVITE_URL } from "../utils/config";
-import { apiFetch } from "../utils/api";
+import { getFreeRemaining } from "../utils/quota.js";
+import { useIsAdmin } from "../utils/admin.js";
+import { DISCORD_INVITE_URL } from "../utils/config.js";
+import { apiFetch } from "../utils/api.js";
 
 export type TabKey =
   | "score"
@@ -363,7 +365,7 @@ export function Sidebar({
                 >
                   <MessageCircle className="w-4 h-4" />
                   <span className="truncate text-sm font-semibold">
-                    Bullseye League
+                    Bullseye Darts League
                   </span>
                 </button>
                 {/* NineDartNation Discord tab */}

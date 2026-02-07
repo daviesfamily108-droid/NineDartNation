@@ -1,5 +1,5 @@
-﻿// PoC: forward small JPEG frames from a video element across windows using BroadcastChannel
-import { broadcastMessage, subscribeMatchSync } from "./broadcast";
+// PoC: forward small JPEG frames from a video element across windows using BroadcastChannel
+import { broadcastMessage, subscribeMatchSync } from "./broadcast.js";
 
 let _interval: number | null = null;
 let _video: HTMLVideoElement | null = null;

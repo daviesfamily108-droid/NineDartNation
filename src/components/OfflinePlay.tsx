@@ -1,56 +1,56 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { suggestCheckouts, sayScore } from "../utils/checkout";
-import { useUserSettings } from "../store/userSettings";
-import { useToast } from "../store/toast";
-import CameraTile from "./CameraTile";
-import CameraView from "./CameraView";
+import { suggestCheckouts, sayScore } from "../utils/checkout.js";
+import { useUserSettings } from "../store/userSettings.js";
+import { useToast } from "../store/toast.js";
+import CameraTile from "./CameraTile.js";
+import CameraView from "./CameraView.js";
 import React, { memo } from "react";
 const MemoCameraView: any = memo(CameraView as any);
-import { broadcastMessage } from "../utils/broadcast";
-import { getUserCurrency, formatPriceInCurrency } from "../utils/config";
-import { bumpGameMode } from "../store/profileStats";
-import { getPreferredUserName } from "../utils/userName";
-import { getApiBaseUrl } from "../utils/api";
+import { broadcastMessage } from "../utils/broadcast.js";
+import { getUserCurrency, formatPriceInCurrency } from "../utils/config.js";
+import { bumpGameMode } from "../store/profileStats.js";
+import { getPreferredUserName } from "../utils/userName.js";
+import { getApiBaseUrl } from "../utils/api.js";
 import {
   DOUBLE_PRACTICE_ORDER,
   isDoubleHit,
   parseManualDart,
-} from "../game/types";
-import { openMatchWindow } from "../utils/matchWindow";
-import { ATC_ORDER } from "../game/aroundTheClock";
+} from "../game/types.js";
+import { openMatchWindow } from "../utils/matchWindow.js";
+import { ATC_ORDER } from "../game/aroundTheClock.js";
 import {
   createCricketState,
   applyCricketDart,
   CRICKET_NUMBERS,
   hasClosedAll as cricketClosedAll,
-} from "../game/cricket";
+} from "../game/cricket.js";
 import {
   createShanghaiState,
   applyShanghaiDart,
   endShanghaiTurn,
-} from "../game/shanghai";
+} from "../game/shanghai.js";
 import {
   createDefaultHalveIt,
   getCurrentHalveTarget,
   applyHalveItDart,
   endHalveItTurn,
-} from "../game/halveIt";
+} from "../game/halveIt.js";
 import {
   createHighLow,
   applyHighLowDart,
   endHighLowTurn,
-} from "../game/highLow";
+} from "../game/highLow.js";
 import {
   createKillerState,
   assignKillerNumbers,
   applyKillerDart,
   killerWinner,
   KillerState,
-} from "../game/killer";
-import { createBaseball, applyBaseballDart } from "../game/baseball";
-import { createGolf, applyGolfDart } from "../game/golf";
-import { createTicTacToe, tryClaimCell, TTT_TARGETS } from "../game/ticTacToe";
+} from "../game/killer.js";
+import { createBaseball, applyBaseballDart } from "../game/baseball.js";
+import { createGolf, applyGolfDart } from "../game/golf.js";
+import { createTicTacToe, tryClaimCell, TTT_TARGETS } from "../game/ticTacToe.js";
 import {
   createScamState,
   addScamAuto,
@@ -65,31 +65,31 @@ import {
   addSevensAuto,
   addSevensNumeric,
   resetSevens,
-} from "../game/scamFivesSevens";
+} from "../game/scamFivesSevens.js";
 import {
   createAmCricketState,
   applyAmCricketDart,
   AM_CRICKET_NUMBERS,
   hasClosedAllAm,
-} from "../game/americanCricket";
-import ResizableModal from "./ui/ResizableModal";
-import MatchStartShowcase from "./ui/MatchStartShowcase";
-import { useAudit } from "../store/audit";
-import GameHeaderBar from "./ui/GameHeaderBar";
-import PauseQuitModal from "./ui/PauseQuitModal";
-import ScoreNumberPad from "./ui/ScoreNumberPad";
-import { useMatchControl } from "../store/matchControl";
-import { formatAvg } from "../utils/stats";
-import GameScoreboard, { type PlayerStats } from "./scoreboards/GameScoreboard";
-import MatchControls from "./MatchControls";
-import { makeOfflineAddVisitAdapter } from "./matchControlAdapters";
+} from "../game/americanCricket.js";
+import ResizableModal from "./ui/ResizableModal.js";
+import MatchStartShowcase from "./ui/MatchStartShowcase.js";
+import { useAudit } from "../store/audit.js";
+import GameHeaderBar from "./ui/GameHeaderBar.js";
+import PauseQuitModal from "./ui/PauseQuitModal.js";
+import ScoreNumberPad from "./ui/ScoreNumberPad.js";
+import { useMatchControl } from "../store/matchControl.js";
+import { formatAvg } from "../utils/stats.js";
+import GameScoreboard, { type PlayerStats } from "./scoreboards/GameScoreboard.js";
+import MatchControls from "./MatchControls.js";
+import { makeOfflineAddVisitAdapter } from "./matchControlAdapters.js";
 import {
   createOfflineMatchActions,
   UnifiedMatchActions,
-} from "../logic/matchActions";
-import { useMatch } from "../store/match";
-import { useOfflineGameStats } from "./scoreboards/useGameStats";
-import { freeGames, premiumGames } from "../utils/games";
+} from "../logic/matchActions.js";
+import { useMatch } from "../store/match.js";
+import { useOfflineGameStats } from "./scoreboards/useGameStats.js";
+import { freeGames, premiumGames } from "../utils/games.js";
 
 const aiLevels = ["Easy", "Medium", "Hardened"];
 
@@ -248,7 +248,38 @@ export default function OfflinePlay({ user }: { user: any }) {
     player: false,
     opponent: false,
   });
-  const setPaused = useMatchControl((s) => s.setPaused);
+  const setPaused = useMatchControl((s: any) => s.setPaused);
+  const paused = useMatchControl((s: any) => s.paused);
+  const pauseEndsAt = useMatchControl((s: any) => s.pauseEndsAt);
+  const [showPauseMenu, setShowPauseMenu] = useState(false);
+  const [pauseNow, setPauseNow] = useState(Date.now());
+
+  // Tick the pause countdown timer every 500ms while paused
+  useEffect(() => {
+    if (!paused || !pauseEndsAt) return;
+    const t = setInterval(() => setPauseNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, [paused, pauseEndsAt]);
+
+  // Auto-unpause when timer expires
+  useEffect(() => {
+    if (paused && pauseEndsAt && Date.now() >= pauseEndsAt) {
+      setPaused(false, null);
+    }
+  }, [paused, pauseEndsAt, pauseNow, setPaused]);
+
+  // Signal the app shell to go full-screen on mobile while in-game
+  useEffect(() => {
+    if (inMatch) {
+      document.documentElement.setAttribute('data-ndn-ingame', 'true');
+    } else {
+      document.documentElement.removeAttribute('data-ndn-ingame');
+    }
+    return () => {
+      document.documentElement.removeAttribute('data-ndn-ingame');
+    };
+  }, [inMatch]);
+
   useEffect(() => {
     const onQuit = () => {
       setShowMatchModal(false);
@@ -265,12 +296,12 @@ export default function OfflinePlay({ user }: { user: any }) {
     };
   }, []);
   // Mirror Online layout defaults when in modern layout, otherwise keep classic feel
-  const [maximized, setMaximized] = useState(offlineLayout === "modern");
-  const [fitAll, setFitAll] = useState(offlineLayout === "modern");
+  const [maximized, setMaximized] = useState(true);
+  const [fitAll, setFitAll] = useState(false);
   // React to layout changes at runtime
   useEffect(() => {
-    setMaximized(offlineLayout === "modern");
-    setFitAll(offlineLayout === "modern");
+    setMaximized(true);
+    setFitAll(false);
   }, [offlineLayout]);
   useEffect(() => {
     if (cameraFitMode !== "fit") {
@@ -284,6 +315,41 @@ export default function OfflinePlay({ user }: { user: any }) {
     () => typeof window !== "undefined" && window.innerWidth < 768,
   );
   const [mobileCameraOpen, setMobileCameraOpen] = useState(false);
+
+  // Mobile camera drawer close behavior: Escape key and swipe-down gesture.
+  useEffect(() => {
+    if (!mobileCameraOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileCameraOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileCameraOpen]);
+
+  const drawerDragRef = useRef<{ startY: number; curY: number; active: boolean }>(
+    { startY: 0, curY: 0, active: false },
+  );
+  const drawerRootRef = useRef<HTMLDivElement | null>(null);
+  const onDrawerPointerDown = useCallback((e: React.PointerEvent) => {
+    drawerDragRef.current = {
+      startY: e.clientY,
+      curY: e.clientY,
+      active: true,
+    };
+    drawerRootRef.current?.setPointerCapture(e.pointerId);
+  }, []);
+  const onDrawerPointerMove = useCallback((e: React.PointerEvent) => {
+    const st = drawerDragRef.current;
+    if (!st.active) return;
+    st.curY = e.clientY;
+  }, []);
+  const onDrawerPointerEnd = useCallback(() => {
+    const st = drawerDragRef.current;
+    if (!st.active) return;
+    st.active = false;
+    const dy = st.curY - st.startY;
+    if (dy > 70) setMobileCameraOpen(false);
+  }, []);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const handleResize = () => setIsMobileScreen(window.innerWidth < 768);
@@ -366,7 +432,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   );
   const [killerSetupDone, setKillerSetupDone] = useState<boolean>(false);
   const [killerTurnIdx, setKillerTurnIdx] = useState<number>(0);
-  const [_killerDarts, setKillerDarts] = useState<number>(0);
+  const [killerDarts, setKillerDarts] = useState<number>(0);
   const [killerWinnerId, setKillerWinnerId] = useState<string | null>(null);
   const [killerLastEvent, setKillerLastEvent] = useState<string>("");
   // Scam/Scum state
@@ -1355,13 +1421,21 @@ export default function OfflinePlay({ user }: { user: any }) {
     }
     // Initialize the global match store for live 3-dart averages and stats tracking
     const humanName = getPreferredUserName(user, "You");
+    // If AI is enabled, always initialize a 2-player match so the scoreboard
+    // can render both the human and the AI bot.
     const aiName = ai !== "None" ? `AI (${ai})` : "Opponent";
-    const players = ai !== "None" ? [humanName, aiName] : [humanName];
+    const players = [humanName, aiName];
     match.newMatch(players, x01Score, `offline-${Date.now()}`);
 
+    // Keep matches in the current window (disable match pop-out).
+    // Request fullscreen instead (best effort; browsers require a user gesture).
     try {
-      // Always open the match window for X01 offline so the camera + scoreboard can be maximized.
-      openMatchWindow();
+      const el = document.documentElement as any;
+      if (el?.requestFullscreen) {
+        void el.requestFullscreen();
+      } else if ((document as any).body?.requestFullscreen) {
+        void (document as any).body.requestFullscreen();
+      }
     } catch {}
   }
 
@@ -1716,6 +1790,8 @@ export default function OfflinePlay({ user }: { user: any }) {
 
   // Optional: Add a full-visit total (0-180) input for quick entry like "93"
   const [visitTotalInput, setVisitTotalInput] = useState("");
+  const [quickScoreInput, setQuickScoreInput] = useState("");
+  const quickScoreInputRef = useRef<HTMLInputElement | null>(null);
   const handleVisitTotalChange = (val: string) => {
     setVisitTotalInput(val);
   };
@@ -1910,6 +1986,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     setSuccesses: (f: (n: number) => number) => void,
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
+    dartsUsed = 1,
   ) {
     const next = rem - value;
     if (next < 0) {
@@ -1927,10 +2004,10 @@ export default function OfflinePlay({ user }: { user: any }) {
       setRem(next);
     }
     setDarts((d) => {
-      const nd = d + 1;
+      const nd = d + dartsUsed;
       if (nd >= 3) {
         setAttempts((a) => a + 1);
-        return 0;
+        return nd % 3;
       }
       return nd;
     });
@@ -1938,6 +2015,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   function addCo170Auto(
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
+    dartsUsed = 1,
   ): boolean {
     recordDart("Checkout 170");
     applyCheckout(
@@ -1949,6 +2027,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       setCo170Successes,
       value,
       ring,
+      dartsUsed,
     );
     if (co170Darts + 1 >= 3) setCo170Rem(170);
     return true;
@@ -1956,6 +2035,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   function addCo121Auto(
     value: number,
     ring?: "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL",
+    dartsUsed = 1,
   ): boolean {
     recordDart("Checkout 121");
     applyCheckout(
@@ -1967,6 +2047,7 @@ export default function OfflinePlay({ user }: { user: any }) {
       setCo121Successes,
       value,
       ring,
+      dartsUsed,
     );
     if (co121Darts + 1 >= 3) setCo121Rem(121);
     return true;
@@ -2252,7 +2333,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     sector?: number | null,
   ): boolean {
     recordDart("High-Low");
-    setHighlow((prev) => {
+    setHighlow((prev: any) => {
       const copy = { ...prev };
       applyHighLowDart(copy as any, value, ring, sector);
       return copy;
@@ -2260,7 +2341,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     setPracticeTurnDarts((d) => {
       const nd = d + 1;
       if (nd >= 3) {
-        setHighlow((prev) => {
+        setHighlow((prev: any) => {
           const cp = { ...prev };
           endHighLowTurn(cp as any);
           return cp;
@@ -2419,13 +2500,92 @@ export default function OfflinePlay({ user }: { user: any }) {
     startNextLeg();
   }
 
+  const supportsQuickScore = !["Killer", "Tic Tac Toe"].includes(
+    selectedMode,
+  );
+  useEffect(() => {
+    if (isMobileScreen || !supportsQuickScore || !showMatchModal) return;
+    quickScoreInputRef.current?.focus();
+  }, [isMobileScreen, supportsQuickScore, showMatchModal, selectedMode]);
+  const commitQuickScore = () => {
+    const parsed = Number(quickScoreInput);
+    if (!Number.isFinite(parsed)) return;
+    const value = Math.max(0, Math.round(parsed));
+
+    switch (selectedMode) {
+      case "Double Practice":
+        addDpValue(value);
+        break;
+      case "Around the Clock":
+        addAtcValue(value);
+        break;
+      case "Cricket":
+        addCricketAuto(value);
+        break;
+      case "Shanghai":
+        addShanghaiAuto(value);
+        break;
+      case "Halve It":
+        addHalveAuto(value);
+        break;
+      case "High-Low":
+        addHighLowAuto(value);
+        break;
+      case "Bob's 27":
+        addB27Auto(value);
+        break;
+      case "Count-Up":
+        addCountUpAuto(value);
+        break;
+      case "High Score":
+        addHighScoreAuto(value);
+        break;
+      case "Low Score":
+        addLowScoreAuto(value);
+        break;
+      case "Checkout 170":
+        addCo170Auto(value, undefined, 3);
+        break;
+      case "Checkout 121":
+        addCo121Auto(value, undefined, 3);
+        break;
+      case "Treble Practice":
+        addTrebleAuto(value);
+        break;
+      case "Baseball":
+        addBaseballAuto(value);
+        break;
+      case "Golf":
+        addGolfAuto(value);
+        break;
+      case "American Cricket":
+        addAmCricketAuto(value);
+        break;
+      case "Scam":
+        recordDart("Scam");
+        setScamPlayer(addScamNumeric(scamPlayer, value));
+        break;
+      case "Fives":
+        recordDart("Fives");
+        setFivesPlayer(addFivesNumeric(fivesPlayer, value));
+        break;
+      case "Sevens":
+        recordDart("Sevens");
+        setSevensPlayer(addSevensNumeric(sevensPlayer, value));
+        break;
+      default:
+        return;
+    }
+
+    setQuickScoreInput("");
+  };
   const isFreeSelected = freeGames.includes(selectedMode as any);
   const lockedPremium = !isFreeSelected && !(user?.fullAccess || user?.admin);
 
   // no external overlay: we render the match modal as absolute inset-0 inside this card
 
   return (
-    <div className="card ndn-game-shell ndn-page relative overflow-hidden md:overflow-hidden overflow-y-auto">
+    <div className={`${inMatch ? '' : 'card '}ndn-game-shell ndn-page relative overflow-hidden md:overflow-hidden overflow-y-auto${inMatch ? ' ndn-ingame-active' : ''}`}>
       {showStartShowcase && (
         <MatchStartShowcase
           players={(match.players || []) as any}
@@ -2433,8 +2593,9 @@ export default function OfflinePlay({ user }: { user: any }) {
           onDone={() => setShowStartShowcase(false)}
         />
       )}
+      {!inMatch && (
       <h2 className="text-3xl font-bold text-brand-700 mb-4 ndn-section-title">
-        Offline Mode �{" "}
+        Offline Mode 🎯{" "}
         {offlineLayout === "classic" ? (
           <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">
             Classic layout
@@ -2445,6 +2606,7 @@ export default function OfflinePlay({ user }: { user: any }) {
           </span>
         )}
       </h2>
+      )}
       <div className="ndn-shell-body">
         <div className="mb-4 flex flex-col gap-3">
           <select
@@ -2461,12 +2623,12 @@ export default function OfflinePlay({ user }: { user: any }) {
             value={selectedMode}
             onChange={(e) => setSelectedMode(e.target.value)}
           >
-            {freeGames.map((mode) => (
+            {freeGames.map((mode: any) => (
               <option key={mode} value={mode}>
                 {mode}
               </option>
             ))}
-            {premiumGames.map((mode) => (
+            {premiumGames.map((mode: any) => (
               <option
                 key={mode}
                 value={mode}
@@ -2477,7 +2639,7 @@ export default function OfflinePlay({ user }: { user: any }) {
             ))}
           </select>
 
-          {selectedMode === "Treble Practice" && (
+          {selectedMode === "Treble Practice" ? (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
               <div className="sm:col-span-1">
                 <label className="font-semibold">Throws per game</label>
@@ -2494,34 +2656,15 @@ export default function OfflinePlay({ user }: { user: any }) {
                   }
                 />
               </div>
+
               <div className="sm:col-span-2 text-xs text-slate-300">
-                Target cycles T20→T19→T18 every 3 darts. Game ends after the
-                selected number of throws.
+                Target cycles T20&rarr;T19&rarr;T18 every 3 darts. Game ends after
+                the selected number of throws.
               </div>
-              {cameraEnabled && !isMobileScreen && (
-                <div className="hidden md:block w-[360px] p-3 min-w-0">
-                  <div
-                    data-testid="offline-camera-pane"
-                    className="rounded-2xl overflow-hidden bg-black/70 p-2"
-                    style={{ willChange: "transform, opacity" }}
-                  >
-                    <MemoCameraView
-                      scoringMode="x01"
-                      showToolbar={cameraToolbarVisible}
-                      immediateAutoCommit
-                      cameraAutoCommit="camera"
-                      onAddVisit={makeOfflineAddVisitAdapter(
-                        commitManualVisitTotal,
-                      )}
-                      onAutoDart={(_value: number, _ring: any, _info: any) => {
-                        // Camera owns commits for X01; parent should not applyDartValue to avoid duplicates.
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
+
+
             </div>
-          )}
+          ) : null}
           {!user?.fullAccess && (
             <div className="mt-2 p-2 rounded-lg bg-slate-800/40 border border-slate-700/40 text-slate-200 text-sm flex items-center gap-2">
               <span>🔒</span>
@@ -2613,13 +2756,11 @@ export default function OfflinePlay({ user }: { user: any }) {
         )}
         {/* Match Modal with turn-by-turn flow */}
         {showMatchModal && (
-          <div
-            className={`absolute inset-0 z-[1000] ${maximized ? "" : "flex items-center justify-center p-3 sm:p-4"}`}
-          >
+          <div className="absolute inset-0 z-[1000]">
             <ResizableModal
               storageKey="ndn:modal:offline-match"
-              className={`${maximized ? "w-full h-full ndn-modal-tight" : ""} relative flex flex-col overflow-hidden`}
-              fullScreen={maximized}
+              className="w-full h-full ndn-modal-tight relative flex flex-col overflow-hidden"
+              fullScreen={true}
               defaultWidth={1100}
               defaultHeight={720}
               minWidth={720}
@@ -2628,10 +2769,41 @@ export default function OfflinePlay({ user }: { user: any }) {
               maxHeight={1200}
               initialFitHeight
             >
+              {/* ── Pause Glass Overlay — blocks all interaction while paused ── */}
+              {paused && pauseEndsAt && (() => {
+                const rem = Math.max(0, pauseEndsAt - pauseNow);
+                const mm = Math.floor(rem / 60000).toString().padStart(2, "0");
+                const ss = Math.floor((rem % 60000) / 1000).toString().padStart(2, "0");
+                const started = useMatchControl.getState().pauseStartedAt ?? pauseNow;
+                const total = Math.max(1, pauseEndsAt - started);
+                const pct = Math.max(0, Math.min(100, Math.round((1 - rem / total) * 100)));
+                return (
+                  <div className="absolute inset-0 z-[200] backdrop-blur-sm bg-black/60 flex items-center justify-center pointer-events-auto">
+                    <div className="rounded-3xl border border-amber-400/30 bg-slate-900/95 p-8 text-white shadow-2xl max-w-md w-full mx-4">
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/20 text-3xl">⏸</div>
+                        <div className="text-lg font-bold text-amber-100">Match Paused</div>
+                        <div className="text-4xl font-extrabold tabular-nums tracking-wider text-amber-100">{mm}:{ss}</div>
+                        <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                          <div className="h-2 rounded-full bg-amber-400 transition-all duration-500" style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="text-xs text-amber-200/60">Resuming automatically when timer expires</div>
+                        <button
+                          type="button"
+                          className="btn bg-emerald-600 hover:bg-emerald-700 px-6 py-2 text-sm font-semibold"
+                          onClick={() => setPaused(false, null)}
+                        >
+                          ▶ Resume Match
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
               {/* Header bar with visible mode and actions; sheen is clipped to this area */}
-              <div className="flex h-full">
+              <div className="h-full min-h-0 flex flex-col">
                 <div
-                  className="flex-1 min-h-0 overflow-x-hidden pt-2 pb-2 pr-0 -ml-2 sm:-ml-3"
+                  className="min-h-0 overflow-x-hidden pt-2 pb-2 pr-0 -ml-2 sm:-ml-3"
                   style={{
                     overflowY: "auto",
                     willChange: "scroll-position",
@@ -2673,43 +2845,21 @@ export default function OfflinePlay({ user }: { user: any }) {
                       }
                       right={
                         <>
-                          {/* Camera scale controls (match Online UI) */}
-                          <div className="flex items-center gap-2 mr-2 text-xs">
-                            <span className="opacity-80">Cam</span>
-                            <button
-                              className="btn btn--ghost px-2 py-1"
-                              onClick={() =>
-                                setCameraScale(
-                                  Math.max(
-                                    0.5,
-                                    Math.round((cameraScale - 0.05) * 100) /
-                                      100,
-                                  ),
-                                )
-                              }
-                              title="Decrease camera size"
-                            >
-                              −
-                            </button>
-                            <span className="w-9 text-center">
-                              {Math.round(cameraScale * 100)}%
-                            </span>
-                            <button
-                              className="btn btn--ghost px-2 py-1"
-                              onClick={() =>
-                                setCameraScale(
-                                  Math.min(
-                                    1.25,
-                                    Math.round((cameraScale + 0.05) * 100) /
-                                      100,
-                                  ),
-                                )
-                              }
-                              title="Increase camera size"
-                            >
-                              +
-                            </button>
-                          </div>
+                          <button
+                            className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
+                            onClick={() => {
+                              try {
+                                setShowMatchModal(false);
+                                setInMatch(false);
+                              } catch {}
+                              try {
+                                useMatchControl.getState().setPaused(false, null);
+                              } catch {}
+                            }}
+                            title="Return to Offline setup"
+                          >
+                            Return
+                          </button>
                           <button
                             className="btn btn--ghost px-3 py-1 text-sm"
                             title={fitAll ? "Actual Size" : "Fit All"}
@@ -2717,13 +2867,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                           >
                             {fitAll ? "Actual Size" : "Fit All"}
                           </button>
-                          <button
-                            className="btn btn--ghost px-3 py-1 text-sm"
-                            title={maximized ? "Restore" : "Maximize"}
-                            onClick={() => setMaximized((m) => !m)}
-                          >
-                            {maximized ? "Restore" : "Maximize"}
-                          </button>
+                          {/* Maximize now only affects browser fullscreen via the FULL button elsewhere; keep this as a no-op toggle to avoid confusion */}
                           <button
                             className="btn bg-slate-700 hover:bg-slate-800 px-3 py-1 text-sm"
                             onClick={() => {
@@ -2746,15 +2890,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                     <PauseQuitModal
                       onClose={() => setShowQuitPause(false)}
                       onQuit={() => {
-                        if (ai === "None") {
-                          setShowQuitPause(false);
-                          setQuitVotes({ player: true, opponent: false });
-                          setShowQuitConfirm(true);
-                          return;
-                        }
                         finalizeQuitMatch();
                       }}
-                      onPause={(minutes) => {
+                      onPause={(minutes: any) => {
                         const endsAt = Date.now() + minutes * 60 * 1000;
                         try {
                           setPaused(true, endsAt);
@@ -3041,6 +3179,96 @@ export default function OfflinePlay({ user }: { user: any }) {
                         />
                       </div>
                     </div>
+                    {/* ── Pause Pill ── */}
+                    <div className="flex items-center gap-3 mb-2 relative">
+                      {!paused ? (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/40 bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-100 hover:bg-amber-500/25 transition"
+                          onClick={() => setShowPauseMenu((v) => !v)}
+                        >
+                          <span>⏸</span>
+                          <span>Pause</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/25 transition"
+                          onClick={() => setPaused(false, null)}
+                        >
+                          <span>▶</span>
+                          <span>Resume</span>
+                        </button>
+                      )}
+                      {paused && pauseEndsAt && (() => {
+                        const rem = Math.max(0, pauseEndsAt - pauseNow);
+                        const mm = Math.floor(rem / 60000).toString().padStart(2, "0");
+                        const ss = Math.floor((rem % 60000) / 1000).toString().padStart(2, "0");
+                        return (
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-600/90 px-3 py-1 text-xs font-bold text-black tabular-nums tracking-wide">
+                            ⏱ {mm}:{ss}
+                          </span>
+                        );
+                      })()}
+                      {showPauseMenu && !paused && (
+                        <div className="absolute left-0 top-full mt-1 z-50 rounded-lg border border-slate-600 bg-slate-800 shadow-lg p-2 flex flex-col gap-1 min-w-[140px]">
+                          <div className="text-[10px] uppercase tracking-wide text-slate-400 px-2 mb-1">Pause for</div>
+                          {[1, 2, 3, 4, 5].map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              className="w-full text-left rounded px-3 py-1.5 text-sm hover:bg-slate-700 transition"
+                              onClick={() => {
+                                const endsAt = Date.now() + m * 60 * 1000;
+                                setPaused(true, endsAt);
+                                try { broadcastMessage({ type: "pause", pauseEndsAt: endsAt, pauseStartedAt: Date.now() }); } catch {}
+                                setShowPauseMenu(false);
+                              }}
+                            >
+                              {m} minute{m > 1 ? "s" : ""}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* ── Pause Countdown Dialogue ── */}
+                    {paused && pauseEndsAt && (() => {
+                      const rem = Math.max(0, pauseEndsAt - pauseNow);
+                      const mm = Math.floor(rem / 60000).toString().padStart(2, "0");
+                      const ss = Math.floor((rem % 60000) / 1000).toString().padStart(2, "0");
+                      const started = useMatchControl.getState().pauseStartedAt ?? pauseNow;
+                      const total = Math.max(1, pauseEndsAt - started);
+                      const pct = Math.max(0, Math.min(100, Math.round((1 - rem / total) * 100)));
+                      return (
+                        <div className="mb-3 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-white">
+                          <div className="flex items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 text-lg">⏸</div>
+                              <div>
+                                <div className="text-sm font-semibold text-amber-100">Match Paused</div>
+                                <div className="text-xs text-amber-200/80">Resuming automatically when timer expires</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-2xl font-bold tabular-nums tracking-wider text-amber-100">{mm}:{ss}</div>
+                              <div className="text-[10px] text-amber-200/60 uppercase tracking-wide">remaining</div>
+                            </div>
+                          </div>
+                          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+                            <div className="h-2 rounded-full bg-amber-400 transition-all duration-500" style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="mt-2 flex justify-end">
+                            <button
+                              type="button"
+                              className="btn px-3 py-1 text-xs bg-emerald-600 hover:bg-emerald-700"
+                              onClick={() => setPaused(false, null)}
+                            >
+                              ▶ Resume now
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
                     {selectedMode !== "X01" ? (
                       <div className="p-3 rounded-2xl glass text-white border border-white/10 min-w-0 flex flex-col h-full mb-2">
                         {selectedMode === "Double Practice" && (
@@ -3580,106 +3808,123 @@ export default function OfflinePlay({ user }: { user: any }) {
                               </div>
                             </div>
                             <div className="relative">
-                              <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
+                              <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_380px] lg:gap-4">
                                 <div className="flex-1 min-w-0 space-y-2.5">
                                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <div
-                                      data-testid="offline-current-shooter"
-                                      className="rounded-2xl bg-slate-900/60 border border-white/10 p-4 text-slate-100 shadow-lg backdrop-blur-sm"
-                                    >
-                                      <div className="text-xs uppercase tracking-wide text-white/50">
-                                        Current Shooter
-                                      </div>
-                                      <div className="mt-1 flex items-center gap-4">
-                                        <div className="text-xl font-semibold text-white">
-                                          {activePlayerName}
+                                    {selectedMode === "X01" ? (
+                                      <>
+                                        <div
+                                          data-testid="offline-current-shooter"
+                                          className="rounded-2xl bg-slate-900/60 border border-white/10 p-4 text-slate-100 shadow-lg backdrop-blur-sm"
+                                        >
+                                          <div className="text-xs uppercase tracking-wide text-white/50">
+                                            Current Shooter
+                                          </div>
+                                          <div className="mt-1 flex items-center gap-4">
+                                            <div className="text-xl font-semibold text-white">
+                                              {activePlayerName}
+                                            </div>
+                                            <div className="ml-auto text-sm text-slate-300">
+                                              3-Dart Avg (Live)
+                                            </div>
+                                          </div>
+                                          <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/80">
+                                            <div>
+                                              <div className="text-xs uppercase tracking-wide text-white/40">
+                                                Remaining
+                                              </div>
+                                              <div className="font-mono text-lg text-white">
+                                                {activeRemaining}
+                                              </div>
+                                            </div>
+                                            <div>
+                                              <div className="text-xs uppercase tracking-wide text-white/40">
+                                                Last Dart
+                                              </div>
+                                              <div className="font-mono text-lg text-white">
+                                                {activeLastScore || 0}
+                                              </div>
+                                            </div>
+                                            <div>
+                                              <div className="text-xs uppercase tracking-wide text-white/40">
+                                                Match Legs
+                                              </div>
+                                              <div className="font-semibold text-white">
+                                                {playerLegs}-{aiLegs}
+                                              </div>
+                                            </div>
+                                            <div>
+                                              <div className="text-xs uppercase tracking-wide text-white/40">
+                                                Next Up
+                                              </div>
+                                              <div className="font-medium text-white">
+                                                {inactivePlayerName}
+                                              </div>
+                                            </div>
+                                          </div>
                                         </div>
-                                        <div className="ml-auto text-sm text-slate-300">
-                                          3-Dart Avg (Live)
-                                        </div>
-                                      </div>
-                                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm text-white/80">
-                                        <div>
-                                          <div className="text-xs uppercase tracking-wide text-white/40">
-                                            Remaining
-                                          </div>
-                                          <div className="font-mono text-lg text-white">
-                                            {activeRemaining}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <div className="text-xs uppercase tracking-wide text-white/40">
-                                            Last Dart
-                                          </div>
-                                          <div className="font-mono text-lg text-white">
-                                            {activeLastScore || 0}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <div className="text-xs uppercase tracking-wide text-white/40">
-                                            Match Legs
-                                          </div>
-                                          <div className="font-semibold text-white">
-                                            {playerLegs}-{aiLegs}
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <div className="text-xs uppercase tracking-wide text-white/40">
-                                            Next Up
-                                          </div>
-                                          <div className="font-medium text-white">
-                                            {inactivePlayerName}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
 
-                                    <div className="space-y-3">
-                                      <div
-                                        data-testid="offline-live-avg"
-                                        className="rounded-xl bg-slate-900/60 border border-white/10 p-3 text-white/80"
-                                      >
-                                        <div className="text-xs uppercase tracking-wide text-white/40">
-                                          3-Dart Avg (Live)
-                                        </div>
-                                        <div className="mt-1 text-lg font-semibold">
-                                          {formatAvg(
-                                            match.players?.[
-                                              match.currentPlayerIdx
-                                            ]?.currentThreeDartAvg ?? 0,
-                                          )}
-                                        </div>
-                                      </div>
+                                        <div className="space-y-3">
+                                          <div
+                                            data-testid="offline-live-avg"
+                                            className="rounded-xl bg-slate-900/60 border border-white/10 p-3 text-white/80"
+                                          >
+                                            <div className="text-xs uppercase tracking-wide text-white/40">
+                                              3-Dart Avg (Live)
+                                            </div>
+                                            <div className="mt-1 text-lg font-semibold">
+                                              {formatAvg(
+                                                match.players?.[
+                                                  match.currentPlayerIdx
+                                                ]?.currentThreeDartAvg ?? 0,
+                                              )}
+                                            </div>
+                                          </div>
 
-                                      <div
-                                        data-testid="offline-player-stats"
-                                        className="rounded-lg border p-3 bg-slate-900/50 border-white/10 text-white/80"
-                                      >
-                                        <div className="text-xs uppercase tracking-wide text-white/40">
-                                          You
+                                          <div
+                                            data-testid="offline-player-stats"
+                                            className="rounded-lg border p-3 bg-slate-900/50 border-white/10 text-white/80"
+                                          >
+                                            <div className="text-xs uppercase tracking-wide text-white/40">
+                                              You
+                                            </div>
+                                            <div className="mt-2 text-sm">
+                                              <div>
+                                                Legs Won:{" "}
+                                                <span className="font-semibold">
+                                                  {playerLegs}
+                                                </span>
+                                              </div>
+                                              <div>
+                                                Score:{" "}
+                                                <span className="font-mono">
+                                                  {activeRemaining}
+                                                </span>
+                                              </div>
+                                              <div>
+                                                Last Score:{" "}
+                                                <span className="font-mono">
+                                                  {activeLastScore || 0}
+                                                </span>
+                                              </div>
+                                            </div>
+                                          </div>
                                         </div>
-                                        <div className="mt-2 text-sm">
-                                          <div>
-                                            Legs Won:{" "}
-                                            <span className="font-semibold">
-                                              {playerLegs}
-                                            </span>
-                                          </div>
-                                          <div>
-                                            Score:{" "}
-                                            <span className="font-mono">
-                                              {activeRemaining}
-                                            </span>
-                                          </div>
-                                          <div>
-                                            Last Score:{" "}
-                                            <span className="font-mono">
-                                              {activeLastScore || 0}
-                                            </span>
-                                          </div>
+                                      </>
+                                    ) : (
+                                      <div className="md:col-span-2 rounded-2xl bg-slate-900/60 border border-white/10 p-4 text-slate-100 shadow-lg backdrop-blur-sm">
+                                        <div className="text-xs uppercase tracking-wide text-white/50">
+                                          Scoreboard
+                                        </div>
+                                        <div className="mt-3">
+                                          <GameScoreboard
+                                            gameMode={selectedMode as any}
+                                            players={scoreboardPlayers}
+                                            matchScore={scoreboardMatchScore}
+                                          />
                                         </div>
                                       </div>
-                                    </div>
+                                    )}
                                   </div>
 
                                   {(selectedMode as any) === "X01" && (
@@ -3839,7 +4084,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   )}
                                 </div>
 
-                                <div className="hidden md:flex md:w-[320px] md:flex-shrink-0 md:flex-col md:gap-3">
+                                <div className="hidden lg:flex lg:flex-col lg:gap-3 min-w-0">
                                   <div className="rounded-2xl overflow-hidden bg-black border border-white/10">
                                     {cameraEnabled ? (
                                       <CameraView
@@ -3880,21 +4125,23 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 />
                               </div>
 
-                              {isMobileScreen &&
-                                cameraEnabled &&
-                                !mobileCameraOpen && (
-                                  <div className="flex items-center gap-2 mt-2 md:hidden">
-                                    <button
-                                      className="btn rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white"
-                                      onClick={() => setMobileCameraOpen(true)}
-                                    >
-                                      Camera
-                                    </button>
-                                    <span className="text-xs text-white/60">
-                                      Tap to open the camera tab
-                                    </span>
-                                  </div>
-                                )}
+                              {isMobileScreen && cameraEnabled && (
+                                <div className="flex items-center gap-2 mt-2 md:hidden">
+                                  <button
+                                    className="btn rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white"
+                                    onClick={() =>
+                                      setMobileCameraOpen((v) => !v)
+                                    }
+                                  >
+                                    {mobileCameraOpen ? "Hide Camera" : "Show Camera"}
+                                  </button>
+                                  <span className="text-xs text-white/60">
+                                    {mobileCameraOpen
+                                      ? "Swipe down / tap outside to close"
+                                      : "Opens as a bottom drawer"}
+                                  </span>
+                                </div>
+                              )}
                             </div>
                           </>
                         ) : (
@@ -3908,58 +4155,72 @@ export default function OfflinePlay({ user }: { user: any }) {
                             </div>
                           </div>
                         )}
-                        {isMobileScreen &&
-                          cameraEnabled &&
-                          mobileCameraOpen && (
-                            <div className="fixed inset-0 z-[90] flex items-start justify-center px-3 pt-6 md:hidden">
-                              <div className="absolute inset-0 bg-black/80" />
-                              <div className="relative z-10 w-full max-w-[420px]">
-                                <div className="relative h-[75vh] rounded-[28px] overflow-hidden bg-black shadow-2xl">
-                                  <div className="absolute inset-0">
-                                    <CameraView
-                                      scoringMode="x01"
-                                      showToolbar={cameraToolbarVisible}
-                                      immediateAutoCommit
-                                      cameraAutoCommit="camera"
-                                      onAddVisit={makeOfflineAddVisitAdapter(
-                                        commitManualVisitTotal,
-                                      )}
-                                      onAutoDart={(_value, _ring, _info) => {
-                                        // Camera owns commits for X01; parent should not applyDartValue to avoid duplicates.
-                                      }}
-                                    />
-                                  </div>
-                                  <button
-                                    className="absolute top-3 right-3 rounded-full bg-black/60 p-2 text-white"
-                                    onClick={() => setMobileCameraOpen(false)}
-                                    aria-label="Close camera tab"
+                        {isMobileScreen && cameraEnabled && mobileCameraOpen && (
+                          <div className="fixed inset-0 z-[120] md:hidden">
+                            <button
+                              type="button"
+                              className="absolute inset-0 bg-black/55"
+                              onClick={() => setMobileCameraOpen(false)}
+                              aria-label="Close camera drawer"
+                            />
+                            <div className="absolute left-0 right-0 bottom-0">
+                              <div className="mx-auto w-full max-w-[520px]">
+                                <div
+                                  ref={drawerRootRef}
+                                  className="rounded-t-[26px] border-t border-l border-r border-white/10 bg-slate-950/95 shadow-2xl overflow-hidden"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div
+                                    className="flex items-center justify-between px-4 py-3 border-b border-white/10"
+                                    onPointerDown={onDrawerPointerDown}
+                                    onPointerMove={onDrawerPointerMove}
+                                    onPointerUp={onDrawerPointerEnd}
+                                    onPointerCancel={onDrawerPointerEnd}
                                   >
-                                    ✕
-                                  </button>
-                                  <div className="absolute bottom-4 right-4 w-full max-w-[220px] rounded-[20px] bg-black/70 p-3 text-left text-white shadow-lg">
-                                    <div className="text-[10px] uppercase tracking-wide text-white/60">
-                                      Current thrower
+                                    <div className="flex items-center gap-2">
+                                      <div className="h-1.5 w-10 rounded-full bg-white/20" />
+                                      <span className="text-sm font-semibold text-white">
+                                        Board Camera
+                                      </span>
                                     </div>
-                                    <div className="text-sm font-semibold leading-tight">
-                                      {currentThrowerName}
+                                    <button
+                                      type="button"
+                                      className="btn btn--ghost px-3 py-1 text-sm"
+                                      onClick={() => setMobileCameraOpen(false)}
+                                    >
+                                      Close
+                                    </button>
+                                  </div>
+                                  <div className="p-3">
+                                    <div className="relative w-full overflow-hidden rounded-2xl bg-black border border-white/10">
+                                      <div className="absolute inset-0">
+                                        <CameraView
+                                          scoringMode="x01"
+                                          showToolbar={cameraToolbarVisible}
+                                          immediateAutoCommit
+                                          cameraAutoCommit="camera"
+                                          onAddVisit={makeOfflineAddVisitAdapter(
+                                            commitManualVisitTotal,
+                                          )}
+                                          onAutoDart={(_value, _ring, _info) => {
+                                            // Camera owns commits for X01; parent should not applyDartValue to avoid duplicates.
+                                          }}
+                                        />
+                                      </div>
+                                      <div className="pt-[56.25%]" />
                                     </div>
-                                    <div className="text-[11px] text-white/60">
-                                      Legs: {currentThrowerLegs}
-                                    </div>
-                                    <div className="mt-2 text-[10px] uppercase tracking-wide text-white/60">
-                                      Opponent
-                                    </div>
-                                    <div className="text-sm font-semibold leading-tight">
-                                      {opponentName}
-                                    </div>
-                                    <div className="text-[11px] text-white/60">
-                                      Legs: {opponentLegs}
+                                    <div className="mt-3 text-xs text-white/70 flex items-center justify-between">
+                                      <span>{currentThrowerName}</span>
+                                      <span>
+                                        Legs {currentThrowerLegs} · Opp {opponentLegs}
+                                      </span>
                                     </div>
                                   </div>
                                 </div>
                               </div>
                             </div>
-                          )}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2 items-stretch min-w-0">
@@ -4209,6 +4470,34 @@ export default function OfflinePlay({ user }: { user: any }) {
                     {/* Turn area */}
                     {selectedMode !== "X01" ? (
                       <div className="space-y-2">
+                        <div className="font-semibold">{
+                          selectedMode === "Double Practice" ? "Double Practice" :
+                          selectedMode === "Around the Clock" ? "Around the Clock" :
+                          selectedMode === "Cricket" ? "Cricket" :
+                          selectedMode === "Shanghai" ? `Shanghai — Round ${shanghai.round}` :
+                          selectedMode === "Halve It" ? `Halve It — Round ${halve.stage + 1}` :
+                          selectedMode === "High-Low" ? `High-Low — Round ${highlow.round}` :
+                          selectedMode === "Bob's 27" ? `Bob's 27 — D${b27Stage}` :
+                          selectedMode === "Count-Up" ? `Count-Up — Round ${cuRound}/${cuMaxRounds}` :
+                          selectedMode === "High Score" ? `High Score — Round ${hsRound}/${hsMaxRounds}` :
+                          selectedMode === "Low Score" ? `Low Score — Round ${lsRound}/${lsMaxRounds}` :
+                          selectedMode === "Checkout 170" ? "Checkout 170" :
+                          selectedMode === "Checkout 121" ? "Checkout 121" :
+                          selectedMode === "Treble Practice" ? `Treble Practice — T${trebleTarget}` :
+                          selectedMode === "Baseball" ? `Baseball — Inning ${baseball.inning}` :
+                          selectedMode === "Golf" ? `Golf — Hole ${golf.hole}` :
+                          selectedMode === "Tic Tac Toe" ? "Tic Tac Toe" :
+                          selectedMode === "American Cricket" ? "American Cricket" :
+                          selectedMode === "Killer" ? "Killer" :
+                          selectedMode === "Scam" ? "Scam" :
+                          selectedMode === "Fives" ? "Fives" :
+                          selectedMode === "Sevens" ? "Sevens" :
+                          "Your Turn"
+                        }</div>
+                        <div className="flex flex-col gap-4">
+                          <div className="flex flex-col-reverse md:grid md:grid-cols-12 gap-4 items-start">
+                            <div className="col-span-12 md:col-span-4 space-y-3">
+                              <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-4 shadow-lg">
                         {selectedMode === "Double Practice" && (
                           <>
                             <div className="font-semibold">
@@ -4318,7 +4607,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, info) =>
+                                  onAutoDart={(value: any, ring: any, info: any) =>
                                     addAtcValue(
                                       value,
                                       (ring === "MISS"
@@ -4400,7 +4689,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, info) =>
+                                  onAutoDart={(value: any, ring: any, info: any) =>
                                     addCricketAuto(
                                       value,
                                       (ring === "MISS"
@@ -4460,7 +4749,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, info) =>
+                                  onAutoDart={(value: any, ring: any, info: any) =>
                                     addShanghaiAuto(
                                       value,
                                       (ring === "MISS"
@@ -4520,7 +4809,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, info) =>
+                                  onAutoDart={(value: any, ring: any, info: any) =>
                                     addHalveAuto(
                                       value,
                                       (ring === "MISS"
@@ -4580,7 +4869,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, info) =>
+                                  onAutoDart={(value: any, ring: any, info: any) =>
                                     addHighLowAuto(
                                       value,
                                       (ring === "MISS"
@@ -4640,7 +4929,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, info) =>
+                                  onAutoDart={(value: any, ring: any, info: any) =>
                                     addB27Auto(
                                       value,
                                       (ring === "MISS"
@@ -4696,7 +4985,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value) => addCountUpAuto(value)}
+                                  onAutoDart={(value: any) => addCountUpAuto(value)}
                                   onAddVisit={makeOfflineAddVisitAdapter(
                                     commitManualVisitTotal,
                                   )}
@@ -4758,7 +5047,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value) =>
+                                  onAutoDart={(value: any) =>
                                     addHighScoreAuto(value)
                                   }
                                   onAddVisit={makeOfflineAddVisitAdapter(
@@ -4822,7 +5111,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value) => addLowScoreAuto(value)}
+                                  onAutoDart={(value: any) => addLowScoreAuto(value)}
                                   onAddVisit={makeOfflineAddVisitAdapter(
                                     commitManualVisitTotal,
                                   )}
@@ -4884,7 +5173,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring) =>
+                                  onAutoDart={(value: any, ring: any) =>
                                     addCo170Auto(
                                       value,
                                       ring === "MISS" ? undefined : ring,
@@ -4937,7 +5226,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring) =>
+                                  onAutoDart={(value: any, ring: any) =>
                                     addCo121Auto(
                                       value,
                                       ring === "MISS" ? undefined : ring,
@@ -4990,7 +5279,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, info) =>
+                                  onAutoDart={(value: any, ring: any, info: any) =>
                                     addTrebleAuto(
                                       value,
                                       (ring === "MISS"
@@ -5057,7 +5346,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, info) =>
+                                  onAutoDart={(value: any, ring: any, info: any) =>
                                     addBaseballAuto(
                                       value,
                                       (ring === "MISS"
@@ -5087,7 +5376,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, info) =>
+                                  onAutoDart={(value: any, ring: any, info: any) =>
                                     addGolfAuto(
                                       value,
                                       (ring === "MISS"
@@ -5167,7 +5456,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(_value, _ring, _info) => {
+                                  onAutoDart={(_value: any, _ring: any, _info: any) => {
                                     // Attempt to claim the currently tapped-looking cell not tracked; as a simple flow, map by round-robin preference or let user click a cell button above.
                                     // No-op here; primary interaction is via buttons with prompt for now.
                                   }}
@@ -5192,7 +5481,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, info) =>
+                                  onAutoDart={(value: any, ring: any, info: any) =>
                                     addAmCricketAuto(
                                       value,
                                       (ring === "MISS"
@@ -5228,7 +5517,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, _info) => {
+                                  onAutoDart={(value: any, ring: any, _info: any) => {
                                     const r =
                                       ring === "MISS" ? undefined : ring;
                                     recordDart("Scam");
@@ -5311,7 +5600,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, _info) => {
+                                  onAutoDart={(value: any, ring: any, _info: any) => {
                                     recordDart("Fives");
                                     setFivesPlayer(
                                       addFivesAuto(
@@ -5403,7 +5692,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   scoringMode="custom"
                                   showToolbar={cameraToolbarVisible}
                                   immediateAutoCommit
-                                  onAutoDart={(value, ring, _info) => {
+                                  onAutoDart={(value: any, ring: any, _info: any) => {
                                     recordDart("Sevens");
                                     setSevensPlayer(
                                       addSevensAuto(
@@ -5571,39 +5860,139 @@ export default function OfflinePlay({ user }: { user: any }) {
                               </div>
                             ) : (
                               <div className="space-y-3">
+                                {/* Turn indicator + dart count */}
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="opacity-60">Turn:</span>
+                                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 font-bold">
+                                      {killerPlayers[killerTurnIdx]?.name || "—"}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <span className="opacity-60">Dart</span>
+                                    <span className="font-mono font-bold">{killerDarts + 1}/3</span>
+                                  </div>
+                                </div>
                                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                                   {killerPlayers.map((p) => {
                                     const st = killerStates[p.id];
                                     const num = killerAssigned[p.id];
+                                    const isTurn = p.id === killerPlayers[killerTurnIdx]?.id;
                                     return (
                                       <div
                                         key={p.id}
-                                        className={`p-2 rounded-xl border ${st?.eliminated ? "opacity-50 border-red-500/40 bg-red-500/10" : "border-slate-700/50 bg-slate-800/50"}`}
+                                        className={`p-2 rounded-xl border ${
+                                          st?.eliminated
+                                            ? "opacity-50 border-red-500/40 bg-red-500/10"
+                                            : isTurn
+                                              ? "border-emerald-400/50 bg-emerald-500/10 ring-1 ring-emerald-400/30"
+                                              : "border-slate-700/50 bg-slate-800/50"
+                                        }`}
                                       >
                                         <div className="flex items-center justify-between text-xs">
                                           <div className="font-semibold">
                                             {p.name}
+                                            {isTurn && <span className="ml-1 text-emerald-300">◀</span>}
                                           </div>
                                           <div
                                             className={`text-[10px] px-1.5 py-0.5 rounded ${st?.isKiller ? "bg-purple-500/20 text-purple-200 border border-purple-400/30" : "bg-slate-600/30 text-slate-300"}`}
                                           >
                                             {st?.isKiller
-                                              ? "Killer"
+                                              ? "🗡 Killer"
                                               : "Not Killer"}
                                           </div>
                                         </div>
-                                        <div className="mt-1 text-sm">
-                                          Number:{" "}
-                                          <span className="font-semibold">
-                                            {num}
-                                          </span>
+                                        <div className="mt-1 text-lg font-extrabold tracking-tight">
+                                          D{num}
                                         </div>
                                         <div className="text-sm">
                                           Lives:{" "}
                                           <span className="font-semibold">
-                                            {st?.lives ?? 0}
+                                            {"❤️".repeat(st?.lives ?? 0)}
+                                            {(st?.lives ?? 0) === 0 && "💀"}
                                           </span>
                                         </div>
+                                        {/* Hit / Miss pills */}
+                                        {!st?.eliminated && !killerWinnerId && (
+                                          <div className="mt-2 flex items-center gap-1.5">
+                                            <button
+                                              className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 hover:bg-emerald-500/30 transition-colors disabled:opacity-40"
+                                              disabled={!!killerWinnerId}
+                                              onClick={() => {
+                                                if (killerWinnerId) return;
+                                                const cur = killerPlayers[killerTurnIdx];
+                                                if (!cur) return;
+                                                setKillerStates((prev) => {
+                                                  const copy: Record<string, KillerState> = {};
+                                                  Object.keys(prev).forEach((k) => (copy[k] = { ...prev[k] }));
+                                                  const res = applyKillerDart(cur.id, copy, "DOUBLE", num);
+                                                  if (res.becameKiller)
+                                                    setKillerLastEvent(`${cur.name} became a Killer!`);
+                                                  else if (res.victimId) {
+                                                    if (res.victimId === cur.id)
+                                                      setKillerLastEvent(`${cur.name} hit own D${num}! Lost a life`);
+                                                    else {
+                                                      const v = killerPlayers.find((pp) => pp.id === res.victimId);
+                                                      setKillerLastEvent(`${cur.name} hit ${v?.name}'s D${killerAssigned[res.victimId!]} (-${res.livesRemoved} life)`);
+                                                    }
+                                                  } else
+                                                    setKillerLastEvent("No effect");
+                                                  const win = killerWinner(copy);
+                                                  if (win) setKillerWinnerId(win);
+                                                  return copy;
+                                                });
+                                                setKillerDarts((d) => {
+                                                  const nd = d + 1;
+                                                  if (nd >= 3) {
+                                                    let next = killerTurnIdx;
+                                                    for (let i = 1; i <= killerPlayers.length; i++) {
+                                                      const idx = (killerTurnIdx + i) % killerPlayers.length;
+                                                      const pid = killerPlayers[idx].id;
+                                                      const pst = killerStates[pid];
+                                                      if (pst && !pst.eliminated && pst.lives > 0) {
+                                                        next = idx;
+                                                        break;
+                                                      }
+                                                    }
+                                                    setKillerTurnIdx(next);
+                                                    return 0;
+                                                  }
+                                                  return nd;
+                                                });
+                                              }}
+                                            >
+                                              Hit D{num}
+                                            </button>
+                                            <button
+                                              className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-slate-600/30 text-slate-300 border border-slate-500/30 hover:bg-slate-600/40 transition-colors disabled:opacity-40"
+                                              disabled={!!killerWinnerId}
+                                              onClick={() => {
+                                                if (killerWinnerId) return;
+                                                setKillerLastEvent("Miss — no effect");
+                                                setKillerDarts((d) => {
+                                                  const nd = d + 1;
+                                                  if (nd >= 3) {
+                                                    let next = killerTurnIdx;
+                                                    for (let i = 1; i <= killerPlayers.length; i++) {
+                                                      const idx = (killerTurnIdx + i) % killerPlayers.length;
+                                                      const pid = killerPlayers[idx].id;
+                                                      const pst = killerStates[pid];
+                                                      if (pst && !pst.eliminated && pst.lives > 0) {
+                                                        next = idx;
+                                                        break;
+                                                      }
+                                                    }
+                                                    setKillerTurnIdx(next);
+                                                    return 0;
+                                                  }
+                                                  return nd;
+                                                });
+                                              }}
+                                            >
+                                              Miss
+                                            </button>
+                                          </div>
+                                        )}
                                       </div>
                                     );
                                   })}
@@ -5614,7 +6003,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                       scoringMode="custom"
                                       showToolbar={cameraToolbarVisible}
                                       immediateAutoCommit
-                                      onAutoDart={(value, ring, info) => {
+                                      onAutoDart={(value: any, ring: any, info: any) => {
                                         if (killerWinnerId) return false;
                                         const r =
                                           ring === "MISS" ? undefined : ring;
@@ -5859,6 +6248,200 @@ export default function OfflinePlay({ user }: { user: any }) {
                             )}
                           </>
                         )}
+                              </div>
+                            </div>
+
+                            <div className="col-span-12 md:col-span-4 space-y-3">
+                              <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-2 text-slate-100 shadow-lg">
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div className="rounded-lg bg-black/30 px-2 py-1">
+                                    <div className="uppercase tracking-wide text-white/50">
+                                      {selectedMode === "Double Practice" ? "Target" :
+                                       selectedMode === "Around the Clock" ? "Target" :
+                                       selectedMode === "Cricket" ? "Marks" :
+                                       selectedMode === "Shanghai" ? "Score" :
+                                       selectedMode === "Halve It" ? "Score" :
+                                       selectedMode === "High-Low" ? "Score" :
+                                       selectedMode === "Bob's 27" ? "Score" :
+                                       selectedMode === "Count-Up" ? "Score" :
+                                       selectedMode === "High Score" ? "Score" :
+                                       selectedMode === "Low Score" ? "Score" :
+                                       selectedMode === "Checkout 121" ? "Remaining" :
+                                       selectedMode === "Checkout 170" ? "Remaining" :
+                                       selectedMode === "Treble Practice" ? "Target" :
+                                       selectedMode === "Baseball" ? "Score" :
+                                       selectedMode === "Golf" ? "Strokes" :
+                                       selectedMode === "Tic Tac Toe" ? "Board" :
+                                       selectedMode === "American Cricket" ? "Points" :
+                                       selectedMode === "Killer" ? "Lives" :
+                                       selectedMode === "Scam" ? "Progress" :
+                                       selectedMode === "Fives" ? "Score" :
+                                       selectedMode === "Sevens" ? "Score" :
+                                       "Current"}
+                                    </div>
+                                    <div className="text-lg font-bold text-white">
+                                      {selectedMode === "Double Practice" ? (DOUBLE_PRACTICE_ORDER[dpIndex]?.label || "Done") :
+                                       selectedMode === "Around the Clock" ? (
+                                         ATC_ORDER[atcIndex] === 25 ? "Bull" :
+                                         ATC_ORDER[atcIndex] === 50 ? "D-Bull" :
+                                         ATC_ORDER[atcIndex] || "Done"
+                                       ) :
+                                       selectedMode === "Cricket" ? (cricket.marks ? Object.values(cricket.marks).reduce((a: number, b: number) => a + b, 0) : 0) :
+                                       selectedMode === "Shanghai" ? shanghai.score :
+                                       selectedMode === "Halve It" ? halve.score :
+                                       selectedMode === "High-Low" ? highlow.score :
+                                       selectedMode === "Bob's 27" ? b27Score :
+                                       selectedMode === "Count-Up" ? cuScore :
+                                       selectedMode === "High Score" ? hsScore :
+                                       selectedMode === "Low Score" ? lsScore :
+                                       selectedMode === "Checkout 121" ? co121Rem :
+                                       selectedMode === "Checkout 170" ? co170Rem :
+                                       selectedMode === "Treble Practice" ? `T${trebleTarget}` :
+                                       selectedMode === "Baseball" ? baseball.score :
+                                       selectedMode === "Golf" ? golf.strokes :
+                                       selectedMode === "Tic Tac Toe" ? "—" :
+                                       selectedMode === "American Cricket" ? (amCricket.points ?? 0) :
+                                       selectedMode === "Killer" ? "—" :
+                                       selectedMode === "Scam" ? `${scamPlayer.targetIndex}/${21}` :
+                                       selectedMode === "Fives" ? fivesPlayer.score :
+                                       selectedMode === "Sevens" ? sevensPlayer.score :
+                                       activeRemaining}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg bg-black/30 px-2 py-1">
+                                    <div className="uppercase tracking-wide text-white/50">
+                                      {selectedMode === "Double Practice" ? "Hits" :
+                                       selectedMode === "Around the Clock" ? "Progress" :
+                                       selectedMode === "Cricket" ? "Points" :
+                                       selectedMode === "Shanghai" ? "Round" :
+                                       selectedMode === "Halve It" ? "Round" :
+                                       selectedMode === "High-Low" ? "Round" :
+                                       selectedMode === "Bob's 27" ? "Doubles hit" :
+                                       selectedMode === "Count-Up" ? "Round" :
+                                       selectedMode === "High Score" ? "Round" :
+                                       selectedMode === "Low Score" ? "Round" :
+                                       selectedMode === "Checkout 121" ? "Darts left" :
+                                       selectedMode === "Checkout 170" ? "Darts left" :
+                                       selectedMode === "Treble Practice" ? "Hits" :
+                                       selectedMode === "Baseball" ? "Inning" :
+                                       selectedMode === "Golf" ? "Hole" :
+                                       selectedMode === "Tic Tac Toe" ? "Turn" :
+                                       selectedMode === "American Cricket" ? "Marks" :
+                                       selectedMode === "Killer" ? "Players" :
+                                       selectedMode === "Scam" ? "Darts" :
+                                       selectedMode === "Fives" ? "Target" :
+                                       selectedMode === "Sevens" ? "Target" :
+                                       "3-dart avg"}
+                                    </div>
+                                    <div className="text-lg font-bold text-emerald-300">
+                                      {selectedMode === "Double Practice" ? `${dpHits}/${DOUBLE_PRACTICE_ORDER.length}` :
+                                       selectedMode === "Around the Clock" ? `${atcHits}/${ATC_ORDER.length}` :
+                                       selectedMode === "Cricket" ? cricket.points :
+                                       selectedMode === "Shanghai" ? `${shanghai.round}/7` :
+                                       selectedMode === "Halve It" ? `${halve.stage + 1}` :
+                                       selectedMode === "High-Low" ? `${highlow.round}` :
+                                       selectedMode === "Bob's 27" ? b27Hits :
+                                       selectedMode === "Count-Up" ? `${cuRound}/${cuMaxRounds}` :
+                                       selectedMode === "High Score" ? `${hsRound}/${hsMaxRounds}` :
+                                       selectedMode === "Low Score" ? `${lsRound}/${lsMaxRounds}` :
+                                       selectedMode === "Checkout 121" ? Math.max(0, 6 - co121Attempts * 3 - co121Darts) :
+                                       selectedMode === "Checkout 170" ? Math.max(0, 6 - co170Attempts * 3 - co170Darts) :
+                                       selectedMode === "Treble Practice" ? `${trebleHits} / ${trebleDarts}` :
+                                       selectedMode === "Baseball" ? `${baseball.inning}/9` :
+                                       selectedMode === "Golf" ? `${golf.hole}/18` :
+                                       selectedMode === "Tic Tac Toe" ? ttt.turn :
+                                       selectedMode === "American Cricket" ? (amCricket.marks ? Object.values(amCricket.marks).reduce((a: number, b: number) => a + b, 0) : 0) :
+                                       selectedMode === "Killer" ? killerPlayers.length :
+                                       selectedMode === "Scam" ? scamPlayer.darts :
+                                       selectedMode === "Fives" ? fivesPlayer.target :
+                                       selectedMode === "Sevens" ? sevensPlayer.target :
+                                       _runningAvg.toFixed(1)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-2 text-slate-100 shadow-lg">
+                                <div className="text-xs uppercase tracking-wide text-white/50 mb-1">
+                                  Scoreboard
+                                </div>
+                                <GameScoreboard
+                                  gameMode={selectedMode as any}
+                                  players={scoreboardPlayers}
+                                  matchScore={scoreboardMatchScore}
+                                />
+                                {supportsQuickScore && (
+                                  <div className="mt-3 rounded-xl border border-white/10 bg-black/20 p-3">
+                                    <div className="text-xs uppercase tracking-wide text-white/50">
+                                      Quick score
+                                    </div>
+                                    <div className="mt-2 flex items-center gap-2">
+                                      <input
+                                        ref={quickScoreInputRef}
+                                        className="input w-24 text-center"
+                                        type="number"
+                                        inputMode="numeric"
+                                        value={quickScoreInput}
+                                        onChange={(e) =>
+                                          setQuickScoreInput(e.target.value)
+                                        }
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter")
+                                            commitQuickScore();
+                                        }}
+                                        readOnly={isMobileScreen}
+                                      />
+                                      <button
+                                        className="btn px-3 py-1 text-sm"
+                                        onClick={commitQuickScore}
+                                      >
+                                        Add
+                                      </button>
+                                    </div>
+                                    <ScoreNumberPad
+                                      className="mt-2 scale-90 origin-top-left"
+                                      value={quickScoreInput}
+                                      onChange={setQuickScoreInput}
+                                      onSubmit={commitQuickScore}
+                                      label=""
+                                      helperText={
+                                        isMobileScreen
+                                          ? "Tap the pad to enter the score."
+                                          : "Type numbers or tap the pad, then Enter."
+                                      }
+                                    />
+                                  </div>
+                                )}n                               </div>
+                            </div>
+
+                            <div className="col-span-12 md:col-span-4">
+                              <div className="relative rounded-2xl bg-black/60 border border-white/10 overflow-hidden shadow-lg">
+                                <div className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-2 py-1 text-[11px] uppercase tracking-wide text-white/70 bg-black/40 backdrop-blur-sm">
+                                  <span>Board camera</span>
+                                  {!cameraEnabled && (
+                                    <span className="text-amber-300 font-semibold">
+                                      Camera disabled
+                                    </span>
+                                  )}
+                                </div>
+                                {cameraEnabled ? (
+                                  <div className="bg-black aspect-video max-h-[30vh] md:max-h-[420px]">
+                                    <MemoCameraView
+                                      scoringMode="custom"
+                                      showToolbar={false}
+                                      immediateAutoCommit
+                                      onAutoDart={() => false}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="p-4 text-sm text-slate-200/80">
+                                    Enable the camera to keep the board visible
+                                    while you score.
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -5948,7 +6531,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   )}
                                 </div>
                                 {cameraEnabled ? (
-                                  <div className="bg-black aspect-video max-h-[420px]">
+                                  <div className="bg-black aspect-video max-h-[30vh] md:max-h-[420px]">
                                     <MemoCameraView
                                       scoringMode="custom"
                                       showToolbar={false}
@@ -5990,7 +6573,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
+                                onAutoDart={(value: any, ring: any, info: any) => {
                                   if (value > 0) {
                                     const r =
                                       ring === "MISS" ? undefined : ring;
@@ -6021,7 +6604,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, info) => {
+                                onAutoDart={(value: any, ring: any, info: any) => {
                                   if (value > 0) {
                                     const r =
                                       ring === "MISS" ? undefined : ring;
@@ -6059,7 +6642,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                               scoringMode="custom"
                               showToolbar={cameraToolbarVisible}
                               immediateAutoCommit
-                              onAutoDart={(value, ring, _info) => {
+                              onAutoDart={(value: any, ring: any, _info: any) => {
                                 if (value > 0) {
                                   setScamPlayer(
                                     addScamAuto(scamPlayer, value, ring as any),
@@ -6085,7 +6668,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                               scoringMode="custom"
                               showToolbar={cameraToolbarVisible}
                               immediateAutoCommit
-                              onAutoDart={(value, ring, _info) => {
+                              onAutoDart={(value: any, ring: any, _info: any) => {
                                 if (value > 0) {
                                   setFivesPlayer(
                                     addFivesAuto(
@@ -6116,7 +6699,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 scoringMode="custom"
                                 showToolbar={cameraToolbarVisible}
                                 immediateAutoCommit
-                                onAutoDart={(value, ring, _info) => {
+                                onAutoDart={(value: any, ring: any, _info: any) => {
                                   if (value > 0) {
                                     setSevensPlayer(
                                       addSevensAuto(

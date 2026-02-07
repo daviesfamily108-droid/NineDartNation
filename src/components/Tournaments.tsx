@@ -1,18 +1,21 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import {
+  allGames,
   getModeOptionsForGame,
   labelForMode,
   type ModeKey,
-} from "../utils/games";
-import { useMatch } from "../store/match";
-import MatchCard from "./MatchCard";
-import MatchStartShowcase from "./ui/MatchStartShowcase";
-import { useToast } from "../store/toast";
-import { useWS } from "./WSProvider";
-import { apiFetch } from "../utils/api";
-import { useUserSettings } from "../store/userSettings";
-import { launchInPlayDemo } from "../utils/inPlayDemo";
-import { openMatchWindow } from "../utils/matchWindow";
+  type GameKey,
+} from "../utils/games.js";
+import { useMatch } from "../store/match.js";
+import MatchCard from "./MatchCard.js";
+import MatchStartShowcase from "./ui/MatchStartShowcase.js";
+import { useToast } from "../store/toast.js";
+import { useWS } from "./WSProvider.js";
+import { apiFetch } from "../utils/api.js";
+import { useUserSettings } from "../store/userSettings.js";
+import { launchInPlayDemo } from "../utils/inPlayDemo.js";
+import { openMatchWindow } from "../utils/matchWindow.js";
+import InGameShell from "./InGameShell.js";
 
 type Tournament = {
   id: string;
@@ -25,6 +28,7 @@ type Tournament = {
   checkinMinutes: number;
   capacity: number;
   participants: { email: string; username: string }[];
+  bracket?: any;
   official?: boolean;
   prize?: boolean;
   prizeType?: "premium" | "none";
@@ -34,6 +38,8 @@ type Tournament = {
   creatorEmail?: string;
   creatorName?: string;
 };
+
+const DEFAULT_TOURNAMENT_GAMES: GameKey[] = ["X01", "Cricket", "Killer"];
 
 const containsIntegrationMarker = (value: unknown) => {
   if (typeof value === "string") {
@@ -84,8 +90,12 @@ export default function Tournaments({ user }: { user: any }) {
   const [showStartShowcase, setShowStartShowcase] = useState(false);
   const _startedShowcasedRef = useRef(false);
 
-  const inProgress = useMatch((s) => s.inProgress);
-  const roomId = useMatch((s) => s.roomId);
+  const inProgress = useMatch((s: any) => s.inProgress);
+  const roomId = useMatch((s: any) => s.roomId);
+
+  if (inProgress) {
+    return <InGameShell user={user} />;
+  }
 
   useEffect(() => {
     if (!inProgress) return;
@@ -140,7 +150,7 @@ export default function Tournaments({ user }: { user: any }) {
   // Listen for match-prestart events (same as OnlinePlay)
   useEffect(() => {
     if (!wsGlobal) return;
-    const unsub = wsGlobal.addListener((msg) => {
+    const unsub = wsGlobal.addListener((msg: any) => {
       try {
         if (msg?.type === "match-prestart") {
           // Someone accepted the invite; show prestart and update join match if it matches
@@ -221,7 +231,7 @@ export default function Tournaments({ user }: { user: any }) {
   }, [joinMatch]);
 
   // Watch for match start (inProgress)
-  const match = useMatch((s) => ({
+  const match = useMatch((s: any) => ({
     players: s.players,
     currentPlayerIdx: s.currentPlayerIdx,
     roomId: s.roomId,
@@ -288,7 +298,7 @@ export default function Tournaments({ user }: { user: any }) {
   // Listen for WS push updates from global provider if available
   useEffect(() => {
     if (!wsGlobal) return;
-    const unsub = wsGlobal.addListener((msg) => {
+    const unsub = wsGlobal.addListener((msg: any) => {
       try {
         if (msg.type === "tournaments") {
           setList(msg.tournaments || []);
@@ -740,8 +750,8 @@ export default function Tournaments({ user }: { user: any }) {
               <MatchCard
                 key={t.id}
                 t={t}
-                onJoin={(m) => join(m)}
-                onLeave={(m) => leave(m)}
+                  onJoin={(m: any) => join(m)}
+                  onLeave={(m: any) => leave(m)}
                 joined={hasJoined(t)}
                 disabled={
                   loading ||
@@ -1142,7 +1152,12 @@ export default function Tournaments({ user }: { user: any }) {
                         setForm((f) => ({ ...f, game: e.target.value }))
                       }
                     >
-                      {["X01", "Cricket", "Killer"].map((g) => (
+                      {(DEFAULT_TOURNAMENT_GAMES.filter((g) =>
+                        (allGames as readonly string[]).includes(g),
+                      ).length
+                        ? DEFAULT_TOURNAMENT_GAMES
+                        : allGames
+                      ).map((g) => (
                         <option key={g} value={g}>
                           {g}
                         </option>
@@ -1161,8 +1176,8 @@ export default function Tournaments({ user }: { user: any }) {
                       }
                     >
                       {getModeOptionsForGame(
-                        form.game as import("../utils/games").GameKey,
-                      ).map((o) => (
+                        form.game as import("../utils/games.js").GameKey,
+                      ).map((o: unknown) => (
                         <option key={String(o)} value={String(o)}>
                           {labelForMode(String(o))}
                         </option>

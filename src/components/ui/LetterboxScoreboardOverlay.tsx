@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
-import { suggestCheckouts } from "../../utils/checkout";
-import { useUserSettings } from "../../store/userSettings";
+import { suggestCheckouts } from "../../utils/checkout.js";
+import { useUserSettings } from "../../store/userSettings.js";
 
 type Row = {
   side: "Away" | "Home";
@@ -18,7 +18,7 @@ export default function LetterboxScoreboardOverlay({
   away: Row;
   home: Row;
 }) {
-  const favoriteDouble = useUserSettings((s) => s.favoriteDouble);
+  const favoriteDouble = useUserSettings((s: any) => s.favoriteDouble);
 
   const route = useMemo(() => {
     if (!Number.isFinite(checkoutRemaining)) return "";

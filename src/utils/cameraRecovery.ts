@@ -1,5 +1,5 @@
-import { useCameraSession } from "../store/cameraSession";
-import { useUserSettings } from "../store/userSettings";
+import { useCameraSession } from "../store/cameraSession.js";
+import { useUserSettings } from "../store/userSettings.js";
 
 export type CameraRecoveryReason =
   | "user-click"

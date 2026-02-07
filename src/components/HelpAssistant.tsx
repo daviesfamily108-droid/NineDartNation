@@ -1,8 +1,8 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { HelpCircle, MessageCircle, X, Send } from "lucide-react";
-import { apiFetch } from "../utils/api";
-import { useWS } from "./WSProvider";
-import HelpdeskChat from "./HelpdeskChat";
+import { apiFetch } from "../utils/api.js";
+import { useWS } from "./WSProvider.js";
+import HelpdeskChat from "./HelpdeskChat.js";
 
 export default function HelpAssistant() {
   const [isOpen, setIsOpen] = useState(false);

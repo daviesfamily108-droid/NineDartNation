@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 100% DART SCORING ACCURACY - Complete Test & Validation Suite
  *
  * This suite ensures absolute accuracy by testing:
@@ -10,9 +10,9 @@
  * 6. Error recovery (fallback mechanisms)
  */
 
-import { isPointOnBoard, type Homography } from "./vision";
-import type { BoardDetectionResult } from "./boardDetection";
-import type { DetectedDart } from "./dartDetection";
+import { isPointOnBoard, type Homography } from "./vision.js";
+import type { BoardDetectionResult } from "./boardDetection.js";
+import type { DetectedDart } from "./dartDetection.js";
 
 export interface AccuracyTestResult {
   name: string;

@@ -1,5 +1,5 @@
-﻿import { scoreFromImagePoint } from "./autoscore";
-import type { Homography, Point } from "./vision";
+import { scoreFromImagePoint } from "./autoscore.js";
+import type { Homography, Point } from "./vision.js";
 
 export async function runDetectionAndNotify(
   detector: any,

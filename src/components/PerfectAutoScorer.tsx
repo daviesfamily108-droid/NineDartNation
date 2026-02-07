@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Perfect Auto-Scorer Component
  *
  * Integrates dart detection with perfect calibration (98% / 0.0px) for automatic scoring.
@@ -13,10 +13,10 @@
  */
 
 import { useCallback, useRef, useState } from "react";
-import { detectDarts, scoreDarts } from "../utils/dartDetection";
-import { detectBoard } from "../utils/boardDetection";
-import type { DetectedDart } from "../utils/dartDetection";
-import type { BoardDetectionResult } from "../utils/boardDetection";
+import { detectDarts, scoreDarts } from "../utils/dartDetection.js";
+import { detectBoard } from "../utils/boardDetection.js";
+import type { DetectedDart } from "../utils/dartDetection.js";
+import type { BoardDetectionResult } from "../utils/boardDetection.js";
 
 export interface PerfectAutoScorerProps {
   videoRef: React.RefObject<HTMLVideoElement>;
@@ -156,7 +156,7 @@ export function PerfectAutoScorer({
       }
 
       // STEP 2: Score each dart using perfect homography
-      const scoredDarts = detection.darts.map((dart) => {
+      const scoredDarts = detection.darts.map((dart: DetectedDart) => {
         if (!calibration.homography) {
           return dart;
         }
@@ -175,7 +175,7 @@ export function PerfectAutoScorer({
       setState("confirmed");
 
       // Log results
-      scoredDarts.forEach((dart, idx) => {
+      scoredDarts.forEach((dart: any, idx: number) => {
         console.log(
           `[PerfectAutoScorer] Dart ${idx + 1}: ${dart.score} (${dart.ring}), confidence ${Math.round(dart.confidence * 100)}%`,
         );

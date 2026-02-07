@@ -1,5 +1,5 @@
-import { useMatch } from "../store/match";
-import { writeMatchSnapshot } from "./matchSync";
+import { useMatch } from "../store/match.js";
+import { writeMatchSnapshot } from "./matchSync.js";
 
 type DemoVisit = {
   score: number;

@@ -1,9 +1,9 @@
-﻿import type { Homography, Point } from "./vision";
+import type { Homography, Point } from "./vision.js";
 import {
   imageToBoard,
   scoreAtBoardPoint,
   scoreAtBoardPointTheta,
-} from "./vision";
+} from "./vision.js";
 
 // Optional theta (radians) applies orientation compensation so sector mapping matches TV order.
 export function scoreFromImagePoint(

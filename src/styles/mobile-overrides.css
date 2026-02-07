@@ -256,6 +256,19 @@
     margin: 0 12px !important;
   }
 
+  /* Full-width card variant for tool/settings pages (e.g. Calibrator) */
+  .card.ndn-mobile-fullwidth {
+    margin: 0 !important;
+    border-radius: 0 !important;
+    padding: 8px !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .card.ndn-mobile-fullwidth .rounded-2xl {
+    border-radius: 12px !important;
+  }
+
   /* Button improvements */
   .btn {
     min-height: 48px !important;
@@ -298,6 +311,71 @@
   footer {
     padding-bottom: calc(var(--ndn-safe-bottom) + 16px) !important;
   }
+
+  /* ===== FULLSCREEN IN-GAME MODE =====
+     When data-ndn-ingame is set on <html>, hide header & bottom nav
+     and let the game shell fill the entire viewport. */
+  html[data-ndn-ingame] .header,
+  html[data-ndn-ingame] #ndn-header {
+    display: none !important;
+  }
+
+  /* Hide the MobileBottomNav floating bar */
+  html[data-ndn-ingame] .fixed.bottom-6 {
+    display: none !important;
+  }
+
+  /* Remove the padding that compensated for header/nav so content starts at top */
+  html[data-ndn-ingame] #ndn-main-scroll {
+    padding-top: env(safe-area-inset-top, 0px) !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  }
+
+  /* Make the game shell card fill the viewport edge-to-edge */
+  html[data-ndn-ingame] .ndn-ingame-active {
+    margin: 0 !important;
+    border-radius: 0 !important;
+    padding: 8px !important;
+    padding-top: env(safe-area-inset-top, 4px) !important;
+    padding-bottom: env(safe-area-inset-bottom, 4px) !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Slim down section titles in fullscreen mode */
+  html[data-ndn-ingame] .ndn-ingame-active .ndn-section-title {
+    margin-bottom: 4px !important;
+  }
+
+  html[data-ndn-ingame] .ndn-ingame-active .ndn-section-title h2 {
+    font-size: 1rem !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* Compact the shell body padding */
+  html[data-ndn-ingame] .ndn-ingame-active .ndn-shell-body {
+    padding-bottom: 4px !important;
+  }
+
+  /* Let inner content breathe without excess gaps */
+  html[data-ndn-ingame] .ndn-ingame-active .btn {
+    min-height: 40px !important;
+    padding: 8px 14px !important;
+    font-size: 14px !important;
+  }
+
+  html[data-ndn-ingame] .ndn-ingame-active .input {
+    min-height: 40px !important;
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+  }
+
+  /* Constrain inline camera views within game modes on mobile */
+  html[data-ndn-ingame] .ndn-ingame-active .rounded-2xl.overflow-hidden.bg-black {
+    max-height: 28vh !important;
+  }
 }
 
 /* Landscape mobile optimization */
@@ -339,4 +417,71 @@
   #ndn-header .ndn-greeting {
     margin-left: 70px !important;
   }
+}
+
+/* ===== GLOBAL FULLSCREEN IN-GAME MODE (all viewport widths) =====
+   When data-ndn-ingame is set on <html>, strip ALL chrome so the game fills the viewport */
+
+html[data-ndn-ingame],
+html[data-ndn-ingame] body {
+  background: #0f172a !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+html[data-ndn-ingame] #ndn-header-wrapper,
+html[data-ndn-ingame] #ndn-header,
+html[data-ndn-ingame] [data-testid="ndn-header"],
+html[data-ndn-ingame] .header,
+html[data-ndn-ingame] .ndn-mobile-menu-slot,
+html[data-ndn-ingame] .ndn-mobile-brand {
+  display: none !important;
+}
+
+html[data-ndn-ingame] #ndn-sidebar-wrapper {
+  display: none !important;
+}
+
+html[data-ndn-ingame] .fixed.bottom-6,
+html[data-ndn-ingame] .fixed.bottom-0 {
+  display: none !important;
+}
+
+html[data-ndn-ingame] #ndn-root-shell {
+  padding: 0 !important;
+  margin: 0 !important;
+  max-width: 100% !important;
+}
+
+html[data-ndn-ingame] #ndn-root-grid {
+  grid-template-columns: 1fr !important;
+  gap: 0 !important;
+  max-width: 100% !important;
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 auto !important;
+}
+
+html[data-ndn-ingame] #ndn-main-scroll {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+html[data-ndn-ingame] .ndn-ingame-active {
+  margin: 0 !important;
+  border-radius: 0 !important;
+  padding: 8px !important;
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: #0f172a !important;
+}
+
+html[data-ndn-ingame] .ndn-ingame-active .card {
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0.75rem !important;
+  background: transparent !important;
 }

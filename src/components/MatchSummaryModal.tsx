@@ -1,5 +1,5 @@
-﻿import ResizableModal from "./ui/ResizableModal";
-import type { Player } from "../store/match";
+import ResizableModal from "./ui/ResizableModal.js";
+import type { Player } from "../store/match.js";
 
 function computeTotals(p: Player) {
   let points = 0;
@@ -9,7 +9,10 @@ function computeTotals(p: Player) {
   let oneEighties = 0;
   for (const L of p.legs || []) {
     points += L.totalScoreStart - L.totalScoreRemaining;
-    const legDarts = (L.visits || []).reduce((a, v) => a + (v.darts || 0), 0);
+    const legDarts = (L.visits || []).reduce(
+      (a: number, v: any) => a + (v.darts || 0),
+      0,
+    );
     darts += legDarts;
     if (L.finished) {
       if (bestLeg === null || L.dartsThrown < bestLeg) bestLeg = L.dartsThrown;

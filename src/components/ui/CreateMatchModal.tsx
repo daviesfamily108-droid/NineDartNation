@@ -1,11 +1,11 @@
-﻿import React, { useLayoutEffect, useState, useRef } from "react";
+import React, { useLayoutEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   allGames,
   type GameKey,
   getStartOptionsForGame,
-} from "../../utils/games";
-import { useUserSettings } from "../../store/userSettings";
+} from "../../utils/games.js";
+import { useUserSettings } from "../../store/userSettings.js";
 
 type Props = {
   open: boolean;
@@ -113,7 +113,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                 (e as any).stopPropagation?.();
               }}
             >
-              {allGames.map((g) => (
+              {allGames.map((g: string) => (
                 <option key={g} value={g}>
                   {g}
                 </option>
@@ -140,7 +140,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                   (e as any).stopPropagation?.();
                 }}
               >
-                {getStartOptionsForGame(game).map((opt) => (
+                {getStartOptionsForGame(game).map((opt: number) => (
                   <option key={opt} value={opt}>
                     {opt}
                   </option>

@@ -1,15 +1,15 @@
-﻿import { useToastStore } from "../store/toast";
+import { useToastStore } from "../store/toast.js";
 
 export default function Toaster() {
-  const toasts = useToastStore((s) => s.toasts);
-  const remove = useToastStore((s) => s.remove);
+  const toasts = useToastStore((s: any) => s.toasts);
+  const remove = useToastStore((s: any) => s.remove);
   if (!toasts.length) return null;
   return (
     <>
       {/* Success messages centered */}
       {toasts
-        .filter((t) => t.type === "success")
-        .map((t) => (
+        .filter((t: any) => t.type === "success")
+        .map((t: any) => (
           <div
             key={t.id}
             className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50"
@@ -24,11 +24,11 @@ export default function Toaster() {
           </div>
         ))}
       {/* Other messages bottom right */}
-      {toasts.filter((t) => t.type !== "success").length > 0 && (
+      {toasts.filter((t: any) => t.type !== "success").length > 0 && (
         <div className="fixed bottom-4 right-4 z-50 space-y-2 sm:right-4 sm:left-auto left-1/2 -translate-x-1/2 sm:translate-x-0 w-[calc(100%-1.5rem)] sm:w-auto max-w-sm">
           {toasts
-            .filter((t) => t.type !== "success")
-            .map((t) => (
+            .filter((t: any) => t.type !== "success")
+            .map((t: any) => (
               <div
                 key={t.id}
                 className={`p-3 rounded-lg shadow-lg border text-sm ${

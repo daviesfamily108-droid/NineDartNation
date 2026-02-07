@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   createContext,
   useCallback,
   useContext,
@@ -8,7 +8,7 @@
   useState,
   type ReactNode,
 } from "react";
-import { getWsCandidates } from "../utils/ws";
+import { getWsCandidates } from "../utils/ws.js";
 
 type WSMessage = any;
 
@@ -37,9 +37,15 @@ export function WSProvider({ children }: { children: ReactNode }) {
   const endpointIdxRef = useRef(0);
   const debug = false;
 
-  const ensureEndpoints = () => {
-    if (endpointsRef.current) return endpointsRef.current;
-    endpointsRef.current = getWsCandidates();
+  const ensureEndpoints = (): string[] => {
+    if (endpointsRef.current && endpointsRef.current.length > 0)
+      return endpointsRef.current;
+
+    const candidates = getWsCandidates();
+    endpointsRef.current =
+      Array.isArray(candidates) && candidates.length > 0
+        ? candidates
+        : [window.location.origin];
     return endpointsRef.current;
   };
 

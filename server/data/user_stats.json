@@ -1,19 +1,83 @@
 {
   "DartsWithG": {
-    "updatedAt": 1769722900916,
+    "updatedAt": 1770461654054,
     "allTime": {
-      "darts": 0,
-      "scored": 0
+      "darts": 129,
+      "scored": 2004,
+      "fnDarts": 36,
+      "fnScored": 610,
+      "best3": 50.099999999999994,
+      "worst3": 45.54545454545455,
+      "bestLegDarts": 30,
+      "bestCheckout": 32,
+      "worstCheckout": 24,
+      "worstLegDarts": 33,
+      "bestFNAvg": 66.33333333333333,
+      "worstFNAvg": 40.666666666666664,
+      "num180s": 0,
+      "scoreFreq": {
+        "0": 3,
+        "8": 1,
+        "20": 1,
+        "24": 2,
+        "26": 6,
+        "30": 2,
+        "31": 1,
+        "32": 1,
+        "34": 1,
+        "40": 1,
+        "41": 6,
+        "43": 3,
+        "45": 3,
+        "47": 1,
+        "53": 1,
+        "55": 2,
+        "56": 1,
+        "58": 2,
+        "60": 5,
+        "86": 1,
+        "97": 1,
+        "100": 2
+      }
     },
-    "series": [],
+    "series": [
+      {
+        "t": 1770288474014,
+        "darts": 33,
+        "scored": 501,
+        "fnDarts": 9,
+        "fnScored": 122
+      },
+      {
+        "t": 1770288574261,
+        "darts": 33,
+        "scored": 501,
+        "fnDarts": 9,
+        "fnScored": 142
+      },
+      {
+        "t": 1770291006936,
+        "darts": 33,
+        "scored": 501,
+        "fnDarts": 9,
+        "fnScored": 147
+      },
+      {
+        "t": 1770376750955,
+        "darts": 30,
+        "scored": 501,
+        "fnDarts": 9,
+        "fnScored": 199
+      }
+    ],
     "daily": {
-      "avg": 0,
-      "ts": 1769722900914
+      "avg": 50.099999999999994,
+      "ts": 1770461654051
     },
     "gameModes": {
       "X01": {
-        "played": 7,
-        "won": 7
+        "played": 12,
+        "won": 12
       }
     }
   }

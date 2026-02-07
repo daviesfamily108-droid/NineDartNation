@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useMatch } from "../store/match";
+import { useMatch } from "../store/match.js";
 
 export interface TurnState {
   isMyTurn: boolean;

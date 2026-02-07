@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
-import { useUserSettings } from "../store/userSettings";
-import { useCameraSession } from "../store/cameraSession";
+import { useUserSettings } from "../store/userSettings.js";
+import { useCameraSession } from "../store/cameraSession.js";
 import {
   dispatchCameraRecovery,
   type CameraRecoveryReason,
-} from "../utils/cameraRecovery";
-import { dispatchCameraRecoveryUi } from "../utils/cameraRecoveryEvents";
+} from "../utils/cameraRecovery.js";
+import { dispatchCameraRecoveryUi } from "../utils/cameraRecoveryEvents.js";
 
 /**
  * GlobalCameraWatchdog
@@ -24,8 +24,8 @@ import { dispatchCameraRecoveryUi } from "../utils/cameraRecoveryEvents";
  *   AND a stream is expected to be live.
  */
 export default function GlobalCameraWatchdog() {
-  const cameraEnabled = useUserSettings((s) => !!s.cameraEnabled);
-  const preferredCameraLabel = useUserSettings((s) => s.preferredCameraLabel);
+  const cameraEnabled = useUserSettings((s: any) => !!s.cameraEnabled);
+  const preferredCameraLabel = useUserSettings((s: any) => s.preferredCameraLabel);
   const shouldWatch = cameraEnabled;
   const session = useCameraSession();
 

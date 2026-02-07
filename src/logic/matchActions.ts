@@ -1,4 +1,4 @@
-﻿import type { Actions as MatchActions } from "../store/match";
+import type { Actions as MatchActions } from "../store/match.js";
 
 export type UnifiedMatchActions = {
   addVisit: (score: number, darts?: number, meta?: any) => void;

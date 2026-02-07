@@ -1,4 +1,4 @@
-﻿import type { Homography, Point } from "./vision";
+import type { Homography, Point } from "./vision.js";
 
 export interface DiagnosticBundle {
   createdAt: number;

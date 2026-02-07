@@ -1,4 +1,4 @@
-﻿// Test setup hooks for Vitest
+// Test setup hooks for Vitest
 // Provide a harmless global.fetch fallback for tests to avoid "Invalid URL" warnings
 // when code calls fetch with a relative URL (Node's fetch requires an absolute URL).
 // The mock is intentionally conservative: it returns a basic successful JSON response.
@@ -38,7 +38,7 @@ import "@testing-library/jest-dom";
 import React from "react";
 import { vi } from "vitest";
 import { afterEach } from "vitest";
-import { installTestLogSilencer } from "./utils/testLogSilencer";
+import { installTestLogSilencer } from "./utils/testLogSilencer.js";
 
 // Keep unit test output small/stable (prevents chat/terminal crashes due to massive logs)
 installTestLogSilencer();

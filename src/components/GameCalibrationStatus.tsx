@@ -1,6 +1,6 @@
 import React from "react";
 import { AlertTriangle, CheckCircle, AlertCircle, Zap } from "lucide-react";
-import { useCalibration } from "../store/calibration";
+import { useCalibration } from "../store/calibration.js";
 import {
   getCalibrationConfidenceForGame,
   isCalibrationSuitableForGame,
@@ -8,7 +8,7 @@ import {
   getRecalibrationRecommendation,
   GAME_CALIBRATION_REQUIREMENTS,
   getGlobalCalibrationConfidence,
-} from "../utils/gameCalibrationRequirements";
+} from "../utils/gameCalibrationRequirements.js";
 
 interface GameCalibrationStatusProps {
   gameMode: string;

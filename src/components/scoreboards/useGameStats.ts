@@ -3,9 +3,9 @@
  */
 
 import { useMemo } from "react";
-import type { PlayerStats } from "./GameScoreboard";
-import type { GameMode } from "./GameScoreboard";
-import { getAllTimeAvg } from "../../store/profileStats";
+import type { PlayerStats } from "./GameScoreboard.js";
+import type { GameMode } from "./GameScoreboard.js";
+import { getAllTimeAvg } from "../../store/profileStats.js";
 
 export function useOfflineGameStats(
   gameMode: GameMode,

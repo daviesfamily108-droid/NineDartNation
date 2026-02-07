@@ -1,5 +1,11 @@
-﻿import React, { useEffect, useState } from "react";
-import { useMatchControl } from "../../store/matchControl";
+import React, { useEffect, useState } from "react";
+import { useMatchControl } from "../../store/matchControl.js";
+
+type MatchControlSnapshot = {
+  paused: boolean;
+  pauseEndsAt: number | null;
+  pauseStartedAt?: number | null;
+};
 
 function fmt(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -15,9 +21,11 @@ export default function PauseTimerBadge({
 }: {
   compact?: boolean;
 }) {
-  const pauseEndsAt = useMatchControl((s) => s.pauseEndsAt);
-  const pauseStartedAt = useMatchControl((s) => s.pauseStartedAt);
-  const paused = useMatchControl((s) => s.paused);
+  const pauseEndsAt = useMatchControl((s: MatchControlSnapshot) => s.pauseEndsAt);
+  const pauseStartedAt = useMatchControl(
+    (s: MatchControlSnapshot) => s.pauseStartedAt,
+  );
+  const paused = useMatchControl((s: MatchControlSnapshot) => s.paused);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {

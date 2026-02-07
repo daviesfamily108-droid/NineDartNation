@@ -1,5 +1,7 @@
-﻿import React, { useEffect, type ReactNode } from "react";
-import FocusLock from "react-focus-lock";
+import React, { useEffect, type ReactNode } from "react";
+import * as FocusLockModule from "react-focus-lock";
+
+const FocusLock = (FocusLockModule as any).default ?? (FocusLockModule as any);
 import { X } from "lucide-react";
 
 type DrawerProps = {

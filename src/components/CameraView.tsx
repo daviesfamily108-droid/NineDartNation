@@ -7,7 +7,7 @@ import {
   applyHomography,
   refinePointSobel,
   imageToBoard,
-} from "../utils/vision";
+} from "../utils/vision.js";
 import React, {
   useCallback,
   useEffect,
@@ -18,32 +18,35 @@ import React, {
   useImperativeHandle,
 } from "react";
 import type { MutableRefObject } from "react";
-import { dlog, dinfo } from "../utils/logger";
-import { ensureVideoPlays } from "../utils/ensureVideoPlays";
-import { useUserSettings } from "../store/userSettings";
-import { useCalibration } from "../store/calibration";
-import { useMatch } from "../store/match";
-import { scoreFromImagePoint } from "../utils/autoscore";
-import { getGlobalCalibrationConfidence } from "../utils/gameCalibrationRequirements";
-import { DartDetector } from "../utils/dartDetector";
-import { addSample } from "../store/profileStats";
-import { subscribeExternalWS } from "../utils/scoring";
-import ResizablePanel from "./ui/ResizablePanel";
+import { dlog, dinfo } from "../utils/logger.js";
+import { ensureVideoPlays } from "../utils/ensureVideoPlays.js";
+import { useUserSettings } from "../store/userSettings.js";
+import { useCalibration } from "../store/calibration.js";
+import { useMatch } from "../store/match.js";
+import { scoreFromImagePoint } from "../utils/autoscore.js";
+import { getGlobalCalibrationConfidence } from "../utils/gameCalibrationRequirements.js";
+import { DartDetector } from "../utils/dartDetector.js";
+import { addSample } from "../store/profileStats.js";
+import { subscribeExternalWS } from "../utils/scoring.js";
+import ResizablePanel from "./ui/ResizablePanel.js";
 import FocusLock from "react-focus-lock";
-import { usePendingVisit } from "../store/pendingVisit";
-import { useCameraSession } from "../store/cameraSession";
-import { useMatchControl } from "../store/matchControl";
-import { useAudit } from "../store/audit";
-import PauseQuitModal from "./ui/PauseQuitModal";
-import PauseTimerBadge from "./ui/PauseTimerBadge";
-import { writeMatchSnapshot } from "../utils/matchSync";
-import { broadcastMessage } from "../utils/broadcast";
-import { startForwarding, stopForwarding } from "../utils/cameraHandoff";
-import { sayScore } from "../utils/checkout";
+import { usePendingVisit } from "../store/pendingVisit.js";
+import { useCameraSession } from "../store/cameraSession.js";
+import { useMatchControl } from "../store/matchControl.js";
+import { useAudit } from "../store/audit.js";
+import PauseQuitModal from "./ui/PauseQuitModal.js";
+import PauseTimerBadge from "./ui/PauseTimerBadge.js";
+import { writeMatchSnapshot } from "../utils/matchSync.js";
+import { broadcastMessage } from "../utils/broadcast.js";
+import { startForwarding, stopForwarding } from "../utils/cameraHandoff.js";
+import { sayScore } from "../utils/checkout.js";
 import {
   distanceFromBullMm,
   mmPerBoardUnitFromBullOuter,
-} from "../utils/bullDistance";
+} from "../utils/bullDistance.js";
+
+const FocusLockComponent =
+  ((FocusLock as any)?.default ?? (FocusLock as any)) as any;
 
 type VideoDiagnostics = {
   ts: number;
@@ -418,31 +421,32 @@ export default forwardRef(function CameraView(
   const confirmUncertainDarts =
     useUserSettings((s) => s.confirmUncertainDarts) ?? true;
   const autoScoreConfidenceThreshold =
-    useUserSettings((s) => s.autoScoreConfidenceThreshold) ??
+    useUserSettings((s: any) => s.autoScoreConfidenceThreshold) ??
     AUTO_COMMIT_CONFIDENCE;
   const autoscoreDetectorMinArea =
-    useUserSettings((s) => s.autoscoreDetectorMinArea) ?? 30;
+    useUserSettings((s: any) => s.autoscoreDetectorMinArea) ?? 30;
   const autoscoreDetectorThresh =
-    useUserSettings((s) => s.autoscoreDetectorThresh) ?? 15;
+    useUserSettings((s: any) => s.autoscoreDetectorThresh) ?? 15;
   const autoscoreDetectorRequireStableN =
-    useUserSettings((s) => s.autoscoreDetectorRequireStableN) ?? 2;
+    useUserSettings((s: any) => s.autoscoreDetectorRequireStableN) ?? 2;
   const harshLightingMode =
-    useUserSettings((s) => s.harshLightingMode) ?? false;
+    useUserSettings((s: any) => s.harshLightingMode) ?? false;
+
   const enhanceBigTrebles =
-    useUserSettings((s) => s.enhanceBigTrebles) ?? false;
-  const cameraEnabled = useUserSettings((s) => s.cameraEnabled);
-  const preferredCameraLocked = useUserSettings((s) => s.preferredCameraLocked);
-  const hideCameraOverlay = useUserSettings((s) => s.hideCameraOverlay);
-  const _cameraRecordDarts = useUserSettings((s) =>
+    useUserSettings((s: any) => s.enhanceBigTrebles) ?? false;
+  const cameraEnabled = useUserSettings((s: any) => s.cameraEnabled);
+  const preferredCameraLocked = useUserSettings((s: any) => s.preferredCameraLocked);
+  const hideCameraOverlay = useUserSettings((s: any) => s.hideCameraOverlay);
+  const _cameraRecordDarts = useUserSettings((s: any) =>
     typeof s.cameraRecordDarts === "boolean" ? s.cameraRecordDarts : true,
   );
-  const cameraShowLabels = useUserSettings((s) =>
+  const cameraShowLabels = useUserSettings((s: any) =>
     typeof s.cameraShowLabels === "boolean" ? s.cameraShowLabels : false,
   );
-  const callerEnabled = useUserSettings((s) => s.callerEnabled);
-  const speakCheckoutOnly = useUserSettings((s) => s.speakCheckoutOnly);
-  const callerVoice = useUserSettings((s) => s.callerVoice);
-  const callerVolume = useUserSettings((s) => s.callerVolume);
+  const callerEnabled = useUserSettings((s: any) => s.callerEnabled);
+  const speakCheckoutOnly = useUserSettings((s: any) => s.speakCheckoutOnly);
+  const callerVoice = useUserSettings((s: any) => s.callerVoice);
+  const callerVolume = useUserSettings((s: any) => s.callerVolume);
 
   // Actions (stable, no need to subscribe to entire state)
   const setPreferredCamera = useUserSettings.getState().setPreferredCamera;
@@ -452,7 +456,7 @@ export default forwardRef(function CameraView(
   const setCameraAspect = useUserSettings.getState().setCameraAspect;
   const setCameraFitMode = useUserSettings.getState().setCameraFitMode;
   const preserveCalibrationOverlay = useUserSettings(
-    (s) => s.preserveCalibrationOverlay,
+    (s: any) => s.preserveCalibrationOverlay,
   );
   const autoscoreEnabled = true;
   const manualOnly =
@@ -775,6 +779,9 @@ export default forwardRef(function CameraView(
     sectorOffset,
     _hydrated,
     locked,
+    lockedScale,
+    lockedAspect,
+    lockedFitMode,
     errorPx,
   } = useCalibration();
 
@@ -784,7 +791,7 @@ export default forwardRef(function CameraView(
 
   // 'matchState' hook: declare early to satisfy hook order and be available for gate checks.
   // NOTE: Some earlier logic depends on whether we're in an online match.
-  const matchState = useMatch((s) => s);
+  const matchState = useMatch((s: any) => s);
   const isOnlineMatch = !!(matchState && (matchState as any).roomId);
 
   const ERROR_PX_MAX = 12;
@@ -1133,7 +1140,7 @@ export default forwardRef(function CameraView(
 
   const clampCameraScale = useCallback((value: number) => {
     if (typeof value !== "number" || Number.isNaN(value)) return 1;
-    return Math.min(1.25, Math.max(0.5, Math.round(value * 100) / 100));
+    return Math.min(1.8, Math.max(0.5, Math.round(value * 100) / 100));
   }, []);
 
   const adjustCameraScale = useCallback(
@@ -1593,7 +1600,7 @@ export default forwardRef(function CameraView(
     }
   }, [manualOnly]);
   // X01 Double-In handling: per-player opened state in this session
-  const x01DoubleInSetting = useUserSettings((s) => s.x01DoubleIn);
+  const x01DoubleInSetting = useUserSettings((s: any) => s.x01DoubleIn);
   const x01DoubleIn =
     typeof x01DoubleInOverride === "boolean"
       ? !!x01DoubleInOverride
@@ -1608,8 +1615,8 @@ export default forwardRef(function CameraView(
   };
   const inProgress = (matchState as any)?.inProgress;
   // Broadcast pending visit to global store so Scoreboard can visualize dots
-  const setVisit = usePendingVisit((s) => s.setVisit);
-  const resetPendingVisit = usePendingVisit((s) => s.reset);
+  const setVisit = usePendingVisit((s: any) => s.setVisit);
+  const resetPendingVisit = usePendingVisit((s: any) => s.reset);
   useEffect(() => {
     try {
       setVisit(pendingEntries as any, pendingDarts, pendingScore);
@@ -1654,8 +1661,8 @@ export default forwardRef(function CameraView(
     },
     [resetPendingVisit],
   );
-  const addVisit = useMatch((s) => s.addVisit);
-  const endLeg = useMatch((s) => s.endLeg);
+  const addVisit = useMatch((s: any) => s.addVisit);
+  const endLeg = useMatch((s: any) => s.endLeg);
   // Helper: convert the current pendingEntries into a minimal, serializable
   // per-dart breakdown that can be stored with the committed visit.
   const snapshotPendingDartEntries = useCallback((entries: any[]) => {
@@ -1716,11 +1723,11 @@ export default forwardRef(function CameraView(
   const [showScoringModal, setShowScoringModal] = useState(false);
   const manualPreviewRef = useRef<HTMLCanvasElement | null>(null);
   // Dart timer
-  const dartTimerEnabled = useUserSettings((s) => s.dartTimerEnabled);
-  const dartTimerSeconds = useUserSettings((s) => s.dartTimerSeconds) || 10;
+  const dartTimerEnabled = useUserSettings((s: any) => s.dartTimerEnabled);
+  const dartTimerSeconds = useUserSettings((s: any) => s.dartTimerSeconds) || 10;
   const [dartTimeLeft, setDartTimeLeft] = useState<number | null>(null);
   const timerRef = useRef<number | null>(null);
-  const paused = useMatchControl((s) => s.paused);
+  const paused = useMatchControl((s: any) => s.paused);
   // Built-in CV detector
   const detectorRef = useRef<DartDetector | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -2290,7 +2297,8 @@ export default forwardRef(function CameraView(
           playResult = await ensureVideoPlays({
             video: videoRef.current,
             stream,
-            onPlayError: (e) => console.error("[CAMERA] Video play failed:", e),
+            onPlayError: (e: any) =>
+              console.error("[CAMERA] Video play failed:", e),
           });
           if (playResult.played) {
             dlog("[CAMERA] Video play ensured");
@@ -2340,7 +2348,7 @@ export default forwardRef(function CameraView(
                       const r = await ensureVideoPlays({
                         video: videoRef.current,
                         stream,
-                        onPlayError: (e) =>
+                        onPlayError: (e: any) =>
                           console.error("[CAMERA] reattach play failed:", e),
                       });
                       if (r.played) dlog("[CAMERA] reattach play confirmed");
@@ -2472,7 +2480,7 @@ export default forwardRef(function CameraView(
     try {
       const sessionStream = cameraSession.getMediaStream?.() || null;
       if (sessionStream) {
-        sessionStream.getTracks().forEach((t) => t.stop());
+        sessionStream.getTracks().forEach((t: any) => t.stop());
       }
     } catch (e) {
       // ignore cleanup errors
@@ -3133,7 +3141,7 @@ export default forwardRef(function CameraView(
         const poly = sampleRing(Hs, r, 720);
         // Scale poly points according to drawScale
         // Adjust for cropping offset and then scale to actual canvas
-        const scaledPoly = poly.map((p) => ({
+        const scaledPoly = poly.map((p: any) => ({
           x: (p.x - cropOverlayX) * drawScaleX,
           y: (p.y - cropOverlayY) * drawScaleY,
         }));
@@ -5218,7 +5226,7 @@ export default forwardRef(function CameraView(
   // External autoscore subscription
   useEffect(() => {
     if (autoscoreProvider !== "external-ws" || !autoscoreWsUrl) return;
-    const sub = subscribeExternalWS(autoscoreWsUrl, (d) => {
+    const sub = subscribeExternalWS(autoscoreWsUrl, (d: any) => {
       if (
         !detectionArmedRef.current ||
         performance.now() - streamingStartMsRef.current < 5000
@@ -6051,21 +6059,30 @@ export default forwardRef(function CameraView(
             >
               <CameraSelector />
               {(() => {
+                const lock = useCalibration.getState?.()
+                  ? (useCalibration.getState() as any)
+                  : null;
                 const aspect =
+                  (lock?.locked && lock?.lockedAspect) ||
                   cameraAspect ||
                   useUserSettings.getState().cameraAspect ||
                   "wide";
                 const fit =
-                  (cameraFitMode ||
+                  (((lock?.locked && lock?.lockedFitMode) ||
+                    cameraFitMode ||
                     useUserSettings.getState().cameraFitMode ||
-                    "fit") === "fit";
+                    "fit") as any) === "fit";
                 const videoClass =
                   aspect === "square"
                     ? "absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black"
                     : fit
                       ? "absolute inset-0 w-full h-full object-contain object-center bg-black"
                       : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black ndn-video-smooth";
-                const videoScale = cameraScale ?? 1;
+                const videoScale =
+                  (lock?.locked &&
+                    typeof lock?.lockedScale === "number" &&
+                    lock?.lockedScale) ||
+                  (cameraScale ?? 1);
                 const glareDimmingEnabled =
                   typeof window !== "undefined" &&
                   (window.localStorage?.getItem("ndn.glareDimming") === "1" ||
@@ -6367,15 +6384,19 @@ export default forwardRef(function CameraView(
                           } catch (e) {}
                           setShowQuitPause(false);
                         }}
-                        onPause={(minutes) => {
+                        onPause={(minutes: any) => {
                           const endsAt = Date.now() + minutes * 60 * 1000;
+                          const initiator = useUserSettings.getState()?.user?.username
+                            || useUserSettings.getState()?.user?.name
+                            || null;
                           try {
-                            useMatchControl.getState().setPaused(true, endsAt);
+                            useMatchControl.getState().setPaused(true, endsAt, initiator);
                             try {
                               broadcastMessage({
                                 type: "pause",
                                 pauseEndsAt: endsAt,
                                 pauseStartedAt: Date.now(),
+                                pauseInitiator: initiator,
                               });
                             } catch {}
                           } catch (e) {}
@@ -6385,22 +6406,12 @@ export default forwardRef(function CameraView(
                     )}
                     <button
                       className="btn btn--ghost px-3 py-1 text-sm"
-                      onClick={() => {
-                        try {
-                          writeMatchSnapshot();
-                          window.open(
-                            `${window.location.origin}${window.location.pathname}?match=1`,
-                            "_blank",
-                          );
-                        } catch (e) {}
-                      }}
-                    >
-                      Open match in new window
-                    </button>
-                    <button
-                      className="btn btn--ghost px-3 py-1 text-sm"
                       onClick={async () => {
                         try {
+                          if (document.fullscreenElement) {
+                            await document.exitFullscreen();
+                            return;
+                          }
                           if (document.documentElement.requestFullscreen) {
                             await document.documentElement.requestFullscreen();
                           } else if ((document as any).body.requestFullscreen) {
@@ -6409,7 +6420,7 @@ export default forwardRef(function CameraView(
                         } catch (e) {}
                       }}
                     >
-                      Open full screen
+                      {document.fullscreenElement ? "Exit full screen" : "Open full screen"}
                     </button>
                   </>
                 )}
@@ -6527,7 +6538,7 @@ export default forwardRef(function CameraView(
           aria-modal="true"
         >
           <div className="absolute inset-0 flex flex-col">
-            <FocusLock returnFocus>
+            <FocusLockComponent returnFocus>
               <div className="p-3 md:p-4 flex items-center justify-between">
                 <h3 className="text-xl md:text-2xl font-semibold">
                   Manual Correction
@@ -6758,13 +6769,13 @@ export default forwardRef(function CameraView(
                   </div>
                 </div>
               </div>
-            </FocusLock>
+            </FocusLockComponent>
           </div>
         </div>
       )}
       {showScoringModal && (
         <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center">
-          <FocusLock returnFocus>
+          <FocusLockComponent returnFocus>
             <div
               className="card w-full max-w-4xl relative text-left bg-[#2d2250] text-white p-6 rounded-xl shadow-xl"
               role="dialog"
@@ -7075,7 +7086,7 @@ export default forwardRef(function CameraView(
                 </div>
               </div>
             </div>
-          </FocusLock>
+          </FocusLockComponent>
         </div>
       )}
       {/* Duplicate Pending Visit panel removed to avoid showing the same controls twice when inline panels are visible. */}

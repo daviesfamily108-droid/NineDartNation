@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Homography } from "../utils/vision";
+import type { Homography } from "../utils/vision.js";
 
 /**
  * Simplified Calibration Store for Manual-Only Mode

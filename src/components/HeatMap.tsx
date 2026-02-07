@@ -1,6 +1,6 @@
-﻿import React, { useEffect, useRef } from "react";
-import useHeatmapStore from "../store/heatmap";
-import { BoardRadii } from "../utils/vision";
+import React, { useEffect, useRef } from "react";
+import useHeatmapStore from "../store/heatmap.js";
+import { BoardRadii } from "../utils/vision.js";
 
 function polarToCartesian(cx: number, cy: number, r: number, angleDeg: number) {
   const a = ((angleDeg - 90) * Math.PI) / 180.0;
@@ -24,7 +24,7 @@ export default function HeatMap({
   width?: number;
   height?: number;
 }) {
-  const samples = useHeatmapStore((s) => s.samples);
+  const samples = useHeatmapStore((s: any) => s.samples);
   const ref = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {

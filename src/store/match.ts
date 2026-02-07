@@ -1,6 +1,6 @@
-﻿import { create } from "zustand";
-import { useAudit } from "./audit";
-import { broadcastMessage } from "../utils/broadcast";
+import { create } from "zustand";
+import { useAudit } from "./audit.js";
+import { broadcastMessage } from "../utils/broadcast.js";
 // Use a dynamic import for profileStats to avoid circular import / TDZ during
 // module initialization. Calling addMatchToAllTime is only needed when a
 // match ends, so lazy-loading is safe and avoids import cycles.
@@ -104,7 +104,12 @@ function updatePlayerEndOfGameStats(player: Player) {
 }
 
 export type Actions = {
-  newMatch: (players: string[], startingScore: number, roomId?: string) => void;
+  newMatch: (
+    players: string[],
+    startingScore: number,
+    roomId?: string,
+    opts?: { firstPlayerId?: string },
+  ) => void;
   addVisit: (
     score: number,
     darts: number,
@@ -132,7 +137,7 @@ export const useMatch = create<MatchState & Actions>((set) => ({
   startingScore: 501,
   inProgress: false,
 
-  newMatch: (playerNames, startingScore, roomId = "") =>
+  newMatch: (playerNames, startingScore, roomId = "", opts) =>
     set(() => {
       const players = playerNames.map(
         (name, i) =>
@@ -143,10 +148,16 @@ export const useMatch = create<MatchState & Actions>((set) => ({
             legs: [],
           }) as Player,
       );
+      const firstIdx = (() => {
+        const want = String(opts?.firstPlayerId ?? "");
+        if (!want) return 0;
+        const idx = players.findIndex((p) => String(p.id) === want);
+        return idx >= 0 ? idx : 0;
+      })();
       console.debug("[useMatch] newMatch", playerNames, startingScore, roomId);
       return {
         players,
-        currentPlayerIdx: 0,
+        currentPlayerIdx: firstIdx,
         startingScore,
         inProgress: true,
         roomId,
@@ -352,7 +363,7 @@ export const useMatch = create<MatchState & Actions>((set) => ({
         // Persist all-time stats and backfill rolling averages when no
         // per-visit samples were recorded for this match.
         // Use dynamic import to avoid circular import / TDZ issues at module init.
-        import("./profileStats").then((m) => {
+        import("./profileStats.js").then((m) => {
           try {
             m.addMatchToAllTime(newPlayers, { recordSeries: true });
           } catch {}
