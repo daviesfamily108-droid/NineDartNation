@@ -2418,18 +2418,20 @@ export default function OfflinePlay({ user }: { user: any }) {
           onDone={() => setShowStartShowcase(false)}
         />
       )}
-      <h2 className="text-3xl font-bold text-brand-700 mb-4 ndn-section-title">
-        Offline Mode �{" "}
-        {effectiveLayout === "classic" ? (
-          <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">
-            Classic layout
-          </span>
-        ) : (
-          <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">
-            Modern layout
-          </span>
-        )}
-      </h2>
+      {!showMatchModal && !inMatch && (
+        <h2 className="text-3xl font-bold text-brand-700 mb-4 ndn-section-title">
+          Offline Mode �{" "}
+          {effectiveLayout === "classic" ? (
+            <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-white/10 border border-white/10 align-middle">
+              Classic layout
+            </span>
+          ) : (
+            <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">
+              Modern layout
+            </span>
+          )}
+        </h2>
+      )}
       <div className="ndn-shell-body">
         {!showMatchModal && !inMatch && (
           <div className="mb-4 flex flex-col gap-3">
@@ -2601,7 +2603,7 @@ export default function OfflinePlay({ user }: { user: any }) {
         {/* Match Modal with turn-by-turn flow */}
         {showMatchModal && (
           <div
-            className={`fixed inset-0 z-[1000] ${maximized ? "" : "flex items-center justify-center p-3 sm:p-4"}`}
+            className={`fixed inset-0 z-[1000] bg-slate-950/90 backdrop-blur-sm ${maximized ? "" : "flex items-center justify-center p-3 sm:p-4"}`}
           >
             <ResizableModal
               storageKey="ndn:modal:offline-match:v2"
