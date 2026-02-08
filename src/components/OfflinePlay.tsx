@@ -3554,6 +3554,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                       showActionButtons={false}
                                       showQuickButtons={false}
                                       showUndo={false}
+                                      showVisitInputRow={false}
                                     />
                                   )}
                                 </div>
@@ -3572,7 +3573,8 @@ export default function OfflinePlay({ user }: { user: any }) {
                                             ? "x01"
                                             : "custom"
                                         }
-                                        showToolbar={cameraToolbarVisible}
+                                        showToolbar={false}
+                                        hideInlinePanels
                                         immediateAutoCommit
                                         cameraAutoCommit="camera"
                                         onAddVisit={makeOfflineAddVisitAdapter(
@@ -3616,7 +3618,8 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   <div className="absolute inset-0">
                                     <CameraView
                                       scoringMode="x01"
-                                      showToolbar={cameraToolbarVisible}
+                                      showToolbar={false}
+                                      hideInlinePanels
                                       immediateAutoCommit
                                       cameraAutoCommit="camera"
                                       onAddVisit={makeOfflineAddVisitAdapter(
@@ -3634,26 +3637,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   >
                                     ✕
                                   </button>
-                                  <div className="absolute bottom-4 right-4 w-full max-w-[220px] rounded-[20px] bg-black/70 p-3 text-left text-white shadow-lg">
-                                    <div className="text-[10px] uppercase tracking-wide text-white/60">
-                                      Current thrower
-                                    </div>
-                                    <div className="text-sm font-semibold leading-tight">
-                                      {currentThrowerName}
-                                    </div>
-                                    <div className="text-[11px] text-white/60">
-                                      Legs: {currentThrowerLegs}
-                                    </div>
-                                    <div className="mt-2 text-[10px] uppercase tracking-wide text-white/60">
-                                      Opponent
-                                    </div>
-                                    <div className="text-sm font-semibold leading-tight">
-                                      {opponentName}
-                                    </div>
-                                    <div className="text-[11px] text-white/60">
-                                      Legs: {opponentLegs}
-                                    </div>
-                                  </div>
+                                  {null}
                                 </div>
                               </div>
                             </div>

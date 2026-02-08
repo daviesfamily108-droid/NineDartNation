@@ -16,6 +16,7 @@ interface MatchControlsProps {
   showActionButtons?: boolean;
   showQuickButtons?: boolean;
   showUndo?: boolean;
+  showVisitInputRow?: boolean;
   quickButtons?: number[];
 }
 
@@ -33,6 +34,7 @@ export default function MatchControls({
   showActionButtons = true,
   showQuickButtons = true,
   showUndo = true,
+  showVisitInputRow = true,
   quickButtons = [180, 140, 100, 60],
 }: MatchControlsProps) {
   const [scoreInput, setScoreInput] = useState<string>("0");
@@ -52,44 +54,46 @@ export default function MatchControls({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <input
-          className="input w-32"
-          type="number"
-          value={scoreInput}
-          onChange={(e) => setScoreInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commitScore();
-            }
-          }}
-          placeholder="Score"
-        />
-        {showDartsSelect && (
-          <select
-            className="input"
-            value={darts}
-            onChange={(e) => setDarts(parseInt(e.target.value))}
-          >
-            <option value={1}>1 dart</option>
-            <option value={2}>2 darts</option>
-            <option value={3}>3 darts</option>
-          </select>
-        )}
-        <button className="btn" onClick={commitScore}>
-          Add Visit ➕
-        </button>
-        {showUndo && (
-          <button
-            className="px-3 py-2 rounded-xl border border-slate-200"
-            onClick={() => onUndo && onUndo()}
-            title="Undo"
-          >
-            <Undo2 className="w-4 h-4" />
+      {showVisitInputRow && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            className="input w-32"
+            type="number"
+            value={scoreInput}
+            onChange={(e) => setScoreInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitScore();
+              }
+            }}
+            placeholder="Score"
+          />
+          {showDartsSelect && (
+            <select
+              className="input"
+              value={darts}
+              onChange={(e) => setDarts(parseInt(e.target.value))}
+            >
+              <option value={1}>1 dart</option>
+              <option value={2}>2 darts</option>
+              <option value={3}>3 darts</option>
+            </select>
+          )}
+          <button className="btn" onClick={commitScore}>
+            Add Visit ➕
           </button>
-        )}
-      </div>
+          {showUndo && (
+            <button
+              className="px-3 py-2 rounded-xl border border-slate-200"
+              onClick={() => onUndo && onUndo()}
+              title="Undo"
+            >
+              <Undo2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      )}
       {showQuickButtons && quickButtons && quickButtons.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mt-2 text-xs">
           <span className="opacity-70">Quick:</span>
