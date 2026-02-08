@@ -5190,6 +5190,32 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 </div>
                               </div>
                               <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-2 text-slate-100 shadow-lg">
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div className="rounded-lg bg-black/30 px-2 py-1">
+                                    <div className="uppercase tracking-wide text-white/50">
+                                      Game
+                                    </div>
+                                    <div className="text-lg font-bold text-white">
+                                      {selectedMode}
+                                      {selectedMode === "X01"
+                                        ? ` / ${x01Score}`
+                                        : ""}
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg bg-black/30 px-2 py-1">
+                                    <div className="uppercase tracking-wide text-white/50">
+                                      Format
+                                    </div>
+                                    <div className="text-lg font-bold text-white">
+                                      {formatType === "first"
+                                        ? "First to"
+                                        : "Best of"}{" "}
+                                      {formatCount} · {playerLegs}-{aiLegs}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="rounded-2xl bg-slate-900/70 border border-white/10 p-2 text-slate-100 shadow-lg">
                                 <div className="text-xs uppercase tracking-wide text-white/50 mb-1">
                                   Scoreboard
                                 </div>
