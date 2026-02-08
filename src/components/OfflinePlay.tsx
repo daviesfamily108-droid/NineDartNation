@@ -447,6 +447,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     stage: 1 | 2;
   } | null>(null);
   const [showCameraManager, setShowCameraManager] = useState<boolean>(false);
+  const [showCreationMode, setShowCreationMode] = useState<boolean>(false);
   const [dartCounts, setDartCounts] = useState<Record<string, number>>({});
   const [awaitingBoardClear, setAwaitingBoardClear] = useState<boolean>(false);
   const pendingVisitRef = useRef<PendingAutoVisit | null>(null);
@@ -3468,7 +3469,207 @@ export default function OfflinePlay({ user }: { user: any }) {
                         )}
                       </div>
                     ) : effectiveLayout === "modern" ? (
-                      <div className="space-y-3 mb-2" />
+                      <div className="space-y-3 mb-2">
+                        {/* Modern in-game header pills */}
+                        <div className="flex items-center justify-center gap-2 flex-wrap py-1">
+                          <button
+                            className="px-3 py-1 rounded-full text-xs font-semibold bg-rose-600/20 text-rose-200 border border-rose-400/30 hover:bg-rose-600/40 transition-colors"
+                            onClick={() => setShowQuitPause(true)}
+                          >
+                            Quit
+                          </button>
+                          <button
+                            className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-600/20 text-amber-200 border border-amber-400/30 hover:bg-amber-600/40 transition-colors"
+                            onClick={() => {
+                              const endsAt = Date.now() + 5 * 60 * 1000;
+                              try {
+                                setPaused(true, endsAt);
+                                broadcastMessage({
+                                  type: "pause",
+                                  pauseEndsAt: endsAt,
+                                  pauseStartedAt: Date.now(),
+                                });
+                              } catch {}
+                              toast("Match paused for 5 minutes", {
+                                type: "info",
+                                timeout: 2500,
+                              });
+                            }}
+                          >
+                            Pause
+                          </button>
+                          <button
+                            className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-600/20 text-slate-200 border border-slate-400/30 hover:bg-slate-600/40 transition-colors"
+                            onClick={() => startMatch()}
+                          >
+                            Restart
+                          </button>
+                          <button
+                            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${showCreationMode ? "bg-indigo-600/40 text-indigo-100 border-indigo-400/50" : "bg-indigo-600/20 text-indigo-200 border-indigo-400/30 hover:bg-indigo-600/40"}`}
+                            onClick={() => setShowCreationMode((v) => !v)}
+                          >
+                            {showCreationMode ? "Close Setup ▲" : "New Match ▼"}
+                          </button>
+                        </div>
+                        {/* Collapsible creation mode panel */}
+                        {showCreationMode && (
+                          <div className="rounded-2xl bg-slate-900/80 border border-white/10 p-3 space-y-3">
+                            <div className="text-xs uppercase tracking-wide text-white/50">
+                              Match Setup
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                              <div>
+                                <label className="text-xs text-white/60 mb-1 block">
+                                  Game Mode
+                                </label>
+                                <select
+                                  className="input w-full text-sm"
+                                  value={selectedMode}
+                                  onChange={(e) =>
+                                    setSelectedMode(e.target.value)
+                                  }
+                                >
+                                  {freeGames.map((mode) => (
+                                    <option key={mode} value={mode}>
+                                      {mode}
+                                    </option>
+                                  ))}
+                                  {premiumGames.map((mode) => (
+                                    <option
+                                      key={mode}
+                                      value={mode}
+                                      disabled={
+                                        !(user?.fullAccess || user?.admin)
+                                      }
+                                    >
+                                      {mode}
+                                      {user?.fullAccess || user?.admin
+                                        ? ""
+                                        : " (Premium)"}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              {selectedMode === "X01" && (
+                                <div>
+                                  <label className="text-xs text-white/60 mb-1 block">
+                                    Starting Score
+                                  </label>
+                                  <input
+                                    className="input w-full text-sm"
+                                    type="number"
+                                    min={1}
+                                    max={1001}
+                                    value={x01Score}
+                                    onChange={(e) =>
+                                      setX01Score(Number(e.target.value))
+                                    }
+                                  />
+                                </div>
+                              )}
+                              <div>
+                                <label className="text-xs text-white/60 mb-1 block">
+                                  Format
+                                </label>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    className={`px-2 py-0.5 rounded-full text-xs border ${formatType === "first" ? "bg-white/20 border-white/30" : "bg-transparent border-white/10 opacity-60"}`}
+                                    onClick={() => setFormatType("first")}
+                                  >
+                                    First to
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`px-2 py-0.5 rounded-full text-xs border ${formatType === "best" ? "bg-white/20 border-white/30" : "bg-transparent border-white/10 opacity-60"}`}
+                                    onClick={() => setFormatType("best")}
+                                  >
+                                    Best of
+                                  </button>
+                                  <input
+                                    className="input w-14 text-center text-sm"
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={formatCount}
+                                    onChange={(e) =>
+                                      setFormatCount(
+                                        Math.max(
+                                          1,
+                                          Math.floor(
+                                            Number(e.target.value) || 1,
+                                          ),
+                                        ),
+                                      )
+                                    }
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="text-xs text-white/60 mb-1 block">
+                                  AI Opponent
+                                </label>
+                                <select
+                                  className="input w-full text-sm"
+                                  value={ai}
+                                  onChange={(e) => setAI(e.target.value)}
+                                >
+                                  <option value="None">None</option>
+                                  {aiLevels.map((level) => (
+                                    <option key={level} value={level}>
+                                      {level}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                className="btn bg-emerald-600 hover:bg-emerald-700 px-4 py-1 text-sm"
+                                onClick={() => {
+                                  setShowCreationMode(false);
+                                  startMatch();
+                                }}
+                              >
+                                Start New Match 🚀
+                              </button>
+                              <button
+                                className="btn btn--ghost px-3 py-1 text-sm"
+                                onClick={() => setShowCreationMode(false)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {/* PauseQuitModal for modern layout */}
+                        {showQuitPause && (
+                          <PauseQuitModal
+                            onClose={() => setShowQuitPause(false)}
+                            onQuit={() => {
+                              if (ai === "None") {
+                                setShowQuitPause(false);
+                                setQuitVotes({ player: true, opponent: false });
+                                setShowQuitConfirm(true);
+                                return;
+                              }
+                              finalizeQuitMatch();
+                            }}
+                            onPause={(minutes) => {
+                              const endsAt = Date.now() + minutes * 60 * 1000;
+                              try {
+                                setPaused(true, endsAt);
+                                broadcastMessage({
+                                  type: "pause",
+                                  pauseEndsAt: endsAt,
+                                  pauseStartedAt: Date.now(),
+                                });
+                              } catch {}
+                              setShowQuitPause(false);
+                            }}
+                          />
+                        )}
+                      </div>
                     ) : null}
                     {/* Turn area */}
                     {selectedMode !== "X01" ? (
