@@ -1344,10 +1344,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     const players = ai !== "None" ? [humanName, aiName] : [humanName];
     match.newMatch(players, x01Score, `offline-${Date.now()}`);
 
-    try {
-      // Always open the match window for X01 offline so the camera + scoreboard can be maximized.
-      openMatchWindow();
-    } catch {}
+    // Keep match in the current page (no popout window).
   }
 
   function startNextLeg() {
