@@ -18,6 +18,7 @@ interface MatchControlsProps {
   showUndo?: boolean;
   showVisitInputRow?: boolean;
   showHelperText?: boolean;
+  showNumberPadLabel?: boolean;
   quickButtons?: number[];
 }
 
@@ -37,6 +38,7 @@ export default function MatchControls({
   showUndo = true,
   showVisitInputRow = true,
   showHelperText = true,
+  showNumberPadLabel = true,
   quickButtons = [180, 140, 100, 60],
 }: MatchControlsProps) {
   const [scoreInput, setScoreInput] = useState<string>("0");
@@ -114,6 +116,7 @@ export default function MatchControls({
         value={scoreInput}
         onChange={setScoreInput}
         onSubmit={commitScore}
+        label={showNumberPadLabel ? "Number pad" : undefined}
         helperText={showHelperText ? "Tap numbers then press Enter to submit." : undefined}
       />
       {showActionButtons && (

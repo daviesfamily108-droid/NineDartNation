@@ -3463,71 +3463,6 @@ export default function OfflinePlay({ user }: { user: any }) {
                             <div className="relative">
                               <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
                                 <div className="flex-1 min-w-0 space-y-2.5">
-                                  <div className="flex flex-wrap items-center gap-2 text-[11px] text-white/80">
-                                    <span className="px-2 py-1 rounded-full bg-white/10 border border-white/10">
-                                      {selectedMode}
-                                    </span>
-                                    <span className="px-2 py-1 rounded-full bg-white/10 border border-white/10">
-                                      Start {x01Score}
-                                    </span>
-                                    <span className="px-2 py-1 rounded-full bg-white/10 border border-white/10">
-                                      Legs {playerLegs}-{aiLegs}
-                                    </span>
-                                    <div
-                                      ref={formatRef}
-                                      className="flex flex-wrap items-center gap-2 px-2 py-1 rounded-full bg-white/10 border border-white/10"
-                                    >
-                                      <span className="opacity-80">Format</span>
-                                      {(() => {
-                                        const disabled =
-                                          playerScore !== x01Score ||
-                                          aiScore !== x01Score ||
-                                          playerVisitDarts > 0;
-                                        const pillCls = `pill ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"} `;
-                                        return (
-                                          <div className="flex items-center gap-1">
-                                            <button
-                                              type="button"
-                                              className={`${pillCls} ${formatType === "first" ? "pill--filled" : "pill--ghost"}`}
-                                              onClick={() => {
-                                                if (!disabled) setFormatType("first");
-                                              }}
-                                            >
-                                              First to
-                                            </button>
-                                            <button
-                                              type="button"
-                                              className={`${pillCls} ${formatType === "best" ? "pill--filled" : "pill--ghost"}`}
-                                              onClick={() => {
-                                                if (!disabled) setFormatType("best");
-                                              }}
-                                            >
-                                              Best of
-                                            </button>
-                                            <input
-                                              className={`input w-14 text-center ${disabled ? "opacity-50" : ""}`}
-                                              type="number"
-                                              min={1}
-                                              step={1}
-                                              value={formatCount}
-                                              onChange={(e) =>
-                                                setFormatCount(
-                                                  Math.max(
-                                                    1,
-                                                    Math.floor(
-                                                      Number(e.target.value) ||
-                                                        1,
-                                                    ),
-                                                  ),
-                                                )
-                                              }
-                                              disabled={disabled}
-                                            />
-                                          </div>
-                                        );
-                                      })()}
-                                    </div>
-                                  </div>
                                   {(selectedMode as any) === "X01" && (
                                     <MatchControls
                                       inProgress={true}
@@ -3547,6 +3482,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                       showUndo={false}
                                       showVisitInputRow={false}
                                       showHelperText={false}
+                                      showNumberPadLabel={false}
                                     />
                                   )}
                                 </div>
