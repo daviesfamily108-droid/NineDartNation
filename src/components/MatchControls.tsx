@@ -17,6 +17,7 @@ interface MatchControlsProps {
   showQuickButtons?: boolean;
   showUndo?: boolean;
   showVisitInputRow?: boolean;
+  showHelperText?: boolean;
   quickButtons?: number[];
 }
 
@@ -35,6 +36,7 @@ export default function MatchControls({
   showQuickButtons = true,
   showUndo = true,
   showVisitInputRow = true,
+  showHelperText = true,
   quickButtons = [180, 140, 100, 60],
 }: MatchControlsProps) {
   const [scoreInput, setScoreInput] = useState<string>("0");
@@ -112,7 +114,7 @@ export default function MatchControls({
         value={scoreInput}
         onChange={setScoreInput}
         onSubmit={commitScore}
-        helperText="Tap numbers then press Enter to submit."
+        helperText={showHelperText ? "Tap numbers then press Enter to submit." : undefined}
       />
       {showActionButtons && (
         <div className="flex flex-wrap items-center gap-2">

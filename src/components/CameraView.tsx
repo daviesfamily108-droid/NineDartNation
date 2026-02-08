@@ -350,6 +350,7 @@ export default forwardRef(function CameraView(
     cameraAutoCommit: _cameraAutoCommit = "camera",
     forceAutoStart = false,
     disableDetection = false,
+    minimalControls = false,
   }: {
     onVisitCommitted?: (
       score: number,
@@ -396,6 +397,7 @@ export default forwardRef(function CameraView(
     // Force the camera to auto-start even if the global toggle was off (useful for match window popouts)
     forceAutoStart?: boolean;
     disableDetection?: boolean;
+    minimalControls?: boolean;
   },
   ref: any,
 ) {
@@ -6018,7 +6020,7 @@ export default forwardRef(function CameraView(
   const mainContent = (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 w-full min-w-0">
       {/* Pills (optional; can be hidden and controlled by parent) */}
-      {showToolbar && (
+      {showToolbar && !minimalControls && (
         <div className="lg:col-span-2">
           <div className="flex items-center gap-2 mb-2">
             <button
@@ -6188,45 +6190,49 @@ export default forwardRef(function CameraView(
               })()}
             </ResizablePanel>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-              <span className="uppercase tracking-wide text-slate-400">
-                Cam
-              </span>
-              <button
-                className="btn btn--ghost px-2 py-1"
-                onClick={() => adjustCameraScale(-0.05)}
-                title="Decrease camera zoom"
-              >
-                -
-              </button>
-              <span className="w-10 text-center font-semibold text-white">
-                {Math.round((cameraScale ?? 1) * 100)}%
-              </span>
-              <button
-                className="btn btn--ghost px-2 py-1"
-                onClick={() => adjustCameraScale(0.05)}
-                title="Increase camera zoom"
-              >
-                +
-              </button>
-              <button
-                className={`btn btn--ghost px-3 py-1 text-[11px] ${cameraFitMode === "fill" ? "bg-emerald-500 text-white" : ""}`}
-                onClick={setFullPreview}
-                title="Show dartboard only"
-              >
-                Full
-              </button>
-              <button
-                className={`btn btn--ghost px-3 py-1 text-[11px] ${cameraFitMode !== "fill" ? "bg-slate-200 text-slate-900" : ""}`}
-                onClick={setWidePreview}
-                title="Letterbox to wide view"
-              >
-                Wide
-              </button>
-            </div>
-            <div className="mt-3 text-xs text-slate-400">
-              Manual scoring active · camera preview only.
-            </div>
+            {!minimalControls && (
+              <>
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="uppercase tracking-wide text-slate-400">
+                    Cam
+                  </span>
+                  <button
+                    className="btn btn--ghost px-2 py-1"
+                    onClick={() => adjustCameraScale(-0.05)}
+                    title="Decrease camera zoom"
+                  >
+                    -
+                  </button>
+                  <span className="w-10 text-center font-semibold text-white">
+                    {Math.round((cameraScale ?? 1) * 100)}%
+                  </span>
+                  <button
+                    className="btn btn--ghost px-2 py-1"
+                    onClick={() => adjustCameraScale(0.05)}
+                    title="Increase camera zoom"
+                  >
+                    +
+                  </button>
+                  <button
+                    className={`btn btn--ghost px-3 py-1 text-[11px] ${cameraFitMode === "fill" ? "bg-emerald-500 text-white" : ""}`}
+                    onClick={setFullPreview}
+                    title="Show dartboard only"
+                  >
+                    Full
+                  </button>
+                  <button
+                    className={`btn btn--ghost px-3 py-1 text-[11px] ${cameraFitMode !== "fill" ? "bg-slate-200 text-slate-900" : ""}`}
+                    onClick={setWidePreview}
+                    title="Letterbox to wide view"
+                  >
+                    Wide
+                  </button>
+                </div>
+                <div className="mt-3 text-xs text-slate-400">
+                  Manual scoring active · camera preview only.
+                </div>
+              </>
+            )}
 
             {/* Keep the camera view clear: no floating status/commit card overlay. */}
             {inProgress ? (
@@ -6240,7 +6246,8 @@ export default forwardRef(function CameraView(
                 </button>
               </div>
             ) : null}
-            <div className="mt-3 rounded-2xl border border-white/10 bg-slate-900/60 p-3">
+            {!minimalControls && (
+              <div className="mt-3 rounded-2xl border border-white/10 bg-slate-900/60 p-3">
               <div className="mb-2 text-[11px] uppercase tracking-wide text-slate-400">
                 Camera controls
               </div>
@@ -6426,7 +6433,8 @@ export default forwardRef(function CameraView(
                   Reset Camera Size
                 </button>
               </div>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       ) : null}
