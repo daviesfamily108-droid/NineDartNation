@@ -2426,159 +2426,167 @@ export default function OfflinePlay({ user }: { user: any }) {
       <div className="ndn-shell-body">
         {!showMatchModal && !inMatch && (
           <div className="mb-4 flex flex-col gap-3">
-          <select
-            onPointerDown={(e) => {
-              (e as any).stopPropagation();
-            }}
-            onMouseDown={(e) => {
-              e.stopPropagation();
-            }}
-            onTouchStart={(e) => {
-              (e as any).stopPropagation?.();
-            }}
-            className="input w-full"
-            value={selectedMode}
-            onChange={(e) => setSelectedMode(e.target.value)}
-          >
-            {freeGames.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode}
-              </option>
-            ))}
-            {premiumGames.map((mode) => (
-              <option
-                key={mode}
-                value={mode}
-                disabled={!(user?.fullAccess || user?.admin)}
-              >
-                {mode} {user?.fullAccess || user?.admin ? "" : "(Premium)"}
-              </option>
-            ))}
-          </select>
+            <select
+              onPointerDown={(e) => {
+                (e as any).stopPropagation();
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation();
+              }}
+              onTouchStart={(e) => {
+                (e as any).stopPropagation?.();
+              }}
+              className="input w-full"
+              value={selectedMode}
+              onChange={(e) => setSelectedMode(e.target.value)}
+            >
+              {freeGames.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode}
+                </option>
+              ))}
+              {premiumGames.map((mode) => (
+                <option
+                  key={mode}
+                  value={mode}
+                  disabled={!(user?.fullAccess || user?.admin)}
+                >
+                  {mode} {user?.fullAccess || user?.admin ? "" : "(Premium)"}
+                </option>
+              ))}
+            </select>
 
-          {selectedMode === "Treble Practice" && (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
-              <div className="sm:col-span-1">
-                <label className="font-semibold">Throws per game</label>
+            {selectedMode === "Treble Practice" && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                <div className="sm:col-span-1">
+                  <label className="font-semibold">Throws per game</label>
+                  <input
+                    className="input w-full"
+                    type="number"
+                    min={3}
+                    step={3}
+                    value={trebleMaxDarts}
+                    onChange={(e) =>
+                      setTrebleMaxDarts(
+                        Math.max(3, Math.floor(Number(e.target.value) || 30)),
+                      )
+                    }
+                  />
+                </div>
+                <div className="sm:col-span-2 text-xs text-slate-300">
+                  Target cycles T20→T19→T18 every 3 darts. Game ends after the
+                  selected number of throws.
+                </div>
+                {cameraEnabled && !isMobileScreen && (
+                  <div className="hidden md:block w-[360px] p-3 min-w-0">
+                    <div
+                      data-testid="offline-camera-pane"
+                      className="rounded-2xl overflow-hidden bg-black/70 p-2"
+                      style={{ willChange: "transform, opacity" }}
+                    >
+                      <MemoCameraView
+                        scoringMode="x01"
+                        showToolbar={cameraToolbarVisible}
+                        immediateAutoCommit
+                        cameraAutoCommit="camera"
+                        onAddVisit={makeOfflineAddVisitAdapter(
+                          commitManualVisitTotal,
+                        )}
+                        onAutoDart={(
+                          _value: number,
+                          _ring: any,
+                          _info: any,
+                        ) => {
+                          // Camera owns commits for X01; parent should not applyDartValue to avoid duplicates.
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {!user?.fullAccess && (
+              <div className="mt-2 p-2 rounded-lg bg-slate-800/40 border border-slate-700/40 text-slate-200 text-sm flex items-center gap-2">
+                <span>🔒</span>
+                <span>
+                  Only X01 and Double Practice are free. Advanced modes (Killer,
+                  Cricket, Shanghai, etc.) require PREMIUM.
+                </span>
+              </div>
+            )}
+            {selectedMode === "X01" && (
+              <>
+                <label className="font-semibold mt-2">
+                  Enter starting score (1-1001):
+                </label>
                 <input
                   className="input w-full"
                   type="number"
-                  min={3}
-                  step={3}
-                  value={trebleMaxDarts}
-                  onChange={(e) =>
-                    setTrebleMaxDarts(
-                      Math.max(3, Math.floor(Number(e.target.value) || 30)),
-                    )
-                  }
+                  min={1}
+                  max={1001}
+                  value={x01Score}
+                  onChange={(e) => setX01Score(Number(e.target.value))}
                 />
+                <label className="font-semibold mt-2">
+                  Play against AI bot?
+                </label>
+                <select
+                  onPointerDown={(e) => {
+                    (e as any).stopPropagation();
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onTouchStart={(e) => {
+                    (e as any).stopPropagation?.();
+                  }}
+                  className="input w-full"
+                  value={ai}
+                  onChange={(e) => setAI(e.target.value)}
+                >
+                  <option value="None">None</option>
+                  {aiLevels.map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+                {ai !== "None" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end mt-2">
+                    <div className="sm:col-span-2">
+                      <label className="font-semibold">
+                        AI throw delay (seconds)
+                      </label>
+                      <input
+                        className="input w-full"
+                        type="number"
+                        min={0.5}
+                        max={10}
+                        step={0.5}
+                        value={aiDelayMs / 1000}
+                        onChange={(e) =>
+                          setAiDelayMs(
+                            Math.round(Number(e.target.value) * 1000),
+                          )
+                        }
+                      />
+                    </div>
+                    <div className="text-sm text-slate-300">
+                      Controls how long the AI waits before its visit.
+                    </div>
+                  </div>
+                )}
+                <button className="btn mt-2" onClick={() => setShowRules(true)}>
+                  X01 Rules & Regulations! 📖
+                </button>
+              </>
+            )}
+            {selectedMode === "Double Practice" && (
+              <div className="mt-2 text-brand-600">
+                Hit doubles D1 → D20 → DBULL in as few darts as possible. AI and
+                X01 settings don't apply.
               </div>
-              <div className="sm:col-span-2 text-xs text-slate-300">
-                Target cycles T20→T19→T18 every 3 darts. Game ends after the
-                selected number of throws.
-              </div>
-              {cameraEnabled && !isMobileScreen && (
-                <div className="hidden md:block w-[360px] p-3 min-w-0">
-                  <div
-                    data-testid="offline-camera-pane"
-                    className="rounded-2xl overflow-hidden bg-black/70 p-2"
-                    style={{ willChange: "transform, opacity" }}
-                  >
-                    <MemoCameraView
-                      scoringMode="x01"
-                      showToolbar={cameraToolbarVisible}
-                      immediateAutoCommit
-                      cameraAutoCommit="camera"
-                      onAddVisit={makeOfflineAddVisitAdapter(
-                        commitManualVisitTotal,
-                      )}
-                      onAutoDart={(_value: number, _ring: any, _info: any) => {
-                        // Camera owns commits for X01; parent should not applyDartValue to avoid duplicates.
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          {!user?.fullAccess && (
-            <div className="mt-2 p-2 rounded-lg bg-slate-800/40 border border-slate-700/40 text-slate-200 text-sm flex items-center gap-2">
-              <span>🔒</span>
-              <span>
-                Only X01 and Double Practice are free. Advanced modes (Killer,
-                Cricket, Shanghai, etc.) require PREMIUM.
-              </span>
-            </div>
-          )}
-          {selectedMode === "X01" && (
-            <>
-              <label className="font-semibold mt-2">
-                Enter starting score (1-1001):
-              </label>
-              <input
-                className="input w-full"
-                type="number"
-                min={1}
-                max={1001}
-                value={x01Score}
-                onChange={(e) => setX01Score(Number(e.target.value))}
-              />
-              <label className="font-semibold mt-2">Play against AI bot?</label>
-              <select
-                onPointerDown={(e) => {
-                  (e as any).stopPropagation();
-                }}
-                onMouseDown={(e) => {
-                  e.stopPropagation();
-                }}
-                onTouchStart={(e) => {
-                  (e as any).stopPropagation?.();
-                }}
-                className="input w-full"
-                value={ai}
-                onChange={(e) => setAI(e.target.value)}
-              >
-                <option value="None">None</option>
-                {aiLevels.map((level) => (
-                  <option key={level} value={level}>
-                    {level}
-                  </option>
-                ))}
-              </select>
-              {ai !== "None" && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end mt-2">
-                  <div className="sm:col-span-2">
-                    <label className="font-semibold">
-                      AI throw delay (seconds)
-                    </label>
-                    <input
-                      className="input w-full"
-                      type="number"
-                      min={0.5}
-                      max={10}
-                      step={0.5}
-                      value={aiDelayMs / 1000}
-                      onChange={(e) =>
-                        setAiDelayMs(Math.round(Number(e.target.value) * 1000))
-                      }
-                    />
-                  </div>
-                  <div className="text-sm text-slate-300">
-                    Controls how long the AI waits before its visit.
-                  </div>
-                </div>
-              )}
-              <button className="btn mt-2" onClick={() => setShowRules(true)}>
-                X01 Rules & Regulations! 📖
-              </button>
-            </>
-          )}
-          {selectedMode === "Double Practice" && (
-            <div className="mt-2 text-brand-600">
-              Hit doubles D1 → D20 → DBULL in as few darts as possible. AI and
-              X01 settings don't apply.
-            </div>
-          )}
+            )}
           </div>
         )}
         {!showMatchModal && !inMatch && (
@@ -2940,7 +2948,9 @@ export default function OfflinePlay({ user }: { user: any }) {
                                       setFormatCount(
                                         Math.max(
                                           1,
-                                          Math.floor(Number(e.target.value) || 1),
+                                          Math.floor(
+                                            Number(e.target.value) || 1,
+                                          ),
                                         ),
                                       )
                                     }
@@ -3458,119 +3468,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                         )}
                       </div>
                     ) : effectiveLayout === "modern" ? (
-                      <div className="space-y-3 mb-2">
-                        <>
-                            <div className="relative">
-                              <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
-                                <div className="flex-1 min-w-0 space-y-2.5">
-                                  {(selectedMode as any) === "X01" && (
-                                    <MatchControls
-                                      inProgress={true}
-                                      startingScore={x01Score}
-                                      onAddVisit={makeOfflineAddVisitAdapter(
-                                        commitManualVisitTotal,
-                                      )}
-                                      onNextPlayer={() =>
-                                        matchActions?.nextPlayer()
-                                      }
-                                      onEndLeg={() => {}}
-                                      onUndo={() => {}}
-                                      showDartsSelect={false}
-                                      showCheckoutSelectors={false}
-                                      showActionButtons={false}
-                                      showQuickButtons={false}
-                                      showUndo={false}
-                                      showVisitInputRow={false}
-                                      showHelperText={false}
-                                      showNumberPadLabel={false}
-                                    />
-                                  )}
-                                </div>
-
-                                <div className="flex flex-col gap-3 md:w-[340px] md:flex-shrink-0">
-                                  <GameScoreboard
-                                    gameMode={selectedMode as any}
-                                    players={singlePlayerScoreboard}
-                                    matchScore={`${playerLegs}-${aiLegs}`}
-                                  />
-                                  <div className="hidden md:block rounded-2xl overflow-hidden bg-black border border-white/10">
-                                    {cameraEnabled ? (
-                                      <CameraView
-                                        scoringMode={
-                                          selectedMode === "X01"
-                                            ? "x01"
-                                            : "custom"
-                                        }
-                                        showToolbar={false}
-                                        minimalControls
-                                        immediateAutoCommit
-                                        cameraAutoCommit="camera"
-                                        onAddVisit={makeOfflineAddVisitAdapter(
-                                          commitManualVisitTotal,
-                                        )}
-                                        onAutoDart={() => {}}
-                                      />
-                                    ) : (
-                                      <div className="p-4 text-sm text-slate-200 text-center">
-                                        Camera disabled
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {isMobileScreen &&
-                                cameraEnabled &&
-                                !mobileCameraOpen && (
-                                  <div className="flex items-center gap-2 mt-2 md:hidden">
-                                    <button
-                                      className="btn rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white"
-                                      onClick={() => setMobileCameraOpen(true)}
-                                    >
-                                      Camera
-                                    </button>
-                                    <span className="text-xs text-white/60">
-                                      Tap to open the camera tab
-                                    </span>
-                                  </div>
-                                )}
-                            </div>
-                        </>
-                        {isMobileScreen &&
-                          cameraEnabled &&
-                          mobileCameraOpen && (
-                            <div className="fixed inset-0 z-[90] flex items-start justify-center px-3 pt-6 md:hidden">
-                              <div className="absolute inset-0 bg-black/80" />
-                              <div className="relative z-10 w-full max-w-[420px]">
-                                <div className="relative h-[75vh] rounded-[28px] overflow-hidden bg-black shadow-2xl">
-                                  <div className="absolute inset-0">
-                                    <CameraView
-                                      scoringMode="x01"
-                                      showToolbar={false}
-                                      minimalControls
-                                      immediateAutoCommit
-                                      cameraAutoCommit="camera"
-                                      onAddVisit={makeOfflineAddVisitAdapter(
-                                        commitManualVisitTotal,
-                                      )}
-                                      onAutoDart={(_value, _ring, _info) => {
-                                        // Camera owns commits for X01; parent should not applyDartValue to avoid duplicates.
-                                      }}
-                                    />
-                                  </div>
-                                  <button
-                                    className="absolute top-3 right-3 rounded-full bg-black/60 p-2 text-white"
-                                    onClick={() => setMobileCameraOpen(false)}
-                                    aria-label="Close camera tab"
-                                  >
-                                    ✕
-                                  </button>
-                                  {null}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                      </div>
+                      <div className="space-y-3 mb-2" />
                     ) : null}
                     {/* Turn area */}
                     {selectedMode !== "X01" ? (
