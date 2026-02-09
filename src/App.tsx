@@ -255,7 +255,9 @@ export default function App() {
     // Delayed retry: if the server is cold-starting the first sync may fail.
     // Retry after 5 seconds so stats still appear without a manual reload.
     const retryTimer = setTimeout(() => {
-      try { syncStatsFromServer(user.username); } catch {}
+      try {
+        syncStatsFromServer(user.username);
+      } catch {}
     }, 5000);
     const refresh = () => {
       const nextAvg =
@@ -339,16 +341,28 @@ export default function App() {
     if (!user?.username) return;
     const handleVisibility = () => {
       if (!document.hidden) {
-        syncStatsFromServer(user.username).then(() => {
-          // After sync, refresh the displayed average
-          window.dispatchEvent(new CustomEvent("ndn:stats-updated", { detail: { name: user.username } }));
-        }).catch(() => {});
+        syncStatsFromServer(user.username)
+          .then(() => {
+            // After sync, refresh the displayed average
+            window.dispatchEvent(
+              new CustomEvent("ndn:stats-updated", {
+                detail: { name: user.username },
+              }),
+            );
+          })
+          .catch(() => {});
       }
     };
     const handleFocus = () => {
-      syncStatsFromServer(user.username).then(() => {
-        window.dispatchEvent(new CustomEvent("ndn:stats-updated", { detail: { name: user.username } }));
-      }).catch(() => {});
+      syncStatsFromServer(user.username)
+        .then(() => {
+          window.dispatchEvent(
+            new CustomEvent("ndn:stats-updated", {
+              detail: { name: user.username },
+            }),
+          );
+        })
+        .catch(() => {});
     };
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("focus", handleFocus);

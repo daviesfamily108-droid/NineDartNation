@@ -117,7 +117,9 @@ export default function MatchControls({
         onChange={setScoreInput}
         onSubmit={commitScore}
         label={showNumberPadLabel ? "Number pad" : undefined}
-        helperText={showHelperText ? "Tap numbers then press Enter to submit." : undefined}
+        helperText={
+          showHelperText ? "Tap numbers then press Enter to submit." : undefined
+        }
       />
       {showActionButtons && (
         <div className="flex flex-wrap items-center gap-2">

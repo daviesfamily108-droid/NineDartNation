@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import CameraView from "./CameraView";
 import GameScoreboard from "./scoreboards/GameScoreboard";
 import { useOnlineGameStats } from "./scoreboards/useGameStats";
@@ -88,9 +94,9 @@ export default function InGameShell({
 
   // Signal the app shell to go full-screen on mobile while in-game
   useEffect(() => {
-    document.documentElement.setAttribute('data-ndn-ingame', 'true');
+    document.documentElement.setAttribute("data-ndn-ingame", "true");
     return () => {
-      document.documentElement.removeAttribute('data-ndn-ingame');
+      document.documentElement.removeAttribute("data-ndn-ingame");
     };
   }, []);
 
@@ -107,7 +113,8 @@ export default function InGameShell({
   }, [paused, pauseEndsAt, setPaused]);
 
   const checkoutRoutes = useMemo(() => {
-    if (gameMode !== "X01" || localRemaining > 170 || localRemaining <= 0) return null;
+    if (gameMode !== "X01" || localRemaining > 170 || localRemaining <= 0)
+      return null;
     const routes = suggestCheckouts(localRemaining);
     return routes && routes.length > 0 ? routes : null;
   }, [gameMode, localRemaining]);
@@ -226,7 +233,10 @@ export default function InGameShell({
           <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-transparent to-amber-500/10" />
           <div className="flex items-center gap-3 text-sm leading-none z-10">
             <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-xs font-semibold tracking-wide">
-              {gameMode}{gameMode === "X01" ? ` / ${match.startingScore || lastOfflineStart}` : ""}
+              {gameMode}
+              {gameMode === "X01"
+                ? ` / ${match.startingScore || lastOfflineStart}`
+                : ""}
             </span>
             {legsInfo.length >= 2 && (
               <span className="font-bold text-white/90 text-sm tabular-nums">
@@ -255,10 +265,14 @@ export default function InGameShell({
         <div className="relative grid grid-cols-[1fr_auto_1fr] items-center py-4 sm:py-6 px-3 sm:px-8">
           {/* Player 1 (local) */}
           <div className="flex flex-col items-center gap-1">
-            <div className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${isUsersTurn ? "text-emerald-400" : "text-slate-400"}`}>
+            <div
+              className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${isUsersTurn ? "text-emerald-400" : "text-slate-400"}`}
+            >
               {localPlayer?.name || "You"}
             </div>
-            <div className={`font-mono text-5xl sm:text-7xl md:text-8xl font-black tabular-nums leading-none ${isUsersTurn ? "text-white" : "text-white/60"}`}>
+            <div
+              className={`font-mono text-5xl sm:text-7xl md:text-8xl font-black tabular-nums leading-none ${isUsersTurn ? "text-white" : "text-white/60"}`}
+            >
               {localRemaining}
             </div>
             {isUsersTurn && (
@@ -274,16 +288,22 @@ export default function InGameShell({
           {/* Centre divider — VS */}
           <div className="flex flex-col items-center gap-1 px-3 sm:px-6">
             <div className="w-px h-8 sm:h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-            <div className="text-lg sm:text-2xl font-black text-white/30 tracking-widest">VS</div>
+            <div className="text-lg sm:text-2xl font-black text-white/30 tracking-widest">
+              VS
+            </div>
             <div className="w-px h-8 sm:h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
           </div>
 
           {/* Player 2 (away) */}
           <div className="flex flex-col items-center gap-1">
-            <div className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${!isUsersTurn ? "text-amber-400" : "text-slate-400"}`}>
+            <div
+              className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${!isUsersTurn ? "text-amber-400" : "text-slate-400"}`}
+            >
               {awayPlayer?.name || "Opponent"}
             </div>
-            <div className={`font-mono text-5xl sm:text-7xl md:text-8xl font-black tabular-nums leading-none ${!isUsersTurn ? "text-white" : "text-white/60"}`}>
+            <div
+              className={`font-mono text-5xl sm:text-7xl md:text-8xl font-black tabular-nums leading-none ${!isUsersTurn ? "text-white" : "text-white/60"}`}
+            >
               {awayRemaining}
             </div>
             {!isUsersTurn && (
@@ -305,7 +325,10 @@ export default function InGameShell({
             </span>
             <div className="flex flex-wrap gap-1.5">
               {checkoutRoutes.map((route: string, i: number) => (
-                <span key={i} className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs sm:text-sm font-medium">
+                <span
+                  key={i}
+                  className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs sm:text-sm font-medium"
+                >
                   {route}
                 </span>
               ))}
@@ -323,12 +346,16 @@ export default function InGameShell({
               {/* Camera label bar */}
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${isUsersTurn ? "bg-emerald-400 shadow-lg shadow-emerald-400/50" : "bg-amber-400 shadow-lg shadow-amber-400/50"}`} />
+                  <div
+                    className={`w-2 h-2 rounded-full ${isUsersTurn ? "bg-emerald-400 shadow-lg shadow-emerald-400/50" : "bg-amber-400 shadow-lg shadow-amber-400/50"}`}
+                  />
                   <span className="text-xs sm:text-sm font-semibold text-white/80">
                     {isUsersTurn ? "Your Camera" : "Opponent Camera"}
                   </span>
                 </div>
-                <span className={`text-[10px] sm:text-xs font-medium ${isUsersTurn ? "text-emerald-300" : "text-amber-300"}`}>
+                <span
+                  className={`text-[10px] sm:text-xs font-medium ${isUsersTurn ? "text-emerald-300" : "text-amber-300"}`}
+                >
                   {isUsersTurn ? "LIVE — Your turn" : "Waiting…"}
                 </span>
               </div>
@@ -340,7 +367,9 @@ export default function InGameShell({
                     forceAutoStart={true}
                     onAddVisit={commitVisit}
                     onEndLeg={(score: any) => {
-                      try { match.endLeg(score ?? 0); } catch {}
+                      try {
+                        match.endLeg(score ?? 0);
+                      } catch {}
                     }}
                     onVisitCommitted={(
                       _score: any,
@@ -356,7 +385,9 @@ export default function InGameShell({
                         frame,
                         ts: Date.now(),
                       });
-                      try { match.endGame(); } catch {}
+                      try {
+                        match.endGame();
+                      } catch {}
                     }}
                   />
                 ) : (
@@ -389,12 +420,16 @@ export default function InGameShell({
             <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent" />
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">Your Scoreboard</h3>
-                <div className={`px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
-                  isUsersTurn
-                    ? "bg-emerald-500/20 border border-emerald-400/30 text-emerald-300"
-                    : "bg-slate-500/20 border border-slate-400/20 text-slate-400"
-                }`}>
+                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">
+                  Your Scoreboard
+                </h3>
+                <div
+                  className={`px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
+                    isUsersTurn
+                      ? "bg-emerald-500/20 border border-emerald-400/30 text-emerald-300"
+                      : "bg-slate-500/20 border border-slate-400/20 text-slate-400"
+                  }`}
+                >
                   {isUsersTurn ? "Your turn" : "Opponent's turn"}
                 </div>
               </div>
@@ -402,23 +437,37 @@ export default function InGameShell({
             </div>
 
             {/* Controls card — always visible, locked when opponent's turn */}
-            <div className={`relative rounded-2xl border shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden transition-all ${
-              isUsersTurn
-                ? "border-white/10 bg-slate-950/70"
-                : "border-white/5 bg-slate-950/40 opacity-60"
-            }`}>
-              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${isUsersTurn ? "from-emerald-500/[0.03]" : "from-slate-500/[0.02]"} to-transparent`} />
+            <div
+              className={`relative rounded-2xl border shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden transition-all ${
+                isUsersTurn
+                  ? "border-white/10 bg-slate-950/70"
+                  : "border-white/5 bg-slate-950/40 opacity-60"
+              }`}
+            >
+              <div
+                className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${isUsersTurn ? "from-emerald-500/[0.03]" : "from-slate-500/[0.02]"} to-transparent`}
+              />
               <div className="flex items-center justify-between mb-2">
-                <div className={`text-xs font-semibold uppercase tracking-wider ${isUsersTurn ? "text-emerald-300/60" : "text-slate-400/60"}`}>
+                <div
+                  className={`text-xs font-semibold uppercase tracking-wider ${isUsersTurn ? "text-emerald-300/60" : "text-slate-400/60"}`}
+                >
                   Score Entry
                 </div>
                 {!isUsersTurn && (
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-500/10 border border-slate-400/20">
-                    <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <svg
+                      className="w-3 h-3 text-slate-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                    >
                       <rect x="5" y="11" width="14" height="11" rx="2" />
                       <path d="M12 3a4 4 0 0 0-4 4v4h8V7a4 4 0 0 0-4-4z" />
                     </svg>
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Waiting for opponent</span>
+                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Waiting for opponent
+                    </span>
                   </div>
                 )}
               </div>
@@ -426,14 +475,20 @@ export default function InGameShell({
                 <MatchControls
                   inProgress={true}
                   startingScore={match.startingScore || lastOfflineStart}
-                  onAddVisit={(score, darts) => commitVisit(score, darts, { visitTotal: score })}
+                  onAddVisit={(score, darts) =>
+                    commitVisit(score, darts, { visitTotal: score })
+                  }
                   quickButtons={[180, 140, 100, 60]}
                   onNextPlayer={() => match.nextPlayer()}
                   onEndLeg={(score) => {
-                    try { match.endLeg(score ?? 0); } catch {}
+                    try {
+                      match.endLeg(score ?? 0);
+                    } catch {}
                   }}
                   onEndGame={() => {
-                    try { match.endGame(); } catch {}
+                    try {
+                      match.endGame();
+                    } catch {}
                   }}
                   onUndo={() => {}}
                   showDartsSelect={true}
@@ -448,7 +503,9 @@ export default function InGameShell({
                     readOnly
                   />
                   <div className="flex flex-wrap gap-2">
-                    <span className="text-[10px] text-white/30 uppercase tracking-wider self-center">Quick:</span>
+                    <span className="text-[10px] text-white/30 uppercase tracking-wider self-center">
+                      Quick:
+                    </span>
                     {[180, 140, 100, 60].map((v) => (
                       <button
                         key={v}
@@ -466,8 +523,12 @@ export default function InGameShell({
             {/* Winning shot banner */}
             {winningShot?.label && (
               <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-center">
-                <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">Winning Double</span>
-                <div className="text-lg font-bold text-emerald-200 mt-0.5">{winningShot.label}</div>
+                <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">
+                  Winning Double
+                </span>
+                <div className="text-lg font-bold text-emerald-200 mt-0.5">
+                  {winningShot.label}
+                </div>
               </div>
             )}
           </div>
@@ -480,12 +541,18 @@ export default function InGameShell({
           onClose={() => setShowQuitPause(false)}
           onQuit={() => {
             setShowQuitPause(false);
-            try { match.endGame(); } catch {}
-            try { window.dispatchEvent(new Event("ndn:match-quit")); } catch {}
+            try {
+              match.endGame();
+            } catch {}
+            try {
+              window.dispatchEvent(new Event("ndn:match-quit"));
+            } catch {}
           }}
           onPause={(minutes: number) => {
             const endsAt = Date.now() + minutes * 60 * 1000;
-            try { setPaused(true, endsAt, localPlayerName); } catch {}
+            try {
+              setPaused(true, endsAt, localPlayerName);
+            } catch {}
             try {
               broadcastMessage({
                 type: "pause",
@@ -500,79 +567,93 @@ export default function InGameShell({
       )}
 
       {/* ── Glass pause overlay — blocks all interaction while paused ── */}
-      {paused && pauseEndsAt && (() => {
-        const remaining = Math.max(0, pauseEndsAt - pauseNow);
-        const secs = Math.ceil(remaining / 1000);
-        const mm = Math.floor(secs / 60).toString().padStart(2, "0");
-        const ss = (secs % 60).toString().padStart(2, "0");
-        const started = useMatchControl.getState().pauseStartedAt ?? pauseNow;
-        const total = Math.max(1, pauseEndsAt - started);
-        const pct = Math.max(0, Math.min(100, (remaining / total) * 100));
-        const isInitiator = !pauseInitiator || pauseInitiator === localPlayerName;
-        return (
-          <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/80 backdrop-blur-md">
-            {/* Ambient glow behind the card */}
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="w-80 h-80 rounded-full bg-amber-500/10 blur-[100px]" />
-            </div>
+      {paused &&
+        pauseEndsAt &&
+        (() => {
+          const remaining = Math.max(0, pauseEndsAt - pauseNow);
+          const secs = Math.ceil(remaining / 1000);
+          const mm = Math.floor(secs / 60)
+            .toString()
+            .padStart(2, "0");
+          const ss = (secs % 60).toString().padStart(2, "0");
+          const started = useMatchControl.getState().pauseStartedAt ?? pauseNow;
+          const total = Math.max(1, pauseEndsAt - started);
+          const pct = Math.max(0, Math.min(100, (remaining / total) * 100));
+          const isInitiator =
+            !pauseInitiator || pauseInitiator === localPlayerName;
+          return (
+            <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/80 backdrop-blur-md">
+              {/* Ambient glow behind the card */}
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="w-80 h-80 rounded-full bg-amber-500/10 blur-[100px]" />
+              </div>
 
-            <div className="relative rounded-3xl border border-amber-400/20 bg-slate-900/95 p-8 sm:p-10 shadow-2xl shadow-amber-500/10 max-w-sm w-full mx-4">
-              <div className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-b from-white/[0.04] to-transparent" />
+              <div className="relative rounded-3xl border border-amber-400/20 bg-slate-900/95 p-8 sm:p-10 shadow-2xl shadow-amber-500/10 max-w-sm w-full mx-4">
+                <div className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-b from-white/[0.04] to-transparent" />
 
-              <div className="relative flex flex-col items-center gap-5">
-                {/* Pause icon */}
-                <div className="flex items-center gap-3">
-                  <div className="w-5 h-14 sm:w-6 sm:h-16 rounded-md bg-amber-400 shadow-lg shadow-amber-400/30" />
-                  <div className="w-5 h-14 sm:w-6 sm:h-16 rounded-md bg-amber-400 shadow-lg shadow-amber-400/30" />
-                </div>
-
-                <div className="text-amber-300 text-lg sm:text-xl font-bold uppercase tracking-[0.2em]">
-                  Match Paused
-                </div>
-
-                {pauseInitiator && (
-                  <div className="text-sm text-amber-200/60">
-                    Paused by <span className="font-semibold text-amber-200/90">{pauseInitiator}</span>
+                <div className="relative flex flex-col items-center gap-5">
+                  {/* Pause icon */}
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-14 sm:w-6 sm:h-16 rounded-md bg-amber-400 shadow-lg shadow-amber-400/30" />
+                    <div className="w-5 h-14 sm:w-6 sm:h-16 rounded-md bg-amber-400 shadow-lg shadow-amber-400/30" />
                   </div>
-                )}
 
-                {/* Big countdown */}
-                <div className="font-mono text-6xl sm:text-7xl font-black text-white tabular-nums leading-none">
-                  {mm}:{ss}
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-300"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-
-                <div className="text-[10px] sm:text-xs text-amber-200/40 uppercase tracking-wider">
-                  Resuming when timer expires
-                </div>
-
-                {isInitiator ? (
-                  <button
-                    className="mt-1 px-8 py-3 rounded-2xl text-base font-bold bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/30 shadow-lg shadow-emerald-500/20 transition-all"
-                    onClick={() => {
-                      setPaused(false, null);
-                      try { broadcastMessage({ type: "unpause" }); } catch {}
-                    }}
-                  >
-                    ▶ Resume Match
-                  </button>
-                ) : (
-                  <div className="mt-1 text-sm text-amber-200/50 italic">
-                    Only <span className="font-semibold text-amber-200/80">{pauseInitiator}</span> can resume
+                  <div className="text-amber-300 text-lg sm:text-xl font-bold uppercase tracking-[0.2em]">
+                    Match Paused
                   </div>
-                )}
+
+                  {pauseInitiator && (
+                    <div className="text-sm text-amber-200/60">
+                      Paused by{" "}
+                      <span className="font-semibold text-amber-200/90">
+                        {pauseInitiator}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Big countdown */}
+                  <div className="font-mono text-6xl sm:text-7xl font-black text-white tabular-nums leading-none">
+                    {mm}:{ss}
+                  </div>
+
+                  {/* Progress bar */}
+                  <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-300"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+
+                  <div className="text-[10px] sm:text-xs text-amber-200/40 uppercase tracking-wider">
+                    Resuming when timer expires
+                  </div>
+
+                  {isInitiator ? (
+                    <button
+                      className="mt-1 px-8 py-3 rounded-2xl text-base font-bold bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/30 shadow-lg shadow-emerald-500/20 transition-all"
+                      onClick={() => {
+                        setPaused(false, null);
+                        try {
+                          broadcastMessage({ type: "unpause" });
+                        } catch {}
+                      }}
+                    >
+                      ▶ Resume Match
+                    </button>
+                  ) : (
+                    <div className="mt-1 text-sm text-amber-200/50 italic">
+                      Only{" "}
+                      <span className="font-semibold text-amber-200/80">
+                        {pauseInitiator}
+                      </span>{" "}
+                      can resume
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
     </div>
   );
 }

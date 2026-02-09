@@ -19,21 +19,22 @@ function goTab(tab: string) {
 const API_URL = getApiBaseUrl();
 
 export default function Home({ user }: { user?: any }) {
-const [showLegal, setShowLegal] = useState(false);
-const [showHowTo, setShowHowTo] = useState(false);
-const [showProfile, setShowProfile] = useState(false);
-const [fact, setFact] = useState<string>("");
-const { lastOffline } = useUserSettings();
-const toast = useToast();
+  const [showLegal, setShowLegal] = useState(false);
+  const [showHowTo, setShowHowTo] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+  const [fact, setFact] = useState<string>("");
+  const { lastOffline } = useUserSettings();
+  const toast = useToast();
 
-// Force re-render when stats are synced from the server so the BEST/WORST
-// table updates without a full page reload.
-const [, setStatsRev] = useState(0);
-useEffect(() => {
-  const onStatsUpdated = () => setStatsRev((r) => r + 1);
-  window.addEventListener("ndn:stats-updated", onStatsUpdated as any);
-  return () => window.removeEventListener("ndn:stats-updated", onStatsUpdated as any);
-}, []);
+  // Force re-render when stats are synced from the server so the BEST/WORST
+  // table updates without a full page reload.
+  const [, setStatsRev] = useState(0);
+  useEffect(() => {
+    const onStatsUpdated = () => setStatsRev((r) => r + 1);
+    window.addEventListener("ndn:stats-updated", onStatsUpdated as any);
+    return () =>
+      window.removeEventListener("ndn:stats-updated", onStatsUpdated as any);
+  }, []);
 
   const openNotifications = () => {
     dispatchOpenNotifications();

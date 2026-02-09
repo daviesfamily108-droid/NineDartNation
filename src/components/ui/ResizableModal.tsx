@@ -225,8 +225,8 @@ export default function ResizableModal({
       };
 
   const baseClass = fullScreen
-    ? frameFullScreenClassName ?? "card relative ndn-modal-full"
-    : frameClassName ?? "card relative";
+    ? (frameFullScreenClassName ?? "card relative ndn-modal-full")
+    : (frameClassName ?? "card relative");
   return (
     <div
       ref={containerRef}

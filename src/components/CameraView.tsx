@@ -6248,191 +6248,195 @@ export default forwardRef(function CameraView(
             ) : null}
             {!minimalControls && (
               <div className="mt-3 rounded-2xl border border-white/10 bg-slate-900/60 p-3">
-              <div className="mb-2 text-[11px] uppercase tracking-wide text-slate-400">
-                Camera controls
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {isPhoneCamera ? (
-                  <>
-                    <div
-                      className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? "bg-emerald-500/10 border-emerald-400/40 text-emerald-100" : "bg-amber-500/10 border-amber-400/40 text-amber-100"}`}
-                    >
-                      {phoneFeedActive
-                        ? "CAM Phone camera stream active"
-                        : "CAM Waiting for phone camera stream"}
-                    </div>
-                    <button
-                      className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm"
-                      onClick={handlePhoneReconnect}
-                    >
-                      Reconnect Phone
-                    </button>
-                    <button
-                      className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm"
-                      onClick={() => {
-                        try {
-                          cameraSession.setShowOverlay?.(
-                            !cameraSession.showOverlay,
-                          );
-                        } catch (e) {}
-                      }}
-                    >
-                      {cameraSession.showOverlay
-                        ? "Hide Overlay"
-                        : "Show Overlay"}
-                    </button>
-                    <button
-                      className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
-                      disabled={!phoneFeedActive}
-                      onClick={() => {
-                        try {
-                          cameraSession.clearSession?.();
-                        } catch (e) {}
-                      }}
-                    >
-                      Stop Phone Feed
-                    </button>
-                    {canFallbackToLocal && (
-                      <button
-                        className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm"
-                        onClick={handleUseLocalCamera}
-                        disabled={!availableCameras.length}
+                <div className="mb-2 text-[11px] uppercase tracking-wide text-slate-400">
+                  Camera controls
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {isPhoneCamera ? (
+                    <>
+                      <div
+                        className={`text-sm px-3 py-2 rounded border flex-1 min-w-[200px] ${phoneFeedActive ? "bg-emerald-500/10 border-emerald-400/40 text-emerald-100" : "bg-amber-500/10 border-amber-400/40 text-amber-100"}`}
                       >
-                        Use Local Camera
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    {!streaming ? (
+                        {phoneFeedActive
+                          ? "CAM Phone camera stream active"
+                          : "CAM Waiting for phone camera stream"}
+                      </div>
                       <button
-                        className="btn"
-                        onClick={startCamera}
-                        disabled={cameraStarting}
+                        className="btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 text-sm"
+                        onClick={handlePhoneReconnect}
                       >
-                        {cameraStarting
-                          ? "Connecting Camera..."
-                          : "Connect Camera"}
+                        Reconnect Phone
                       </button>
-                    ) : (
                       <button
-                        className="btn bg-rose-600 hover:bg-rose-700"
-                        onClick={stopCamera}
+                        className="btn bg-slate-700 hover:bg-slate-800 text-white px-3 py-1 text-sm"
+                        onClick={() => {
+                          try {
+                            cameraSession.setShowOverlay?.(
+                              !cameraSession.showOverlay,
+                            );
+                          } catch (e) {}
+                        }}
                       >
-                        Stop Camera
+                        {cameraSession.showOverlay
+                          ? "Hide Overlay"
+                          : "Show Overlay"}
                       </button>
-                    )}
-                  </>
-                )}
-                {!manualOnly && (
+                      <button
+                        className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
+                        disabled={!phoneFeedActive}
+                        onClick={() => {
+                          try {
+                            cameraSession.clearSession?.();
+                          } catch (e) {}
+                        }}
+                      >
+                        Stop Phone Feed
+                      </button>
+                      {canFallbackToLocal && (
+                        <button
+                          className="btn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 text-sm"
+                          onClick={handleUseLocalCamera}
+                          disabled={!availableCameras.length}
+                        >
+                          Use Local Camera
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {!streaming ? (
+                        <button
+                          className="btn"
+                          onClick={startCamera}
+                          disabled={cameraStarting}
+                        >
+                          {cameraStarting
+                            ? "Connecting Camera..."
+                            : "Connect Camera"}
+                        </button>
+                      ) : (
+                        <button
+                          className="btn bg-rose-600 hover:bg-rose-700"
+                          onClick={stopCamera}
+                        >
+                          Stop Camera
+                        </button>
+                      )}
+                    </>
+                  )}
+                  {!manualOnly && (
+                    <button
+                      className="btn bg-slate-700 hover:bg-slate-800"
+                      onClick={requestDeviceManager}
+                      title="Open phone, WiFi, and USB camera options"
+                    >
+                      Camera Devices
+                    </button>
+                  )}
+                  <button
+                    className="btn btn--ghost px-3 py-1 text-sm"
+                    onClick={() => setHideCameraOverlay(!hideCameraOverlay)}
+                    title="Toggle the board guide overlay"
+                  >
+                    {hideCameraOverlay
+                      ? "Show board guides"
+                      : "Hide board guides"}
+                  </button>
+                  <button
+                    className="btn"
+                    onClick={capture}
+                    disabled={!effectiveStreaming}
+                  >
+                    Capture Still
+                  </button>
+                  {matchState?.inProgress && (
+                    <>
+                      <PauseTimerBadge compact />
+                      <button
+                        className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
+                        onClick={() => setShowQuitPause(true)}
+                      >
+                        Quit / Pause
+                      </button>
+                      {showQuitPause && (
+                        <PauseQuitModal
+                          onClose={() => setShowQuitPause(false)}
+                          onQuit={() => {
+                            try {
+                              // Emit a global event other parts of the app can listen to
+                              window.dispatchEvent(
+                                new CustomEvent("ndn:match-quit"),
+                              );
+                              // broadcast to other windows
+                              try {
+                                broadcastMessage({ type: "quit" });
+                              } catch {}
+                            } catch (e) {}
+                            setShowQuitPause(false);
+                          }}
+                          onPause={(minutes) => {
+                            const endsAt = Date.now() + minutes * 60 * 1000;
+                            try {
+                              useMatchControl
+                                .getState()
+                                .setPaused(true, endsAt);
+                              try {
+                                broadcastMessage({
+                                  type: "pause",
+                                  pauseEndsAt: endsAt,
+                                  pauseStartedAt: Date.now(),
+                                });
+                              } catch {}
+                            } catch (e) {}
+                            setShowQuitPause(false);
+                          }}
+                        />
+                      )}
+                      <button
+                        className="btn btn--ghost px-3 py-1 text-sm"
+                        onClick={() => {
+                          try {
+                            writeMatchSnapshot();
+                            window.open(
+                              `${window.location.origin}${window.location.pathname}?match=1`,
+                              "_blank",
+                            );
+                          } catch (e) {}
+                        }}
+                      >
+                        Open match in new window
+                      </button>
+                      <button
+                        className="btn btn--ghost px-3 py-1 text-sm"
+                        onClick={async () => {
+                          try {
+                            if (document.documentElement.requestFullscreen) {
+                              await document.documentElement.requestFullscreen();
+                            } else if (
+                              (document as any).body.requestFullscreen
+                            ) {
+                              await (document as any).body.requestFullscreen();
+                            }
+                          } catch (e) {}
+                        }}
+                      >
+                        Open full screen
+                      </button>
+                    </>
+                  )}
                   <button
                     className="btn bg-slate-700 hover:bg-slate-800"
-                    onClick={requestDeviceManager}
-                    title="Open phone, WiFi, and USB camera options"
+                    onClick={() => {
+                      try {
+                        window.dispatchEvent(
+                          new Event("ndn:camera-reset" as any),
+                        );
+                      } catch (e) {}
+                    }}
                   >
-                    Camera Devices
+                    Reset Camera Size
                   </button>
-                )}
-                <button
-                  className="btn btn--ghost px-3 py-1 text-sm"
-                  onClick={() => setHideCameraOverlay(!hideCameraOverlay)}
-                  title="Toggle the board guide overlay"
-                >
-                  {hideCameraOverlay
-                    ? "Show board guides"
-                    : "Hide board guides"}
-                </button>
-                <button
-                  className="btn"
-                  onClick={capture}
-                  disabled={!effectiveStreaming}
-                >
-                  Capture Still
-                </button>
-                {matchState?.inProgress && (
-                  <>
-                    <PauseTimerBadge compact />
-                    <button
-                      className="btn bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 text-sm"
-                      onClick={() => setShowQuitPause(true)}
-                    >
-                      Quit / Pause
-                    </button>
-                    {showQuitPause && (
-                      <PauseQuitModal
-                        onClose={() => setShowQuitPause(false)}
-                        onQuit={() => {
-                          try {
-                            // Emit a global event other parts of the app can listen to
-                            window.dispatchEvent(
-                              new CustomEvent("ndn:match-quit"),
-                            );
-                            // broadcast to other windows
-                            try {
-                              broadcastMessage({ type: "quit" });
-                            } catch {}
-                          } catch (e) {}
-                          setShowQuitPause(false);
-                        }}
-                        onPause={(minutes) => {
-                          const endsAt = Date.now() + minutes * 60 * 1000;
-                          try {
-                            useMatchControl.getState().setPaused(true, endsAt);
-                            try {
-                              broadcastMessage({
-                                type: "pause",
-                                pauseEndsAt: endsAt,
-                                pauseStartedAt: Date.now(),
-                              });
-                            } catch {}
-                          } catch (e) {}
-                          setShowQuitPause(false);
-                        }}
-                      />
-                    )}
-                    <button
-                      className="btn btn--ghost px-3 py-1 text-sm"
-                      onClick={() => {
-                        try {
-                          writeMatchSnapshot();
-                          window.open(
-                            `${window.location.origin}${window.location.pathname}?match=1`,
-                            "_blank",
-                          );
-                        } catch (e) {}
-                      }}
-                    >
-                      Open match in new window
-                    </button>
-                    <button
-                      className="btn btn--ghost px-3 py-1 text-sm"
-                      onClick={async () => {
-                        try {
-                          if (document.documentElement.requestFullscreen) {
-                            await document.documentElement.requestFullscreen();
-                          } else if ((document as any).body.requestFullscreen) {
-                            await (document as any).body.requestFullscreen();
-                          }
-                        } catch (e) {}
-                      }}
-                    >
-                      Open full screen
-                    </button>
-                  </>
-                )}
-                <button
-                  className="btn bg-slate-700 hover:bg-slate-800"
-                  onClick={() => {
-                    try {
-                      window.dispatchEvent(
-                        new Event("ndn:camera-reset" as any),
-                      );
-                    } catch (e) {}
-                  }}
-                >
-                  Reset Camera Size
-                </button>
-              </div>
+                </div>
               </div>
             )}
           </div>

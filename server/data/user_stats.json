@@ -1,19 +1,37 @@
 {
   "DartsWithG": {
-    "updatedAt": 1770468362160,
+    "updatedAt": 1770584730035,
     "allTime": {
-      "darts": 0,
-      "scored": 0
+      "darts": 122,
+      "scored": 1503,
+      "fnDarts": 27,
+      "fnScored": 569,
+      "best3": 45.54545454545455,
+      "worst3": 27.833333333333336,
+      "bestLegDarts": 33,
+      "bestCheckout": 34,
+      "worstLegDarts": 54,
+      "bestFNAvg": 67,
+      "worstFNAvg": 57,
+      "num180s": 0
     },
-    "series": [],
+    "series": [
+      {
+        "t": 1770584725877,
+        "darts": 122,
+        "scored": 1503,
+        "fnDarts": 27,
+        "fnScored": 569
+      }
+    ],
     "daily": {
       "avg": 0,
-      "ts": 1770468362159
+      "ts": 1770579221148
     },
     "gameModes": {
       "X01": {
-        "played": 12,
-        "won": 12
+        "played": 15,
+        "won": 15
       }
     }
   }
