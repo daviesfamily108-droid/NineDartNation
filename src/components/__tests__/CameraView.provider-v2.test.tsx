@@ -1,7 +1,7 @@
 import React, { createRef } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render } from "@testing-library/react";
-import CameraView, { type CameraViewHandle } from "../CameraView";
+import CameraView, { type CameraViewHandle } from "../CameraView.js";
 
 // Minimal canvas shim for jsdom
 beforeEach(() => {

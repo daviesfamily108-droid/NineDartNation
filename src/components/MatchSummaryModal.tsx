@@ -1,5 +1,5 @@
-﻿import ResizableModal from "./ui/ResizableModal";
-import type { Player } from "../store/match";
+﻿import ResizableModal from "./ui/ResizableModal.js";
+import type { Player } from "../store/match.js";
 
 function computeTotals(p: Player) {
   let points = 0;

@@ -11,18 +11,18 @@ import {
 import FocusLock from "react-focus-lock";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { getFreeRemaining } from "../utils/quota";
-import { useIsAdmin } from "../utils/admin";
-import { DISCORD_INVITE_URL } from "../utils/config";
-import { apiFetch } from "../utils/api";
+import { getFreeRemaining } from "../utils/quota.js";
+import { useIsAdmin } from "../utils/admin.js";
+import { DISCORD_INVITE_URL } from "../utils/config.js";
+import { apiFetch } from "../utils/api.js";
 
 export type TabKey =
   | "score"
+  | "camera"
   | "online"
   | "offline"
   | "friends"
   | "stats"
-  | "calibrate"
   | "settings"
   | "admin"
   | "tournaments"
@@ -37,12 +37,12 @@ type TabDefinition = {
 export function getTabs(user: any): TabDefinition[] {
   const baseTabs: TabDefinition[] = [
     { key: "score", label: "Home 🏠", icon: LayoutDashboard },
+    { key: "camera", label: "Camera 🎥", icon: Camera },
     { key: "online", label: "Online Play 🌐", icon: Users },
     { key: "offline", label: "Offline 🏆", icon: Trophy },
     { key: "tournaments", label: "Tournaments 🏟️", icon: Trophy },
     { key: "friends", label: "Friends 👥", icon: Users },
     { key: "stats", label: "Stats 📊", icon: Trophy },
-    { key: "calibrate", label: "Camera Connection 📷", icon: Camera },
     { key: "settings", label: "Settings ⚙️", icon: Settings },
   ];
   // Admin tab visibility handled in Sidebar via hook (client-side fetch)
@@ -263,7 +263,7 @@ export function Sidebar({
   );
   const socialTabs = tabs.filter((t) => ["friends"].includes(t.key));
   const systemTabs = tabs.filter((t) =>
-    ["stats", "calibrate", "settings", "admin", "fullaccess"].includes(t.key),
+    ["camera", "stats", "settings", "admin", "fullaccess"].includes(t.key),
   );
 
   const renderTab = (t: TabDefinition) => {
@@ -363,7 +363,7 @@ export function Sidebar({
                 >
                   <MessageCircle className="w-4 h-4" />
                   <span className="truncate text-sm font-semibold">
-                    Bullseye League
+                    Bullseye Darts League
                   </span>
                 </button>
                 {/* NineDartNation Discord tab */}
@@ -409,7 +409,7 @@ export function Sidebar({
                     ✕
                   </button>
                   <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-[#8ea1e1]">
-                    <MessageCircle className="w-6 h-6" /> BullseyeDartsLeague 🎯
+                    <MessageCircle className="w-6 h-6" /> Bullseye Darts League 🎯
                   </h3>
                   <div className="mb-4 text-lg font-semibold">
                     Join this fantastic Online Darts League with divisions and

@@ -7,7 +7,7 @@ describe("Calibrator overlay size preservation", () => {
   afterEach(async () => {
     // Reset calibration store after each test if available
     try {
-      const mod = await import("../../store/calibration");
+      const mod = await import("../../store/calibration.js");
       mod.useCalibration.getState().reset();
     } catch {
       // ignore
@@ -49,7 +49,7 @@ describe("Calibrator overlay size preservation", () => {
       }
     }
     // Dynamically import the store after ensuring localStorage exists, then call the setter
-    const { useCalibration } = await import("../../store/calibration");
+    const { useCalibration } = await import("../../store/calibration.js");
     // Directly call the calibration setter in the store and validate overlaySize is persisted
     useCalibration
       .getState()

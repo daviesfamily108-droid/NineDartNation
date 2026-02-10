@@ -1,49 +1,50 @@
 // Online play screen (renders CameraView)
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import CameraView from './CameraView'
-import ResizablePanel from './ui/ResizablePanel'
-import { suggestCheckouts, sayScore } from '../utils/checkout'
-import { addSample, getAllTimeAvg } from '../store/profileStats'
-import MatchStartShowcase from './ui/MatchStartShowcase'
-import { getFreeRemaining, incOnlineUsage } from '../utils/quota'
-import { useUserSettings } from '../store/userSettings'
-import { useCalibration } from '../store/calibration'
-import { useMatch } from '../store/match'
-import GameCalibrationStatus from './GameCalibrationStatus'
-import MatchSummaryModal from './MatchSummaryModal'
-import { freeGames, premiumGames, allGames, type GameKey } from '../utils/games'
-import { getUserCurrency, formatPriceInCurrency } from '../utils/config'
-import ResizableModal from './ui/ResizableModal'
-import GameHeaderBar from './ui/GameHeaderBar'
-import { useToast } from '../store/toast'
-// import { TabKey } from './Sidebar'
-import { useWS } from './WSProvider'
-import { useMessages } from '../store/messages'
-import { censorProfanity, containsProfanity } from '../utils/profanity'
-import { useBlocklist } from '../store/blocklist'
-import TabPills from './ui/TabPills'
-import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart, ringSectorToDart } from '../game/types'
-import { ATC_ORDER } from '../game/aroundTheClock'
-import { createCricketState, applyCricketDart, CRICKET_NUMBERS, hasClosedAll as cricketClosedAll, cricketWinner } from '../game/cricket'
-import { createShanghaiState, getRoundTarget as shanghaiTarget, applyShanghaiDart, endShanghaiTurn } from '../game/shanghai'
-import { createDefaultHalveIt, getCurrentHalveTarget, applyHalveItDart, endHalveItTurn } from '../game/halveIt'
-import { createHighLow, applyHighLowDart, endHighLowTurn } from '../game/highLow'
-import { assignKillerNumbers, createKillerState, applyKillerDart, killerWinner } from '../game/killer'
-import { apiFetch } from '../utils/api'
+import CameraView from './CameraView.js'
+import InGameShell from './InGameShell.js'
+import ResizablePanel from './ui/ResizablePanel.js'
+import { suggestCheckouts, sayScore } from '../utils/checkout.js'
+import { addSample, getAllTimeAvg } from '../store/profileStats.js'
+import MatchStartShowcase from './ui/MatchStartShowcase.js'
+import { getFreeRemaining, incOnlineUsage } from '../utils/quota.js'
+import { useUserSettings } from '../store/userSettings.js'
+import { useCalibration } from '../store/calibration.js'
+import { useMatch } from '../store/match.js'
+import MatchSummaryModal from './MatchSummaryModal.js'
+import { freeGames, premiumGames, allGames, type GameKey } from '../utils/games.js'
+import { getUserCurrency, formatPriceInCurrency } from '../utils/config.js'
+import ResizableModal from './ui/ResizableModal.js'
+import GameHeaderBar from './ui/GameHeaderBar.js'
+import { useToast } from '../store/toast.js'
+// import { TabKey } from './Sidebar.js'
+import { useWS } from './WSProvider.js'
+import { useMessages } from '../store/messages.js'
+import { censorProfanity, containsProfanity } from '../utils/profanity.js'
+import { useBlocklist } from '../store/blocklist.js'
+import TabPills from './ui/TabPills.js'
+import { DOUBLE_PRACTICE_ORDER, isDoubleHit, parseManualDart, ringSectorToDart } from '../game/types.js'
+import { ATC_ORDER } from '../game/aroundTheClock.js'
+import { createCricketState, applyCricketDart, CRICKET_NUMBERS, hasClosedAll as cricketClosedAll, cricketWinner } from '../game/cricket.js'
+import { createShanghaiState, getRoundTarget as shanghaiTarget, applyShanghaiDart, endShanghaiTurn } from '../game/shanghai.js'
+import { createDefaultHalveIt, getCurrentHalveTarget, applyHalveItDart, endHalveItTurn } from '../game/halveIt.js'
+import { createHighLow, applyHighLowDart, endHighLowTurn } from '../game/highLow.js'
+import { assignKillerNumbers, createKillerState, applyKillerDart, killerWinner } from '../game/killer.js'
+import { apiFetch } from '../utils/api.js'
 // Phase 2 premium games (Online support)
-import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS } from '../game/americanCricket'
-import { createBaseball, applyBaseballDart } from '../game/baseball'
-import { createGolf, applyGolfDart, GOLF_TARGETS } from '../game/golf'
-import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe'
-import { useMatchControl } from '../store/matchControl'
-import GameScoreboard from './scoreboards/GameScoreboard'
-import { makeOnlineAddVisitAdapter } from './matchControlAdapters'
-import { applyVisitCommit } from '../logic/applyVisitCommit'
-import { useOnlineGameStats } from './scoreboards/useGameStats'
-import { getWsCandidates } from '../utils/ws'
-import { getPreferredUserName } from '../utils/userName'
+import { createAmCricketState, applyAmCricketDart, AM_CRICKET_NUMBERS } from '../game/americanCricket.js'
+import { createBaseball, applyBaseballDart } from '../game/baseball.js'
+import { createGolf, applyGolfDart, GOLF_TARGETS } from '../game/golf.js'
+import { createTicTacToe, tryClaimCell, TTT_TARGETS } from '../game/ticTacToe.js'
+import { useMatchControl } from '../store/matchControl.js'
+import GameScoreboard from './scoreboards/GameScoreboard.js'
+import { makeOnlineAddVisitAdapter } from './matchControlAdapters.js'
+import { applyVisitCommit } from '../logic/applyVisitCommit.js'
+import { useOnlineGameStats } from './scoreboards/useGameStats.js'
+import { getWsCandidates } from '../utils/ws.js'
+import { getPreferredUserName } from '../utils/userName.js'
+import PauseOverlay from './ui/PauseOverlay.js'
 
-export default function OnlinePlay({ user }: { user?: any }) {
+export default function OnlinePlay({ user, initialCameraTab }: { user?: any; initialCameraTab?: 'connection' | 'preview' }) {
   const toast = useToast();
   const match = useMatch();
   const wsGlobal = useWS();
@@ -107,7 +108,7 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const lastToastRef = useRef(0)
   const firstConnectDoneRef = useRef(false)
   const msgs = useMessages()
-  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale, cameraFitMode = 'fill', setCameraFitMode, cameraEnabled, textSize, boxSize, autoscoreProvider, matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName, x01DoubleIn: defaultX01DoubleIn } = useUserSettings()
+  const { favoriteDouble, callerEnabled, callerVoice, callerVolume, speakCheckoutOnly, allowSpectate, cameraScale, setCameraScale, cameraFitMode = 'fill', setCameraFitMode, cameraEnabled, textSize, boxSize, autoscoreProvider, matchType = 'singles', setMatchType, teamAName = 'Team A', setTeamAName, teamBName = 'Team B', setTeamBName, x01DoubleIn: defaultX01DoubleIn, preferredCameraId, setPreferredCamera } = useUserSettings()
   const setCameraEnabled = useUserSettings.getState().setCameraEnabled
   const manualScoring = autoscoreProvider === 'manual'
   useEffect(() => {
@@ -166,6 +167,9 @@ export default function OnlinePlay({ user }: { user?: any }) {
   const [pairingExpiryAt, setPairingExpiryAt] = useState<number | null>(null)
   const pairingTimerRef = useRef<number | null>(null)
   const pairingPendingTimeoutRef = useRef<number | null>(null)
+  const [cameraTab, setCameraTab] = useState<'connection' | 'preview'>(initialCameraTab ?? 'connection')
+  const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
+  const [cameraAccessError, setCameraAccessError] = useState<string | null>(null)
   // Copy pairing code to clipboard
   async function copyPairingCode() {
     if (!pairingCode) return
@@ -192,6 +196,28 @@ export default function OnlinePlay({ user }: { user?: any }) {
       try { if (pairingPendingTimeoutRef.current) window.clearTimeout(pairingPendingTimeoutRef.current) } catch {}
     }
   }, [])
+  useEffect(() => {
+    if (cameraTab !== 'connection') return
+    refreshCameraDeviceList()
+  }, [cameraTab])
+  useEffect(() => {
+    if (!initialCameraTab) return
+    setCameraTab(initialCameraTab)
+  }, [initialCameraTab])
+  async function refreshCameraDeviceList() {
+    try {
+      if (!navigator?.mediaDevices?.enumerateDevices) {
+        setCameraAccessError('not-supported')
+        return
+      }
+      const list = await navigator.mediaDevices.enumerateDevices()
+      setAvailableCameras(list.filter((d) => d.kind === 'videoinput'))
+      setCameraAccessError(null)
+    } catch (err) {
+      console.warn('[OnlinePlay] enumerateDevices failed:', err)
+      setCameraAccessError('enumerate-failed')
+    }
+  }
   // Highlight auto-download UI
   const [highlightCandidate, setHighlightCandidate] = useState<any | null>(null)
   const [showHighlightModal, setShowHighlightModal] = useState(false)
@@ -1428,6 +1454,34 @@ export default function OnlinePlay({ user }: { user?: any }) {
     }
   }
 
+  // ── When a match is in progress, render the full in-game shell (same as offline) ──
+  if (match.inProgress) {
+    // Resolve local player index so both sides see the correct perspective
+    const localIdx = (match.players || []).findIndex(
+      (p: any) => p?.name && p.name === localPlayerName
+    );
+    return (
+      <InGameShell
+        user={user}
+        showStartShowcase={showStartShowcase}
+        onShowStartShowcaseChange={setShowStartShowcase}
+        onCommitVisit={(score, _darts, _meta) => {
+          submitVisitManual(score);
+        }}
+        onQuit={() => {
+          try { match.endGame(); } catch {}
+          sendState();
+          try { window.dispatchEvent(new Event("ndn:match-quit")); } catch {}
+        }}
+        onStateChange={sendState}
+        localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}
+        gameModeOverride={currentGame}
+        isOnline={true}
+      />
+    );
+  }
+
+  // ── Lobby view (no match in progress) ──
   return (
     <div className="card ndn-game-shell relative overflow-hidden">
       <h2 className="text-3xl font-bold text-brand-700 mb-4">Online Play</h2>
@@ -1518,80 +1572,132 @@ export default function OnlinePlay({ user }: { user?: any }) {
           {/* Right column: camera / preview */}
           <div className="col-span-12 md:col-span-4">
             <div className="rounded-2xl p-3 border border-white/10 bg-black/5 h-full min-h-[200px]">
-              <div className="flex items-center justify-between mb-2">
-                <div className="font-semibold">Camera Preview</div>
-                <div className="flex items-center gap-2">
-                  <button
-                    className="btn"
-                    disabled={pairingPending || !!pairingCode || !connected}
-                    onClick={() => {
-                      try { setPairingPending(true) } catch {}
-                      try { requestPairingCode(false) } catch {}
-                      // clear any existing pending timeout
-                      try { if (pairingPendingTimeoutRef.current) window.clearTimeout(pairingPendingTimeoutRef.current) } catch {}
-                      pairingPendingTimeoutRef.current = window.setTimeout(() => { try { setPairingPending(false) } catch {} }, 8000) as unknown as number
-                    }}
-                    title={(!connected ? 'Connect to server' : (pairingCode ? 'Pairing code active' : 'Pair mobile camera'))}
-                  >
-                    {pairingPending ? 'Requesting…' : (pairingCode ? 'Paired' : 'Pair')}
-                  </button>
-                  {roomId && roomCreatorId && selfId === roomCreatorId && (
-                    <label className="inline-flex items-center gap-2 ml-2">
-                      <input
-                        type="checkbox"
-                        checked={roomAutocommit}
-                        onChange={(e) => {
-                          const v = e.target.checked
-                          try { wsGlobal.send({ type: 'set-match-autocommit', roomId, allow: v }) } catch {}
-                          setRoomAutocommit(v)
-                        }}
-                      />
-                      <span className="ml-1 text-sm">Server autocommit</span>
-                    </label>
-                  )}
-                </div>
-              </div>
-              {pairingCode && (
-                <div className="mb-2 p-2 rounded bg-white/5 border border-white/10 flex items-center justify-between">
-                  <div className="font-mono text-xl tracking-wider">{pairingCode}</div>
-                  <div className="flex items-center gap-2">
-                    <button className="btn btn--ghost" onClick={copyPairingCode}>Copy</button>
-                    <div className="text-sm opacity-70">Expires in {pairCountdown}s</div>
-                  </div>
-                </div>
-              )}
-              <CameraView
-                cameraAutoCommit="parent"
-                forceAutoStart
-                immediateAutoCommit={useUserSettings.getState().autoCommitMode === "immediate" && useUserSettings.getState().allowAutocommitInOnline}
-                onAddVisit={makeOnlineAddVisitAdapter(submitVisitManual)}
-                onAutoDart={(value: number, ring: any, info: any) => {
-                  // For online matches, prefer server-side verification: send auto-visit to server
-                  if (roomId && wsGlobal && wsGlobal.connected) {
-                    try {
-                      wsGlobal.send({
-                        type: 'auto-visit',
-                        roomId,
-                        value,
-                        darts: 3,
-                        ring,
-                        sector: info?.sector ?? null,
-                        pBoard: info?.pBoard ?? null,
-                        calibrationValid: !!info?.calibrationValid,
-                        bullDistanceMm: info?.bullDistanceMm ?? null,
-                        tipVideoPx: info?.tipVideoPx ?? null,
-                      });
-                    } catch {}
-                  } else {
-                    // fallback to local submit
-                    try { submitVisitManual(value) } catch {}
-                  }
-                }}
+              <TabPills
+                tabs={[
+                  { key: 'connection', label: 'Camera Connection' },
+                  { key: 'preview', label: 'Camera Preview' },
+                ]}
+                active={cameraTab}
+                onChange={(key) => setCameraTab(key as 'connection' | 'preview')}
+                className="mb-3"
               />
+              {cameraTab === 'connection' && (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="font-semibold">Connect your camera</div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="btn"
+                        disabled={pairingPending || !!pairingCode || !connected}
+                        onClick={() => {
+                          try { setPairingPending(true) } catch {}
+                          try { requestPairingCode(false) } catch {}
+                          // clear any existing pending timeout
+                          try { if (pairingPendingTimeoutRef.current) window.clearTimeout(pairingPendingTimeoutRef.current) } catch {}
+                          pairingPendingTimeoutRef.current = window.setTimeout(() => { try { setPairingPending(false) } catch {} }, 8000) as unknown as number
+                        }}
+                        title={(!connected ? 'Connect to server' : (pairingCode ? 'Pairing code active' : 'Pair mobile camera'))}
+                      >
+                        {pairingPending ? 'Requesting…' : (pairingCode ? 'Paired' : 'Pair')}
+                      </button>
+                      {roomId && roomCreatorId && selfId === roomCreatorId && (
+                        <label className="inline-flex items-center gap-2 ml-2">
+                          <input
+                            type="checkbox"
+                            checked={roomAutocommit}
+                            onChange={(e) => {
+                              const v = e.target.checked
+                              try { wsGlobal.send({ type: 'set-match-autocommit', roomId, allow: v }) } catch {}
+                              setRoomAutocommit(v)
+                            }}
+                          />
+                          <span className="ml-1 text-sm">Server autocommit</span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                  {pairingCode ? (
+                    <div className="mb-2 p-2 rounded bg-white/5 border border-white/10 flex items-center justify-between">
+                      <div className="font-mono text-xl tracking-wider">{pairingCode}</div>
+                      <div className="flex items-center gap-2">
+                        <button className="btn btn--ghost" onClick={copyPairingCode}>Copy</button>
+                        <div className="text-sm opacity-70">Expires in {pairCountdown}s</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-sm opacity-70 mb-2">
+                      Pair your phone camera to continue, then switch to the preview tab.
+                    </div>
+                  )}
+                  <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                    <div className="text-sm font-semibold mb-2">Camera device</div>
+                    <div className="text-xs opacity-70 mb-2">Choose the camera model you want to use (VERT, OBS, webcams, etc.).</div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        className="input flex-1"
+                        value={preferredCameraId || ''}
+                        onChange={(e) => {
+                          const id = e.target.value || undefined
+                          const label = availableCameras.find((d) => d.deviceId === id)?.label
+                          try { setPreferredCamera(id, label || '', true) } catch {}
+                        }}
+                      >
+                        <option value="">Auto (browser default)</option>
+                        {availableCameras.map((d) => (
+                          <option key={d.deviceId} value={d.deviceId}>
+                            {d.label || (d.deviceId ? `Camera (${d.deviceId.slice(0, 6)})` : 'Camera')}
+                          </option>
+                        ))}
+                      </select>
+                      <button className="btn btn--ghost btn-sm" onClick={refreshCameraDeviceList}>Rescan</button>
+                    </div>
+                    {availableCameras.length === 0 && (
+                      <div className="mt-2 text-xs opacity-70">No cameras found. Grant camera permission and click Rescan.</div>
+                    )}
+                    {cameraAccessError === 'not-supported' && (
+                      <div className="mt-2 text-xs text-rose-300">Camera selection is not supported in this browser.</div>
+                    )}
+                    {cameraAccessError === 'enumerate-failed' && (
+                      <div className="mt-2 text-xs text-rose-300">Unable to list cameras. Allow camera access, then rescan.</div>
+                    )}
+                  </div>
+                </>
+              )}
+              {cameraTab === 'preview' && (
+                <CameraView
+                  cameraAutoCommit="parent"
+                  forceAutoStart
+                  immediateAutoCommit={useUserSettings.getState().autoCommitMode === "immediate" && useUserSettings.getState().allowAutocommitInOnline}
+                  onAddVisit={makeOnlineAddVisitAdapter(submitVisitManual)}
+                  onAutoDart={(value: number, ring: any, info: any) => {
+                    // For online matches, prefer server-side verification: send auto-visit to server
+                    if (roomId && wsGlobal && wsGlobal.connected) {
+                      try {
+                        wsGlobal.send({
+                          type: 'auto-visit',
+                          roomId,
+                          value,
+                          darts: 3,
+                          ring,
+                          sector: info?.sector ?? null,
+                          pBoard: info?.pBoard ?? null,
+                          calibrationValid: !!info?.calibrationValid,
+                          bullDistanceMm: info?.bullDistanceMm ?? null,
+                          tipVideoPx: info?.tipVideoPx ?? null,
+                        });
+                      } catch {}
+                    } else {
+                      // fallback to local submit
+                      try { submitVisitManual(value) } catch {}
+                    }
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
       </div>
+      <PauseOverlay localPlayerName={localPlayerName} onResume={() => { setPausedGlobal(false, null); setPausedLocal(false); setPauseRequestedBy(null); setPauseAcceptedBy({}); setPauseEndsAt(null); sendState(); }} />
     </div>
   )
 }

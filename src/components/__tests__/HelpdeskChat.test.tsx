@@ -8,7 +8,7 @@ import {
   act,
   waitFor,
 } from "@testing-library/react";
-import HelpdeskChat from "../HelpdeskChat";
+import HelpdeskChat from "../HelpdeskChat.js";
 import { vi, describe, it, beforeEach, expect } from "vitest";
 
 let mockSend = vi.fn();

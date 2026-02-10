@@ -1,5 +1,5 @@
 ﻿import React from "react";
-import { labelForMode, type ModeKey } from "../utils/games";
+import { labelForMode, type ModeKey } from "../utils/games.js";
 
 type Tournament = {
   id: string;

@@ -1,7 +1,7 @@
 ﻿import React from "react";
 import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { Sidebar } from "../Sidebar";
+import { Sidebar } from "../Sidebar.js";
 
 // Simple smoke test: when user has no subscription but we have a cached subscription
 // in localStorage, the PREMIUM tab should be hidden.

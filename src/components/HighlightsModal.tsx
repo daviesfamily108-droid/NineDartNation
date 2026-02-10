@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useState } from "react";
-import ResizableModal from "./ui/ResizableModal";
-import { apiFetch } from "../utils/api";
-import { useToast } from "../store/toast";
+import ResizableModal from "./ui/ResizableModal.js";
+import { apiFetch } from "../utils/api.js";
+import { useToast } from "../store/toast.js";
 
 export default function HighlightsModal({ onClose }: { onClose?: () => void }) {
   const [highlights, setHighlights] = useState<any[]>([]);

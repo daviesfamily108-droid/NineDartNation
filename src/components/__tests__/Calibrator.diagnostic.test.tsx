@@ -1,4 +1,4 @@
-﻿import { buildDiagnosticBundle } from "../../utils/calibrationDiagnostics";
+﻿import { buildDiagnosticBundle } from "../../utils/calibrationDiagnostics.js";
 
 test("buildDiagnosticBundle returns expected shape even without canvas", async () => {
   const bundle = await buildDiagnosticBundle({

@@ -45,8 +45,8 @@ vi.mock("../../utils/vision", async () => {
 
 describe("Calibrator manual click mapping", () => {
   it("does not apply calibration when manual clicks are disabled", async () => {
-    const { default: Calibrator } = await import("../Calibrator");
-    const { useCalibration } = await import("../../store/calibration");
+    const { default: Calibrator } = await import("../Calibrator.js");
+    const { useCalibration } = await import("../../store/calibration.js");
 
     const { container: calContainer } = render(<Calibrator />);
 

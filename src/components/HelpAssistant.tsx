@@ -1,11 +1,13 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { HelpCircle, MessageCircle, X, Send } from "lucide-react";
-import { apiFetch } from "../utils/api";
-import { useWS } from "./WSProvider";
-import HelpdeskChat from "./HelpdeskChat";
+import { apiFetch } from "../utils/api.js";
+import { useWS } from "./WSProvider.js";
+import HelpdeskChat from "./HelpdeskChat.js";
+import { useMatch } from "../store/match.js";
 
 export default function HelpAssistant() {
-  const [isOpen, setIsOpen] = useState(false);
+const { inProgress } = useMatch();
+const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<
     Array<{
       text:
@@ -313,14 +315,16 @@ export default function HelpAssistant() {
 
   return (
     <>
-      {/* Floating Button */}
-      <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 right-4 z-50 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-colors"
-        title="Help Assistant"
-      >
-        <HelpCircle className="w-6 h-6" />
-      </button>
+      {/* Floating Button — hidden during active matches */}
+      {!inProgress && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-4 right-4 z-50 bg-blue-600 hover:bg-blue-700 text-white p-4 rounded-full shadow-lg transition-colors"
+          title="Help Assistant"
+        >
+          <HelpCircle className="w-6 h-6" />
+        </button>
+      )}
 
       {/* Modal */}
       {isOpen && (

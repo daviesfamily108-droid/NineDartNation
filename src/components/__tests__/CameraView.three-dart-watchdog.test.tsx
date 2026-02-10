@@ -2,7 +2,7 @@ import React from "react";
 import { describe, expect, test, vi } from "vitest";
 import { render, act } from "@testing-library/react";
 
-import CameraView from "../CameraView";
+import CameraView from "../CameraView.js";
 
 // Minimal mocks so CameraView test helpers are available and the component can mount.
 vi.mock("../../store/match", async () => {

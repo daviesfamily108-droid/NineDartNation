@@ -4,8 +4,8 @@ import {
   allGames,
   type GameKey,
   getStartOptionsForGame,
-} from "../../utils/games";
-import { useUserSettings } from "../../store/userSettings";
+} from "../../utils/games.js";
+import { useUserSettings } from "../../store/userSettings.js";
 
 type Props = {
   open: boolean;

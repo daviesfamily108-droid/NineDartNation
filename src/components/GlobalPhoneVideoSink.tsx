@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef } from "react";
-import { useCameraSession } from "../store/cameraSession";
+import { useCameraSession } from "../store/cameraSession.js";
 
 /**
  * GlobalPhoneVideoSink

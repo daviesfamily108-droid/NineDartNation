@@ -1,22 +1,22 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import BarChart from "./BarChart";
-import TabPills from "./ui/TabPills";
-import { getGameModeStats } from "../store/profileStats";
+import BarChart from "./BarChart.js";
+import TabPills from "./ui/TabPills.js";
+import { getGameModeStats } from "../store/profileStats.js";
 import {
   allGames,
   labelForMode,
   getModeOptionsForGame,
   getModeValueOptionsForGame,
-} from "../utils/games";
-import { useWS } from "./WSProvider";
-import CameraStatusBadge from "./CameraStatusBadge";
-import HelpdeskChat from "./HelpdeskChat";
-import { useCalibration } from "../store/calibration";
-import { useToast } from "../store/toast";
+} from "../utils/games.js";
+import { useWS } from "./WSProvider.js";
+import CameraStatusBadge from "./CameraStatusBadge.js";
+import HelpdeskChat from "./HelpdeskChat.js";
+import { useCalibration } from "../store/calibration.js";
+import { useToast } from "../store/toast.js";
 import {
   getCalibrationConfidenceForGame,
   getCalibrationQualityText,
-} from "../utils/gameCalibrationRequirements";
+} from "../utils/gameCalibrationRequirements.js";
 
 const OWNER_EMAIL = "daviesfamily108@gmail.com";
 

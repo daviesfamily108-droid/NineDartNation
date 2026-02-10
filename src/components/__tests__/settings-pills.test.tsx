@@ -1,7 +1,7 @@
 ﻿import React from "react";
 import { render, fireEvent } from "@testing-library/react";
 import { describe, it, expect, beforeAll } from "vitest";
-import { ThemeProvider } from "../ThemeContext";
+import { ThemeProvider } from "../ThemeContext.js";
 import { waitFor } from "@testing-library/react";
 
 beforeAll(() => {
@@ -46,7 +46,7 @@ beforeAll(() => {
 
 describe("Settings Panel pill open/close", () => {
   it("User Info pill opens and closes immediately", async () => {
-    const { default: SettingsPanel } = await import("../SettingsPanel");
+    const { default: SettingsPanel } = await import("../SettingsPanel.js");
     const r = render(
       <ThemeProvider>
         <SettingsPanel
@@ -66,7 +66,7 @@ describe("Settings Panel pill open/close", () => {
   });
 
   it("Calibration pill opens and closes immediately", async () => {
-    const { default: SettingsPanel } = await import("../SettingsPanel");
+    const { default: SettingsPanel } = await import("../SettingsPanel.js");
     const r = render(
       <ThemeProvider>
         <SettingsPanel
@@ -89,7 +89,7 @@ describe("Settings Panel pill open/close", () => {
   });
 
   it("Settings pill opens and closes immediately", async () => {
-    const { default: SettingsPanel } = await import("../SettingsPanel");
+    const { default: SettingsPanel } = await import("../SettingsPanel.js");
     const r = render(
       <ThemeProvider>
         <SettingsPanel

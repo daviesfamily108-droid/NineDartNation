@@ -1,9 +1,9 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import FocusLock from "react-focus-lock";
 import { createPortal } from "react-dom";
-import CameraTile from "../CameraTile";
-import type { Player } from "../../store/match";
-import { useCameraSession } from "../../store/cameraSession";
+import CameraTile from "../CameraTile.js";
+import type { Player } from "../../store/match.js";
+import { useCameraSession } from "../../store/cameraSession.js";
 import {
   getAllTime,
   getAllTime180s,
@@ -11,8 +11,8 @@ import {
   getAllTimeBestCheckout,
   getAllTimeBestLeg,
   getAllTimeFirstNineAvg,
-} from "../../store/profileStats";
-import { useUserSettings } from "../../store/userSettings";
+} from "../../store/profileStats.js";
+import { useUserSettings } from "../../store/userSettings.js";
 
 interface StatProps {
   label: string;

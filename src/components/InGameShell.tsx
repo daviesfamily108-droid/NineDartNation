@@ -5,30 +5,48 @@ import React, {
   useRef,
   useState,
 } from "react";
-import CameraView from "./CameraView";
-import GameScoreboard from "./scoreboards/GameScoreboard";
-import { useOnlineGameStats } from "./scoreboards/useGameStats";
-import { useMatch } from "../store/match";
-import { useMatchControl } from "../store/matchControl";
-import { usePendingVisit } from "../store/pendingVisit";
-import PauseTimerBadge from "./ui/PauseTimerBadge";
-import PauseQuitModal from "./ui/PauseQuitModal";
-import { useUserSettings } from "../store/userSettings";
-import MatchStartShowcase from "./ui/MatchStartShowcase";
-import MatchControls from "./MatchControls";
-import { suggestCheckouts, sayScore } from "../utils/checkout";
-import { getPreferredUserName } from "../utils/userName";
-import LetterboxScoreboardOverlay from "./ui/LetterboxScoreboardOverlay";
-import { broadcastMessage } from "../utils/broadcast";
+import CameraView from "./CameraView.js";
+import GameScoreboard from "./scoreboards/GameScoreboard.js";
+import { useOnlineGameStats } from "./scoreboards/useGameStats.js";
+import { useMatch } from "../store/match.js";
+import { useMatchControl } from "../store/matchControl.js";
+import { usePendingVisit } from "../store/pendingVisit.js";
+import PauseTimerBadge from "./ui/PauseTimerBadge.js";
+import PauseQuitModal from "./ui/PauseQuitModal.js";
+import PauseOverlay from "./ui/PauseOverlay.js";
+import { useUserSettings } from "../store/userSettings.js";
+import MatchStartShowcase from "./ui/MatchStartShowcase.js";
+import { suggestCheckouts, sayScore } from "../utils/checkout.js";
+import { getPreferredUserName } from "../utils/userName.js";
+import LetterboxScoreboardOverlay from "./ui/LetterboxScoreboardOverlay.js";
+import { broadcastMessage } from "../utils/broadcast.js";
 
 export default function InGameShell({
   user,
   showStartShowcase: showStartShowcaseProp,
   onShowStartShowcaseChange,
+  onCommitVisit,
+  onQuit: onQuitProp,
+  onStateChange,
+  localPlayerIndexOverride,
+  gameModeOverride,
+  isOnline,
 }: {
   user: any;
   showStartShowcase?: boolean;
   onShowStartShowcaseChange?: (open: boolean) => void;
+  /** Override default visit commit (for online WS sync). */
+  onCommitVisit?: (score: number, darts: number, meta?: any) => void;
+  /** Override default quit behaviour. */
+  onQuit?: () => void;
+  /** Called after any match state mutation for external sync. */
+  onStateChange?: () => void;
+  /** Explicit local player index for online (skips name matching). */
+  localPlayerIndexOverride?: number;
+  /** Override game mode label (e.g. online tracks currentGame separately). */
+  gameModeOverride?: string;
+  /** True when this is an online match — adds visual indicators. */
+  isOnline?: boolean;
 }) {
   const match = useMatch();
   useUserSettings((s: any) => s.hideInGameSidebar ?? true);
@@ -49,19 +67,17 @@ export default function InGameShell({
   );
 
   const settingsUser = useUserSettings((s: any) => s.user);
-  const localPlayerName =
-    user?.username ||
-    user?.name ||
-    user?.displayName ||
+  const localPlayerName = getPreferredUserName(user, '') ||
+    getPreferredUserName(settingsUser, '') ||
     user?.email?.split("@")[0] ||
-    settingsUser?.username ||
-    settingsUser?.name ||
-    settingsUser?.displayName ||
-    settingsUser?.email?.split("@")[0];
+    settingsUser?.email?.split("@")[0] ||
+    'You';
 
-  const resolvedLocalIndex = (match.players || []).findIndex(
-    (p: any) => p?.name && p.name === localPlayerName,
-  );
+  const resolvedLocalIndex = typeof localPlayerIndexOverride === 'number' && localPlayerIndexOverride >= 0
+    ? localPlayerIndexOverride
+    : (match.players || []).findIndex(
+        (p: any) => p?.name && p.name === localPlayerName,
+      );
   const localPlayerIndex = resolvedLocalIndex >= 0 ? resolvedLocalIndex : 0;
   const isUsersTurn = (match.currentPlayerIdx ?? 0) === localPlayerIndex;
 
@@ -77,7 +93,28 @@ export default function InGameShell({
   const awayRemaining =
     awayLeg?.totalScoreRemaining ?? match.startingScore ?? lastOfflineStart;
 
-  const gameMode = (((match as any)?.game || "X01") as any) ?? "X01";
+  // Compute per-player stats for hero banner (last visit, 3-dart average)
+  const playerStats = useMemo(() => {
+    const compute = (p: any) => {
+      if (!p) return { lastVisit: 0, avg3: 0 };
+      let pts = 0, darts = 0;
+      for (const L of (p.legs || [])) {
+        pts += ((L.totalScoreStart ?? 0) - (L.totalScoreRemaining ?? 0));
+        darts += (L.visits || []).reduce((a: number, v: any) => a + (v.darts || 0) - (v.preOpenDarts || 0), 0);
+      }
+      const lastV = (p.legs?.[p.legs.length - 1]?.visits || []).slice(-1)[0];
+      return {
+        lastVisit: lastV?.score ?? lastV?.visitTotal ?? 0,
+        avg3: darts > 0 ? ((pts / darts) * 3) : 0,
+      };
+    };
+    return { local: compute(localPlayer), away: compute(awayPlayer) };
+  }, [localPlayer, awayPlayer, localLeg?.visits?.length, awayLeg?.visits?.length]);
+
+  // Checkout suggestions for the current thrower (local or away)
+  const throwerRemaining = isUsersTurn ? localRemaining : awayRemaining;
+
+  const gameMode = gameModeOverride || ((match as any)?.game || "X01");
   const scoreboardPlayers = useOnlineGameStats(gameMode, match as any);
 
   const callerEnabled = useUserSettings((s: any) => s.callerEnabled);
@@ -119,6 +156,14 @@ export default function InGameShell({
     return routes && routes.length > 0 ? routes : null;
   }, [gameMode, localRemaining]);
 
+  // Checkout for the current thrower (shown in hero strip for both players)
+  const throwerCheckout = useMemo(() => {
+    if (gameMode !== "X01" || throwerRemaining > 170 || throwerRemaining <= 0)
+      return null;
+    const routes = suggestCheckouts(throwerRemaining);
+    return routes && routes.length > 0 ? routes : null;
+  }, [gameMode, throwerRemaining]);
+
   const legsInfo = useMemo(() => {
     const players = match.players || [];
     return players.map((p: any) => ({
@@ -139,7 +184,14 @@ export default function InGameShell({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [showNumpad, setShowNumpad] = useState(false);
+  const [numpadValue, setNumpadValue] = useState("");
+
   const commitVisit = (score: number, darts: number, meta?: any) => {
+    if (onCommitVisit) {
+      onCommitVisit(score, darts, meta);
+      return;
+    }
     const p = match.players?.[match.currentPlayerIdx];
     const leg = p?.legs?.[p.legs.length - 1];
     const prevRemaining = leg ? leg.totalScoreRemaining : match.startingScore;
@@ -163,6 +215,7 @@ export default function InGameShell({
     } else {
       match.nextPlayer();
     }
+    onStateChange?.();
   };
 
   const deriveWinningLabel = useCallback(() => {
@@ -232,6 +285,11 @@ export default function InGameShell({
         <div className="relative flex items-center justify-between gap-2 px-3 sm:px-5 py-2.5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg">
           <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-transparent to-amber-500/10" />
           <div className="flex items-center gap-3 text-sm leading-none z-10">
+            {isOnline && (
+              <span className="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 text-[10px] sm:text-xs font-semibold tracking-wide">
+                🌐 Online
+              </span>
+            )}
             <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-xs font-semibold tracking-wide">
               {gameMode}
               {gameMode === "X01"
@@ -280,8 +338,20 @@ export default function InGameShell({
                 ● Throwing
               </div>
             )}
-            <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
-              Legs: {localPlayer?.legsWon || 0}
+            <div className="flex items-center gap-3 mt-1">
+              <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
+                Legs: {localPlayer?.legsWon || 0}
+              </div>
+              {playerStats.local.avg3 > 0 && (
+                <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
+                  Avg: {playerStats.local.avg3.toFixed(1)}
+                </div>
+              )}
+              {playerStats.local.lastVisit > 0 && (
+                <div className="text-[10px] sm:text-xs text-slate-500 tabular-nums">
+                  Last: {playerStats.local.lastVisit}
+                </div>
+              )}
             </div>
           </div>
 
@@ -311,23 +381,45 @@ export default function InGameShell({
                 ● Throwing
               </div>
             )}
-            <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
-              Legs: {awayPlayer?.legsWon || 0}
+            <div className="flex items-center gap-3 mt-1">
+              <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
+                Legs: {awayPlayer?.legsWon || 0}
+              </div>
+              {playerStats.away.avg3 > 0 && (
+                <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
+                  Avg: {playerStats.away.avg3.toFixed(1)}
+                </div>
+              )}
+              {playerStats.away.lastVisit > 0 && (
+                <div className="text-[10px] sm:text-xs text-slate-500 tabular-nums">
+                  Last: {playerStats.away.lastVisit}
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Checkout suggestion strip */}
-        {checkoutRoutes && (
-          <div className="relative border-t border-emerald-400/20 bg-emerald-500/10 px-4 py-2 flex items-center gap-3">
-            <span className="text-[10px] sm:text-xs uppercase tracking-wider text-emerald-300/80 font-semibold whitespace-nowrap">
-              Checkout {localRemaining}:
+        {/* Checkout suggestion strip — shows for whoever is currently throwing */}
+        {throwerCheckout && (
+          <div className={`relative border-t px-4 py-2 flex items-center gap-3 ${
+            isUsersTurn
+              ? "border-emerald-400/20 bg-emerald-500/10"
+              : "border-amber-400/20 bg-amber-500/10"
+          }`}>
+            <span className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold whitespace-nowrap ${
+              isUsersTurn ? "text-emerald-300/80" : "text-amber-300/80"
+            }`}>
+              Checkout {throwerRemaining}:
             </span>
             <div className="flex flex-wrap gap-1.5">
-              {checkoutRoutes.map((route: string, i: number) => (
+              {throwerCheckout.map((route: string, i: number) => (
                 <span
                   key={i}
-                  className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs sm:text-sm font-medium"
+                  className={`px-2 py-0.5 rounded-lg text-xs sm:text-sm font-medium ${
+                    isUsersTurn
+                      ? "bg-emerald-500/20 border border-emerald-400/20 text-emerald-100"
+                      : "bg-amber-500/20 border border-amber-400/20 text-amber-100"
+                  }`}
                 >
                   {route}
                 </span>
@@ -337,203 +429,212 @@ export default function InGameShell({
         )}
       </div>
 
-      {/* ── Main content: Camera + Scoreboard + Controls ── */}
+      {/* ── Main content — context-sensitive layout ── */}
       <div className="ndn-shell-body">
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-3 md:gap-4 items-stretch">
-          {/* Left column: Camera */}
-          <div className="min-w-0">
-            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 h-full flex flex-col overflow-hidden">
-              {/* Camera label bar */}
+
+        {/* ───── OPPONENT'S TURN: Camera + Scoreboard (spectator view) ───── */}
+        {!isUsersTurn && (
+          <div className="flex flex-col gap-3">
+            {/* Camera — full width, prominent */}
+            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
               <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
                 <div className="flex items-center gap-2">
-                  <div
-                    className={`w-2 h-2 rounded-full ${isUsersTurn ? "bg-emerald-400 shadow-lg shadow-emerald-400/50" : "bg-amber-400 shadow-lg shadow-amber-400/50"}`}
-                  />
+                  <div className="w-2 h-2 rounded-full bg-amber-400 shadow-lg shadow-amber-400/50 animate-pulse" />
                   <span className="text-xs sm:text-sm font-semibold text-white/80">
-                    {isUsersTurn ? "Your Camera" : "Opponent Camera"}
+                    Opponent&apos;s Camera
                   </span>
                 </div>
-                <span
-                  className={`text-[10px] sm:text-xs font-medium ${isUsersTurn ? "text-emerald-300" : "text-amber-300"}`}
-                >
-                  {isUsersTurn ? "LIVE — Your turn" : "Waiting…"}
+                <span className="text-[10px] sm:text-xs font-medium text-amber-300">
+                  Waiting for {awayPlayer?.name || "opponent"}&hellip;
                 </span>
               </div>
-              {/* Camera viewport */}
-              <div className="relative min-h-[10rem] max-h-[40vh] md:max-h-none md:flex-1 bg-black">
-                {isUsersTurn ? (
-                  <CameraView
-                    hideInlinePanels={true}
-                    forceAutoStart={true}
-                    onAddVisit={commitVisit}
-                    onEndLeg={(score: any) => {
-                      try {
-                        match.endLeg(score ?? 0);
-                      } catch {}
-                    }}
-                    onVisitCommitted={(
-                      _score: any,
-                      _darts: any,
-                      finished: any,
-                      meta: any,
-                    ) => {
-                      if (!finished) return;
-                      const frame = meta?.frame ?? remoteFrame ?? null;
-                      setWinningShot({
-                        label: meta?.label || deriveWinningLabel() || undefined,
-                        ring: meta?.ring,
-                        frame,
-                        ts: Date.now(),
-                      });
-                      try {
-                        match.endGame();
-                      } catch {}
-                    }}
-                  />
-                ) : (
-                  <CameraView hideInlinePanels={true} forceAutoStart={true} />
-                )}
-                {gameMode === "X01" && !isUsersTurn && (
+              <div className="relative min-h-[12rem] max-h-[50vh] bg-black">
+                <CameraView hideInlinePanels={true} forceAutoStart={true} />
+                {gameMode === "X01" && (
                   <LetterboxScoreboardOverlay
                     checkoutRemaining={localRemaining}
-                    away={{
-                      side: "Away",
-                      name: awayPlayer?.name || "Away",
-                      legsWon: awayPlayer?.legsWon || 0,
-                      remaining: awayRemaining,
-                    }}
-                    home={{
-                      side: "Home",
-                      name: localPlayer?.name || "Home",
-                      legsWon: localPlayer?.legsWon || 0,
-                      remaining: localRemaining,
-                    }}
+                    away={{ side: "Away", name: awayPlayer?.name || "Away", legsWon: awayPlayer?.legsWon || 0, remaining: awayRemaining }}
+                    home={{ side: "Home", name: localPlayer?.name || "Home", legsWon: localPlayer?.legsWon || 0, remaining: localRemaining }}
                   />
                 )}
               </div>
             </div>
-          </div>
 
-          {/* Right column: Scoreboard + Controls */}
-          <div className="min-w-0 flex flex-col gap-3">
-            {/* Scoreboard card */}
+            {/* Scoreboard — full width */}
             <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent" />
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">
-                  Your Scoreboard
-                </h3>
-                <div
-                  className={`px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
-                    isUsersTurn
-                      ? "bg-emerald-500/20 border border-emerald-400/30 text-emerald-300"
-                      : "bg-slate-500/20 border border-slate-400/20 text-slate-400"
-                  }`}
-                >
-                  {isUsersTurn ? "Your turn" : "Opponent's turn"}
+                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">Scoreboard</h3>
+                <div className="px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-amber-500/20 border border-amber-400/30 text-amber-300">
+                  {awayPlayer?.name || "Opponent"}&apos;s turn
+                </div>
+              </div>
+              <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
+            </div>
+          </div>
+        )}
+
+        {/* ───── YOUR TURN: Scoreboard + Score Entry Box ───── */}
+        {isUsersTurn && (
+          <div className="flex flex-col gap-3">
+            {/* Scoreboard — full width */}
+            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] to-transparent" />
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">Scoreboard</h3>
+                <div className="px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 animate-pulse">
+                  ● Your turn
                 </div>
               </div>
               <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
             </div>
 
-            {/* Controls card — always visible, locked when opponent's turn */}
-            <div
-              className={`relative rounded-2xl border shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden transition-all ${
-                isUsersTurn
-                  ? "border-white/10 bg-slate-950/70"
-                  : "border-white/5 bg-slate-950/40 opacity-60"
-              }`}
+            {/* Score Entry Box — tappable card that opens the numpad */}
+            <button
+              type="button"
+              className="relative w-full rounded-2xl border-2 border-dashed border-emerald-400/40 bg-emerald-500/5 hover:bg-emerald-500/10 active:scale-[0.98] transition-all p-6 sm:p-8 text-center group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
+              onClick={() => { setNumpadValue(""); setShowNumpad(true); }}
             >
-              <div
-                className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${isUsersTurn ? "from-emerald-500/[0.03]" : "from-slate-500/[0.02]"} to-transparent`}
-              />
-              <div className="flex items-center justify-between mb-2">
-                <div
-                  className={`text-xs font-semibold uppercase tracking-wider ${isUsersTurn ? "text-emerald-300/60" : "text-slate-400/60"}`}
-                >
-                  Score Entry
-                </div>
-                {!isUsersTurn && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-500/10 border border-slate-400/20">
-                    <svg
-                      className="w-3 h-3 text-slate-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2.5}
-                    >
-                      <rect x="5" y="11" width="14" height="11" rx="2" />
-                      <path d="M12 3a4 4 0 0 0-4 4v4h8V7a4 4 0 0 0-4-4z" />
-                    </svg>
-                    <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                      Waiting for opponent
-                    </span>
-                  </div>
-                )}
+              <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/[0.05] to-transparent" />
+              <div className="text-emerald-300/60 text-xs sm:text-sm uppercase tracking-widest font-semibold mb-2">
+                Enter Score
               </div>
-              {isUsersTurn ? (
-                <MatchControls
-                  inProgress={true}
-                  startingScore={match.startingScore || lastOfflineStart}
-                  onAddVisit={(score, darts) =>
-                    commitVisit(score, darts, { visitTotal: score })
-                  }
-                  quickButtons={[180, 140, 100, 60]}
-                  onNextPlayer={() => match.nextPlayer()}
-                  onEndLeg={(score) => {
-                    try {
-                      match.endLeg(score ?? 0);
-                    } catch {}
-                  }}
-                  onEndGame={() => {
-                    try {
-                      match.endGame();
-                    } catch {}
-                  }}
-                  onUndo={() => {}}
-                  showDartsSelect={true}
-                />
-              ) : (
-                <div className="flex flex-col gap-3">
-                  <input
-                    type="text"
-                    className="w-full text-center text-xl font-bold rounded-xl border border-white/5 bg-white/5 text-white/30 px-4 py-3 cursor-not-allowed"
-                    placeholder="Locked"
-                    disabled
-                    readOnly
-                  />
-                  <div className="flex flex-wrap gap-2">
-                    <span className="text-[10px] text-white/30 uppercase tracking-wider self-center">
-                      Quick:
+              <div className="font-mono text-4xl sm:text-5xl font-black text-emerald-200 group-hover:text-emerald-100 transition-colors">
+                {localRemaining}
+              </div>
+              <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-sm font-semibold">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <rect x="4" y="4" width="16" height="16" rx="2" />
+                  <path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01" strokeLinecap="round" />
+                </svg>
+                Tap to enter score
+              </div>
+              {checkoutRoutes && (
+                <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                  {checkoutRoutes.map((route: string, i: number) => (
+                    <span key={i} className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs font-medium">
+                      {route}
                     </span>
-                    {[180, 140, 100, 60].map((v) => (
-                      <button
-                        key={v}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-white/5 bg-white/[0.02] text-white/20 cursor-not-allowed"
-                        disabled
-                      >
-                        {v}
-                      </button>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               )}
+            </button>
+
+            {/* Quick score buttons row */}
+            <div className="flex flex-wrap gap-2 justify-center">
+              {[180, 140, 100, 85, 60, 45, 26, 0].map((v) => (
+                <button
+                  key={v}
+                  className="px-4 py-2.5 rounded-xl text-sm font-bold bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/90 transition-all active:scale-95"
+                  onClick={() => commitVisit(v, 3, { visitTotal: v })}
+                >
+                  {v}
+                </button>
+              ))}
             </div>
 
             {/* Winning shot banner */}
             {winningShot?.label && (
               <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-center">
-                <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">
-                  Winning Double
-                </span>
-                <div className="text-lg font-bold text-emerald-200 mt-0.5">
-                  {winningShot.label}
-                </div>
+                <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">Winning Double</span>
+                <div className="text-lg font-bold text-emerald-200 mt-0.5">{winningShot.label}</div>
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
+
+      {/* ── Number Pad Modal ── */}
+      {showNumpad && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowNumpad(false)}>
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+          {/* Panel */}
+          <div
+            className="relative w-full max-w-sm mx-auto mb-0 sm:mb-0 rounded-t-3xl sm:rounded-3xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-2xl p-4 sm:p-6 animate-[slideUp_0.2s_ease-out]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Display */}
+            <div className="mb-4 rounded-2xl bg-black/40 border border-white/10 p-4 text-center">
+              <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">Score</div>
+              <div className="font-mono text-5xl sm:text-6xl font-black text-white tabular-nums min-h-[3.5rem] leading-none">
+                {numpadValue || <span className="text-white/20">0</span>}
+              </div>
+              {numpadValue && checkoutRoutes && Number(numpadValue) === localRemaining && (
+                <div className="mt-2 text-xs text-emerald-300 font-semibold">✓ Checkout!</div>
+              )}
+            </div>
+
+            {/* Numpad grid */}
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
+                <button
+                  key={n}
+                  className="py-3.5 rounded-xl text-xl font-bold bg-white/5 hover:bg-white/10 active:bg-white/20 border border-white/10 text-white transition-all active:scale-95"
+                  onClick={() => {
+                    const next = numpadValue + String(n);
+                    if (Number(next) <= 180) setNumpadValue(next);
+                  }}
+                >
+                  {n}
+                </button>
+              ))}
+              {/* Bottom row: backspace, 0, submit */}
+              <button
+                className="py-3.5 rounded-xl text-lg font-bold bg-white/5 hover:bg-white/10 active:bg-white/20 border border-white/10 text-white/60 transition-all active:scale-95"
+                onClick={() => setNumpadValue((v) => v.slice(0, -1))}
+              >
+                ⌫
+              </button>
+              <button
+                className="py-3.5 rounded-xl text-xl font-bold bg-white/5 hover:bg-white/10 active:bg-white/20 border border-white/10 text-white transition-all active:scale-95"
+                onClick={() => {
+                  const next = numpadValue + "0";
+                  if (Number(next) <= 180) setNumpadValue(next);
+                }}
+              >
+                0
+              </button>
+              <button
+                className="py-3.5 rounded-xl text-lg font-bold bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-400 border border-emerald-400/30 text-white shadow-lg shadow-emerald-600/30 transition-all active:scale-95"
+                onClick={() => {
+                  const score = Math.max(0, Math.min(180, Number(numpadValue) || 0));
+                  commitVisit(score, 3, { visitTotal: score });
+                  setNumpadValue("");
+                  setShowNumpad(false);
+                }}
+              >
+                ✓
+              </button>
+            </div>
+
+            {/* Quick buttons inside numpad */}
+            <div className="flex flex-wrap gap-2 justify-center mb-3">
+              {[180, 140, 100, 85, 60, 45, 26, 0].map((v) => (
+                <button
+                  key={v}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 transition-all active:scale-95"
+                  onClick={() => {
+                    commitVisit(v, 3, { visitTotal: v });
+                    setNumpadValue("");
+                    setShowNumpad(false);
+                  }}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+
+            {/* Cancel */}
+            <button
+              className="w-full py-2.5 rounded-xl text-sm font-semibold text-white/50 hover:text-white/80 hover:bg-white/5 transition-all"
+              onClick={() => setShowNumpad(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Quit / Pause modal ── */}
       {showQuitPause && (
@@ -541,22 +642,24 @@ export default function InGameShell({
           onClose={() => setShowQuitPause(false)}
           onQuit={() => {
             setShowQuitPause(false);
-            try {
-              match.endGame();
-            } catch {}
-            try {
-              window.dispatchEvent(new Event("ndn:match-quit"));
-            } catch {}
+            if (onQuitProp) {
+              onQuitProp();
+            } else {
+              try {
+                match.endGame();
+              } catch {}
+              try {
+                window.dispatchEvent(new Event("ndn:match-quit"));
+              } catch {}
+            }
           }}
-          onPause={(minutes: number) => {
-            const endsAt = Date.now() + minutes * 60 * 1000;
+          onPause={() => {
             try {
-              setPaused(true, endsAt, localPlayerName);
+              setPaused(true, null, localPlayerName);
             } catch {}
             try {
               broadcastMessage({
                 type: "pause",
-                pauseEndsAt: endsAt,
                 pauseStartedAt: Date.now(),
                 pauseInitiator: localPlayerName,
               });
@@ -566,94 +669,15 @@ export default function InGameShell({
         />
       )}
 
-      {/* ── Glass pause overlay — blocks all interaction while paused ── */}
-      {paused &&
-        pauseEndsAt &&
-        (() => {
-          const remaining = Math.max(0, pauseEndsAt - pauseNow);
-          const secs = Math.ceil(remaining / 1000);
-          const mm = Math.floor(secs / 60)
-            .toString()
-            .padStart(2, "0");
-          const ss = (secs % 60).toString().padStart(2, "0");
-          const started = useMatchControl.getState().pauseStartedAt ?? pauseNow;
-          const total = Math.max(1, pauseEndsAt - started);
-          const pct = Math.max(0, Math.min(100, (remaining / total) * 100));
-          const isInitiator =
-            !pauseInitiator || pauseInitiator === localPlayerName;
-          return (
-            <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/80 backdrop-blur-md">
-              {/* Ambient glow behind the card */}
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <div className="w-80 h-80 rounded-full bg-amber-500/10 blur-[100px]" />
-              </div>
-
-              <div className="relative rounded-3xl border border-amber-400/20 bg-slate-900/95 p-8 sm:p-10 shadow-2xl shadow-amber-500/10 max-w-sm w-full mx-4">
-                <div className="pointer-events-none absolute inset-0 rounded-3xl bg-gradient-to-b from-white/[0.04] to-transparent" />
-
-                <div className="relative flex flex-col items-center gap-5">
-                  {/* Pause icon */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-5 h-14 sm:w-6 sm:h-16 rounded-md bg-amber-400 shadow-lg shadow-amber-400/30" />
-                    <div className="w-5 h-14 sm:w-6 sm:h-16 rounded-md bg-amber-400 shadow-lg shadow-amber-400/30" />
-                  </div>
-
-                  <div className="text-amber-300 text-lg sm:text-xl font-bold uppercase tracking-[0.2em]">
-                    Match Paused
-                  </div>
-
-                  {pauseInitiator && (
-                    <div className="text-sm text-amber-200/60">
-                      Paused by{" "}
-                      <span className="font-semibold text-amber-200/90">
-                        {pauseInitiator}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Big countdown */}
-                  <div className="font-mono text-6xl sm:text-7xl font-black text-white tabular-nums leading-none">
-                    {mm}:{ss}
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-300"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-
-                  <div className="text-[10px] sm:text-xs text-amber-200/40 uppercase tracking-wider">
-                    Resuming when timer expires
-                  </div>
-
-                  {isInitiator ? (
-                    <button
-                      className="mt-1 px-8 py-3 rounded-2xl text-base font-bold bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/30 shadow-lg shadow-emerald-500/20 transition-all"
-                      onClick={() => {
-                        setPaused(false, null);
-                        try {
-                          broadcastMessage({ type: "unpause" });
-                        } catch {}
-                      }}
-                    >
-                      ▶ Resume Match
-                    </button>
-                  ) : (
-                    <div className="mt-1 text-sm text-amber-200/50 italic">
-                      Only{" "}
-                      <span className="font-semibold text-amber-200/80">
-                        {pauseInitiator}
-                      </span>{" "}
-                      can resume
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })()}
+      <PauseOverlay
+        localPlayerName={localPlayerName}
+        onResume={() => {
+          setPaused(false, null);
+          try {
+            broadcastMessage({ type: "unpause" });
+          } catch {}
+        }}
+      />
     </div>
   );
 }

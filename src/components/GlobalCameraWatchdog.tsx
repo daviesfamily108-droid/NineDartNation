@@ -1,11 +1,11 @@
 import { useEffect, useRef } from "react";
-import { useUserSettings } from "../store/userSettings";
-import { useCameraSession } from "../store/cameraSession";
+import { useUserSettings } from "../store/userSettings.js";
+import { useCameraSession } from "../store/cameraSession.js";
 import {
   dispatchCameraRecovery,
   type CameraRecoveryReason,
-} from "../utils/cameraRecovery";
-import { dispatchCameraRecoveryUi } from "../utils/cameraRecoveryEvents";
+} from "../utils/cameraRecovery.js";
+import { dispatchCameraRecoveryUi } from "../utils/cameraRecoveryEvents.js";
 
 /**
  * GlobalCameraWatchdog

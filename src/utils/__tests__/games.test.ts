@@ -3,7 +3,7 @@
   getModeOptionsForGame,
   getModeValueOptionsForGame,
   labelForMode,
-} from "../games";
+} from "../games.js";
 
 describe("games mappings", () => {
   test("X01 start options include 301/501/701", () => {

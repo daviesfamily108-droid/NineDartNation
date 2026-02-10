@@ -1,5 +1,5 @@
 ﻿import { create } from "zustand";
-import type { Ring } from "../utils/scoring";
+import type { Ring } from "../utils/scoring.js";
 
 export type PendingEntry = {
   label: string;

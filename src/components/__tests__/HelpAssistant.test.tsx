@@ -7,11 +7,11 @@ import {
   waitFor,
   act,
 } from "@testing-library/react";
-import HelpAssistant from "../HelpAssistant";
+import HelpAssistant from "../HelpAssistant.js";
 import { vi, describe, it, beforeEach, expect } from "vitest";
 
 // Import the real module and spy on apiFetch so the import resolver works in ESM
-import * as api from "../../utils/api";
+import * as api from "../../utils/api.js";
 
 // Mock WS provider (no-op)
 vi.mock("../WSProvider", () => ({

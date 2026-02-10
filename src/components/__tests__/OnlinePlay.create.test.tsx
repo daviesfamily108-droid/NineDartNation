@@ -21,7 +21,7 @@ vi.mock("../WSProvider", () => ({
   }),
 }));
 import OnlinePlay from "../OnlinePlay.clean";
-import { useMatch } from "../../store/match";
+import { useMatch } from "../../store/match.js";
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 
 describe("OnlinePlay create modal", () => {

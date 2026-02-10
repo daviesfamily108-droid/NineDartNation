@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect } from "vitest";
-import { getTabs } from "../Sidebar";
+import { getTabs } from "../Sidebar.js";
 
 describe("Sidebar premium tab visibility", () => {
   it("shows PREMIUM tab for users without subscription", () => {

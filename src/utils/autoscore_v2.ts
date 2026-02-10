@@ -1,9 +1,9 @@
-﻿import type { Homography, Point } from "./vision";
+﻿import type { Homography, Point } from "./vision.js";
 import {
   imageToBoard,
   scoreAtBoardPointTheta,
   scoreAtBoardPoint,
-} from "./vision";
+} from "./vision.js";
 
 export type AutoscoreV2Config = {
   minConfidence?: number; // default 0.8

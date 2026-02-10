@@ -1,9 +1,9 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useToast } from "../store/toast";
-import { useMessages } from "../store/messages";
-import { censorProfanity } from "../utils/profanity";
-import TabPills from "./ui/TabPills";
-import { labelForMode } from "../utils/games";
+import { useToast } from "../store/toast.js";
+import { useMessages } from "../store/messages.js";
+import { censorProfanity } from "../utils/profanity.js";
+import TabPills from "./ui/TabPills.js";
+import { labelForMode } from "../utils/games.js";
 
 type Friend = {
   email: string;

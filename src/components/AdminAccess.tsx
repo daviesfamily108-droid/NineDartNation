@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
-import { useToast } from "../store/toast";
-import { getApiBaseUrl } from "../utils/api";
+import { useToast } from "../store/toast.js";
+import { getApiBaseUrl } from "../utils/api.js";
 
 export default function AdminAccess({ user }: { user?: any }) {
   const [subscription, setSubscription] = useState<any>(null);

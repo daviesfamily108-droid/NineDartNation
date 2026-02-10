@@ -6,13 +6,13 @@ import React, {
   useMemo,
   CSSProperties,
 } from "react";
-import { useCameraSession, CameraStreamMode } from "../store/cameraSession";
-import { useUserSettings } from "../store/userSettings";
-import { apiFetch } from "../utils/api";
-import { getPreferredWsUrl } from "../utils/ws";
-import { ensureVideoPlays } from "../utils/ensureVideoPlays";
+import { useCameraSession, CameraStreamMode } from "../store/cameraSession.js";
+import { useUserSettings } from "../store/userSettings.js";
+import { apiFetch } from "../utils/api.js";
+import { getPreferredWsUrl } from "../utils/ws.js";
+import { ensureVideoPlays } from "../utils/ensureVideoPlays.js";
 import { Camera, Smartphone } from "lucide-react";
-import { dinfo } from "../utils/logger";
+import { dinfo } from "../utils/logger.js";
 
 function clsx(...args: any[]) {
   return args.filter(Boolean).join(" ");

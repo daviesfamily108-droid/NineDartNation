@@ -1,8 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 import { render } from "@testing-library/react";
-import GlobalCameraWatchdog from "../GlobalCameraWatchdog";
-import { NDN_CAMERA_RECOVERY_EVENT } from "../../utils/cameraRecoveryEvents";
+import GlobalCameraWatchdog from "../GlobalCameraWatchdog.js";
+import { NDN_CAMERA_RECOVERY_EVENT } from "../../utils/cameraRecoveryEvents.js";
 
 // The watchdog now delegates recovery dispatch to a helper; mock it so we can assert behavior.
 vi.mock("../../utils/cameraRecovery", () => {
@@ -46,7 +46,7 @@ vi.mock("../../store/cameraSession", () => {
   };
 });
 
-const camMod = await import("../../store/cameraSession");
+const camMod = await import("../../store/cameraSession.js");
 
 describe("GlobalCameraWatchdog", () => {
   beforeEach(() => {
@@ -59,7 +59,7 @@ describe("GlobalCameraWatchdog", () => {
 
   it("dispatches recovery when video stalls", async () => {
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
-    const recMod = await import("../../utils/cameraRecovery");
+    const recMod = await import("../../utils/cameraRecovery.js");
     const rec = (recMod as any).dispatchCameraRecovery as ReturnType<
       typeof vi.fn
     >;

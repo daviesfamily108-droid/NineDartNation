@@ -18,21 +18,22 @@ import React, {
   useImperativeHandle,
 } from "react";
 import type { MutableRefObject } from "react";
-import { dlog } from "../utils/logger";
-import { ensureVideoPlays } from "../utils/ensureVideoPlays";
-import { useUserSettings } from "../store/userSettings";
-import { useCalibration } from "../store/calibration";
-import { useMatch } from "../store/match";
-import { useMatchControl } from "../store/matchControl";
-import { useCameraSession } from "../store/cameraSession";
-import { usePendingVisit } from "../store/pendingVisit";
-import ResizablePanel from "./ui/ResizablePanel";
+import { dlog } from "../utils/logger.js";
+import { ensureVideoPlays } from "../utils/ensureVideoPlays.js";
+import { useUserSettings } from "../store/userSettings.js";
+import { useCalibration } from "../store/calibration.js";
+import { useMatch } from "../store/match.js";
+import { useMatchControl } from "../store/matchControl.js";
+import { useCameraSession } from "../store/cameraSession.js";
+import { usePendingVisit } from "../store/pendingVisit.js";
+import ResizablePanel from "./ui/ResizablePanel.js";
 import FocusLock from "react-focus-lock";
-import PauseQuitModal from "./ui/PauseQuitModal";
-import PauseTimerBadge from "./ui/PauseTimerBadge";
-import { writeMatchSnapshot } from "../utils/matchSync";
-import { broadcastMessage } from "../utils/broadcast";
-import { sayScore } from "../utils/checkout";
+import PauseQuitModal from "./ui/PauseQuitModal.js";
+import PauseTimerBadge from "./ui/PauseTimerBadge.js";
+import PauseOverlay from "./ui/PauseOverlay.js";
+import { writeMatchSnapshot } from "../utils/matchSync.js";
+import { broadcastMessage } from "../utils/broadcast.js";
+import { sayScore } from "../utils/checkout.js";
 
 type Ring = "MISS" | "SINGLE" | "DOUBLE" | "TRIPLE" | "BULL" | "INNER_BULL";
 
@@ -75,18 +76,20 @@ export default forwardRef(function CameraViewManualLocked(
   ) as MutableRefObject<HTMLVideoElement | null>;
 
   // Simple user settings for camera display
-  const cameraAspect = useUserSettings((s) => s.cameraAspect);
-  const cameraFitMode = useUserSettings((s) => s.cameraFitMode);
-  const cameraScale = useUserSettings((s) => s.cameraScale);
-  const cameraEnabled = useUserSettings((s) => s.cameraEnabled);
-  const preferredCameraId = useUserSettings((s) => s.preferredCameraId);
-  const preferredCameraLabel = useUserSettings((s) => s.preferredCameraLabel);
-  const callerEnabled = useUserSettings((s) => s.callerEnabled);
-  const speakCheckoutOnly = useUserSettings((s) => s.speakCheckoutOnly);
-  const callerVoice = useUserSettings((s) => s.callerVoice);
-  const callerVolume = useUserSettings((s) => s.callerVolume);
-  const dartTimerEnabled = useUserSettings((s) => s.dartTimerEnabled);
-  const dartTimerSeconds = useUserSettings((s) => s.dartTimerSeconds) || 10;
+  const cameraAspect = useUserSettings((s: any) => s.cameraAspect);
+  const cameraFitMode = useUserSettings((s: any) => s.cameraFitMode);
+  const cameraScale = useUserSettings((s: any) => s.cameraScale);
+  const cameraEnabled = useUserSettings((s: any) => s.cameraEnabled);
+  const preferredCameraId = useUserSettings((s: any) => s.preferredCameraId);
+  const preferredCameraLabel = useUserSettings(
+    (s: any) => s.preferredCameraLabel,
+  );
+  const callerEnabled = useUserSettings((s: any) => s.callerEnabled);
+  const speakCheckoutOnly = useUserSettings((s: any) => s.speakCheckoutOnly);
+  const callerVoice = useUserSettings((s: any) => s.callerVoice);
+  const callerVolume = useUserSettings((s: any) => s.callerVolume);
+  const dartTimerEnabled = useUserSettings((s: any) => s.dartTimerEnabled);
+  const dartTimerSeconds = useUserSettings((s: any) => s.dartTimerSeconds) || 10;
 
   // Actions
   const setCameraEnabled = useUserSettings.getState().setCameraEnabled;
@@ -107,8 +110,8 @@ export default forwardRef(function CameraViewManualLocked(
   const [streaming, setStreaming] = useState(false);
   const [cameraStarting, setCameraStarting] = useState(false);
   const cameraSession = useCameraSession();
-  const matchState = useMatch((s) => s);
-  const paused = useMatchControl((s) => s.paused);
+  const matchState = useMatch((s: any) => s);
+  const paused = useMatchControl((s: any) => s.paused);
   const inProgress = (matchState as any)?.inProgress;
 
   // Simple pending visit tracking
@@ -118,10 +121,11 @@ export default forwardRef(function CameraViewManualLocked(
     Array<{ label: string; value: number; ring: Ring }>
   >([]);
   const [showQuitPause, setShowQuitPause] = useState(false);
+  const localPlayerName = useUserSettings((s: any) => s.user?.username);
   const [dartTimeLeft, setDartTimeLeft] = useState<number | null>(null);
   const timerRef = useRef<number | null>(null);
 
-  const setVisit = usePendingVisit((s) => s.setVisit);
+  const setVisit = usePendingVisit((s: any) => s.setVisit);
 
   // Sync pending visit to global store
   useEffect(() => {
@@ -174,8 +178,8 @@ export default forwardRef(function CameraViewManualLocked(
 
   // Match state helpers
   const currentPlayerId = matchState.players[matchState.currentPlayerIdx]?.id;
-  const addVisit = useMatch((s) => s.addVisit);
-  const endLeg = useMatch((s) => s.endLeg);
+  const addVisit = useMatch((s: any) => s.addVisit);
+  const endLeg = useMatch((s: any) => s.endLeg);
 
   const getCurrentRemaining = useCallback((): number => {
     const s = matchState;
@@ -629,14 +633,17 @@ export default forwardRef(function CameraViewManualLocked(
                     } catch (e) {}
                     setShowQuitPause(false);
                   }}
-                  onPause={(minutes) => {
+                  onPause={(minutes: number) => {
                     const endsAt = Date.now() + minutes * 60 * 1000;
                     try {
-                      useMatchControl.getState().setPaused(true, endsAt);
+                      useMatchControl
+                        .getState()
+                        .setPaused(true, endsAt, localPlayerName || null);
                       broadcastMessage({
                         type: "pause",
                         pauseEndsAt: endsAt,
                         pauseStartedAt: Date.now(),
+                        pauseInitiator: localPlayerName || null,
                       });
                     } catch (e) {}
                     setShowQuitPause(false);
@@ -645,6 +652,15 @@ export default forwardRef(function CameraViewManualLocked(
               )}
             </>
           )}
+          <PauseOverlay
+            localPlayerName={localPlayerName}
+            onResume={() => {
+              useMatchControl.getState().setPaused(false, null);
+              try {
+                broadcastMessage({ type: "unpause" });
+              } catch {}
+            }}
+          />
         </div>
       </div>
 

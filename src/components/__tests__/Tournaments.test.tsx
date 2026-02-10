@@ -8,8 +8,8 @@ import {
   act,
   waitFor,
 } from "@testing-library/react";
-import Tournaments from "../Tournaments";
-import { useMatch } from "../../store/match";
+import Tournaments from "../Tournaments.js";
+import { useMatch } from "../../store/match.js";
 import { vi, describe, test, expect, beforeEach, afterEach } from "vitest";
 
 describe("Tournaments", () => {

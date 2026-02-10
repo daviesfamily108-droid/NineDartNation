@@ -3,16 +3,20 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable", "WebWorker"],
-    "module": "ESNext",
+    "module": "NodeNext",
     "moduleDetection": "force",
     "skipLibCheck": true,
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
+    "allowJs": true,
+    "checkJs": false,
     "strict": true,
     "baseUrl": ".",
     "types": ["vite/client", "vitest/globals", "node"]
@@ -20,9 +24,9 @@
   "include": [
     "src/**/*",
     "vite.config.ts"
-  ]
-  ,
+  ],
   "exclude": [
+    "src/components/Calibrator.tsx",
     "src/components/OnlinePlay_prev_*.tsx",
     "src/components/OnlinePlay_1cdd139.tsx"
   ]

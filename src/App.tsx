@@ -5,23 +5,22 @@ import React, {
   useState,
   Suspense,
 } from "react";
-import { Sidebar, TabKey, buildTabList } from "./components/Sidebar";
-import { useIsAdmin } from "./utils/admin";
-const Home = React.lazy(() => import("./components/Home"));
-import ScrollFade from "./components/ScrollFade";
-import Calibrator from "./components/Calibrator";
+import { Sidebar, TabKey, buildTabList } from "./components/Sidebar.js";
+import { useIsAdmin } from "./utils/admin.js";
+const Home = React.lazy(() => import("./components/Home.js"));
+import ScrollFade from "./components/ScrollFade.js";
 // Lazy-load CameraView to avoid importing a large camera module at app
 // bootstrap time. This prevents the component module from executing during
 // initial module evaluation which can avoid TDZ issues when other modules
 // import shared stores during startup.
-const CameraView = React.lazy(() => import("./components/CameraView"));
-const OfflinePlay = React.lazy(() => import("./components/OfflinePlay"));
-const Friends = React.lazy(() => import("./components/Friends"));
-import Toaster from "./components/Toaster";
-import AdminDashboard from "./components/AdminDashboard";
-import SettingsPanel from "./components/SettingsPanel";
-import Auth from "./components/Auth";
-import { ThemeProvider } from "./components/ThemeContext";
+const CameraView = React.lazy(() => import("./components/CameraView.js"));
+const OfflinePlay = React.lazy(() => import("./components/OfflinePlay.js"));
+const Friends = React.lazy(() => import("./components/Friends.js"));
+import Toaster from "./components/Toaster.js";
+import AdminDashboard from "./components/AdminDashboard.js";
+import SettingsPanel from "./components/SettingsPanel.js";
+import Auth from "./components/Auth.js";
+import { ThemeProvider } from "./components/ThemeContext.js";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -37,39 +36,39 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useWS } from "./components/WSProvider";
+import { useWS } from "./components/WSProvider.js";
 import {
   getMonthlyAvg3,
   getAllTimeAvg,
   syncStatsFromServer,
-} from "./store/profileStats";
-import { useMatch } from "./store/match";
-import { useUserSettings } from "./store/userSettings";
-import { useCalibration } from "./store/calibration";
-import { apiFetch, getApiBaseUrl } from "./utils/api";
-import { DISCORD_INVITE_URL } from "./utils/config";
+} from "./store/profileStats.js";
+import { useMatch } from "./store/match.js";
+import { useUserSettings } from "./store/userSettings.js";
+import { apiFetch, getApiBaseUrl } from "./utils/api.js";
+import { DISCORD_INVITE_URL } from "./utils/config.js";
 import "./styles/premium.css";
 import "./styles/themes.css";
 const OnlinePlay = React.lazy(() => import("./components/OnlinePlay.clean"));
-const StatsPanel = React.lazy(() => import("./components/StatsPanel"));
-const Tournaments = React.lazy(() => import("./components/Tournaments"));
-const AdminAccess = React.lazy(() => import("./components/AdminAccess"));
+const StatsPanel = React.lazy(() => import("./components/StatsPanel.js"));
+const Tournaments = React.lazy(() => import("./components/Tournaments.js"));
+const AdminAccess = React.lazy(() => import("./components/AdminAccess.js"));
+const CameraSetup = React.lazy(() => import("./components/CameraSetup.js"));
 // AdminAccess already imported above
-import Drawer from "./components/ui/Drawer";
-const OpsDashboard = React.lazy(() => import("./components/OpsDashboard"));
-import HelpAssistant from "./components/HelpAssistant";
-import GlobalCameraLogger from "./components/GlobalCameraLogger";
-import GlobalPhoneVideoSink from "./components/GlobalPhoneVideoSink";
-import GlobalCameraWatchdog from "./components/GlobalCameraWatchdog";
-import GlobalCameraRecoveryToasts from "./components/GlobalCameraRecoveryToasts";
-import InstallPicker from "./components/InstallPicker";
-import AddToHomeButton from "./components/AddToHomeButton";
-import Footer from "./components/Footer";
-import AutoPauseManager from "./components/AutoPauseManager";
-import MatchPage from "./components/MatchPage";
-import { useToast } from "./store/toast";
-import { NDN_OPEN_NOTIFICATIONS_EVENT } from "./utils/events";
-import WSConnectionDot from "./components/WSConnectionDot";
+import Drawer from "./components/ui/Drawer.js";
+const OpsDashboard = React.lazy(() => import("./components/OpsDashboard.js"));
+import HelpAssistant from "./components/HelpAssistant.js";
+import GlobalCameraLogger from "./components/GlobalCameraLogger.js";
+import GlobalPhoneVideoSink from "./components/GlobalPhoneVideoSink.js";
+import GlobalCameraWatchdog from "./components/GlobalCameraWatchdog.js";
+import GlobalCameraRecoveryToasts from "./components/GlobalCameraRecoveryToasts.js";
+import InstallPicker from "./components/InstallPicker.js";
+import AddToHomeButton from "./components/AddToHomeButton.js";
+import Footer from "./components/Footer.js";
+import AutoPauseManager from "./components/AutoPauseManager.js";
+import MatchPage from "./components/MatchPage.js";
+import { useToast } from "./store/toast.js";
+import { NDN_OPEN_NOTIFICATIONS_EVENT } from "./utils/events.js";
+import WSConnectionDot from "./components/WSConnectionDot.js";
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -120,29 +119,7 @@ export default function App() {
   const toast = useToast();
   const normalizedDelta = Math.abs(avgDelta) >= 0.05 ? avgDelta : 0;
   const API_URL = getApiBaseUrl();
-  const {
-    locked: calibLocked,
-    H: calibH,
-    errorPx,
-    setCalibration,
-  } = useCalibration();
   const userSettings = useUserSettings();
-
-  // Sync locked state from userSettings to calibration store on app mount
-  useEffect(() => {
-    try {
-      const persistedLocked = userSettings.preferredCameraLocked;
-      if (persistedLocked && calibLocked !== persistedLocked) {
-        setCalibration({ locked: persistedLocked });
-        console.info(
-          "[APP] Synced camera locked state from userSettings:",
-          persistedLocked,
-        );
-      }
-    } catch (e) {
-      console.warn("Failed to sync locked state from userSettings", e);
-    }
-  }, [calibLocked, setCalibration, userSettings.preferredCameraLocked]);
 
   // Globally catch unhandled promise rejections and surface as warnings so the
   // devtools console is less noisy. We still log the reason so developers can
@@ -1286,6 +1263,15 @@ export default function App() {
                   </ScrollFade>
                 </Suspense>
               )}
+              {tab === "camera" && (
+                <Suspense
+                  fallback={<div className="p-4">Loading camera...</div>}
+                >
+                  <ScrollFade className="flex-1 min-h-0">
+                    <CameraSetup />
+                  </ScrollFade>
+                </Suspense>
+              )}
               {tab === "offline" && (
                 <Suspense
                   fallback={<div className="p-4">Loading offline...</div>}
@@ -1295,12 +1281,6 @@ export default function App() {
                   </ScrollFade>
                 </Suspense>
               )}
-              {/* Always keep Calibrator mounted to preserve phone camera stream, but hide when not active */}
-              <div className={tab === "calibrate" ? "" : "hidden"}>
-                <ScrollFade>
-                  <Calibrator />
-                </ScrollFade>
-              </div>
               {tab === "friends" && (
                 <Suspense
                   fallback={<div className="p-4">Loading friends...</div>}

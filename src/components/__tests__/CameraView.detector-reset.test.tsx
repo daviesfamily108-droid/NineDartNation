@@ -1,9 +1,9 @@
 ﻿import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import CameraView from "../CameraView";
-import { useCalibration } from "../../store/calibration";
-import { useMatch } from "../../store/match";
-import { useUserSettings } from "../../store/userSettings";
+import CameraView from "../CameraView.js";
+import { useCalibration } from "../../store/calibration.js";
+import { useMatch } from "../../store/match.js";
+import { useUserSettings } from "../../store/userSettings.js";
 
 // Mock the DartDetector to track if it's being initialized and reset
 let detectorInitCount = 0;

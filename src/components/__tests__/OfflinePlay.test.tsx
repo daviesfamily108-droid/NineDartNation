@@ -7,14 +7,14 @@ import {
   waitFor,
   fireEvent,
 } from "@testing-library/react";
-import OfflinePlay from "../OfflinePlay";
+import OfflinePlay from "../OfflinePlay.js";
 // Mock CameraView to avoid async camera effects in OfflinePlay tests
 vi.mock("../CameraView", () => ({
   default: () => <div data-testid="mock-camera" />,
 }));
-import { useMatch } from "../../store/match";
+import { useMatch } from "../../store/match.js";
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import { formatAvg } from "../../utils/stats";
+import { formatAvg } from "../../utils/stats.js";
 
 describe("OfflinePlay", () => {
   beforeEach(() => {
@@ -101,7 +101,7 @@ describe("OfflinePlay", () => {
     render(<OfflinePlay user={user} />);
     await waitFor(() => screen.getByText(/Start Match/i));
     // Enable camera in settings so the pane can mount
-    const { useUserSettings } = await import("../../store/userSettings");
+    const { useUserSettings } = await import("../../store/userSettings.js");
     act(() => {
       useUserSettings.setState({ cameraEnabled: true });
     });

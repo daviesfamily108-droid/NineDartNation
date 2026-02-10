@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { useMatch } from "../../store/match";
-import { applyVisitCommit } from "../applyVisitCommit";
+import { useMatch } from "../../store/match.js";
+import { applyVisitCommit } from "../applyVisitCommit.js";
 
 describe("applyVisitCommit", () => {
   beforeEach(() => {

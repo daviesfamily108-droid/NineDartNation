@@ -1,7 +1,7 @@
 ﻿import React from "react";
 import { render } from "@testing-library/react";
 import { vi } from "vitest";
-import ThemeProvider, { useTheme } from "../ThemeProvider";
+import ThemeProvider, { useTheme } from "../ThemeProvider.js";
 
 function ReadHtmlAttr() {
   const { theme, auto } = useTheme();

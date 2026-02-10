@@ -1,7 +1,7 @@
-import { useMatch } from "../store/match";
-import { formatAvg } from "../utils/stats";
+import { useMatch } from "../store/match.js";
+import { formatAvg } from "../utils/stats.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import BarChart from "./BarChart";
+import BarChart from "./BarChart.js";
 import {
   getGameModeStats,
   getMonthlyAvg3,
@@ -12,9 +12,9 @@ import {
   getDailyAdjustedAvg,
   getRollingAvg,
   getStatSeries,
-} from "../store/profileStats";
-import { allGames } from "../utils/games";
-import TabPills from "./ui/TabPills";
+} from "../store/profileStats.js";
+import { allGames } from "../utils/games.js";
+import TabPills from "./ui/TabPills.js";
 
 export default function StatsPanel({ user }: { user?: any }) {
   const {
@@ -129,32 +129,39 @@ export default function StatsPanel({ user }: { user?: any }) {
     };
   }, []);
 
-  // Build a score-frequency distribution for the selected family.
-  // For now, we only have X01 in the match store; "other" is a placeholder that would read other game stats when added.
+  // Build a score-frequency distribution for the selected family using bucketed ranges.
+  const scoreBuckets = [
+    { min: 0, max: 25, label: "0-25" },
+    { min: 26, max: 40, label: "26-40" },
+    { min: 41, max: 45, label: "41-45" },
+    { min: 46, max: 55, label: "46-55" },
+    { min: 56, max: 60, label: "56-60" },
+    { min: 61, max: 80, label: "61-80" },
+    { min: 81, max: 99, label: "81-99" },
+    { min: 100, max: 119, label: "100-119" },
+    { min: 120, max: 139, label: "120-139" },
+    { min: 140, max: 159, label: "140-159" },
+    { min: 160, max: 179, label: "160-179" },
+    { min: 180, max: 180, label: "180" },
+  ];
   const dist = useMemo(() => {
-    const freq = new Map<number, number>();
+    const counts = scoreBuckets.map(() => 0);
     if (family === "x01") {
       for (const p of players) {
         for (const leg of p.legs) {
           for (const v of leg.visits) {
             const s = Math.max(0, Math.min(180, v.score));
-            freq.set(s, (freq.get(s) ?? 0) + 1);
+            for (let i = 0; i < scoreBuckets.length; i++) {
+              if (s >= scoreBuckets[i].min && s <= scoreBuckets[i].max) {
+                counts[i]++;
+                break;
+              }
+            }
           }
         }
       }
     }
-    // Convert to sorted array (by score asc) and limit to reasonable width
-    const arr = Array.from(freq.entries()).sort((a, b) => a[0] - b[0]);
-    // If very sparse, still show common x01 bands
-    if (arr.length === 0 && family === "x01") {
-      [0, 26, 41, 60, 81, 100, 120, 140, 160, 180].forEach((k) =>
-        freq.set(k, 0),
-      );
-      return Array.from(freq.entries())
-        .sort((a, b) => a[0] - b[0])
-        .map(([label, value]) => ({ label, value }));
-    }
-    return arr.map(([label, value]) => ({ label, value }));
+    return scoreBuckets.map((b, i) => ({ label: b.label, value: counts[i] }));
   }, [players, family]);
 
   // Build Other Modes dataset: one bar per mode with value = played, label = mode name, and show played/won in label
@@ -264,7 +271,7 @@ export default function StatsPanel({ user }: { user?: any }) {
 
   return (
     <div
-      className="card ndn-game-shell ndn-page ndn-stats-page pb-[290px] overflow-visible"
+      className="card ndn-game-shell ndn-page ndn-stats-page pb-[700px] overflow-visible"
       style={{
         background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
       }}

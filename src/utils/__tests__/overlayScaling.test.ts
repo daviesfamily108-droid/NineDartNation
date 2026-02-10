@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect } from "vitest";
-import { sampleRing, scaleHomography, BoardRadii } from "../vision";
+import { sampleRing, scaleHomography, BoardRadii } from "../vision.js";
 
 describe("Overlay scaling math", () => {
   it("produces identical drawn points whether scaling via overlay preservation or native canvas scaling", () => {

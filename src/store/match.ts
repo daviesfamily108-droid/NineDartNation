@@ -1,6 +1,6 @@
 ﻿import { create } from "zustand";
-import { useAudit } from "./audit";
-import { broadcastMessage } from "../utils/broadcast";
+import { useAudit } from "./audit.js";
+import { broadcastMessage } from "../utils/broadcast.js";
 // Use a dynamic import for profileStats to avoid circular import / TDZ during
 // module initialization. Calling addMatchToAllTime is only needed when a
 // match ends, so lazy-loading is safe and avoids import cycles.
@@ -352,7 +352,7 @@ export const useMatch = create<MatchState & Actions>((set) => ({
         // Persist all-time stats and backfill rolling averages when no
         // per-visit samples were recorded for this match.
         // Use dynamic import to avoid circular import / TDZ issues at module init.
-        import("./profileStats").then((m) => {
+        import("./profileStats.js").then((m) => {
           try {
             m.addMatchToAllTime(newPlayers, { recordSeries: true });
           } catch {}

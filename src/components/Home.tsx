@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useToast } from "../store/toast";
-import { formatAvg } from "../utils/stats";
-import { getAllTime } from "../store/profileStats";
-import { useUserSettings } from "../store/userSettings";
-import ProfilePanel from "./ProfilePanel";
-import { sym } from "../ui/icons";
-import { getApiBaseUrl } from "../utils/api";
-import { dispatchOpenNotifications } from "../utils/events";
+import { useToast } from "../store/toast.js";
+import { formatAvg } from "../utils/stats.js";
+import { getAllTime } from "../store/profileStats.js";
+import { useUserSettings } from "../store/userSettings.js";
+import ProfilePanel from "./ProfilePanel.js";
+import { sym } from "../ui/icons.js";
+import { getApiBaseUrl } from "../utils/api.js";
+import { dispatchOpenNotifications } from "../utils/events.js";
 
 function goTab(tab: string) {
   try {
@@ -375,7 +375,7 @@ export default function Home({ user }: { user?: any }) {
             <ul className="list-disc pl-5 mb-2">
               <li>Choose a game mode and invite friends or play solo.</li>
               <li>Track your stats and progress in the Stats tab.</li>
-              <li>Join the BullseyeDartsLeague for online competition.</li>
+              <li>Join the Bullseye Darts League for online competition.</li>
               <li>Upgrade to PREMIUM for advanced features and modes.</li>
               <li>Need help? Visit the Settings tab for support and tips.</li>
             </ul>

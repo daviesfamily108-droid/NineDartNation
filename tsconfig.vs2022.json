@@ -2,16 +2,24 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": false,
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "allowJs": true,
+    "checkJs": false
   },
   "files": [
     "src/types/tsserver-shims.d.ts",
     "src/types/vs-node16-shims.d.ts"
+  ],
+  "include": [
+    "src/**/*",
+    "vite.config.ts"
   ],
   "exclude": [
     "node_modules",

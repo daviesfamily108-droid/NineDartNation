@@ -6,7 +6,7 @@ import {
   imageToBoard,
   applyHomography,
   type Homography,
-} from "../vision";
+} from "../vision.js";
 
 describe("homography round-trip", () => {
   it("computes homography and round-trips points (small error)", () => {

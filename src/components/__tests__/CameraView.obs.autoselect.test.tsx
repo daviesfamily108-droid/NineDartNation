@@ -140,7 +140,7 @@ describe("CameraView auto-select OBS virtual camera", () => {
     // Wait for the mocked setter to be called with the OBS device
     await waitFor(
       async () => {
-        const { useUserSettings } = await import("../../store/userSettings");
+        const { useUserSettings } = await import("../../store/userSettings.js");
         const spy = useUserSettings.getState().setPreferredCamera as any;
         expect(typeof spy).toBe("function");
         expect(spy.mock?.calls?.length || 0).toBeGreaterThan(0);

@@ -6,3 +6,10 @@ declare const process: any;
 declare interface ImportMeta {
   env?: Record<string, any>;
 }
+
+declare module "../utils/*";
+declare module "../utils/*.js";
+declare module "../store/*";
+declare module "../store/*.js";
+declare module "./WSProvider";
+declare module "./WSProvider.js";

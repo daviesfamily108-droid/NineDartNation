@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { scoreDarts } from "../dartDetection";
-import { BoardRadii, SectorOrder } from "../vision";
+import { scoreDarts } from "../dartDetection.js";
+import { BoardRadii, SectorOrder } from "../vision.js";
 
 describe("scoreDarts", () => {
   it("scores using board->image homography and orients sectors via theta", () => {

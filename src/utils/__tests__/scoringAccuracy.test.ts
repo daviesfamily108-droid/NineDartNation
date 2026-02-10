@@ -1,4 +1,4 @@
-import { createScoringValidator } from "../scoringAccuracy";
+import { createScoringValidator } from "../scoringAccuracy.js";
 
 describe("ScoringAccuracyValidator metrics", () => {
   it("calculates successRate and averages correctly", () => {

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Undo2 } from "lucide-react";
-import ScoreNumberPad from "./ui/ScoreNumberPad";
+import ScoreNumberPad from "./ui/ScoreNumberPad.js";
 
 interface MatchControlsProps {
   inProgress?: boolean;

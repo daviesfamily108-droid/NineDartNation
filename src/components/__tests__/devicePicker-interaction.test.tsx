@@ -39,9 +39,9 @@ describe("DevicePicker interaction guard", () => {
 
   it("prevents an external auto-lock from bouncing the user unlock action", async () => {
     // Import the store and component after localStorage mock is present
-    const userSettingsMod = await import("../../store/userSettings");
+    const userSettingsMod = await import("../../store/userSettings.js");
     const { useUserSettings } = userSettingsMod;
-    const { default: Calibrator } = await import("../Calibrator");
+    const { default: Calibrator } = await import("../Calibrator.js");
 
     // Ensure initial locked state so the button shows "Unlock"
     act(() => {
@@ -121,9 +121,9 @@ describe("DevicePicker interaction guard", () => {
   });
 
   it("select remains open and not closed when outside mousedown happens immediately after pointerdown", async () => {
-    const userSettingsMod = await import("../../store/userSettings");
+    const userSettingsMod = await import("../../store/userSettings.js");
     const { useUserSettings } = userSettingsMod;
-    const { default: Calibrator } = await import("../Calibrator");
+    const { default: Calibrator } = await import("../Calibrator.js");
     const r = render(<Calibrator />);
     const pickerRoot = r.getByTestId("device-picker-root");
     const toggle = r.getByTestId("device-picker-toggle");

@@ -1,10 +1,10 @@
-﻿import { useMatch } from "../store/match";
-import { formatAvg } from "../utils/stats";
+﻿import { useMatch } from "../store/match.js";
+import { formatAvg } from "../utils/stats.js";
 // Icons not used directly in Scoreboard; MatchControls has its own icons
-import MatchControls from "./MatchControls";
-import { usePendingVisit } from "../store/pendingVisit";
-import type { UnifiedMatchActions } from "../logic/matchActions";
-import ResizableModal from "./ui/ResizableModal";
+import MatchControls from "./MatchControls.js";
+import { usePendingVisit } from "../store/pendingVisit.js";
+import type { UnifiedMatchActions } from "../logic/matchActions.js";
+import ResizableModal from "./ui/ResizableModal.js";
 
 export default function Scoreboard({
   matchActions,

@@ -24,7 +24,7 @@ vi.mock("../WSProvider", () => ({
   }),
 }));
 
-import HelpdeskChat from "../HelpdeskChat";
+import HelpdeskChat from "../HelpdeskChat.js";
 
 describe("HelpdeskChat behavior", () => {
   beforeEach(() => {

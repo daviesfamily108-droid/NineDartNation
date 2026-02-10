@@ -3,16 +3,16 @@ import {
   getModeOptionsForGame,
   labelForMode,
   type ModeKey,
-} from "../utils/games";
-import { useMatch } from "../store/match";
-import MatchCard from "./MatchCard";
-import MatchStartShowcase from "./ui/MatchStartShowcase";
-import { useToast } from "../store/toast";
-import { useWS } from "./WSProvider";
-import { apiFetch } from "../utils/api";
-import { useUserSettings } from "../store/userSettings";
-import { launchInPlayDemo } from "../utils/inPlayDemo";
-import { openMatchWindow } from "../utils/matchWindow";
+} from "../utils/games.js";
+import { useMatch } from "../store/match.js";
+import MatchCard from "./MatchCard.js";
+import MatchStartShowcase from "./ui/MatchStartShowcase.js";
+import { useToast } from "../store/toast.js";
+import { useWS } from "./WSProvider.js";
+import { apiFetch } from "../utils/api.js";
+import { useUserSettings } from "../store/userSettings.js";
+import { launchInPlayDemo } from "../utils/inPlayDemo.js";
+import { openMatchWindow } from "../utils/matchWindow.js";
 
 type Tournament = {
   id: string;
@@ -1161,7 +1161,7 @@ export default function Tournaments({ user }: { user: any }) {
                       }
                     >
                       {getModeOptionsForGame(
-                        form.game as import("../utils/games").GameKey,
+                        form.game as import("../utils/games.js").GameKey,
                       ).map((o) => (
                         <option key={String(o)} value={String(o)}>
                           {labelForMode(String(o))}

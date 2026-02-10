@@ -67,7 +67,7 @@ vi.mock("../../../store/cameraSession", () => ({
     },
   ),
 }));
-import MatchStartShowcase from "../MatchStartShowcase";
+import MatchStartShowcase from "../MatchStartShowcase.js";
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
 describe("MatchStartShowcase", () => {

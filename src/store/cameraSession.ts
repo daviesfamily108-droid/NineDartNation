@@ -1,5 +1,5 @@
 ﻿import { create } from "zustand";
-import { dlog } from "../utils/logger";
+import { dlog } from "../utils/logger.js";
 import { persist, createJSONStorage } from "zustand/middleware";
 
 const TEST_MODE =

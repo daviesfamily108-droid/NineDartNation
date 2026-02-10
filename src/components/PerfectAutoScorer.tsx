@@ -13,10 +13,10 @@
  */
 
 import { useCallback, useRef, useState } from "react";
-import { detectDarts, scoreDarts } from "../utils/dartDetection";
-import { detectBoard } from "../utils/boardDetection";
-import type { DetectedDart } from "../utils/dartDetection";
-import type { BoardDetectionResult } from "../utils/boardDetection";
+import { detectDarts, scoreDarts } from "../utils/dartDetection.js";
+import { detectBoard } from "../utils/boardDetection.js";
+import type { DetectedDart } from "../utils/dartDetection.js";
+import type { BoardDetectionResult } from "../utils/boardDetection.js";
 
 export interface PerfectAutoScorerProps {
   videoRef: React.RefObject<HTMLVideoElement>;

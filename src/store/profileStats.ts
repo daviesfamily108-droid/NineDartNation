@@ -1,6 +1,6 @@
-import { broadcastMessage } from "../utils/broadcast";
-import { resolveApiUrl } from "../utils/api";
-import type { Player, Leg } from "./match";
+import { broadcastMessage } from "../utils/broadcast.js";
+import { resolveApiUrl } from "../utils/api.js";
+import type { Player, Leg } from "./match.js";
 
 export type AllTimeTotals = {
   darts: number;

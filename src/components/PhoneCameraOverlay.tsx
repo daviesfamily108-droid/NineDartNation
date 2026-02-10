@@ -1,11 +1,11 @@
-﻿import React, { useEffect, useRef, useState } from "react";
-import { useCameraSession } from "../store/cameraSession";
+import React, { useEffect, useRef, useState } from "react";
+import { useCameraSession } from "../store/cameraSession.js";
 
 /**
  * PhoneCameraOverlay - Displays the phone camera stream in a floating preview
  * when user has paired phone camera and is navigated to Online/Offline/Tournament modes
  *
- * Shows a draggable, resizable canvas that mirrors frames from the Calibrator's video element
+ * Shows a draggable, resizable canvas that mirrors frames from the camera video element
  * Includes refresh button to force canvas redraw and reconnect button to restart camera
  */
 export default function PhoneCameraOverlay() {
@@ -218,8 +218,7 @@ export default function PhoneCameraOverlay() {
   const handleReconnect = () => {
     setIsReconnecting(true);
     try {
-      // Signal Calibrator to restart phone pairing
-      // Dispatch event that Calibrator can listen to
+      // Signal camera pairing to restart
       window.dispatchEvent(
         new CustomEvent("ndn:phone-camera-reconnect", {
           detail: { timestamp: Date.now() },

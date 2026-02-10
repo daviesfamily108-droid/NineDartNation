@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
-import { suggestCheckouts } from "../../utils/checkout";
-import { useUserSettings } from "../../store/userSettings";
+import { suggestCheckouts } from "../../utils/checkout.js";
+import { useUserSettings } from "../../store/userSettings.js";
 
 type Row = {
   side: "Away" | "Home";

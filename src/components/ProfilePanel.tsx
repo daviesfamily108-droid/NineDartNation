@@ -24,15 +24,15 @@ import {
   Percent,
   Hash,
 } from "lucide-react";
-import { useUserSettings } from "../store/userSettings";
+import { useUserSettings } from "../store/userSettings.js";
 import {
   getAllTime,
   getRollingAvg,
   getAllTimeAvg,
   getGameModeStats,
-} from "../store/profileStats";
-import { formatAvg } from "../utils/stats";
-import { apiFetch } from "../utils/api";
+} from "../store/profileStats.js";
+import { formatAvg } from "../utils/stats.js";
+import { apiFetch } from "../utils/api.js";
 
 // Section component - defined outside to avoid recreation on every render
 const Section = ({

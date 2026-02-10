@@ -38,7 +38,7 @@ beforeAll(() => {
 
 describe("Calibrator mode pills", () => {
   it("clicking the mode pills updates mode and localStorage", async () => {
-    const { default: Calibrator } = await import("../Calibrator");
+    const { default: Calibrator } = await import("../Calibrator.js");
     const r = render(<Calibrator />);
     const localBtn = r.getByTestId("mode-local");
     const phoneBtn = r.getByTestId("mode-phone");

@@ -42,7 +42,7 @@ vi.mock("../CameraView", () => ({
 }));
 
 import OnlinePlay from "../OnlinePlay.clean";
-import { useMatch } from "../../store/match";
+import { useMatch } from "../../store/match.js";
 
 describe("OnlinePlay focus mode", () => {
   beforeEach(() => {
@@ -59,7 +59,7 @@ describe("OnlinePlay focus mode", () => {
 
   test("toggles focus mode and hides created-by details", async () => {
     render(<OnlinePlay user={{ username: "Alice" }} />);
-    const useWS = (await import("../WSProvider")).useWS as any;
+    const useWS = (await import("../WSProvider.js")).useWS as any;
     act(() => {
       useWS().__emit({
         type: "matches",
@@ -100,7 +100,7 @@ describe("OnlinePlay focus mode", () => {
 
   test("clicking outside matches grid exits focus mode", async () => {
     render(<OnlinePlay user={{ username: "Alice" }} />);
-    const useWS = (await import("../WSProvider")).useWS as any;
+    const useWS = (await import("../WSProvider.js")).useWS as any;
     act(() => {
       useWS().__emit({
         type: "matches",
@@ -152,7 +152,7 @@ describe("OnlinePlay focus mode", () => {
 
   test("match card shows avatar initials and Join button in layout", async () => {
     render(<OnlinePlay user={{ username: "Alice" }} />);
-    const useWS = (await import("../WSProvider")).useWS as any;
+    const useWS = (await import("../WSProvider.js")).useWS as any;
     act(() => {
       useWS().__emit({
         type: "matches",

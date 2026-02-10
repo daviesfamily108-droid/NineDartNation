@@ -1,5 +1,5 @@
 ﻿import { useRef, useEffect, useState } from "react";
-import { useUserSettings } from "../store/userSettings";
+import { useUserSettings } from "../store/userSettings.js";
 import { X } from "lucide-react";
 
 interface FloatingCameraPreviewProps {

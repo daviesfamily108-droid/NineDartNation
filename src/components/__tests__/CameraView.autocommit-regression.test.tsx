@@ -101,7 +101,7 @@ vi.mock("../../utils/ensureVideoPlays", () => ({
 
 // IMPORTANT: Use a dynamic import so mocks are applied before the module loads.
 async function loadCameraView() {
-  const mod = await import("../CameraView");
+  const mod = await import("../CameraView.js");
   return mod.default;
 }
 
@@ -116,7 +116,7 @@ describe("CameraView autocommit regression", () => {
   it('does not immediately callAddVisit when cameraAutoCommit="camera" in wait-for-clear mode', async () => {
     const CameraView = await loadCameraView();
 
-    const { useMatch } = await import("../../store/match");
+    const { useMatch } = await import("../../store/match.js");
     const match = (useMatch as any)();
 
     render(<CameraView cameraAutoCommit="camera" />);
@@ -129,7 +129,7 @@ describe("CameraView autocommit regression", () => {
   it('does not immediately callAddVisit when cameraAutoCommit="parent" unless immediateAutoCommit is true', async () => {
     const CameraView = await loadCameraView();
 
-    const { useMatch } = await import("../../store/match");
+    const { useMatch } = await import("../../store/match.js");
     const match = (useMatch as any)();
 
     render(

@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect } from "vitest";
-import { broadcastMessage, subscribeMatchSync } from "../broadcast";
+import { broadcastMessage, subscribeMatchSync } from "../broadcast.js";
 
 describe("broadcast helpers", () => {
   it("subscribe receives messages from broadcastMessage via BroadcastChannel", async () => {

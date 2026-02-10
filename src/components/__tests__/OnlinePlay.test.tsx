@@ -39,7 +39,7 @@ vi.mock("../CameraView", () => ({
   default: () => <div data-testid="mock-camera" />,
 }));
 import OnlinePlay from "../OnlinePlay.clean";
-import { useMatch } from "../../store/match";
+import { useMatch } from "../../store/match.js";
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 
 describe("OnlinePlay", () => {
@@ -81,7 +81,7 @@ describe("OnlinePlay", () => {
     const user = { email: "a@example.com", username: "Alice" };
     render(<OnlinePlay user={user} />);
     await waitFor(() => screen.getByText(/Create Match \+/i));
-    const useWS = (await import("../WSProvider")).useWS as any;
+    const useWS = (await import("../WSProvider.js")).useWS as any;
     // Simulate match prestart push from server with short time so prestart choice UI appears
     act(() => {
       // Simulate joined / presence messages so client can map IDs to names
@@ -173,7 +173,7 @@ describe("OnlinePlay", () => {
     const user = { email: "a@example.com", username: "Alice" };
     render(<OnlinePlay user={user} />);
     await waitFor(() => screen.getByText(/Create Match \+/i));
-    const useWS = (await import("../WSProvider")).useWS as any;
+    const useWS = (await import("../WSProvider.js")).useWS as any;
     // Simulate server 'matches' list with a world match that has a roomName
     act(() => {
       useWS().__emit({
@@ -201,7 +201,7 @@ describe("OnlinePlay", () => {
     const user = { email: "a@example.com", username: "Alice" };
     render(<OnlinePlay user={user} />);
     await waitFor(() => screen.getByText(/Create Match \+/i));
-    const useWS = (await import("../WSProvider")).useWS as any;
+    const useWS = (await import("../WSProvider.js")).useWS as any;
     // Create 13 matches to exceed a 3x4 capacity (12), ensuring grid shows many items
     const matches = Array.from({ length: 13 }).map((_, idx) => ({
       id: `m-${idx}`,

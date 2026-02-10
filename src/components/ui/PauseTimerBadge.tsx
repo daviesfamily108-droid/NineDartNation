@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from "react";
-import { useMatchControl } from "../../store/matchControl";
+import { useMatchControl } from "../../store/matchControl.js";
 
 function fmt(ms: number) {
   const s = Math.max(0, Math.floor(ms / 1000));

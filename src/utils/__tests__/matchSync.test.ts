@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect, beforeEach } from "vitest";
-import { writeMatchSnapshot, readMatchSnapshot } from "../matchSync";
+import { writeMatchSnapshot, readMatchSnapshot } from "../matchSync.js";
 
 // Mock localStorage for Vitest jsdom environment will have one, so just ensure we clear it
 beforeEach(() => {

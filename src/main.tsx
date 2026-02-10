@@ -4,13 +4,13 @@ import "./index.css";
 // Mobile-only overrides loaded after the main stylesheet to strongly
 // restyle the app on small screens without touching desktop styles.
 import "./styles/mobile-overrides.css";
-import App from "./App";
-import ResetPassword from "./components/ResetPassword";
-import { WSProvider } from "./components/WSProvider";
-import ErrorBoundary from "./components/ErrorBoundary";
-import { installApiInterceptor } from "./utils/api";
-import { setupInstallPromptHooks } from "./utils/installPrompt";
-import { installQuietConsole } from "./utils/quietConsole";
+import App from "./App.js";
+import ResetPassword from "./components/ResetPassword.js";
+import { WSProvider } from "./components/WSProvider.js";
+import ErrorBoundary from "./components/ErrorBoundary.js";
+import { installApiInterceptor } from "./utils/api.js";
+import { setupInstallPromptHooks } from "./utils/installPrompt.js";
+import { installQuietConsole } from "./utils/quietConsole.js";
 
 // In some hosting setups, third-party or legacy code may expect a global React.
 // This ensures `React` is available at runtime to prevent 'React is not defined' errors.

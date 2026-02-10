@@ -1,4 +1,4 @@
-﻿import { DartDetector } from "../dartDetector";
+﻿import { DartDetector } from "../dartDetector.js";
 
 function makeImageData(width: number, height: number, gray = 100) {
   const data = new Uint8ClampedArray(width * height * 4);

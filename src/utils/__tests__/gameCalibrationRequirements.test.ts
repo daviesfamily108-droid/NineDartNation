@@ -1,6 +1,6 @@
 ﻿import { describe, it, expect } from "vitest";
 
-import { getCalibrationConfidenceForGame } from "../gameCalibrationRequirements";
+import { getCalibrationConfidenceForGame } from "../gameCalibrationRequirements.js";
 
 describe("getCalibrationConfidenceForGame", () => {
   it("returns 0 confidence when errorPx is missing", () => {

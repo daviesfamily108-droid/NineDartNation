@@ -1,7 +1,7 @@
 ﻿import React from "react";
 import { render, cleanup } from "@testing-library/react";
-import OfflinePlay from "../OfflinePlay";
-import { useUserSettings } from "../../store/userSettings";
+import OfflinePlay from "../OfflinePlay.js";
+import { useUserSettings } from "../../store/userSettings.js";
 
 afterEach(() => {
   cleanup();

@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import FocusLock from "react-focus-lock";
 
 export default function PauseQuitModal({
@@ -8,7 +8,7 @@ export default function PauseQuitModal({
 }: {
   onClose: () => void;
   onQuit: () => void;
-  onPause: (minutes: number) => void;
+  onPause: (() => void) | ((minutes: number) => void);
 }) {
   // Close on Escape for accessibility
   React.useEffect(() => {
@@ -47,12 +47,12 @@ export default function PauseQuitModal({
             </div>
             <div className="mb-4">
               <p className="mb-2">
-                You can either quit the match, or pause it for up to 5 minutes
-                🎯.
+                You can either quit the match, or pause it 🎯.
               </p>
               <p className="text-sm text-slate-400">
-                If paused, the match will automatically resume when the timer
-                expires or when a player resumes early 🎯.
+                When paused, you'll choose a timer (1, 3, or 5 minutes). The
+                match will automatically resume when the timer expires or when
+                a player resumes early 🎯.
               </p>
             </div>
 
@@ -63,18 +63,12 @@ export default function PauseQuitModal({
               >
                 Quit match 🎯
               </button>
-              <div className="flex items-center gap-2">
-                <span className="opacity-80">Pause:</span>
-                {[1, 2, 3, 4, 5].map((m) => (
-                  <button
-                    key={m}
-                    className="btn btn--ghost px-3 py-1 text-sm"
-                    onClick={() => onPause(m)}
-                  >
-                    {m}m 🎯
-                  </button>
-                ))}
-              </div>
+              <button
+                className="btn bg-amber-600 hover:bg-amber-700 px-3 py-1"
+                onClick={() => (onPause as () => void)()}
+              >
+                Pause match ⏸️
+              </button>
             </div>
 
             <div className="text-right">

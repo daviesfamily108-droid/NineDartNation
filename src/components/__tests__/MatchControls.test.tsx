@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, test, expect, vi } from "vitest";
-import MatchControls from "../MatchControls";
+import MatchControls from "../MatchControls.js";
 
 describe("MatchControls component", () => {
   test("calls onAddVisit, onUndo, onNextPlayer, onEndLeg, onEndGame as expected", async () => {

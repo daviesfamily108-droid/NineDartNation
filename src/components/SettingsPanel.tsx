@@ -14,9 +14,9 @@ import {
   Send,
   ChevronDown,
 } from "lucide-react";
-import { useUserSettings } from "../store/userSettings";
-import ThemeToggle from "./ThemeToggle";
-import { apiFetch } from "../utils/api";
+import { useUserSettings } from "../store/userSettings.js";
+import ThemeToggle from "./ThemeToggle.js";
+import { apiFetch } from "../utils/api.js";
 
 export default function SettingsPanel({ user }: { user?: any }) {
   const __TEST_MODE__ =

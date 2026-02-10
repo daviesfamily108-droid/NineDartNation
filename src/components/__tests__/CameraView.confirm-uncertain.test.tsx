@@ -1,7 +1,7 @@
 import React, { createRef } from "react";
 import { render, fireEvent, act, waitFor } from "@testing-library/react";
 import { vi, describe, it, expect, beforeEach } from "vitest";
-import CameraView, { type CameraViewHandle } from "../CameraView";
+import CameraView, { type CameraViewHandle } from "../CameraView.js";
 
 // Mock detector to return a low-confidence detection deterministically
 vi.mock("../../utils/dartDetector", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
-import { useCameraSession } from "../cameraSession";
+import { useCameraSession } from "../cameraSession.js";
 
 // Minimal MediaStream-ish stub for our store; we only care that it is returned.
 type FakeMediaStream = { id: string };

@@ -6,7 +6,7 @@
   scaleHomography,
   translateHomography,
   applyHomography,
-} from "../vision";
+} from "../vision.js";
 
 // deterministic RNG for tests
 function seededRng(seed = 12345) {

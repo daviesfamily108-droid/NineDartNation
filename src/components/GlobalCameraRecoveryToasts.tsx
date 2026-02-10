@@ -1,10 +1,10 @@
 import { useEffect, useRef } from "react";
-import { useToast } from "../store/toast";
+import { useToast } from "../store/toast.js";
 import {
   NDN_CAMERA_RECOVERY_EVENT,
   type CameraRecoveryUiDetail,
-} from "../utils/cameraRecoveryEvents";
-import { dispatchCameraRecovery } from "../utils/cameraRecovery";
+} from "../utils/cameraRecoveryEvents.js";
+import { dispatchCameraRecovery } from "../utils/cameraRecovery.js";
 
 function prettyReason(r: string) {
   if (r.includes("ended-track")) return "Camera stream ended. Recovering…";

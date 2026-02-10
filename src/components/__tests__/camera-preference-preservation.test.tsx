@@ -1,7 +1,7 @@
 ﻿import React from "react";
 import { render, act, waitFor } from "@testing-library/react";
-import CameraView from "../CameraView";
-import { useUserSettings } from "../../store/userSettings";
+import CameraView from "../CameraView.js";
+import { useUserSettings } from "../../store/userSettings.js";
 
 beforeEach(() => {
   // Reset store

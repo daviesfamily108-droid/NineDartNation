@@ -77,6 +77,7 @@ import MatchStartShowcase from "./ui/MatchStartShowcase";
 import { useAudit } from "../store/audit";
 import GameHeaderBar from "./ui/GameHeaderBar";
 import PauseQuitModal from "./ui/PauseQuitModal";
+import PauseOverlay from "./ui/PauseOverlay";
 import ScoreNumberPad from "./ui/ScoreNumberPad";
 import { useMatchControl } from "../store/matchControl";
 import { formatAvg } from "../utils/stats";
@@ -2622,7 +2623,7 @@ export default function OfflinePlay({ user }: { user: any }) {
               {/* Header bar with visible mode and actions; sheen is clipped to this area */}
               <div className="flex h-full">
                 <div
-                  className="flex-1 min-h-0 overflow-x-hidden pt-2 pb-2 pr-0 -ml-2 sm:-ml-3"
+                  className="flex-1 min-h-0 overflow-x-hidden pt-2 pb-2 pr-0 pl-2 sm:pl-3"
                   style={{
                     overflowY: "auto",
                     willChange: "scroll-position",
@@ -2706,14 +2707,13 @@ export default function OfflinePlay({ user }: { user: any }) {
                             }
                             finalizeQuitMatch();
                           }}
-                          onPause={(minutes) => {
-                            const endsAt = Date.now() + minutes * 60 * 1000;
+                          onPause={() => {
                             try {
-                              setPaused(true, endsAt);
+                              setPaused(true, null, humanName);
                               broadcastMessage({
                                 type: "pause",
-                                pauseEndsAt: endsAt,
                                 pauseStartedAt: Date.now(),
+                                pauseInitiator: humanName,
                               });
                             } catch {}
                             setShowQuitPause(false);
@@ -3481,16 +3481,15 @@ export default function OfflinePlay({ user }: { user: any }) {
                           <button
                             className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-600/20 text-amber-200 border border-amber-400/30 hover:bg-amber-600/40 transition-colors"
                             onClick={() => {
-                              const endsAt = Date.now() + 5 * 60 * 1000;
                               try {
-                                setPaused(true, endsAt);
+                                setPaused(true, null, humanName);
                                 broadcastMessage({
                                   type: "pause",
-                                  pauseEndsAt: endsAt,
                                   pauseStartedAt: Date.now(),
+                                  pauseInitiator: humanName,
                                 });
                               } catch {}
-                              toast("Match paused for 5 minutes", {
+                              toast("Match paused — select duration on overlay", {
                                 type: "info",
                                 timeout: 2500,
                               });
@@ -3655,14 +3654,13 @@ export default function OfflinePlay({ user }: { user: any }) {
                               }
                               finalizeQuitMatch();
                             }}
-                            onPause={(minutes) => {
-                              const endsAt = Date.now() + minutes * 60 * 1000;
+                            onPause={() => {
                               try {
-                                setPaused(true, endsAt);
+                                setPaused(true, null, humanName);
                                 broadcastMessage({
                                   type: "pause",
-                                  pauseEndsAt: endsAt,
                                   pauseStartedAt: Date.now(),
+                                  pauseInitiator: humanName,
                                 });
                               } catch {}
                               setShowQuitPause(false);
@@ -6150,6 +6148,7 @@ export default function OfflinePlay({ user }: { user: any }) {
 
         {/* Phone camera overlay removed per UX preference; use header badge preview only */}
       </div>
+      <PauseOverlay localPlayerName={humanName} onResume={() => { setPaused(false, null); }} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect, vi } from "vitest";
-import { runDetectionAndNotify } from "../detectionNotifier";
+import { runDetectionAndNotify } from "../detectionNotifier.js";
 
 describe("runDetectionAndNotify", () => {
   it("calls onAutoDart when detector returns a good detection", async () => {

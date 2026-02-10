@@ -7,8 +7,8 @@ import {
   waitFor,
   fireEvent,
 } from "@testing-library/react";
-import App from "../../App";
-import { useMatch } from "../../store/match";
+import App from "../../App.js";
+import { useMatch } from "../../store/match.js";
 
 describe("App header", () => {
   beforeEach(() => {

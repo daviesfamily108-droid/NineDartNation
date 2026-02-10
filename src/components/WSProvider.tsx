@@ -8,7 +8,7 @@
   useState,
   type ReactNode,
 } from "react";
-import { getWsCandidates } from "../utils/ws";
+import { getWsCandidates } from "../utils/ws.js";
 
 type WSMessage = any;
 

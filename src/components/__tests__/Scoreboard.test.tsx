@@ -9,8 +9,8 @@ import {
   act,
   waitFor,
 } from "@testing-library/react";
-import Scoreboard from "../Scoreboard";
-import { useMatch } from "../../store/match";
+import Scoreboard from "../Scoreboard.js";
+import { useMatch } from "../../store/match.js";
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
 
 describe("Scoreboard", () => {
@@ -169,7 +169,7 @@ describe("Scoreboard", () => {
     await act(async () => {
       useMatch.getState().newMatch(["Alice", "Bob"], 501);
     });
-    const { formatAvg } = await import("../../utils/stats");
+    const { formatAvg } = await import("../../utils/stats.js");
     // Initially render the scoreboard
     const { getByText } = render(<Scoreboard />);
     // Before any visits, the avg tile label should exist in each player's card

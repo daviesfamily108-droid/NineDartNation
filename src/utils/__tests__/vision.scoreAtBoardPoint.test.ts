@@ -1,4 +1,4 @@
-﻿import { scoreAtBoardPoint, BoardRadii } from "../vision";
+﻿import { scoreAtBoardPoint, BoardRadii } from "../vision.js";
 import { describe, test, expect } from "vitest";
 
 describe("scoreAtBoardPoint", () => {

@@ -1,5 +1,5 @@
 ﻿import { useEffect } from "react";
-import { useMatchControl } from "../store/matchControl";
+import { useMatchControl } from "../store/matchControl.js";
 
 // Watches pauseEndsAt and automatically clears pause when time elapses.
 export default function AutoPauseManager() {

@@ -7,7 +7,7 @@ import {
   applyHomography,
   refinePointSobel,
   imageToBoard,
-} from "../utils/vision";
+} from "../utils/vision.js";
 import React, {
   useCallback,
   useEffect,
@@ -18,32 +18,32 @@ import React, {
   useImperativeHandle,
 } from "react";
 import type { MutableRefObject } from "react";
-import { dlog, dinfo } from "../utils/logger";
-import { ensureVideoPlays } from "../utils/ensureVideoPlays";
-import { useUserSettings } from "../store/userSettings";
-import { useCalibration } from "../store/calibration";
-import { useMatch } from "../store/match";
-import { scoreFromImagePoint } from "../utils/autoscore";
-import { getGlobalCalibrationConfidence } from "../utils/gameCalibrationRequirements";
-import { DartDetector } from "../utils/dartDetector";
-import { addSample } from "../store/profileStats";
-import { subscribeExternalWS } from "../utils/scoring";
-import ResizablePanel from "./ui/ResizablePanel";
+import { dlog, dinfo } from "../utils/logger.js";
+import { ensureVideoPlays } from "../utils/ensureVideoPlays.js";
+import { useUserSettings } from "../store/userSettings.js";
+import { useCalibration } from "../store/calibration.js";
+import { useMatch } from "../store/match.js";
+import { scoreFromImagePoint } from "../utils/autoscore.js";
+import { getGlobalCalibrationConfidence } from "../utils/gameCalibrationRequirements.js";
+import { DartDetector } from "../utils/dartDetector.js";
+import { addSample } from "../store/profileStats.js";
+import { subscribeExternalWS } from "../utils/scoring.js";
+import ResizablePanel from "./ui/ResizablePanel.js";
 import FocusLock from "react-focus-lock";
-import { usePendingVisit } from "../store/pendingVisit";
-import { useCameraSession } from "../store/cameraSession";
-import { useMatchControl } from "../store/matchControl";
-import { useAudit } from "../store/audit";
-import PauseQuitModal from "./ui/PauseQuitModal";
-import PauseTimerBadge from "./ui/PauseTimerBadge";
-import { writeMatchSnapshot } from "../utils/matchSync";
-import { broadcastMessage } from "../utils/broadcast";
-import { startForwarding, stopForwarding } from "../utils/cameraHandoff";
-import { sayScore } from "../utils/checkout";
+import { usePendingVisit } from "../store/pendingVisit.js";
+import { useCameraSession } from "../store/cameraSession.js";
+import { useMatchControl } from "../store/matchControl.js";
+import { useAudit } from "../store/audit.js";
+import PauseQuitModal from "./ui/PauseQuitModal.js";
+import PauseTimerBadge from "./ui/PauseTimerBadge.js";
+import { writeMatchSnapshot } from "../utils/matchSync.js";
+import { broadcastMessage } from "../utils/broadcast.js";
+import { startForwarding, stopForwarding } from "../utils/cameraHandoff.js";
+import { sayScore } from "../utils/checkout.js";
 import {
   distanceFromBullMm,
   mmPerBoardUnitFromBullOuter,
-} from "../utils/bullDistance";
+} from "../utils/bullDistance.js";
 
 type VideoDiagnostics = {
   ts: number;
@@ -462,6 +462,7 @@ export default forwardRef(function CameraView(
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>(
     [],
   );
+  const lastPreferredCameraRef = useRef<string | undefined>(preferredCameraId);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -787,6 +788,7 @@ export default forwardRef(function CameraView(
   // 'matchState' hook: declare early to satisfy hook order and be available for gate checks.
   // NOTE: Some earlier logic depends on whether we're in an online match.
   const matchState = useMatch((s) => s);
+  const localPlayerName = useUserSettings((s) => s.user?.username);
   const isOnlineMatch = !!(matchState && (matchState as any).roomId);
 
   const ERROR_PX_MAX = 12;
@@ -2492,6 +2494,25 @@ export default forwardRef(function CameraView(
     setStreaming(false);
     setCameraStarting(false);
   }
+
+  useEffect(() => {
+    if (lastPreferredCameraRef.current === preferredCameraId) return;
+    lastPreferredCameraRef.current = preferredCameraId;
+    if (!cameraEnabled || cameraStarting || !streaming) return;
+    let cancelled = false;
+    const restart = async () => {
+      stopCamera();
+      await new Promise((r) => setTimeout(r, 150));
+      if (cancelled) return;
+      try {
+        await startCamera();
+      } catch (e) {}
+    };
+    void restart();
+    return () => {
+      cancelled = true;
+    };
+  }, [preferredCameraId, cameraEnabled, cameraStarting, streaming]);
 
   useEffect(() => {
     const videoEl = videoRef.current;
@@ -6374,17 +6395,16 @@ export default forwardRef(function CameraView(
                             } catch (e) {}
                             setShowQuitPause(false);
                           }}
-                          onPause={(minutes) => {
-                            const endsAt = Date.now() + minutes * 60 * 1000;
+                          onPause={() => {
                             try {
                               useMatchControl
                                 .getState()
-                                .setPaused(true, endsAt);
+                                .setPaused(true, null, localPlayerName || null);
                               try {
                                 broadcastMessage({
                                   type: "pause",
-                                  pauseEndsAt: endsAt,
                                   pauseStartedAt: Date.now(),
+                                  pauseInitiator: localPlayerName || null,
                                 });
                               } catch {}
                             } catch (e) {}

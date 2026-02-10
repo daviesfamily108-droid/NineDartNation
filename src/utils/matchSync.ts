@@ -1,7 +1,7 @@
 ﻿// Lightweight match state sync helper using BroadcastChannel + localStorage
-import { useMatch } from "../store/match";
-import { useMatchControl } from "../store/matchControl";
-import { broadcastMessage } from "./broadcast";
+import { useMatch } from "../store/match.js";
+import { useMatchControl } from "../store/matchControl.js";
+import { broadcastMessage } from "./broadcast.js";
 
 const STORAGE_KEY = "ndn:match-sync";
 

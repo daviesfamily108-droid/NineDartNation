@@ -8,7 +8,7 @@ import {
   ShieldCheck,
   MessageCircle,
 } from "lucide-react";
-import { getApiBaseUrl } from "../utils/api";
+import { getApiBaseUrl } from "../utils/api.js";
 
 // Demo admin values removed: unused in codebase
 
@@ -44,11 +44,11 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
     setLoading(true);
     // Preload main app chunks so switching to the app is faster
     try {
-      void import("./Home");
+      void import("./Home.js");
       void import("./OnlinePlay.clean");
-      void import("./OfflinePlay");
-      void import("./Scoreboard");
-      void import("./StatsPanel");
+      void import("./OfflinePlay.js");
+      void import("./Scoreboard.js");
+      void import("./StatsPanel.js");
     } catch (e) {}
     if (!username || !password) {
       setError("Username and password required.");

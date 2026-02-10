@@ -1,6 +1,6 @@
-﻿import { scoreAtBoardPoint, BoardRadii, SectorOrder } from "../vision";
-import { scoreFromImagePoint } from "../autoscore";
-import { applyHomography } from "../vision";
+﻿import { scoreAtBoardPoint, BoardRadii, SectorOrder } from "../vision.js";
+import { scoreFromImagePoint } from "../autoscore.js";
+import { applyHomography } from "../vision.js";
 
 function degToRad(d: number) {
   return (d * Math.PI) / 180;

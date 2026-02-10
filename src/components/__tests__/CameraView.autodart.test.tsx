@@ -175,12 +175,12 @@ vi.mock("../../utils/checkout", () => ({
   sayDart: sayDartMock,
 }));
 
-import { useCalibration } from "../../store/calibration";
+import { useCalibration } from "../../store/calibration.js";
 let useCalibrationRef: any;
 let useUserSettings: any;
 // Note: We'll use real stores with persistence stubbed out above
 
-import { scoreFromImagePoint } from "../../utils/autoscore";
+import { scoreFromImagePoint } from "../../utils/autoscore.js";
 
 // Camera commit gating regression tests live outside the large homography suite below
 // to avoid accidentally nesting vitest `it()` blocks inside async tests.
@@ -768,7 +768,7 @@ describe("scoreFromImagePoint (autoscore) - simple homography tests", () => {
       await vi.importActual("../../store/pendingVisit")
     ).usePendingVisit as any;
     pendingVisitStore.setState?.({ darts: 0, total: 0, entries: [] });
-    const userSettingsStoreModule = await import("../../store/userSettings");
+    const userSettingsStoreModule = await import("../../store/userSettings.js");
     const userSettingsStore = userSettingsStoreModule.useUserSettings as any;
     userSettingsStore.setState?.({
       callerEnabled: true,

@@ -3,7 +3,7 @@ import {
   markerIdToMatrix,
   MARKER_ORDER,
   MARKER_TARGETS,
-} from "../markerCalibration";
+} from "../markerCalibration.js";
 
 describe("markerIdToMatrix", () => {
   const deriveId = (matrix: number[][]) => {

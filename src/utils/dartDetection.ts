@@ -8,13 +8,13 @@
  * 4. Confidence scoring
  */
 
-import type { Point, Homography } from "./vision";
+import type { Point, Homography } from "./vision.js";
 import {
   imageToBoard,
   scoreAtBoardPoint,
   scoreAtBoardPointTheta,
   isPointOnBoard,
-} from "./vision";
+} from "./vision.js";
 
 export interface DartDetectionConfig {
   minConfidence?: number; // 0-1, default 0.7 (we'll override to 0.8 for stricter)

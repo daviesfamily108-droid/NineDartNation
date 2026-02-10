@@ -7,7 +7,7 @@
  * See: DART_SCORING_100_PERCENT_ACCURACY.md for detailed documentation
  *
  * Quick reference:
- * 1. Import: import { getEnhancedDartScorer } from './enhancedScoring'
+ * 1. Import: import { getEnhancedDartScorer } from './enhancedScoring.js'
  * 2. Initialize: const scorer = getEnhancedDartScorer()
  * 3. Validate: const result = scorer.scoreDart(dart, calibration)
  * 4. Use: if (result.valid) { applyDart() } else { showManual() }
@@ -17,7 +17,7 @@
 
 // Pattern 1: Basic validation before scoring
 // ============================================================================
-// import { getEnhancedDartScorer } from './enhancedScoring';
+// import { getEnhancedDartScorer } from './enhancedScoring.js';
 //
 // const scorer = getEnhancedDartScorer({
 //   minDetectionConfidence: 0.70,
@@ -45,7 +45,7 @@
 
 // Pattern 3: Running comprehensive accuracy tests
 // ============================================================================
-// import { getScoringTester } from './scoringTester';
+// import { getScoringTester } from './scoringTester.js';
 //
 // const tester = getScoringTester();
 // const report = tester.runAllTests(calibration, detectedDarts);
@@ -57,7 +57,7 @@
 
 // Pattern 4: Direct validation of any scoring attempt
 // ============================================================================
-// import { getScoringValidator } from './scoringAccuracy';
+// import { getScoringValidator } from './scoringAccuracy.js';
 //
 // const validator = getScoringValidator({
 //   minCalibrationConfidence: 90,

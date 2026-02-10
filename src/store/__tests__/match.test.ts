@@ -1,5 +1,5 @@
 ﻿import { beforeEach, describe, expect, it } from "vitest";
-import { useMatch } from "../match";
+import { useMatch } from "../match.js";
 
 describe("three-dart average calculations", () => {
   beforeEach(() => {

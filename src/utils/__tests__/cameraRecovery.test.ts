@@ -22,7 +22,7 @@ describe("dispatchCameraRecovery", () => {
   });
 
   it("dispatches ndn:camera-reset for local mode", async () => {
-    const mod = await import("../cameraRecovery");
+    const mod = await import("../cameraRecovery.js");
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
 
     mod.dispatchCameraRecovery("user-click");
@@ -35,10 +35,10 @@ describe("dispatchCameraRecovery", () => {
   });
 
   it("dispatches ndn:phone-camera-reconnect when phone selected", async () => {
-    const mod = await import("../cameraRecovery");
+    const mod = await import("../cameraRecovery.js");
     const dispatchSpy = vi.spyOn(window, "dispatchEvent");
 
-    const us = await import("../../store/userSettings");
+    const us = await import("../../store/userSettings.js");
     (us as any).__settings.preferredCameraLabel = "Phone Camera";
 
     mod.dispatchCameraRecovery("user-click");

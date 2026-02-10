@@ -5,8 +5,8 @@
  * Manages detection pipeline, confidence filtering, and scoring
  */
 
-import { detectDarts, scoreDarts, type DetectedDart } from "./dartDetection";
-import type { BoardDetectionResult } from "./boardDetection";
+import { detectDarts, scoreDarts, type DetectedDart } from "./dartDetection.js";
+import type { BoardDetectionResult } from "./boardDetection.js";
 
 export interface AutoScoringConfig {
   enabled: boolean;
