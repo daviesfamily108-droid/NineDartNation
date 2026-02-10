@@ -90,6 +90,11 @@ export default function MatchPage() {
   }, []);
 
   useEffect(() => {
+    if (!showNumpad) return;
+    numpadInputRef.current?.focus();
+  }, [showNumpad]);
+
+  useEffect(() => {
     // Ensure camera is enabled for the pop-out so the feed can start immediately
     try {
       useUserSettings.getState().setCameraEnabled(true);
@@ -419,7 +424,9 @@ export default function MatchPage() {
           Return
         </button>
         <h2 className="text-3xl font-bold text-brand-700">Match 🎯</h2>
-        <div className="ml-auto"><PauseTimerBadge /></div>
+        <div className="ml-auto">
+          <PauseTimerBadge />
+        </div>
         {winningShot?.label && (
           <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">
             Winning double: {winningShot.label}
@@ -439,9 +446,13 @@ export default function MatchPage() {
           <div className="lg:col-span-3 flex flex-col gap-4">
             {/* Scoreboard */}
             <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-4 sm:p-5 overflow-hidden">
-              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${isUsersTurn ? "from-emerald-500/[0.03]" : "from-white/[0.02]"} to-transparent`} />
+              <div
+                className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${isUsersTurn ? "from-emerald-500/[0.03]" : "from-white/[0.02]"} to-transparent`}
+              />
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">Scoreboard</h3>
+                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">
+                  Scoreboard
+                </h3>
                 {isUsersTurn ? (
                   <div className="px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 animate-pulse">
                     ● Your turn
@@ -458,8 +469,13 @@ export default function MatchPage() {
                   name: p.name || `Player ${idx + 1}`,
                   isCurrentTurn: idx === (match.currentPlayerIdx || 0),
                   legsWon: p.legsWon || 0,
-                  score: p.legs?.[p.legs.length - 1]?.totalScoreRemaining ?? match.startingScore ?? lastOfflineStart,
-                  lastScore: p.legs?.length ? p.legs[p.legs.length - 1].visits?.slice(-1)[0]?.score || 0 : 0,
+                  score:
+                    p.legs?.[p.legs.length - 1]?.totalScoreRemaining ??
+                    match.startingScore ??
+                    lastOfflineStart,
+                  lastScore: p.legs?.length
+                    ? p.legs[p.legs.length - 1].visits?.slice(-1)[0]?.score || 0
+                    : 0,
                 }))}
               />
             </div>
@@ -471,7 +487,10 @@ export default function MatchPage() {
                 <button
                   type="button"
                   className="relative w-full rounded-2xl border-2 border-dashed border-emerald-400/40 bg-emerald-500/5 hover:bg-emerald-500/10 active:scale-[0.98] transition-all p-6 sm:p-8 text-center group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
-                  onClick={() => { setNumpadValue(""); setShowNumpad(true); }}
+                  onClick={() => {
+                    setNumpadValue("");
+                    setShowNumpad(true);
+                  }}
                 >
                   <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/[0.05] to-transparent" />
                   <div className="text-emerald-300/60 text-xs sm:text-sm uppercase tracking-widest font-semibold mb-2">
@@ -481,18 +500,33 @@ export default function MatchPage() {
                     {localRemaining}
                   </div>
                   <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-sm font-semibold">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
                       <rect x="4" y="4" width="16" height="16" rx="2" />
-                      <path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01" strokeLinecap="round" />
+                      <path
+                        d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"
+                        strokeLinecap="round"
+                      />
                     </svg>
                     Tap to enter score
                   </div>
                   {(() => {
-                    const routes = localRemaining <= 170 ? suggestCheckouts(localRemaining) : null;
+                    const routes =
+                      localRemaining <= 170
+                        ? suggestCheckouts(localRemaining)
+                        : null;
                     return routes ? (
                       <div className="mt-3 flex flex-wrap justify-center gap-1.5">
                         {routes.map((route: string, i: number) => (
-                          <span key={i} className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs font-medium">
+                          <span
+                            key={i}
+                            className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs font-medium"
+                          >
                             {route}
                           </span>
                         ))}
@@ -507,7 +541,9 @@ export default function MatchPage() {
                     <button
                       key={v}
                       className="px-4 py-2.5 rounded-xl text-sm font-bold bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/90 transition-all active:scale-95"
-                      onClick={() => { commitVisit(v, 3, { visitTotal: v }); }}
+                      onClick={() => {
+                        commitVisit(v, 3, { visitTotal: v });
+                      }}
                     >
                       {v}
                     </button>
@@ -516,16 +552,24 @@ export default function MatchPage() {
               </>
             ) : (
               <div className="rounded-2xl border border-amber-400/20 bg-amber-500/5 px-4 py-6 text-center">
-                <div className="text-amber-300/60 text-xs uppercase tracking-widest font-semibold mb-1">Waiting</div>
-                <div className="text-lg font-bold text-amber-200">{awayPlayer?.name || "Opponent"} is throwing&hellip;</div>
+                <div className="text-amber-300/60 text-xs uppercase tracking-widest font-semibold mb-1">
+                  Waiting
+                </div>
+                <div className="text-lg font-bold text-amber-200">
+                  {awayPlayer?.name || "Opponent"} is throwing&hellip;
+                </div>
               </div>
             )}
 
             {/* Winning shot banner */}
             {winningShot?.label && (
               <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-center">
-                <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">Winning Double</span>
-                <div className="text-lg font-bold text-emerald-200 mt-0.5">{winningShot.label}</div>
+                <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">
+                  Winning Double
+                </span>
+                <div className="text-lg font-bold text-emerald-200 mt-0.5">
+                  {winningShot.label}
+                </div>
               </div>
             )}
           </div>
@@ -536,8 +580,12 @@ export default function MatchPage() {
               <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
                 <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 bg-white/5">
                   <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${isUsersTurn ? "bg-emerald-400 shadow-lg shadow-emerald-400/50" : "bg-amber-400 shadow-lg shadow-amber-400/50"} animate-pulse`} />
-                    <span className="text-xs sm:text-sm font-semibold text-white/80">Live Camera</span>
+                    <div
+                      className={`w-2 h-2 rounded-full ${isUsersTurn ? "bg-emerald-400 shadow-lg shadow-emerald-400/50" : "bg-amber-400 shadow-lg shadow-amber-400/50"} animate-pulse`}
+                    />
+                    <span className="text-xs sm:text-sm font-semibold text-white/80">
+                      Live Camera
+                    </span>
                   </div>
                   {!isUsersTurn && (
                     <span className="text-[10px] sm:text-xs font-medium text-amber-300/80">
@@ -550,18 +598,39 @@ export default function MatchPage() {
                     hideInlinePanels={true}
                     forceAutoStart={true}
                     onAddVisit={commitVisit}
-                    onEndLeg={(score) => { try { match.endLeg(score ?? 0); } catch {} }}
+                    onEndLeg={(score) => {
+                      try {
+                        match.endLeg(score ?? 0);
+                      } catch {}
+                    }}
                     onVisitCommitted={(_score, _darts, finished, meta) => {
                       if (!finished) return;
                       const frame = meta?.frame ?? remoteFrame ?? null;
-                      setWinningShot({ label: meta?.label || deriveWinningLabel() || undefined, ring: meta?.ring, frame, ts: Date.now() });
-                      try { match.endGame(); } catch {}
+                      setWinningShot({
+                        label: meta?.label || deriveWinningLabel() || undefined,
+                        ring: meta?.ring,
+                        frame,
+                        ts: Date.now(),
+                      });
+                      try {
+                        match.endGame();
+                      } catch {}
                     }}
                   />
                   <LetterboxScoreboardOverlay
                     checkoutRemaining={localRemaining}
-                    away={{ side: "Away", name: awayPlayer?.name || "Away", legsWon: awayPlayer?.legsWon || 0, remaining: awayRemaining }}
-                    home={{ side: "Home", name: localPlayer?.name || "Home", legsWon: localPlayer?.legsWon || 0, remaining: localRemaining }}
+                    away={{
+                      side: "Away",
+                      name: awayPlayer?.name || "Away",
+                      legsWon: awayPlayer?.legsWon || 0,
+                      remaining: awayRemaining,
+                    }}
+                    home={{
+                      side: "Home",
+                      name: localPlayer?.name || "Home",
+                      legsWon: localPlayer?.legsWon || 0,
+                      remaining: localRemaining,
+                    }}
                   />
                 </div>
               </div>
@@ -571,7 +640,10 @@ export default function MatchPage() {
 
         {/* ── Number Pad Modal ── */}
         {showNumpad && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowNumpad(false)}>
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            onClick={() => setShowNumpad(false)}
+          >
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
             {/* Panel */}
@@ -583,7 +655,6 @@ export default function MatchPage() {
               {/* Hidden input for desktop keyboard capture — auto-focused on open */}
               <input
                 ref={numpadInputRef}
-                autoFocus
                 type="text"
                 inputMode="numeric"
                 className="sr-only"
@@ -596,7 +667,10 @@ export default function MatchPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    const score = Math.min(180, Math.max(0, parseInt(numpadValue) || 0));
+                    const score = Math.min(
+                      180,
+                      Math.max(0, parseInt(numpadValue) || 0),
+                    );
                     commitVisit(score, 3, { visitTotal: score });
                     setShowNumpad(false);
                     setNumpadValue("");
@@ -610,12 +684,19 @@ export default function MatchPage() {
               />
 
               {/* Score display */}
-              <div className="text-center mb-4" onClick={() => numpadInputRef.current?.focus()}>
-                <div className="text-xs text-white/50 uppercase tracking-widest mb-1">Score</div>
+              <div
+                className="text-center mb-4"
+                onClick={() => numpadInputRef.current?.focus()}
+              >
+                <div className="text-xs text-white/50 uppercase tracking-widest mb-1">
+                  Score
+                </div>
                 <div className="font-mono text-4xl font-black text-white min-h-[2.5rem]">
                   {numpadValue || <span className="text-white/20">0</span>}
                 </div>
-                <div className="text-[10px] text-white/30 mt-1">Type on keyboard or tap below</div>
+                <div className="text-[10px] text-white/30 mt-1">
+                  Type on keyboard or tap below
+                </div>
               </div>
 
               {/* 3×4 grid */}
@@ -659,7 +740,10 @@ export default function MatchPage() {
                   type="button"
                   className="py-3.5 rounded-xl text-lg font-bold bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 text-emerald-200 transition-all active:scale-95"
                   onClick={() => {
-                    const score = Math.min(180, Math.max(0, parseInt(numpadValue) || 0));
+                    const score = Math.min(
+                      180,
+                      Math.max(0, parseInt(numpadValue) || 0),
+                    );
                     commitVisit(score, 3, { visitTotal: score });
                     setShowNumpad(false);
                     setNumpadValue("");

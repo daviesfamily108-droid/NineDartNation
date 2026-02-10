@@ -16,15 +16,21 @@ export default function BarChart({
   showValues?: boolean;
 }) {
   const max = Math.max(1, ...data.map((d) => d.value));
+  const minBarSlot = barWidth + gap + 8;
+  const minChartWidth = data.length * minBarSlot;
   return (
-    <div className="w-full" style={{ height }}>
-      <div className="h-full flex items-end justify-evenly">
+    <div className="w-full overflow-x-auto" style={{ height: height + 20 }}>
+      <div
+        className="h-full flex items-end justify-evenly"
+        style={{ minWidth: minChartWidth }}
+      >
         {data.map((d, i) => {
-          const h = Math.round((d.value / max) * (height - 44)); // leave room for labels
+          const h = Math.round((d.value / max) * (height - 54));
           return (
             <div
               key={i}
-              className="flex flex-col items-center justify-end flex-1 min-w-0"
+              className="flex flex-col items-center justify-end"
+              style={{ flex: "1 1 0%", minWidth: minBarSlot }}
             >
               <div
                 className="rounded-t-md bg-gradient-to-b from-indigo-400 to-fuchsia-500 shadow-sm"
@@ -36,7 +42,16 @@ export default function BarChart({
                   {d.value}
                 </div>
               )}
-              <div className="text-[10px] leading-tight mt-1 text-slate-200 font-medium select-none text-center whitespace-nowrap">
+              <div
+                className="text-[9px] sm:text-[10px] leading-tight mt-1 text-slate-200 font-medium select-none text-center origin-top"
+                style={{
+                  writingMode: "initial",
+                  maxWidth: minBarSlot,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
                 {d.label}
               </div>
             </div>

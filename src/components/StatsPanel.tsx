@@ -751,14 +751,14 @@ export default function StatsPanel({ user }: { user?: any }) {
               </div>
             )}
           </div>
-          <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-300/80 mb-2">
-            <span className="text-left">
+          <div className="flex flex-col sm:flex-row sm:justify-between gap-1 text-[11px] text-slate-300/80 mb-2">
+            <span>
               Most frequent:{" "}
               {distSummary
                 ? `${distSummary.most.label} (${distSummary.most.value})`
                 : "—"}
             </span>
-            <span className="text-right">
+            <span className="sm:text-right">
               Least frequent:{" "}
               {distSummary
                 ? `${distSummary.least.label} (${distSummary.least.value})`
@@ -766,10 +766,11 @@ export default function StatsPanel({ user }: { user?: any }) {
             </span>
           </div>
           <div
-            className="rounded-xl border border-indigo-500/20 p-3 min-h-[220px] transform transition-shadow duration-200 hover:shadow-lg overflow-y-auto"
+            className="rounded-xl border border-indigo-500/20 p-3 min-h-[220px] transform transition-shadow duration-200 hover:shadow-lg overflow-x-auto overflow-y-hidden -mx-1 px-1"
             style={{
               background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
               scrollbarColor: "#8F43EE #18122B",
+              WebkitOverflowScrolling: "touch",
             }}
           >
             <BarChart data={dist} showValues={false} />
