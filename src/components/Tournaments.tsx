@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   getModeOptionsForGame,
   labelForMode,
@@ -354,11 +354,39 @@ export default function Tournaments({ user }: { user: any }) {
     });
   };
 
-  const hasJoined = (t: Tournament | null | undefined) => {
-    if (!t || !email) return false;
-    const ps = Array.isArray(t.participants) ? t.participants : [];
-    return ps.some((p) => String(p?.email || "").toLowerCase() === email);
-  };
+  const hasJoined = useCallback(
+    (t: Tournament | null | undefined) => {
+      if (!t || !email) return false;
+      const ps = Array.isArray(t.participants) ? t.participants : [];
+      return ps.some((p) => String(p?.email || "").toLowerCase() === email);
+    },
+    [email],
+  );
+
+  const [prestartPreview, setPrestartPreview] = useState<Tournament | null>(
+    null,
+  );
+  const [dismissedPrestart, setDismissedPrestart] = useState<
+    Record<string, boolean>
+  >({});
+  const [prestartNow, setPrestartNow] = useState(() => Date.now());
+
+  const buildBracketPairs = useCallback((t: Tournament) => {
+    const names = (t.participants || []).map(
+      (p) => p.username || p.email || "Player",
+    );
+    const size = Math.max(
+      1,
+      2 ** Math.ceil(Math.log2(Math.max(1, names.length))),
+    );
+    const padded = [...names];
+    while (padded.length < size) padded.push("BYE");
+    const pairs: Array<[string, string]> = [];
+    for (let i = 0; i < padded.length; i += 2) {
+      pairs.push([padded[i], padded[i + 1] ?? "BYE"]);
+    }
+    return pairs;
+  }, []);
 
   // Simple, persistent match preference UI
   const MatchPrefs = () => (
@@ -638,6 +666,30 @@ export default function Tournaments({ user }: { user: any }) {
     [visibleTournaments],
   );
 
+  useEffect(() => {
+    const check = () => {
+      const now = Date.now();
+      const upcoming = visibleTournaments.find((t) => {
+        if (!hasJoined(t)) return false;
+        if (t.status !== "scheduled") return false;
+        if (dismissedPrestart[t.id]) return false;
+        const delta = t.startAt - now;
+        return delta > 0 && delta <= 5 * 60 * 1000;
+      });
+      setPrestartPreview(upcoming ?? null);
+    };
+    check();
+    const id = window.setInterval(check, 15000);
+    return () => window.clearInterval(id);
+  }, [dismissedPrestart, hasJoined, visibleTournaments]);
+
+  useEffect(() => {
+    if (!prestartPreview) return;
+    setPrestartNow(Date.now());
+    const id = window.setInterval(() => setPrestartNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [prestartPreview]);
+
   // Pagination for Created Game Lobby
   const [createdPage, setCreatedPage] = useState(1);
   const itemsPerPage = 16;
@@ -668,11 +720,11 @@ export default function Tournaments({ user }: { user: any }) {
   }
 
   return (
-    <div className="card ndn-game-shell ndn-page">
+    <div className="card ndn-game-shell ndn-page flex flex-col min-h-0">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-2xl font-bold ndn-section-title">Tournaments 🎯</h2>
       </div>
-      <div className="ndn-shell-body">
+      <div className="ndn-shell-body overflow-visible flex-1 min-h-0">
         {/* Create Tournament + and default match prefs on a single header row */}
         <div className="mb-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-between gap-2 flex-wrap">
           <div className="min-w-0">
@@ -1093,6 +1145,75 @@ export default function Tournaments({ user }: { user: any }) {
           </section>
         </div>
 
+        {prestartPreview && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tournament-prestart-heading"
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setDismissedPrestart((prev) => ({
+                  ...prev,
+                  [prestartPreview.id]: true,
+                }));
+                setPrestartPreview(null);
+              }
+            }}
+          >
+            <div className="bg-slate-900 rounded-2xl p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3
+                    id="tournament-prestart-heading"
+                    className="text-xl font-semibold"
+                  >
+                    Bracket Preview
+                  </h3>
+                  <div className="text-sm opacity-70">
+                    {prestartPreview.title} starts in{" "}
+                    {Math.max(
+                      0,
+                      Math.ceil((prestartPreview.startAt - prestartNow) / 1000),
+                    )}
+                    s
+                  </div>
+                </div>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => {
+                    setDismissedPrestart((prev) => ({
+                      ...prev,
+                      [prestartPreview.id]: true,
+                    }));
+                    setPrestartPreview(null);
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <div className="text-xs uppercase tracking-wide text-slate-400 mb-3">
+                Round 1
+              </div>
+              <div className="space-y-2">
+                {buildBracketPairs(prestartPreview).map((pair, idx) => (
+                  <div
+                    key={`${prestartPreview.id}-pair-${idx}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                  >
+                    <span className="font-semibold">Match {idx + 1}</span>
+                    <span className="text-slate-200">
+                      {pair[0]} vs {pair[1]}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 text-xs text-slate-400">
+                Byes are shown so everyone can see their bracket position.
+              </div>
+            </div>
+          </div>
+        )}
         {showCreate && (
           <div
             role="dialog"
