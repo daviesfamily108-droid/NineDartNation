@@ -1,4 +1,4 @@
-﻿import React, { useLayoutEffect, useState, useRef } from "react";
+import React, { useLayoutEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   allGames,
@@ -63,7 +63,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
   if (!portalEl) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-2 sm:p-6">
       {/* A dedicated, accessible button covers the backdrop to capture clicks and keyboard input */}
       <button
         aria-label="Close dialog"
@@ -71,31 +71,39 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
         onClick={onClose}
       />
       <div
-        className="card rounded-xl p-6 max-w-lg w-full relative text-white"
+        className="rounded-2xl p-5 sm:p-6 max-w-lg w-full relative text-white shadow-2xl border border-indigo-500/30 max-h-[85vh] overflow-y-auto"
+        style={{ background: "var(--ndn-card-bg, #0f172a)" }}
         role="dialog"
       >
         <button
           aria-label="Close"
-          className="absolute top-3 right-3 text-rose-400 font-bold"
+          className="absolute top-3 right-3 w-7 h-7 rounded-full bg-indigo-500/20 hover:bg-indigo-500/40 flex items-center justify-center text-xs transition-colors"
           onClick={onClose}
         >
           ✕
         </button>
-        <h2 className="text-lg font-semibold mb-3">Create Match 🎯</h2>
+        <h2 className="text-base sm:text-lg font-bold tracking-tight mb-3">
+          🎯 Create Match
+        </h2>
         <div className="grid grid-cols-1 gap-3">
           <div>
-            <div className="text-sm opacity-80">Created By 🎯</div>
-            <div className="mt-1 p-2 bg-white/5 rounded text-white">
-              {user} 🎯
+            <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-300/70 mb-1">
+              Created By
+            </div>
+            <div className="p-2 rounded-lg border border-indigo-500/20 bg-indigo-500/10 text-sm text-white">
+              {user}
             </div>
           </div>
           <div>
-            <label className="text-sm opacity-80" htmlFor="match-game">
-              Match Name (Game) 🎯
+            <label
+              className="text-[10px] font-bold uppercase tracking-widest text-indigo-300/70 mb-1 block"
+              htmlFor="match-game"
+            >
+              Game
             </label>
             <select
               id="match-game"
-              className="w-full p-2 border border-white/10 bg-white/5 rounded text-white"
+              className="w-full p-2 border border-indigo-500/20 bg-indigo-500/10 rounded-lg text-sm text-white"
               value={game}
               onChange={(e) => {
                 const v = e.target.value as GameKey;
@@ -122,12 +130,15 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
           </div>
           {getStartOptionsForGame(game).length > 0 ? (
             <div>
-              <label className="text-sm opacity-80" htmlFor="match-start">
-                {`${game} Starting Score 🎯`}
+              <label
+                className="text-[10px] font-bold uppercase tracking-widest text-indigo-300/70 mb-1 block"
+                htmlFor="match-start"
+              >
+                {`${game} Starting Score`}
               </label>
               <select
                 id="match-start"
-                className="ml-2 p-2 border border-white/10 bg-white/5 rounded text-white w-full"
+                className="p-2 border border-indigo-500/20 bg-indigo-500/10 rounded-lg text-sm text-white w-full"
                 value={startingScore}
                 onChange={(e) => setStartingScore(Number(e.target.value))}
                 onPointerDown={(e) => {
@@ -149,7 +160,9 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
             </div>
           ) : null}
           <div>
-            <div className="text-sm opacity-80">Mode 🎯</div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-indigo-300/70 mb-1">
+              Mode
+            </div>
             <div className="flex gap-2 mt-1 justify-center">
               <label
                 className={`btn ${modeType === "bestof" ? "btn-primary" : "btn-ghost"}`}
@@ -170,7 +183,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                   }}
                   className="sr-only"
                 />{" "}
-                Best Of 🎯
+                Best Of
               </label>
               <label
                 className={`btn ${modeType === "firstto" ? "btn-primary" : "btn-ghost"}`}
@@ -187,13 +200,16 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                   }}
                   className="sr-only"
                 />{" "}
-                First To 🎯
+                First To
               </label>
             </div>
           </div>
           <div>
-            <label className="text-sm opacity-80" htmlFor="match-legs">
-              {modeType === "bestof" ? "Best Of 🎯" : "First To 🎯"}
+            <label
+              className="text-[10px] font-bold uppercase tracking-widest text-indigo-300/70 mb-1 block"
+              htmlFor="match-legs"
+            >
+              {modeType === "bestof" ? "Best Of" : "First To"}
             </label>
             <input
               id="match-legs"
@@ -204,25 +220,31 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                 setLegs(Math.max(1, Number(e.target.value || 1)))
               }
               ref={legsRef}
-              className="w-full p-2 border border-white/10 bg-white/5 rounded text-white"
+              className="w-full p-2 border border-indigo-500/20 bg-indigo-500/10 rounded-lg text-sm text-white"
             />
           </div>
           <div>
-            <label className="text-sm opacity-80" htmlFor="match-avg">
-              Average Choice (±) 🎯
+            <label
+              className="text-[10px] font-bold uppercase tracking-widest text-indigo-300/70 mb-1 block"
+              htmlFor="match-avg"
+            >
+              Average Choice (±)
             </label>
             <input
               id="match-avg"
               type="number"
               value={avgChoice}
               onChange={(e) => setAvgChoice(Number(e.target.value || 0))}
-              className="w-full p-2 border border-white/10 bg-white/5 rounded text-white"
+              className="w-full p-2 border border-indigo-500/20 bg-indigo-500/10 rounded-lg text-sm text-white"
             />
           </div>
         </div>
-        <div className="flex justify-end mt-4">
-          <button className="btn btn-primary" onClick={handleCreate}>
-            Create Match 🎯
+        <div className="flex gap-2 mt-4 pt-3 border-t border-indigo-500/20">
+          <button className="flex-1 btn btn-ghost text-xs" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="flex-1 btn text-xs" onClick={handleCreate}>
+            Create Match
           </button>
         </div>
       </div>
