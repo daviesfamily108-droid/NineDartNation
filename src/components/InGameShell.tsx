@@ -67,17 +67,20 @@ export default function InGameShell({
   );
 
   const settingsUser = useUserSettings((s: any) => s.user);
-  const localPlayerName = getPreferredUserName(user, '') ||
-    getPreferredUserName(settingsUser, '') ||
+  const localPlayerName =
+    getPreferredUserName(user, "") ||
+    getPreferredUserName(settingsUser, "") ||
     user?.email?.split("@")[0] ||
     settingsUser?.email?.split("@")[0] ||
-    'You';
+    "You";
 
-  const resolvedLocalIndex = typeof localPlayerIndexOverride === 'number' && localPlayerIndexOverride >= 0
-    ? localPlayerIndexOverride
-    : (match.players || []).findIndex(
-        (p: any) => p?.name && p.name === localPlayerName,
-      );
+  const resolvedLocalIndex =
+    typeof localPlayerIndexOverride === "number" &&
+    localPlayerIndexOverride >= 0
+      ? localPlayerIndexOverride
+      : (match.players || []).findIndex(
+          (p: any) => p?.name && p.name === localPlayerName,
+        );
   const localPlayerIndex = resolvedLocalIndex >= 0 ? resolvedLocalIndex : 0;
   const isUsersTurn = (match.currentPlayerIdx ?? 0) === localPlayerIndex;
 
@@ -97,24 +100,33 @@ export default function InGameShell({
   const playerStats = useMemo(() => {
     const compute = (p: any) => {
       if (!p) return { lastVisit: 0, avg3: 0 };
-      let pts = 0, darts = 0;
-      for (const L of (p.legs || [])) {
-        pts += ((L.totalScoreStart ?? 0) - (L.totalScoreRemaining ?? 0));
-        darts += (L.visits || []).reduce((a: number, v: any) => a + (v.darts || 0) - (v.preOpenDarts || 0), 0);
+      let pts = 0,
+        darts = 0;
+      for (const L of p.legs || []) {
+        pts += (L.totalScoreStart ?? 0) - (L.totalScoreRemaining ?? 0);
+        darts += (L.visits || []).reduce(
+          (a: number, v: any) => a + (v.darts || 0) - (v.preOpenDarts || 0),
+          0,
+        );
       }
       const lastV = (p.legs?.[p.legs.length - 1]?.visits || []).slice(-1)[0];
       return {
         lastVisit: lastV?.score ?? lastV?.visitTotal ?? 0,
-        avg3: darts > 0 ? ((pts / darts) * 3) : 0,
+        avg3: darts > 0 ? (pts / darts) * 3 : 0,
       };
     };
     return { local: compute(localPlayer), away: compute(awayPlayer) };
-  }, [localPlayer, awayPlayer, localLeg?.visits?.length, awayLeg?.visits?.length]);
+  }, [
+    localPlayer,
+    awayPlayer,
+    localLeg?.visits?.length,
+    awayLeg?.visits?.length,
+  ]);
 
   // Checkout suggestions for the current thrower (local or away)
   const throwerRemaining = isUsersTurn ? localRemaining : awayRemaining;
 
-  const gameMode = gameModeOverride || ((match as any)?.game || "X01");
+  const gameMode = gameModeOverride || (match as any)?.game || "X01";
   const scoreboardPlayers = useOnlineGameStats(gameMode, match as any);
 
   const callerEnabled = useUserSettings((s: any) => s.callerEnabled);
@@ -401,14 +413,18 @@ export default function InGameShell({
 
         {/* Checkout suggestion strip — shows for whoever is currently throwing */}
         {throwerCheckout && (
-          <div className={`relative border-t px-4 py-2 flex items-center gap-3 ${
-            isUsersTurn
-              ? "border-emerald-400/20 bg-emerald-500/10"
-              : "border-amber-400/20 bg-amber-500/10"
-          }`}>
-            <span className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold whitespace-nowrap ${
-              isUsersTurn ? "text-emerald-300/80" : "text-amber-300/80"
-            }`}>
+          <div
+            className={`relative border-t px-4 py-2 flex items-center gap-3 ${
+              isUsersTurn
+                ? "border-emerald-400/20 bg-emerald-500/10"
+                : "border-amber-400/20 bg-amber-500/10"
+            }`}
+          >
+            <span
+              className={`text-[10px] sm:text-xs uppercase tracking-wider font-semibold whitespace-nowrap ${
+                isUsersTurn ? "text-emerald-300/80" : "text-amber-300/80"
+              }`}
+            >
               Checkout {throwerRemaining}:
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -431,7 +447,6 @@ export default function InGameShell({
 
       {/* ── Main content — context-sensitive layout ── */}
       <div className="ndn-shell-body">
-
         {/* ───── OPPONENT'S TURN: Camera + Scoreboard (spectator view) ───── */}
         {!isUsersTurn && (
           <div className="flex flex-col gap-3">
@@ -453,8 +468,18 @@ export default function InGameShell({
                 {gameMode === "X01" && (
                   <LetterboxScoreboardOverlay
                     checkoutRemaining={localRemaining}
-                    away={{ side: "Away", name: awayPlayer?.name || "Away", legsWon: awayPlayer?.legsWon || 0, remaining: awayRemaining }}
-                    home={{ side: "Home", name: localPlayer?.name || "Home", legsWon: localPlayer?.legsWon || 0, remaining: localRemaining }}
+                    away={{
+                      side: "Away",
+                      name: awayPlayer?.name || "Away",
+                      legsWon: awayPlayer?.legsWon || 0,
+                      remaining: awayRemaining,
+                    }}
+                    home={{
+                      side: "Home",
+                      name: localPlayer?.name || "Home",
+                      legsWon: localPlayer?.legsWon || 0,
+                      remaining: localRemaining,
+                    }}
                   />
                 )}
               </div>
@@ -464,7 +489,9 @@ export default function InGameShell({
             <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent" />
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">Scoreboard</h3>
+                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">
+                  Scoreboard
+                </h3>
                 <div className="px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-amber-500/20 border border-amber-400/30 text-amber-300">
                   {awayPlayer?.name || "Opponent"}&apos;s turn
                 </div>
@@ -481,7 +508,9 @@ export default function InGameShell({
             <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] to-transparent" />
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">Scoreboard</h3>
+                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">
+                  Scoreboard
+                </h3>
                 <div className="px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 animate-pulse">
                   ● Your turn
                 </div>
@@ -493,7 +522,10 @@ export default function InGameShell({
             <button
               type="button"
               className="relative w-full rounded-2xl border-2 border-dashed border-emerald-400/40 bg-emerald-500/5 hover:bg-emerald-500/10 active:scale-[0.98] transition-all p-6 sm:p-8 text-center group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
-              onClick={() => { setNumpadValue(""); setShowNumpad(true); }}
+              onClick={() => {
+                setNumpadValue("");
+                setShowNumpad(true);
+              }}
             >
               <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/[0.05] to-transparent" />
               <div className="text-emerald-300/60 text-xs sm:text-sm uppercase tracking-widest font-semibold mb-2">
@@ -503,16 +535,28 @@ export default function InGameShell({
                 {localRemaining}
               </div>
               <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-sm font-semibold">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
                   <rect x="4" y="4" width="16" height="16" rx="2" />
-                  <path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01" strokeLinecap="round" />
+                  <path
+                    d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"
+                    strokeLinecap="round"
+                  />
                 </svg>
                 Tap to enter score
               </div>
               {checkoutRoutes && (
                 <div className="mt-3 flex flex-wrap justify-center gap-1.5">
                   {checkoutRoutes.map((route: string, i: number) => (
-                    <span key={i} className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs font-medium">
+                    <span
+                      key={i}
+                      className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs font-medium"
+                    >
                       {route}
                     </span>
                   ))}
@@ -536,8 +580,12 @@ export default function InGameShell({
             {/* Winning shot banner */}
             {winningShot?.label && (
               <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-center">
-                <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">Winning Double</span>
-                <div className="text-lg font-bold text-emerald-200 mt-0.5">{winningShot.label}</div>
+                <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">
+                  Winning Double
+                </span>
+                <div className="text-lg font-bold text-emerald-200 mt-0.5">
+                  {winningShot.label}
+                </div>
               </div>
             )}
           </div>
@@ -546,7 +594,10 @@ export default function InGameShell({
 
       {/* ── Number Pad Modal ── */}
       {showNumpad && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setShowNumpad(false)}>
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          onClick={() => setShowNumpad(false)}
+        >
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           {/* Panel */}
@@ -556,13 +607,19 @@ export default function InGameShell({
           >
             {/* Display */}
             <div className="mb-4 rounded-2xl bg-black/40 border border-white/10 p-4 text-center">
-              <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">Score</div>
+              <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">
+                Score
+              </div>
               <div className="font-mono text-5xl sm:text-6xl font-black text-white tabular-nums min-h-[3.5rem] leading-none">
                 {numpadValue || <span className="text-white/20">0</span>}
               </div>
-              {numpadValue && checkoutRoutes && Number(numpadValue) === localRemaining && (
-                <div className="mt-2 text-xs text-emerald-300 font-semibold">✓ Checkout!</div>
-              )}
+              {numpadValue &&
+                checkoutRoutes &&
+                Number(numpadValue) === localRemaining && (
+                  <div className="mt-2 text-xs text-emerald-300 font-semibold">
+                    ✓ Checkout!
+                  </div>
+                )}
             </div>
 
             {/* Numpad grid */}
@@ -598,7 +655,10 @@ export default function InGameShell({
               <button
                 className="py-3.5 rounded-xl text-lg font-bold bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-400 border border-emerald-400/30 text-white shadow-lg shadow-emerald-600/30 transition-all active:scale-95"
                 onClick={() => {
-                  const score = Math.max(0, Math.min(180, Number(numpadValue) || 0));
+                  const score = Math.max(
+                    0,
+                    Math.min(180, Number(numpadValue) || 0),
+                  );
                   commitVisit(score, 3, { visitTotal: score });
                   setNumpadValue("");
                   setShowNumpad(false);

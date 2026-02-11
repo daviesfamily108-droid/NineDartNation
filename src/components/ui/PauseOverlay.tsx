@@ -59,9 +59,7 @@ export default function PauseOverlay({
   if (!paused) return null;
 
   const canResume =
-    !pauseInitiator ||
-    !localPlayerName ||
-    pauseInitiator === localPlayerName;
+    !pauseInitiator || !localPlayerName || pauseInitiator === localPlayerName;
 
   const handleResume = () => {
     if (onResume) {
@@ -111,7 +109,11 @@ export default function PauseOverlay({
           <div className="relative flex items-center justify-center w-48 h-48 sm:w-56 sm:h-56">
             <div
               className="absolute inset-0 rounded-full border border-amber-300/30 shadow-inner"
-              style={needsSelection ? { background: "rgba(255, 255, 255, 0.08)" } : ringStyle}
+              style={
+                needsSelection
+                  ? { background: "rgba(255, 255, 255, 0.08)" }
+                  : ringStyle
+              }
             />
             <div className="absolute inset-3 rounded-full bg-slate-950/90 border border-white/10 flex items-center justify-center">
               <div className="font-mono text-5xl sm:text-6xl font-black text-white tabular-nums">

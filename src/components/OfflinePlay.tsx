@@ -3489,10 +3489,13 @@ export default function OfflinePlay({ user }: { user: any }) {
                                   pauseInitiator: humanName,
                                 });
                               } catch {}
-                              toast("Match paused — select duration on overlay", {
-                                type: "info",
-                                timeout: 2500,
-                              });
+                              toast(
+                                "Match paused — select duration on overlay",
+                                {
+                                  type: "info",
+                                  timeout: 2500,
+                                },
+                              );
                             }}
                           >
                             Pause
@@ -6148,7 +6151,12 @@ export default function OfflinePlay({ user }: { user: any }) {
 
         {/* Phone camera overlay removed per UX preference; use header badge preview only */}
       </div>
-      <PauseOverlay localPlayerName={humanName} onResume={() => { setPaused(false, null); }} />
+      <PauseOverlay
+        localPlayerName={humanName}
+        onResume={() => {
+          setPaused(false, null);
+        }}
+      />
     </div>
   );
 }

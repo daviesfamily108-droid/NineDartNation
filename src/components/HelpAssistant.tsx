@@ -6,8 +6,8 @@ import HelpdeskChat from "./HelpdeskChat.js";
 import { useMatch } from "../store/match.js";
 
 export default function HelpAssistant() {
-const { inProgress } = useMatch();
-const [isOpen, setIsOpen] = useState(false);
+  const { inProgress } = useMatch();
+  const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<
     Array<{
       text:

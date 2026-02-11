@@ -13,7 +13,10 @@
 
 import type { DetectedDart } from "./dartDetection.js";
 import type { BoardDetectionResult } from "./boardDetection.js";
-import { getScoringValidator, type ScoringValidation } from "./scoringAccuracy.js";
+import {
+  getScoringValidator,
+  type ScoringValidation,
+} from "./scoringAccuracy.js";
 
 export interface EnhancedDartScoringConfig {
   // Detection thresholds

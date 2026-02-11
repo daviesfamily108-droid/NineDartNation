@@ -1818,7 +1818,7 @@ function MobileNav({
           >
             <MessageCircle className="w-6 h-6" />
             <div className="flex flex-col items-start">
-              <span className="font-bold">Bullseye League</span>
+              <span className="font-bold">Bulleye Darts League</span>
               <span className="text-xs opacity-70">Join the competition</span>
             </div>
           </button>
@@ -1841,7 +1841,7 @@ function MobileNav({
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-[#1a1825] border border-white/10 rounded-3xl p-6 max-w-sm w-full shadow-2xl">
             <h2 className="text-xl font-bold text-white mb-2">
-              Join Bullseye League
+              Join Bulleye Darts League
             </h2>
             <p className="text-slate-400 text-sm mb-6">
               Connect with enthusiasts and compete in tourneys!

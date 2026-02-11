@@ -51,8 +51,8 @@ export default function PauseQuitModal({
               </p>
               <p className="text-sm text-slate-400">
                 When paused, you'll choose a timer (1, 3, or 5 minutes). The
-                match will automatically resume when the timer expires or when
-                a player resumes early 🎯.
+                match will automatically resume when the timer expires or when a
+                player resumes early 🎯.
               </p>
             </div>
 

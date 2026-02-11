@@ -409,7 +409,8 @@ export function Sidebar({
                     ✕
                   </button>
                   <h3 className="text-xl font-bold mb-2 flex items-center gap-2 text-[#8ea1e1]">
-                    <MessageCircle className="w-6 h-6" /> Bullseye Darts League 🎯
+                    <MessageCircle className="w-6 h-6" /> Bullseye Darts League
+                    🎯
                   </h3>
                   <div className="mb-4 text-lg font-semibold">
                     Join this fantastic Online Darts League with divisions and

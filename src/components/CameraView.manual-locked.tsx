@@ -89,7 +89,8 @@ export default forwardRef(function CameraViewManualLocked(
   const callerVoice = useUserSettings((s: any) => s.callerVoice);
   const callerVolume = useUserSettings((s: any) => s.callerVolume);
   const dartTimerEnabled = useUserSettings((s: any) => s.dartTimerEnabled);
-  const dartTimerSeconds = useUserSettings((s: any) => s.dartTimerSeconds) || 10;
+  const dartTimerSeconds =
+    useUserSettings((s: any) => s.dartTimerSeconds) || 10;
 
   // Actions
   const setCameraEnabled = useUserSettings.getState().setCameraEnabled;
