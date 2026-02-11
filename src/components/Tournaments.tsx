@@ -1220,133 +1220,138 @@ export default function Tournaments({ user }: { user: any }) {
             aria-modal="true"
             aria-labelledby="create-tournament-heading"
             tabIndex={-1}
-            className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/60 sm:p-4"
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-3 sm:p-6"
             onClick={(e) => {
               if (e.target === e.currentTarget) setShowCreate(false);
             }}
           >
-            <div className="bg-slate-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-4xl max-h-[95vh] sm:max-h-[90vh] flex flex-col">
-              {/* Sticky header */}
-              <div className="flex items-center justify-between p-4 sm:p-6 pb-2 sm:pb-4 border-b border-white/10 shrink-0">
+            <div className="bg-gradient-to-b from-slate-800 to-slate-900 rounded-2xl w-full sm:max-w-2xl max-h-[85vh] flex flex-col shadow-2xl border border-white/10 overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0 bg-slate-800/80">
                 <h3
                   id="create-tournament-heading"
-                  className="text-lg sm:text-2xl font-semibold"
+                  className="text-base sm:text-xl font-bold tracking-tight"
                 >
-                  Create Tournament 🎯
+                  🎯 New Tournament
                 </h3>
-                <button className="btn" onClick={() => setShowCreate(false)}>
-                  Close ✕
+                <button
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-sm transition-colors"
+                  onClick={() => setShowCreate(false)}
+                  aria-label="Close"
+                >
+                  ✕
                 </button>
               </div>
-              {/* Scrollable body */}
-              <div className="flex-1 overflow-y-auto p-4 sm:p-6 pt-3 sm:pt-4">
-                <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 sm:gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold mb-1">
-                      Title
-                    </label>
-                    <input
-                      className="input w-full"
-                      value={form.title}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, title: e.target.value }))
-                      }
-                      placeholder="Enter tournament title"
-                    />
-                  </div>
+              {/* Scrollable form */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                {/* Title */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+                    Tournament Title
+                  </label>
+                  <input
+                    className="input w-full"
+                    value={form.title}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, title: e.target.value }))
+                    }
+                    placeholder="e.g. Friday Night 501"
+                  />
+                </div>
+                {/* Game settings row */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+                    Game Settings
+                  </label>
                   <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <label className="block text-xs sm:text-sm font-semibold mb-1">
-                        Game
-                      </label>
-                      <select
-                        className="input w-full"
-                        value={form.game}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, game: e.target.value }))
-                        }
-                      >
-                        {["X01", "Cricket", "Killer"].map((g) => (
-                          <option key={g} value={g}>
-                            {g}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs sm:text-sm font-semibold mb-1">
-                        Mode
-                      </label>
-                      <select
-                        className="input w-full"
-                        value={form.mode}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            mode: e.target.value as any,
-                          }))
-                        }
-                      >
-                        {getModeOptionsForGame(
-                          form.game as import("../utils/games.js").GameKey,
-                        ).map((o) => (
-                          <option key={String(o)} value={String(o)}>
-                            {labelForMode(String(o))}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs sm:text-sm font-semibold mb-1">
-                        Number
-                      </label>
-                      <input
-                        className="input w-full"
-                        type="number"
-                        min={1}
-                        value={form.value}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            value: Number(e.target.value),
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-1">
-                      Description
-                    </label>
-                    <textarea
-                      className="input w-full"
-                      rows={2}
-                      value={form.description}
+                    <select
+                      className="input w-full text-sm"
+                      value={form.game}
                       onChange={(e) =>
-                        setForm((f) => ({ ...f, description: e.target.value }))
+                        setForm((f) => ({ ...f, game: e.target.value }))
                       }
+                    >
+                      {["X01", "Cricket", "Killer"].map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      className="input w-full text-sm"
+                      value={form.mode}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          mode: e.target.value as any,
+                        }))
+                      }
+                    >
+                      {getModeOptionsForGame(
+                        form.game as import("../utils/games.js").GameKey,
+                      ).map((o) => (
+                        <option key={String(o)} value={String(o)}>
+                          {labelForMode(String(o))}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      className="input w-full text-sm"
+                      type="number"
+                      min={1}
+                      value={form.value}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          value: Number(e.target.value),
+                        }))
+                      }
+                      placeholder="Legs"
                     />
                   </div>
+                  <div className="flex gap-4 mt-1 text-[10px] text-slate-500 px-0.5">
+                    <span>Game</span>
+                    <span>Mode</span>
+                    <span>Legs</span>
+                  </div>
+                </div>
+                {/* Description */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+                    Description
+                  </label>
+                  <textarea
+                    className="input w-full text-sm"
+                    rows={2}
+                    value={form.description}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, description: e.target.value }))
+                    }
+                    placeholder="Optional details…"
+                  />
+                </div>
+                {/* Schedule row */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+                    Schedule
+                  </label>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs sm:text-sm font-semibold mb-1">
-                        Start time
-                      </label>
                       <input
-                        className="input w-full"
+                        className="input w-full text-sm"
                         type="datetime-local"
                         value={form.startAt}
                         onChange={(e) =>
                           setForm((f) => ({ ...f, startAt: e.target.value }))
                         }
                       />
+                      <div className="text-[10px] text-slate-500 mt-0.5 px-0.5">
+                        Start time
+                      </div>
                     </div>
                     <div>
-                      <label className="block text-xs sm:text-sm font-semibold mb-1">
-                        Check-in (min)
-                      </label>
                       <input
-                        className="input w-full"
+                        className="input w-full text-sm"
                         type="number"
                         min={0}
                         value={form.checkinMinutes}
@@ -1357,16 +1362,22 @@ export default function Tournaments({ user }: { user: any }) {
                           }))
                         }
                       />
+                      <div className="text-[10px] text-slate-500 mt-0.5 px-0.5">
+                        Check-in (min)
+                      </div>
                     </div>
                   </div>
+                </div>
+                {/* Score & Capacity row */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+                    Players
+                  </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {form.game === "X01" && (
+                    {form.game === "X01" ? (
                       <div>
-                        <label className="block text-xs sm:text-sm font-semibold mb-1">
-                          Starting Score
-                        </label>
                         <select
-                          className="input w-full"
+                          className="input w-full text-sm"
                           value={String(form.startingScore)}
                           onChange={(e) =>
                             setForm((f) => ({
@@ -1381,14 +1392,16 @@ export default function Tournaments({ user }: { user: any }) {
                             </option>
                           ))}
                         </select>
+                        <div className="text-[10px] text-slate-500 mt-0.5 px-0.5">
+                          Starting score
+                        </div>
                       </div>
+                    ) : (
+                      <div />
                     )}
                     <div>
-                      <label className="block text-xs sm:text-sm font-semibold mb-1">
-                        Capacity
-                      </label>
                       <input
-                        className="input w-full"
+                        className="input w-full text-sm"
                         type="number"
                         min={6}
                         max={64}
@@ -1400,46 +1413,54 @@ export default function Tournaments({ user }: { user: any }) {
                           }))
                         }
                       />
+                      <div className="text-[10px] text-slate-500 mt-0.5 px-0.5">
+                        Max players
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className="inline-flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        className="accent-purple-500"
-                        checked={!!form.requireCalibration}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            requireCalibration: !!e.target.checked,
-                          }))
-                        }
-                      />
-                      <span className="font-semibold">Require Camera</span>
-                    </label>
-                    <div className="text-xs opacity-70 mt-1">
-                      Players must have a camera connected to join matches.
-                    </div>
-                  </div>
-                  <div className="text-xs opacity-70">
-                    Note: community tournaments do not award prizes.
                   </div>
                 </div>
+                {/* Camera toggle */}
+                <div className="flex items-center gap-3 rounded-xl bg-white/5 border border-white/10 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    className="accent-purple-500 w-4 h-4 shrink-0"
+                    checked={!!form.requireCalibration}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        requireCalibration: !!e.target.checked,
+                      }))
+                    }
+                    id="require-camera"
+                  />
+                  <label
+                    htmlFor="require-camera"
+                    className="text-sm leading-tight"
+                  >
+                    <span className="font-semibold">Require Camera</span>
+                    <span className="block text-xs text-slate-400 mt-0.5">
+                      Players must have a camera to join matches
+                    </span>
+                  </label>
+                </div>
+                <div className="text-xs text-slate-500 text-center">
+                  Community tournaments do not award prizes.
+                </div>
               </div>
-              {/* Sticky footer */}
-              <div className="flex justify-end gap-3 p-4 sm:p-6 pt-3 sm:pt-4 border-t border-white/10 shrink-0">
+              {/* Footer */}
+              <div className="flex gap-3 px-5 py-4 border-t border-white/10 shrink-0 bg-slate-800/80">
                 <button
-                  className="btn btn-ghost"
+                  className="flex-1 btn btn-ghost text-sm"
                   onClick={() => setShowCreate(false)}
                 >
                   Cancel
                 </button>
                 <button
-                  className="btn"
+                  className="flex-1 btn text-sm"
                   disabled={loading}
                   onClick={createTournament}
                 >
-                  {loading ? "Creating..." : "Create Tournament"}
+                  {loading ? "Creating…" : "Create Tournament"}
                 </button>
               </div>
             </div>
