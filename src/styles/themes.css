@@ -95,9 +95,27 @@ html, body {
 /* Cards and panels should use themed surface */
 .card,
 .panel {
+  background-color: var(--surface);
+  color: var(--text);
+  border-color: rgba(255,255,255,0.1);
+}
+
+/* In dark mode (default), preserve the original glassy card look */
+:root .card,
+:root .panel {
+  background: rgba(49,46,129,0.18);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #F5F5F5;
+  border-color: #8F43EE44;
+}
+
+/* Light mode: force light surface */
+[data-color-mode="light"] .card,
+[data-color-mode="light"] .panel {
   background-color: var(--surface) !important;
   color: var(--text) !important;
-  border-color: rgba(255,255,255,0.1) !important;
+  border-color: rgba(0,0,0,0.1) !important;
 }
 
 .glass {

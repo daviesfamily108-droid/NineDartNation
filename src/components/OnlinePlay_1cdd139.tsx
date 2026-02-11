@@ -1489,7 +1489,7 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
         <div className="grid grid-cols-12 gap-4 min-h-[420px]">
           {/* Left column: toolbar + lobby (scrollable) */}
           <div className="col-span-12 md:col-span-4 flex flex-col gap-3">
-            <div className="rounded-2xl bg-white/5 backdrop-blur border border-white/10 p-2 flex items-center gap-2">
+            <div className="rounded-2xl bg-indigo-500/10 backdrop-blur border border-indigo-500/20 p-2 flex items-center gap-2">
               <div className="flex items-center gap-2">
                 <label className="text-xs opacity-70 shrink-0">Room</label>
                 <input className="input w-28" value={roomId} onChange={e => setRoomId(e.target.value)} placeholder="room-1" />
@@ -1516,7 +1516,7 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
               </div>
               <ul className="space-y-2">
                 {filteredLobby.map((m:any)=> (
-                  <li key={m.id} className="p-2 rounded bg-white/3 border border-white/6 flex items-center justify-between">
+                  <li key={m.id} className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between">
                     <div className="text-sm">{m.game} · {m.mode} · {m.startingScore}</div>
                     <div className="text-xs opacity-70">{m.creator || 'host'}</div>
                   </li>
@@ -1571,7 +1571,7 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
 
           {/* Right column: camera / preview */}
           <div className="col-span-12 md:col-span-4">
-            <div className="rounded-2xl p-3 border border-white/10 bg-black/5 h-full min-h-[200px]">
+            <div className="rounded-2xl p-3 border border-indigo-500/20 bg-indigo-500/5 h-full min-h-[200px]">
               <TabPills
                 tabs={[
                   { key: 'connection', label: 'Camera Connection' },
@@ -1617,7 +1617,7 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
                     </div>
                   </div>
                   {pairingCode ? (
-                    <div className="mb-2 p-2 rounded bg-white/5 border border-white/10 flex items-center justify-between">
+                    <div className="mb-2 p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between">
                       <div className="font-mono text-xl tracking-wider">{pairingCode}</div>
                       <div className="flex items-center gap-2">
                         <button className="btn btn--ghost" onClick={copyPairingCode}>Copy</button>
@@ -1629,7 +1629,7 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
                       Pair your phone camera to continue, then switch to the preview tab.
                     </div>
                   )}
-                  <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3">
+                    <div className="mt-3 rounded-lg border border-indigo-500/20 bg-indigo-500/10 p-3">
                     <div className="text-sm font-semibold mb-2">Camera device</div>
                     <div className="text-xs opacity-70 mb-2">Choose the camera model you want to use (VERT, OBS, webcams, etc.).</div>
                     <div className="flex items-center gap-2">
