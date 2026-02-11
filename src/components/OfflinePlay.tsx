@@ -2409,7 +2409,7 @@ export default function OfflinePlay({ user }: { user: any }) {
   // no external overlay: we render the match modal as absolute inset-0 inside this card
 
   return (
-    <div className="ndn-game-shell ndn-page relative overflow-hidden md:overflow-hidden overflow-y-auto bg-transparent shadow-none rounded-none">
+    <div className="card ndn-game-shell ndn-page flex flex-col min-h-0 relative overflow-hidden md:overflow-hidden overflow-y-auto">
       {showStartShowcase && (
         <MatchStartShowcase
           players={(match.players || []) as any}
@@ -2418,12 +2418,11 @@ export default function OfflinePlay({ user }: { user: any }) {
         />
       )}
       {!showMatchModal && !inMatch && (
-        <h2 className="text-3xl font-bold text-brand-700 mb-4 ndn-section-title">
-          Offline Mode �{" "}
-          <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 align-middle">
-            Modern layout
-          </span>
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-2xl font-bold ndn-section-title">
+            Offline Mode 🎮
+          </h2>
+        </div>
       )}
       <div className="ndn-shell-body">
         {!showMatchModal && !inMatch && (

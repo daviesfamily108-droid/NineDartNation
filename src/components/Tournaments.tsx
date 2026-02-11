@@ -775,7 +775,7 @@ export default function Tournaments({ user }: { user: any }) {
           World Lobby
         </div>
         {/* Created Game Lobby: show all created tournaments (scheduled) */}
-        <div className="mb-3 p-3 rounded-xl border border-slate-700 bg-black/10">
+        <div className="mb-3 p-3 rounded-xl border border-indigo-500/20 bg-indigo-500/5">
           <div className="flex items-center justify-between mb-2">
             <div className="font-semibold">Created Game Lobby</div>
             <div className="text-xs opacity-60">
@@ -929,7 +929,7 @@ export default function Tournaments({ user }: { user: any }) {
               {official.map((t) => (
                 <li
                   key={t.id}
-                  className="p-3 rounded bg-black/10 flex items-center justify-between relative"
+                  className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between relative"
                 >
                   <div className="space-y-0.5">
                     <div className="font-semibold">
@@ -1044,7 +1044,7 @@ export default function Tournaments({ user }: { user: any }) {
               {paginatedCommunity.map((t) => (
                 <li
                   key={t.id}
-                  className="p-3 rounded bg-black/10 flex items-center justify-between relative"
+                  className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between relative"
                 >
                   <div className="space-y-0.5">
                     <div className="font-semibold">{t.title}</div>

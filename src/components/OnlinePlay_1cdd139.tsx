@@ -1483,9 +1483,11 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
 
   // ── Lobby view (no match in progress) ──
   return (
-    <div className="card ndn-game-shell relative overflow-hidden">
-      <h2 className="text-3xl font-bold text-brand-700 mb-4">Online Play</h2>
-      <div className="ndn-shell-body">
+    <div className="card ndn-game-shell ndn-page flex flex-col min-h-0 relative overflow-hidden">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-2xl font-bold ndn-section-title">Online Play 🎮</h2>
+      </div>
+      <div className="ndn-shell-body overflow-visible flex-1 min-h-0">
         <div className="grid grid-cols-12 gap-4 min-h-[420px]">
           {/* Left column: toolbar + lobby (scrollable) */}
           <div className="col-span-12 md:col-span-4 flex flex-col gap-3">
@@ -1506,7 +1508,7 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
               <button className="btn" disabled={!connected || locked}>Create Match +</button>
             </div>
 
-            <div className="flex-1 overflow-auto rounded-xl border border-indigo-500/20 p-3 bg-indigo-500/8">
+            <div className="flex-1 overflow-auto rounded-xl border border-indigo-500/20 p-3 bg-indigo-500/5">
               <div className="flex items-center justify-between mb-3">
                 <div className="font-semibold">World Lobby</div>
                 <div className="flex items-center gap-2">
@@ -1545,7 +1547,7 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
                 )}
               />
 
-              <div className="rounded-2xl bg-slate-900/60 border border-white/10 p-3 text-slate-100 shadow-lg backdrop-blur-sm">
+              <div className="rounded-2xl bg-indigo-500/5 border border-indigo-500/20 p-3 text-slate-100 shadow-lg backdrop-blur-sm">
                 {/* Build players list for GameScoreboard */}
                 {(() => {
                   const players = (match.players || []).map((p:any, i:number) => {
