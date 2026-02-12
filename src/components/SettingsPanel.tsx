@@ -463,22 +463,18 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
   return (
     <div className="space-y-6 ndn-page">
-      <div className="rounded-[28px] border border-white/10 bg-gradient-to-br from-slate-950/70 via-indigo-950/30 to-slate-950/60 p-5 shadow-2xl">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.35em] text-slate-400">
-              Preferences
-            </div>
-            <h2 className="mt-1 text-2xl font-extrabold text-white">
-              Settings
-            </h2>
-            <div className="mt-1 text-sm text-slate-300/80">
-              Tune your camera, scoring, and app experience.
-            </div>
+      <div className="rounded-[28px] border border-white/10 bg-gradient-to-br from-slate-950/70 via-indigo-950/30 to-slate-950/60 p-5 shadow-2xl space-y-4">
+        <div>
+          <div className="text-xs uppercase tracking-[0.35em] text-slate-400">
+            Preferences
           </div>
-          <div className="shrink-0 rounded-2xl border border-white/10 bg-white/5 px-3 py-2">
-            <ThemeToggle />
+          <h2 className="mt-1 text-2xl font-extrabold text-white">Settings</h2>
+          <div className="mt-1 text-sm text-slate-300/80">
+            Tune your camera, scoring, and app experience.
           </div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+          <ThemeToggle />
         </div>
       </div>
 

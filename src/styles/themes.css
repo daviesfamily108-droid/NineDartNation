@@ -118,6 +118,23 @@ html, body {
   border-color: rgba(0,0,0,0.1) !important;
 }
 
+/* Game-shell pages should use the page background, not card surface, so they
+   don't appear as a white rectangle in light mode. */
+[data-color-mode="light"] .ndn-game-shell.card {
+  background-color: var(--bg) !important;
+  border-color: rgba(0,0,0,0.06) !important;
+}
+
+/* Inner panels inside game shells need readable colours in light mode */
+[data-color-mode="light"] .ndn-game-shell .ndn-shell-body {
+  color: var(--text);
+}
+[data-color-mode="light"] .ndn-game-shell .input {
+  background-color: var(--surface);
+  color: var(--text);
+  border-color: rgba(0,0,0,0.15);
+}
+
 .glass {
   background-color: rgba(255, 255, 255, 0.03) !important;
   backdrop-filter: blur(12px);
