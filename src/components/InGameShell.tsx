@@ -127,7 +127,56 @@ export default function InGameShell({
   const throwerRemaining = isUsersTurn ? localRemaining : awayRemaining;
 
   const gameMode = gameModeOverride || (match as any)?.game || "X01";
+  const isX01 = gameMode === "X01";
   const scoreboardPlayers = useOnlineGameStats(gameMode, match as any);
+
+  // Game-mode-aware hero display values for each player
+  const heroValues = useMemo(() => {
+    const forPlayer = (p: any, sbIdx: number) => {
+      const sb = scoreboardPlayers[sbIdx];
+      if (isX01) {
+        const leg = p?.legs?.[p.legs.length - 1];
+        return {
+          primary: String(
+            leg?.totalScoreRemaining ?? match.startingScore ?? lastOfflineStart,
+          ),
+          primaryLabel: "Remaining",
+        };
+      }
+      if (gameMode === "Cricket" || gameMode === "American Cricket") {
+        return {
+          primary: String(sb?.points ?? 0),
+          primaryLabel: "Points",
+        };
+      }
+      if (gameMode === "Killer") {
+        const lives = sb?.lives ?? 0;
+        return {
+          primary: sb?.eliminated ? "OUT" : String(lives),
+          primaryLabel: sb?.eliminated ? "Eliminated" : "Lives",
+        };
+      }
+      // Generic score-based games
+      return {
+        primary: String(sb?.score ?? sb?.points ?? 0),
+        primaryLabel: "Score",
+      };
+    };
+    return {
+      local: forPlayer(localPlayer, localPlayerIndex),
+      away: forPlayer(awayPlayer, awayIdx >= 0 ? awayIdx : 0),
+    };
+  }, [
+    isX01,
+    gameMode,
+    scoreboardPlayers,
+    localPlayer,
+    awayPlayer,
+    localPlayerIndex,
+    awayIdx,
+    match.startingScore,
+    lastOfflineStart,
+  ]);
 
   const callerEnabled = useUserSettings((s: any) => s.callerEnabled);
   const callerVoice = useUserSettings((s: any) => s.callerVoice);
@@ -162,19 +211,19 @@ export default function InGameShell({
   }, [paused, pauseEndsAt, setPaused]);
 
   const checkoutRoutes = useMemo(() => {
-    if (gameMode !== "X01" || localRemaining > 170 || localRemaining <= 0)
-      return null;
+    if (!isX01 || localRemaining > 170 || localRemaining <= 0) return null;
     const routes = suggestCheckouts(localRemaining);
     return routes && routes.length > 0 ? routes : null;
-  }, [gameMode, localRemaining]);
+  }, [isX01, localRemaining]);
 
   // Checkout for the current thrower (shown in hero strip for both players)
   const throwerCheckout = useMemo(() => {
-    if (gameMode !== "X01" || throwerRemaining > 170 || throwerRemaining <= 0)
-      return null;
+    if (!isX01 || throwerRemaining > 170 || throwerRemaining <= 0) return null;
     const routes = suggestCheckouts(throwerRemaining);
     return routes && routes.length > 0 ? routes : null;
-  }, [gameMode, throwerRemaining]);
+  }, [isX01, throwerRemaining]);
+
+  const numpadMax = isX01 ? 180 : 999;
 
   const legsInfo = useMemo(() => {
     const players = match.players || [];
@@ -304,9 +353,7 @@ export default function InGameShell({
             )}
             <span className="px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-xs font-semibold tracking-wide">
               {gameMode}
-              {gameMode === "X01"
-                ? ` / ${match.startingScore || lastOfflineStart}`
-                : ""}
+              {isX01 ? ` / ${match.startingScore || lastOfflineStart}` : ""}
             </span>
             {legsInfo.length >= 2 && (
               <span className="font-bold text-white/90 text-sm tabular-nums">
@@ -340,10 +387,13 @@ export default function InGameShell({
             >
               {localPlayer?.name || "You"}
             </div>
+            <div className="text-[10px] sm:text-xs uppercase tracking-wider text-slate-500 font-medium">
+              {heroValues.local.primaryLabel}
+            </div>
             <div
               className={`font-mono text-5xl sm:text-7xl md:text-8xl font-black tabular-nums leading-none ${isUsersTurn ? "text-white" : "text-white/60"}`}
             >
-              {localRemaining}
+              {heroValues.local.primary}
             </div>
             {isUsersTurn && (
               <div className="mt-1 px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
@@ -351,9 +401,11 @@ export default function InGameShell({
               </div>
             )}
             <div className="flex items-center gap-3 mt-1">
-              <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
-                Legs: {localPlayer?.legsWon || 0}
-              </div>
+              {isX01 && (
+                <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
+                  Legs: {localPlayer?.legsWon || 0}
+                </div>
+              )}
               {playerStats.local.avg3 > 0 && (
                 <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
                   Avg: {playerStats.local.avg3.toFixed(1)}
@@ -383,10 +435,13 @@ export default function InGameShell({
             >
               {awayPlayer?.name || "Opponent"}
             </div>
+            <div className="text-[10px] sm:text-xs uppercase tracking-wider text-slate-500 font-medium">
+              {heroValues.away.primaryLabel}
+            </div>
             <div
               className={`font-mono text-5xl sm:text-7xl md:text-8xl font-black tabular-nums leading-none ${!isUsersTurn ? "text-white" : "text-white/60"}`}
             >
-              {awayRemaining}
+              {heroValues.away.primary}
             </div>
             {!isUsersTurn && (
               <div className="mt-1 px-3 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
@@ -394,9 +449,11 @@ export default function InGameShell({
               </div>
             )}
             <div className="flex items-center gap-3 mt-1">
-              <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
-                Legs: {awayPlayer?.legsWon || 0}
-              </div>
+              {isX01 && (
+                <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
+                  Legs: {awayPlayer?.legsWon || 0}
+                </div>
+              )}
               {playerStats.away.avg3 > 0 && (
                 <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
                   Avg: {playerStats.away.avg3.toFixed(1)}
@@ -465,7 +522,7 @@ export default function InGameShell({
               </div>
               <div className="relative min-h-[12rem] max-h-[50vh] bg-black">
                 <CameraView hideInlinePanels={true} forceAutoStart={true} />
-                {gameMode === "X01" && (
+                {isX01 && (
                   <LetterboxScoreboardOverlay
                     checkoutRemaining={localRemaining}
                     away={{
@@ -532,7 +589,7 @@ export default function InGameShell({
                 Enter Score
               </div>
               <div className="font-mono text-4xl sm:text-5xl font-black text-emerald-200 group-hover:text-emerald-100 transition-colors">
-                {localRemaining}
+                {heroValues.local.primary}
               </div>
               <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-sm font-semibold">
                 <svg
@@ -566,7 +623,10 @@ export default function InGameShell({
 
             {/* Quick score buttons row */}
             <div className="flex flex-wrap gap-2 justify-center">
-              {[180, 140, 100, 85, 60, 45, 26, 0].map((v) => (
+              {(isX01
+                ? [180, 140, 100, 85, 60, 45, 26, 0]
+                : [100, 80, 60, 45, 26, 20, 10, 0]
+              ).map((v) => (
                 <button
                   key={v}
                   className="px-4 py-2.5 rounded-xl text-sm font-bold bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/90 transition-all active:scale-95"
@@ -581,7 +641,7 @@ export default function InGameShell({
             {winningShot?.label && (
               <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-center">
                 <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">
-                  Winning Double
+                  {isX01 ? "Winning Double" : "Winning Shot"}
                 </span>
                 <div className="text-lg font-bold text-emerald-200 mt-0.5">
                   {winningShot.label}
@@ -630,7 +690,7 @@ export default function InGameShell({
                   className="py-3.5 rounded-xl text-xl font-bold bg-white/5 hover:bg-white/10 active:bg-white/20 border border-white/10 text-white transition-all active:scale-95"
                   onClick={() => {
                     const next = numpadValue + String(n);
-                    if (Number(next) <= 180) setNumpadValue(next);
+                    if (Number(next) <= numpadMax) setNumpadValue(next);
                   }}
                 >
                   {n}
@@ -647,7 +707,7 @@ export default function InGameShell({
                 className="py-3.5 rounded-xl text-xl font-bold bg-white/5 hover:bg-white/10 active:bg-white/20 border border-white/10 text-white transition-all active:scale-95"
                 onClick={() => {
                   const next = numpadValue + "0";
-                  if (Number(next) <= 180) setNumpadValue(next);
+                  if (Number(next) <= numpadMax) setNumpadValue(next);
                 }}
               >
                 0
@@ -657,7 +717,7 @@ export default function InGameShell({
                 onClick={() => {
                   const score = Math.max(
                     0,
-                    Math.min(180, Number(numpadValue) || 0),
+                    Math.min(numpadMax, Number(numpadValue) || 0),
                   );
                   commitVisit(score, 3, { visitTotal: score });
                   setNumpadValue("");
@@ -670,7 +730,10 @@ export default function InGameShell({
 
             {/* Quick buttons inside numpad */}
             <div className="flex flex-wrap gap-2 justify-center mb-3">
-              {[180, 140, 100, 85, 60, 45, 26, 0].map((v) => (
+              {(isX01
+                ? [180, 140, 100, 85, 60, 45, 26, 0]
+                : [100, 80, 60, 45, 26, 20, 10, 0]
+              ).map((v) => (
                 <button
                   key={v}
                   className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 transition-all active:scale-95"
