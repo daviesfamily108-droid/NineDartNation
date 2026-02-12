@@ -898,13 +898,10 @@ export default forwardRef(function CameraView(
     };
   } | null>(null);
   const pendingCommitTimerRef = useRef<number | null>(null);
-  // Commit policy:
-  // - Default to wait-for-clear for reliability.
-  // - Only skip waiting when the user/parent explicitly opts into immediate commits.
-  // NOTE: cameraAutoCommit MUST NOT implicitly force immediate commits; that behavior
-  // causes premature/incorrect scoring in real play (especially online/tournaments).
-  const shouldDeferCommit =
-    !immediateAutoCommit && autoCommitMode !== "immediate";
+  // Commit policy: MANUAL-ONLY — auto-scoring is disabled site-wide.
+  // The camera will still detect and display darts, but visits are never
+  // auto-committed.  The player must always confirm/enter scores manually.
+  const shouldDeferCommit = true;
   const [indicatorVersion, setIndicatorVersion] = useState(0);
   const [indicatorEntryVersions, setIndicatorEntryVersions] = useState<
     number[]
@@ -4203,6 +4200,10 @@ export default forwardRef(function CameraView(
             } catch {}
 
             const applyAutoHit = async (candidate: AutoCandidate) => {
+              // Auto-scoring disabled site-wide — all scoring is manual.
+              // The camera still detects darts for visual feedback, but
+              // never auto-commits scores or notifies the parent.
+              return;
               if (boardLockedRef.current) return;
               console.log(
                 "[CameraView] applyAutoHit CALLED:",
@@ -5238,8 +5239,10 @@ export default forwardRef(function CameraView(
     } catch (e) {}
   }, [overlayRef, imageSize]);
 
-  // External autoscore subscription
+  // External autoscore subscription — DISABLED (manual-only scoring)
   useEffect(() => {
+    // Auto-scoring disabled site-wide; external WS provider is not used.
+    return;
     if (autoscoreProvider !== "external-ws" || !autoscoreWsUrl) return;
     const sub = subscribeExternalWS(autoscoreWsUrl, (d) => {
       if (
@@ -5328,16 +5331,8 @@ export default forwardRef(function CameraView(
     setLastAutoValue(score.base);
     setLastAutoRing(score.ring as Ring);
     setHadRecentAuto(true);
-    // Optional immediate commit hook (e.g., Double Practice)
-    try {
-      if (immediateAutoCommit && onAutoDart) {
-        onAutoDart(score.base, score.ring as Ring, {
-          sector: score.sector,
-          mult: score.mult,
-        });
-        setHadRecentAuto(false);
-      }
-    } catch (e) {}
+    // Auto-scoring disabled site-wide — darts are detected and displayed
+    // but never auto-committed.  Manual entry is required.
   }
 
   function parseManual(
