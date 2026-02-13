@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   User,
   Trophy,
@@ -234,6 +234,12 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
             detail: { username: uname, avatar: result },
           }),
         );
+        // Sync avatar to server so other users can see it
+        apiFetch("/api/user/avatar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avatar: result }),
+        }).catch(() => {});
       }
     };
     reader.readAsDataURL(file);
@@ -289,6 +295,14 @@ export default function ProfilePanel({ user, onClose }: ProfilePanelProps) {
           detail: { username: uname, avatar: profilePhoto },
         }),
       );
+      // Sync avatar to server
+      if (profilePhoto) {
+        apiFetch("/api/user/avatar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ avatar: profilePhoto }),
+        }).catch(() => {});
+      }
       setIsEditing(false);
     } catch {}
   };

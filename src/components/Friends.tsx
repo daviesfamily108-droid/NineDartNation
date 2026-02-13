@@ -11,6 +11,9 @@ type Friend = {
   status?: "online" | "offline" | "ingame";
   lastSeen?: number;
   roomId?: string | null;
+  avatar?: string | null;
+  threeDartAvg?: number;
+  relationship?: "none" | "friend" | "pending-outgoing" | "pending-incoming";
   match?: {
     game: string;
     mode: string;
@@ -193,7 +196,7 @@ export default function Friends({ user }: { user?: any }) {
     }
     try {
       const res = await fetch(
-        `/api/friends/search?q=${encodeURIComponent(term)}`,
+        `/api/friends/search?q=${encodeURIComponent(term)}&email=${encodeURIComponent(email)}`,
       );
       const data = await res.json();
       setResults(data.results || []);
@@ -649,48 +652,157 @@ export default function Friends({ user }: { user?: any }) {
             value={q}
             onChange={(e) => search(e.target.value)}
           />
-          <ul className="space-y-2 mb-3 max-h-48 overflow-auto">
+          <ul className="space-y-2 mb-3 max-h-[320px] overflow-auto">
             {results.map((r) => (
               <li
                 key={r.email}
-                className="flex items-center justify-between gap-2 p-3 rounded-2xl border border-white/10 bg-slate-900/40"
+                className="flex items-center gap-3 p-3 rounded-2xl border border-white/10 bg-slate-900/40"
               >
-                <div className="flex items-center gap-2">
+                <div className="relative shrink-0">
+                  {r.avatar ? (
+                    <img
+                      src={r.avatar}
+                      alt=""
+                      className="w-10 h-10 rounded-full object-cover border-2 border-white/20"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm border-2 border-white/20">
+                      {(r.username || r.email || "?")[0].toUpperCase()}
+                    </div>
+                  )}
                   <span
-                    className={`inline-block w-2 h-2 rounded-full ${r.status === "online" ? "bg-emerald-400" : r.status === "ingame" ? "bg-amber-400" : "bg-slate-400"}`}
-                  ></span>
-                  <span>{r.username || r.email}</span>
+                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-slate-900 ${r.status === "online" ? "bg-emerald-400" : r.status === "ingame" ? "bg-amber-400" : "bg-slate-400"}`}
+                  />
                 </div>
-                <button
-                  onClick={() => addFriend(r.email)}
-                  disabled={loading}
-                  className={`px-4 py-2 rounded-xl text-white text-sm font-bold transition-colors ${loading ? "bg-indigo-900/40 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"}`}
-                >
-                  {loading ? "Working…" : "Add ➕"}
-                </button>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-white truncate">
+                    {r.username || r.email}
+                  </div>
+                  <div className="text-xs text-slate-400 flex items-center gap-2">
+                    <span>
+                      3DA:{" "}
+                      <span className="text-indigo-300 font-semibold">
+                        {r.threeDartAvg ? r.threeDartAvg.toFixed(1) : "—"}
+                      </span>
+                    </span>
+                    <span className="text-slate-600">•</span>
+                    <span
+                      className={
+                        r.status === "online"
+                          ? "text-emerald-400"
+                          : r.status === "ingame"
+                            ? "text-amber-400"
+                            : "text-slate-500"
+                      }
+                    >
+                      {r.status === "online"
+                        ? "Online"
+                        : r.status === "ingame"
+                          ? "In-Game"
+                          : "Offline"}
+                    </span>
+                  </div>
+                </div>
+                <div className="shrink-0">
+                  {r.relationship === "friend" ? (
+                    <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 text-xs font-bold">
+                      Friends ✓
+                    </span>
+                  ) : r.relationship === "pending-outgoing" ? (
+                    <span className="px-3 py-1.5 rounded-xl bg-white/5 text-white/40 text-xs font-bold">
+                      Pending ⏳
+                    </span>
+                  ) : r.relationship === "pending-incoming" ? (
+                    <button
+                      onClick={() => {
+                        const req = requests.find(
+                          (rq) =>
+                            rq.fromEmail.toLowerCase() ===
+                            r.email.toLowerCase(),
+                        );
+                        if (req) acceptFriend(req.id);
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/30 transition-colors"
+                    >
+                      Accept ✅
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => addFriend(r.email)}
+                      disabled={loading}
+                      className={`px-3 py-1.5 rounded-xl text-white text-xs font-bold transition-colors ${loading ? "bg-indigo-900/40 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"}`}
+                    >
+                      {loading ? "Working…" : "Add ➕"}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
-            {results.length === 0 && (
+            {results.length === 0 && q && (
+              <li className="text-sm text-slate-400 text-center py-4">
+                No accounts found for &quot;{q}&quot;
+              </li>
+            )}
+            {results.length === 0 && !q && (
               <li className="text-xs opacity-60">Type to search...</li>
             )}
           </ul>
           <div className="font-semibold mb-1 text-white/90">Suggested</div>
-          <ul className="space-y-2 max-h-48 overflow-auto">
+          <ul className="space-y-2 max-h-[280px] overflow-auto">
             {suggested.map((s) => (
               <li
                 key={s.email}
-                className="flex items-center justify-between gap-2 p-3 rounded-2xl border border-white/10 bg-slate-900/40"
+                className="flex items-center gap-3 p-3 rounded-2xl border border-white/10 bg-slate-900/40"
               >
-                <div className="flex items-center gap-2">
+                <div className="relative shrink-0">
+                  {s.avatar ? (
+                    <img
+                      src={s.avatar}
+                      alt=""
+                      className="w-10 h-10 rounded-full object-cover border-2 border-white/20"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-sm border-2 border-white/20">
+                      {(s.username || s.email || "?")[0].toUpperCase()}
+                    </div>
+                  )}
                   <span
-                    className={`inline-block w-2 h-2 rounded-full ${s.status === "online" ? "bg-emerald-400" : s.status === "ingame" ? "bg-amber-400" : "bg-slate-400"}`}
-                  ></span>
-                  <span>{s.username || s.email}</span>
+                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-slate-900 ${s.status === "online" ? "bg-emerald-400" : s.status === "ingame" ? "bg-amber-400" : "bg-slate-400"}`}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-white truncate">
+                    {s.username || s.email}
+                  </div>
+                  <div className="text-xs text-slate-400 flex items-center gap-2">
+                    <span>
+                      3DA:{" "}
+                      <span className="text-indigo-300 font-semibold">
+                        {s.threeDartAvg ? s.threeDartAvg.toFixed(1) : "—"}
+                      </span>
+                    </span>
+                    <span className="text-slate-600">•</span>
+                    <span
+                      className={
+                        s.status === "online"
+                          ? "text-emerald-400"
+                          : s.status === "ingame"
+                            ? "text-amber-400"
+                            : "text-slate-500"
+                      }
+                    >
+                      {s.status === "online"
+                        ? "Online"
+                        : s.status === "ingame"
+                          ? "In-Game"
+                          : "Offline"}
+                    </span>
+                  </div>
                 </div>
                 <button
                   onClick={() => addFriend(s.email)}
                   disabled={loading}
-                  className={`px-4 py-2 rounded-xl text-white text-sm font-bold transition-colors ${loading ? "bg-indigo-900/40 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"}`}
+                  className={`shrink-0 px-3 py-1.5 rounded-xl text-white text-xs font-bold transition-colors ${loading ? "bg-indigo-900/40 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-500"}`}
                 >
                   {loading ? "Working…" : "Add ➕"}
                 </button>

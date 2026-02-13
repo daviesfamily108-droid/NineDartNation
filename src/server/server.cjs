@@ -652,6 +652,81 @@ app.delete('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((re
   return res.json({ ok: true });
 })
 
+// User avatar persistence (server-wide).
+// Avatars are stored as base64 data URIs keyed by username.
+const AVATARS_FILE = path.join(__dirname, '..', 'data', 'user_avatars.json');
+let avatarsCache = null;
+
+function loadAvatarsFromDisk() {
+  if (avatarsCache !== null) return avatarsCache;
+  try {
+    if (fs.existsSync(AVATARS_FILE)) {
+      const raw = fs.readFileSync(AVATARS_FILE, 'utf8');
+      avatarsCache = JSON.parse(raw || '{}') || {};
+    } else {
+      avatarsCache = {};
+    }
+  } catch (err) {
+    startLogger.warn('[Avatars] Failed to load from disk:', err && err.message);
+    avatarsCache = {};
+  }
+  return avatarsCache;
+}
+
+function persistAvatarsToDisk() {
+  try {
+    const dir = path.dirname(AVATARS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(AVATARS_FILE, JSON.stringify(avatarsCache || {}, null, 2), 'utf8');
+  } catch (err) {
+    startLogger.warn('[Avatars] Failed to persist to disk:', err && err.message);
+  }
+}
+
+function getUserAvatar(username) {
+  const store = loadAvatarsFromDisk();
+  return store[username] || null;
+}
+
+function setUserAvatar(username, dataUri) {
+  const store = loadAvatarsFromDisk();
+  store[username] = dataUri;
+  avatarsCache = store;
+  persistAvatarsToDisk();
+}
+
+// Save / fetch avatar
+app.post('/api/user/avatar', requireAuth, (req, res) => {
+  try {
+    const username = req.user.username || req.user.email;
+    const avatar = req.body && req.body.avatar;
+    if (!avatar || typeof avatar !== 'string') return res.status(400).json({ error: 'Avatar data required.' });
+    // Limit to ~2MB base64
+    if (avatar.length > 3 * 1024 * 1024) return res.status(400).json({ error: 'Avatar too large.' });
+    setUserAvatar(username, avatar);
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to save avatar.' });
+  }
+});
+
+app.get('/api/user/avatar/:username', (req, res) => {
+  const username = req.params.username;
+  if (!username) return res.status(400).json({ error: 'Username required.' });
+  const avatar = getUserAvatar(username);
+  return res.json({ ok: true, avatar: avatar || null });
+});
+
+// Helper: compute 3-dart average from stored stats for a username
+function getUser3DA(username) {
+  const store = loadStatsFromDisk();
+  const stats = store[username];
+  if (!stats || !stats.allTime) return 0;
+  const { darts, scored } = stats.allTime;
+  if (!darts) return 0;
+  return Math.round(((scored / darts) * 3) * 100) / 100;
+}
+
 // User stats persistence (server-wide). If Supabase is configured we'll use it,
 // otherwise fall back to a file-backed JSON store under data/user_stats.json
 const STATS_FILE = path.join(__dirname, '..', 'data', 'user_stats.json');
@@ -2446,7 +2521,10 @@ app.get('/api/friends/list', (req, res) => {
   const set = friendships.get(email) || new Set()
   const list = Array.from(set).map(e => {
     const u = users.get(e) || { email: e, username: e, status: 'offline' }
-    return { email: e, username: u.username, status: u.status, lastSeen: u.lastSeen, roomId: u.currentRoomId || null, match: u.currentMatch || null }
+    const uname = u.username || e
+    const avatar = getUserAvatar(uname) || null
+    const threeDartAvg = getUser3DA(uname)
+    return { email: e, username: uname, status: u.status, lastSeen: u.lastSeen, roomId: u.currentRoomId || null, match: u.currentMatch || null, avatar, threeDartAvg }
   })
   res.json({ ok: true, friends: list })
 })
@@ -2480,9 +2558,23 @@ process.on('SIGTERM', shutdown)
 
 app.get('/api/friends/search', (req, res) => {
   const q = String(req.query.q || '').toLowerCase()
+  const callerEmail = String(req.query.email || '').toLowerCase()
   const results = []
+  const myFriends = friendships.get(callerEmail) || new Set()
+  const pendingOut = (friendRequests || []).filter(r => r && String(r.from || '').toLowerCase() === callerEmail && String(r.status || 'pending') === 'pending').map(r => String(r.to || '').toLowerCase())
+  const pendingIn = (friendRequests || []).filter(r => r && String(r.to || '').toLowerCase() === callerEmail && String(r.status || 'pending') === 'pending').map(r => String(r.from || '').toLowerCase())
   for (const [e, u] of users.entries()) {
-    if (!q || e.includes(q) || (u.username||'').toLowerCase().includes(q)) results.push({ email: e, username: u.username, status: u.status, lastSeen: u.lastSeen })
+    if (e === callerEmail) continue
+    if (!q || e.includes(q) || (u.username||'').toLowerCase().includes(q)) {
+      const uname = u.username || e
+      const avatar = getUserAvatar(uname) || null
+      const threeDartAvg = getUser3DA(uname)
+      let relationship = 'none'
+      if (myFriends.has(e)) relationship = 'friend'
+      else if (pendingOut.includes(e)) relationship = 'pending-outgoing'
+      else if (pendingIn.includes(e)) relationship = 'pending-incoming'
+      results.push({ email: e, username: uname, status: u.status, lastSeen: u.lastSeen, avatar, threeDartAvg, relationship })
+    }
     if (results.length >= 20) break
   }
   res.json({ ok: true, results })
@@ -2493,7 +2585,12 @@ app.get('/api/friends/suggested', (req, res) => {
   const set = friendships.get(email) || new Set()
   const suggestions = []
   for (const [e, u] of users.entries()) {
-    if (e !== email && !set.has(e)) suggestions.push({ email: e, username: u.username, status: u.status, lastSeen: u.lastSeen })
+    if (e !== email && !set.has(e)) {
+      const uname = u.username || e
+      const avatar = getUserAvatar(uname) || null
+      const threeDartAvg = getUser3DA(uname)
+      suggestions.push({ email: e, username: uname, status: u.status, lastSeen: u.lastSeen, avatar, threeDartAvg })
+    }
     if (suggestions.length >= 10) break
   }
   res.json({ ok: true, suggestions })
