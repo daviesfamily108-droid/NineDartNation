@@ -197,7 +197,8 @@ export default function OfflinePlay({ user }: { user: any }) {
   } = useUserSettings();
   const manualScoring = autoscoreProvider === "manual";
   const cameraToolbarVisible = cameraEnabled && !manualScoring;
-  const effectiveLayout = "modern" as "classic" | "modern";
+  const effectiveLayout =
+    offlineLayout === "classic" ? "classic" : ("modern" as const);
   const waitForBoardClear =
     cameraEnabled && !manualScoring && autoCommitMode !== "immediate";
   const [selectedMode, setSelectedMode] = useState<string>("X01");
@@ -876,6 +877,280 @@ export default function OfflinePlay({ user }: { user: any }) {
   const runningScored = totalScored + (playerVisitSum || 0);
   const runningDarts = totalDarts + (playerVisitDarts || 0);
   const _runningAvg = runningDarts > 0 ? (runningScored / runningDarts) * 3 : 0;
+
+  const displayScoreboardPlayers = useMemo(() => {
+    if (scoreboardPlayers.length > 0) return scoreboardPlayers;
+    switch (selectedMode) {
+      case "Double Practice":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            target: DOUBLE_PRACTICE_ORDER[dpIndex]?.label || "—",
+            hits: dpHits,
+            totalNeeded: DOUBLE_PRACTICE_ORDER.length,
+          },
+        ] as PlayerStats[];
+      case "Around the Clock":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            target:
+              ATC_ORDER[atcIndex] === 25
+                ? "25 (Outer Bull)"
+                : ATC_ORDER[atcIndex] === 50
+                  ? "50 (Inner Bull)"
+                  : ATC_ORDER[atcIndex] || "—",
+            hits: atcHits,
+            totalNeeded: ATC_ORDER.length,
+          },
+        ] as PlayerStats[];
+      case "Treble Practice":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            target: `T${trebleTarget}`,
+            hits: trebleHits,
+            totalNeeded: trebleMaxDarts,
+          },
+        ] as PlayerStats[];
+      case "Count-Up":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            score: cuScore,
+            round: cuRound,
+          },
+        ] as PlayerStats[];
+      case "High Score":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            score: hsScore,
+            round: hsRound,
+          },
+        ] as PlayerStats[];
+      case "Low Score":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            score: lsScore,
+            round: lsRound,
+          },
+        ] as PlayerStats[];
+      case "Checkout 170":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            remaining: co170Rem,
+            attempts: co170Attempts,
+            successes: co170Successes,
+          },
+        ] as PlayerStats[];
+      case "Checkout 121":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            remaining: co121Rem,
+            attempts: co121Attempts,
+            successes: co121Successes,
+          },
+        ] as PlayerStats[];
+      case "Bob's 27":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            target: b27Stage,
+            score: b27Score,
+          },
+        ] as PlayerStats[];
+      case "Baseball":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            inning: baseball.inning,
+            score: baseball.score,
+          },
+        ] as PlayerStats[];
+      case "Golf":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            hole: golf.hole,
+            strokes: golf.strokes,
+          },
+        ] as PlayerStats[];
+      case "Tic Tac Toe":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            turn: ttt.turn,
+            winner: ttt.winner,
+          },
+        ] as PlayerStats[];
+      case "Scam":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            target: SCAM_TARGET_NAMES[scamPlayer.targetIndex] || "—",
+            darts: scamPlayer.darts,
+            finished: scamPlayer.finished,
+          },
+        ] as PlayerStats[];
+      case "Fives":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            score: fives.score,
+            target: fives.target,
+            darts: fives.darts,
+          },
+        ] as PlayerStats[];
+      case "Sevens":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            score: sevens.score,
+            target: sevens.target,
+            darts: sevens.darts,
+          },
+        ] as PlayerStats[];
+      case "High-Low":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            round: highlow.round,
+            target: highlow.target,
+            score: highlow.score,
+          },
+        ] as PlayerStats[];
+      case "Halve It":
+        return [
+          {
+            name: humanName,
+            isCurrentTurn: true,
+            round: halve.stage + 1,
+            target: (() => {
+              const t = getCurrentHalveTarget(halve);
+              if (!t) return "—";
+              if (t.kind === "ANY_NUMBER") return "Any";
+              if (t.kind === "BULL") return "Bull";
+              if (
+                t.kind === "DOUBLE" ||
+                t.kind === "TRIPLE" ||
+                t.kind === "NUMBER"
+              )
+                return `${t.kind} ${(t as any).num}`;
+              return "—";
+            })(),
+            score: halve.score,
+          },
+        ] as PlayerStats[];
+      default:
+        return singlePlayerScoreboard;
+    }
+  }, [
+    scoreboardPlayers,
+    selectedMode,
+    humanName,
+    dpIndex,
+    dpHits,
+    atcIndex,
+    atcHits,
+    trebleTarget,
+    trebleHits,
+    trebleMaxDarts,
+    cuScore,
+    cuRound,
+    hsScore,
+    hsRound,
+    lsScore,
+    lsRound,
+    co170Rem,
+    co170Attempts,
+    co170Successes,
+    co121Rem,
+    co121Attempts,
+    co121Successes,
+    b27Stage,
+    b27Score,
+    baseball,
+    golf,
+    ttt,
+    scamPlayer,
+    fives,
+    sevens,
+    highlow,
+    halve,
+    singlePlayerScoreboard,
+  ]);
+
+  const summaryStats = useMemo(() => {
+    if (selectedMode === "X01") {
+      return {
+        primaryLabel: "Current score",
+        primaryValue: activeRemaining,
+        secondaryLabel: "3-dart avg",
+        secondaryValue: _runningAvg.toFixed(1),
+        secondaryClass: "text-emerald-300",
+      };
+    }
+    const first = displayScoreboardPlayers[0];
+    const primaryValue = (first?.score ??
+      first?.points ??
+      first?.lives ??
+      first?.remaining ??
+      0) as number;
+    let secondaryLabel = "Target";
+    let secondaryValue: string | number = first?.target ?? first?.round ?? "—";
+    if (selectedMode === "Cricket" || selectedMode === "American Cricket") {
+      secondaryLabel = "Points";
+      secondaryValue = first?.points ?? 0;
+    } else if (selectedMode === "Killer") {
+      secondaryLabel = "Lives";
+      secondaryValue = first?.lives ?? 0;
+    } else if (
+      selectedMode === "Checkout 170" ||
+      selectedMode === "Checkout 121"
+    ) {
+      secondaryLabel = "Remaining";
+      secondaryValue = first?.remaining ?? 0;
+    } else if (selectedMode === "Baseball") {
+      secondaryLabel = "Inning";
+      secondaryValue = first?.inning ?? 1;
+    } else if (selectedMode === "Golf") {
+      secondaryLabel = "Hole";
+      secondaryValue = first?.hole ?? 1;
+    } else if (selectedMode === "Scam") {
+      secondaryLabel = "Target";
+      secondaryValue = first?.target ?? "—";
+    } else if (selectedMode === "Fives" || selectedMode === "Sevens") {
+      secondaryLabel = "Target";
+      secondaryValue = first?.target ?? "—";
+    }
+    return {
+      primaryLabel: "Score",
+      primaryValue,
+      secondaryLabel,
+      secondaryValue,
+      secondaryClass: "text-white",
+    };
+  }, [selectedMode, activeRemaining, _runningAvg, displayScoreboardPlayers]);
 
   const formatDartCount = useCallback((count: number) => {
     const safe = Math.max(0, Math.min(99, Math.round(count || 0)));
@@ -1703,10 +1978,90 @@ export default function OfflinePlay({ user }: { user: any }) {
   const handleVisitTotalChange = (val: string) => {
     setVisitTotalInput(val);
   };
+  const resolveManualEntry = (value: number) => {
+    if (value === 50) return { ring: "INNER_BULL" as const, sector: 25 };
+    if (value === 25) return { ring: "BULL" as const, sector: 25 };
+    if (value >= 1 && value <= 20)
+      return { ring: "SINGLE" as const, sector: value };
+    return { ring: undefined, sector: null };
+  };
+  const applyManualScore = (value: number) => {
+    const { ring, sector } = resolveManualEntry(value);
+    switch (selectedMode) {
+      case "Double Practice":
+        addDpValue(value);
+        return;
+      case "Around the Clock":
+        addAtcValue(value, ring as any, sector);
+        return;
+      case "Cricket":
+        addCricketAuto(value, ring as any, sector);
+        return;
+      case "Shanghai":
+        addShanghaiAuto(value, ring as any, sector);
+        return;
+      case "Halve It":
+        addHalveAuto(value, ring as any, sector);
+        return;
+      case "High-Low":
+        addHighLowAuto(value, ring as any, sector);
+        return;
+      case "Bob's 27":
+        addB27Auto(value, ring as any, sector);
+        return;
+      case "Count-Up":
+        addCountUpAuto(value);
+        return;
+      case "High Score":
+        addHighScoreAuto(value);
+        return;
+      case "Low Score":
+        addLowScoreAuto(value);
+        return;
+      case "Checkout 170":
+        addCo170Auto(value, ring as any, sector);
+        return;
+      case "Checkout 121":
+        addCo121Auto(value, ring as any, sector);
+        return;
+      case "Treble Practice":
+        addTrebleAuto(value, ring as any, sector);
+        return;
+      case "Baseball":
+        addBaseballAuto(value, ring as any, sector);
+        return;
+      case "Golf":
+        addGolfAuto(value, ring as any, sector);
+        return;
+      case "American Cricket":
+        addAmCricketAuto(value, ring as any, sector);
+        return;
+      case "Scam":
+        setScamPlayer(addScamAuto(scamPlayer, value, ring as any));
+        return;
+      case "Fives":
+        setFives(addFivesAuto(fives, value));
+        return;
+      case "Sevens":
+        setSevens(addSevensAuto(sevens, value));
+        return;
+      default:
+        toast("Use manual controls for this mode.", {
+          type: "info",
+          timeout: 2000,
+        });
+    }
+  };
   const addVisitTotal = () => {
     const val = parseInt(visitTotalInput, 10);
-    if (isNaN(val) || val < 0 || val > 180) {
-      alert("Enter a number 0-180 for visit total");
+    if (isNaN(val) || val < 0) {
+      alert("Enter a valid number");
+      return;
+    }
+    if (selectedMode !== "X01") {
+      const bounded = clamp(Math.round(val), 0, 999);
+      applyManualScore(bounded);
+      setVisitTotalInput("");
       return;
     }
     if (val > 180) {
@@ -3672,7 +4027,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                       </div>
                     ) : null}
                     {/* Turn area */}
-                    {selectedMode !== "X01" ? (
+                    {effectiveLayout !== "modern" ? (
                       <div className="space-y-2">
                         {selectedMode === "Double Practice" && (
                           <>
@@ -5340,8 +5695,16 @@ export default function OfflinePlay({ user }: { user: any }) {
                                     className="input w-28"
                                     type="number"
                                     min={0}
-                                    max={playerScore <= 170 ? 170 : 180}
-                                    placeholder="0–180"
+                                    max={
+                                      selectedMode === "X01"
+                                        ? playerScore <= 170
+                                          ? 170
+                                          : 180
+                                        : 999
+                                    }
+                                    placeholder={
+                                      selectedMode === "X01" ? "0–180" : "0–999"
+                                    }
                                     value={visitTotalInput}
                                     onChange={(e) =>
                                       handleVisitTotalChange(e.target.value)
@@ -5374,18 +5737,20 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 <div className="grid grid-cols-2 gap-2 text-xs">
                                   <div className="rounded-lg bg-black/30 px-2 py-1">
                                     <div className="uppercase tracking-wide text-white/50">
-                                      Current score
+                                      {summaryStats.primaryLabel}
                                     </div>
                                     <div className="text-lg font-bold text-white">
-                                      {activeRemaining}
+                                      {summaryStats.primaryValue}
                                     </div>
                                   </div>
                                   <div className="rounded-lg bg-black/30 px-2 py-1">
                                     <div className="uppercase tracking-wide text-white/50">
-                                      3-dart avg
+                                      {summaryStats.secondaryLabel}
                                     </div>
-                                    <div className="text-lg font-bold text-emerald-300">
-                                      {_runningAvg.toFixed(1)}
+                                    <div
+                                      className={`text-lg font-bold ${summaryStats.secondaryClass}`}
+                                    >
+                                      {summaryStats.secondaryValue}
                                     </div>
                                   </div>
                                 </div>
@@ -5422,7 +5787,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                                 </div>
                                 <GameScoreboard
                                   gameMode={selectedMode as any}
-                                  players={singlePlayerScoreboard}
+                                  players={displayScoreboardPlayers}
                                   matchScore={scoreboardMatchScore}
                                 />
                               </div>
@@ -5443,8 +5808,8 @@ export default function OfflinePlay({ user }: { user: any }) {
                                     <MemoCameraView
                                       scoringMode="custom"
                                       showToolbar={false}
-                                      immediateAutoCommit
-                                      onAutoDart={() => false}
+                                      immediateAutoCommit={false}
+                                      disableDetection
                                     />
                                   </div>
                                 ) : (
