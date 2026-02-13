@@ -2541,28 +2541,60 @@ app.get('/api/friends/list', (req, res) => {
 })
 
 // Search users
-app.get('/api/friends/search', (req, res) => {
+app.get('/api/friends/search', async (req, res) => {
   const q = String(req.query.q || '').toLowerCase()
   const callerEmail = String(req.query.email || '').toLowerCase()
   const users = global.users || new Map()
   const results = []
+  const seenEmails = new Set()
   const myFriends = friendships.get(callerEmail) || new Set()
   const pendingOut = (friendRequests || []).filter(r => r && String(r.from || '').toLowerCase() === callerEmail && String(r.status || 'pending') === 'pending').map(r => String(r.to || '').toLowerCase())
   const pendingIn = (friendRequests || []).filter(r => r && String(r.to || '').toLowerCase() === callerEmail && String(r.status || 'pending') === 'pending').map(r => String(r.from || '').toLowerCase())
+
+  function buildResult(e, u) {
+    const uname = u.username || e
+    const avatar = getUserAvatar(uname) || null
+    const threeDartAvg = getUser3DA(uname)
+    let relationship = 'none'
+    if (myFriends.has(e)) relationship = 'friend'
+    else if (pendingOut.includes(e)) relationship = 'pending-outgoing'
+    else if (pendingIn.includes(e)) relationship = 'pending-incoming'
+    return { email: e, username: uname, status: u.status || 'offline', lastSeen: u.lastSeen, avatar, threeDartAvg, relationship }
+  }
+
+  // Search in-memory first
   for (const [e, u] of users.entries()) {
     if (e === callerEmail) continue
     if (!q || e.includes(q) || (u.username||'').toLowerCase().includes(q)) {
-      const uname = u.username || e
-      const avatar = getUserAvatar(uname) || null
-      const threeDartAvg = getUser3DA(uname)
-      let relationship = 'none'
-      if (myFriends.has(e)) relationship = 'friend'
-      else if (pendingOut.includes(e)) relationship = 'pending-outgoing'
-      else if (pendingIn.includes(e)) relationship = 'pending-incoming'
-      results.push({ email: e, username: uname, status: u.status, lastSeen: u.lastSeen, avatar, threeDartAvg, relationship })
+      results.push(buildResult(e, u))
+      seenEmails.add(e)
     }
     if (results.length >= 20) break
   }
+
+  // If fewer than 20 results and Supabase is available, also search the database
+  if (results.length < 20 && q && supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('email, username')
+        .or(`username.ilike.%${q}%,email.ilike.%${q}%`)
+        .limit(20)
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          const e = String(row.email || '').toLowerCase()
+          if (e === callerEmail || seenEmails.has(e)) continue
+          if (!users.has(e)) {
+            users.set(e, { email: e, username: row.username, status: 'offline' })
+          }
+          results.push(buildResult(e, users.get(e) || { email: e, username: row.username, status: 'offline' }))
+          seenEmails.add(e)
+          if (results.length >= 20) break
+        }
+      }
+    } catch {}
+  }
+
   res.json({ ok: true, results })
 })
 
@@ -4080,6 +4112,7 @@ if (supabase && String(process.env.NDN_AUTO_MIGRATE_TOURNAMENTS || '') === '1') 
 // Simple in-memory users and friendships (demo)
 // users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
 const users = new Map();
+global.users = users;
 // Migration: If any old users exist in global object, migrate them to Map
 if (global.oldUsers && typeof global.oldUsers === 'object') {
   for (const key of Object.keys(global.oldUsers)) {
@@ -4090,39 +4123,39 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
   }
 }
 // Load users from Supabase on startup
-// (async () => {
-//   if (supabase) {
-//     try {
-//       console.log('[DB] Loading users from Supabase...');
-//       const { data, error } = await supabase
-//         .from('users')
-//         .select('*');
+(async () => {
+  if (supabase) {
+    try {
+      console.log('[DB] Loading users from Supabase...');
+      const { data, error } = await supabase
+        .from('users')
+        .select('*');
 
-//       if (error) {
-//         console.error('[DB] Failed to load users from Supabase:', error);
-//       } else if (data) {
-//         let loadedCount = 0;
-//         for (const user of data) {
-//           users.set(user.email, {
-//             email: user.email,
-//             username: user.username,
-//             password: user.password,
-//             admin: user.admin || false,
-//             subscription: user.subscription || { fullAccess: false }
-//           });
-//           loadedCount++;
-//         }
-//         console.log(`[DB] Successfully loaded ${loadedCount} users from Supabase`);
-//       } else {
-//         console.log('[DB] No users found in Supabase');
-//       }
-//     } catch (err) {
-//       console.error('[DB] Error loading users from Supabase:', err);
-//     }
-//   } else {
-//     console.warn('[DB] Supabase not configured - using in-memory storage only');
-//   }
-// })();
+      if (error) {
+        console.error('[DB] Failed to load users from Supabase:', error);
+      } else if (data) {
+        let loadedCount = 0;
+        for (const user of data) {
+          users.set(user.email, {
+            email: user.email,
+            username: user.username,
+            password: user.password,
+            admin: user.admin || false,
+            subscription: user.subscription || { fullAccess: false }
+          });
+          loadedCount++;
+        }
+        console.log(`[DB] Successfully loaded ${loadedCount} users from Supabase`);
+      } else {
+        console.log('[DB] No users found in Supabase');
+      }
+    } catch (err) {
+      console.error('[DB] Error loading users from Supabase:', err);
+    }
+  } else {
+    console.warn('[DB] Supabase not configured - using in-memory storage only');
+  }
+})();
 // Initialize demo admin user
 if (!users.has('daviesfamily108@gmail.com')) {
   users.set('daviesfamily108@gmail.com', {
