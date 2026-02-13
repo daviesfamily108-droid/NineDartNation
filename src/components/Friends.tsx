@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../store/toast.js";
 import { useMessages } from "../store/messages.js";
 import { censorProfanity } from "../utils/profanity.js";
@@ -212,7 +212,7 @@ export default function Friends({ user }: { user?: any }) {
       await refresh();
       setQ("");
       setResults([]);
-      toast("Friend added", { type: "success" });
+      toast("Friend request sent", { type: "success" });
     } finally {
       setLoading(false);
     }

@@ -103,7 +103,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
             </label>
             <select
               id="match-game"
-              className="w-full p-2 border border-indigo-500/20 bg-indigo-500/10 rounded-lg text-sm text-white"
+              className="w-full p-2 border border-indigo-500/20 bg-slate-900 rounded-lg text-sm text-white"
               value={game}
               onChange={(e) => {
                 const v = e.target.value as GameKey;
@@ -122,7 +122,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
               }}
             >
               {allGames.map((g) => (
-                <option key={g} value={g}>
+                <option key={g} value={g} className="bg-slate-900 text-white">
                   {g}
                 </option>
               ))}
@@ -138,7 +138,7 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
               </label>
               <select
                 id="match-start"
-                className="p-2 border border-indigo-500/20 bg-indigo-500/10 rounded-lg text-sm text-white w-full"
+                className="p-2 border border-indigo-500/20 bg-slate-900 rounded-lg text-sm text-white w-full"
                 value={startingScore}
                 onChange={(e) => setStartingScore(Number(e.target.value))}
                 onPointerDown={(e) => {
@@ -152,7 +152,11 @@ export default function CreateMatchModal({ open, onClose, onCreate }: Props) {
                 }}
               >
                 {getStartOptionsForGame(game).map((opt) => (
-                  <option key={opt} value={opt}>
+                  <option
+                    key={opt}
+                    value={opt}
+                    className="bg-slate-900 text-white"
+                  >
                     {opt}
                   </option>
                 ))}

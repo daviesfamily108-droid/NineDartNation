@@ -1,4 +1,4 @@
-﻿const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
 const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
@@ -651,6 +651,107 @@ app.delete('/api/notifications/:id', requireAuth, requireSelfOrAdminForEmail((re
   }
   return res.json({ ok: true });
 })
+
+// User stats persistence (server-wide). If Supabase is configured we'll use it,
+// otherwise fall back to a file-backed JSON store under data/user_stats.json
+const STATS_FILE = path.join(__dirname, '..', 'data', 'user_stats.json');
+let statsCache = null;
+
+function loadStatsFromDisk() {
+  if (statsCache !== null) return statsCache;
+  try {
+    if (fs.existsSync(STATS_FILE)) {
+      const raw = fs.readFileSync(STATS_FILE, 'utf8');
+      statsCache = JSON.parse(raw || '{}') || {};
+    } else {
+      statsCache = {};
+    }
+  } catch (err) {
+    startLogger.warn('[Stats] Failed to load from disk:', err && err.message);
+    statsCache = {};
+  }
+  return statsCache;
+}
+
+function persistStatsToDisk() {
+  try {
+    const dir = path.dirname(STATS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(STATS_FILE, JSON.stringify(statsCache || {}, null, 2), 'utf8');
+  } catch (err) {
+    startLogger.warn('[Stats] Failed to persist to disk:', err && err.message);
+  }
+}
+
+async function getUserStatsPersistent(username) {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('user_stats')
+        .select('payload, updated_at')
+        .eq('username', username)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data || !data.payload) return null;
+      return { ...data.payload, updatedAt: data.payload.updatedAt || new Date(data.updated_at).getTime() };
+    } catch (err) {
+      startLogger.warn('[Stats] Supabase fetch error:', err && err.message);
+    }
+  }
+  const store = loadStatsFromDisk();
+  return store[username] || null;
+}
+
+async function saveUserStatsPersistent(username, payload) {
+  const incomingUpdatedAt = Number(payload && payload.updatedAt) || Date.now();
+  const existing = await getUserStatsPersistent(username);
+  if (existing && existing.updatedAt && existing.updatedAt > incomingUpdatedAt) {
+    return existing;
+  }
+  const next = { ...payload, updatedAt: incomingUpdatedAt };
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('user_stats')
+        .upsert({ username, updated_at: new Date(incomingUpdatedAt).toISOString(), payload: next })
+        .select('payload')
+        .single();
+      if (error) throw error;
+      return data && data.payload ? data.payload : next;
+    } catch (err) {
+      startLogger.warn('[Stats] Supabase upsert error:', err && err.message);
+    }
+  }
+  const store = loadStatsFromDisk();
+  store[username] = next;
+  statsCache = store;
+  persistStatsToDisk();
+  return next;
+}
+
+// User stats sync endpoints
+app.get('/api/user/stats', requireAuth, async (req, res) => {
+  try {
+    const username = req.user.username || req.user.email;
+    const stats = await getUserStatsPersistent(username);
+    return res.json({ stats: stats || null });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch stats.' });
+  }
+});
+
+app.post('/api/user/stats', requireAuth, async (req, res) => {
+  try {
+    const username = req.user.username || req.user.email;
+    const payload = req.body && req.body.stats;
+    if (!payload) return res.status(400).json({ error: 'Stats payload required.' });
+    const saved = await saveUserStatsPersistent(username, payload);
+    return res.json({ ok: true, stats: saved });
+  } catch (err) {
+    startLogger.error('[Stats] Error saving stats:', err && err.message);
+    return res.status(500).json({ error: 'Failed to save stats.' });
+  }
+});
 
 // Placeholder webhook (accepts JSON; in production use Stripe raw body & verify signature)
 app.post('/webhook/stripe', async (req, res) => {
@@ -1516,6 +1617,25 @@ function loadFriendships() {
   } catch {}
 }
 loadFriendships()
+
+// Friend requests persistence
+const friendRequests = [];
+const FRIEND_REQUESTS_FILE = './friend-requests.json'
+function saveFriendRequests() {
+  try {
+    fs.writeFileSync(FRIEND_REQUESTS_FILE, JSON.stringify({ requests: friendRequests }, null, 2))
+  } catch {}
+}
+function loadFriendRequests() {
+  try {
+    if (!fs.existsSync(FRIEND_REQUESTS_FILE)) return
+    const j = JSON.parse(fs.readFileSync(FRIEND_REQUESTS_FILE, 'utf8'))
+    if (j && j.requests) {
+      friendRequests.splice(0, friendRequests.length, ...j.requests)
+    }
+  } catch {}
+}
+loadFriendRequests()
 
 function broadcastAll(data) {
   const payload = (typeof data === 'string') ? data : JSON.stringify(data)
@@ -2391,9 +2511,9 @@ app.get('/api/friends/requests', (req, res) => {
     .map((r) => {
       const from = String(r.from || '').toLowerCase()
       const u = users.get(from) || { email: from, username: from, status: 'offline' }
-      return { ...r, from, to: email, fromName: u.username }
+      return { id: r.id, fromEmail: from, fromUsername: u.username, toEmail: email, toUsername: (users.get(email) || {}).username || email, requestedAt: r.ts }
     })
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0))
 
   res.json({ ok: true, requests: incoming })
 })
@@ -2407,32 +2527,137 @@ app.get('/api/friends/outgoing', (req, res) => {
     .map((r) => {
       const to = String(r.to || '').toLowerCase()
       const u = users.get(to) || { email: to, username: to, status: 'offline' }
-      return { ...r, from: email, to, toName: u.username }
+      return { id: r.id, fromEmail: email, fromUsername: (users.get(email) || {}).username || email, toEmail: to, toUsername: u.username, requestedAt: r.ts }
     })
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0))
 
   res.json({ ok: true, requests: outgoing })
 })
 
-app.post('/api/friends/add', (req, res) => {
+app.post('/api/friends/add', async (req, res) => {
   const { email, friend } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(friend || '').toLowerCase()
   if (!me || !other || me === other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
-  const set = friendships.get(me) || new Set()
-  set.add(other)
-  friendships.set(me, set)
-  saveFriendships()
+  // If already friends, skip
+  const mySet = friendships.get(me) || new Set()
+  if (mySet.has(other)) return res.json({ ok: true, already: true })
+  // If a pending request already exists from me to them, skip
+  const existing = friendRequests.find(r => r && String(r.from || '').toLowerCase() === me && String(r.to || '').toLowerCase() === other && String(r.status || 'pending') === 'pending')
+  if (existing) return res.json({ ok: true, already: true })
+  // Create a pending friend request
+  const id = nanoid(10)
+  const request = { id, from: me, to: other, ts: Date.now(), status: 'pending' }
+  friendRequests.push(request)
+  saveFriendRequests()
+  // Create notification for the recipient
+  const fromUser = users.get(me)
+  const fromName = (fromUser && fromUser.username) || me
+  await createNotification(other, `${fromName} sent you a friend request`, 'friend-request', { fromEmail: me, requestId: id })
+  // Try deliver via WS if recipient online
+  const recipientUser = users.get(other)
+  if (recipientUser && recipientUser.wsId) {
+    const target = clients.get(recipientUser.wsId)
+    if (target && target.readyState === 1) {
+      target.send(JSON.stringify({ type: 'friend-request', fromEmail: me, fromName, requestId: id }))
+    }
+  }
   res.json({ ok: true })
 })
 
-app.post('/api/friends/remove', (req, res) => {
+app.post('/api/friends/remove', async (req, res) => {
   const { email, friend } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(friend || '').toLowerCase()
-  const set = friendships.get(me)
-  if (set) set.delete(other)
+  // Remove from both sides (mutual)
+  const mySet = friendships.get(me)
+  if (mySet) mySet.delete(other)
+  const otherSet = friendships.get(other)
+  if (otherSet) otherSet.delete(me)
   saveFriendships()
+  // Create notification for the removed friend
+  const myUser = users.get(me)
+  const myName = (myUser && myUser.username) || me
+  await createNotification(other, `${myName} removed you from their friends list`, 'friend-removed', { fromEmail: me })
+  // Try deliver via WS if other is online
+  const otherUser = users.get(other)
+  if (otherUser && otherUser.wsId) {
+    const target = clients.get(otherUser.wsId)
+    if (target && target.readyState === 1) {
+      target.send(JSON.stringify({ type: 'friend-removed', fromEmail: me, fromName: myName }))
+    }
+  }
+  res.json({ ok: true })
+})
+
+// Accept a friend request
+app.post('/api/friends/accept', async (req, res) => {
+  const { email, requestId } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  // Find matching pending request by id
+  const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  const other = String(friendRequests[idx].from || '').toLowerCase()
+  friendRequests[idx].status = 'accepted'
+  saveFriendRequests()
+  // Add mutual friendship
+  const mySet = friendships.get(me) || new Set()
+  mySet.add(other)
+  friendships.set(me, mySet)
+  const otherSet = friendships.get(other) || new Set()
+  otherSet.add(me)
+  friendships.set(other, otherSet)
+  saveFriendships()
+  // Notify the original sender that their request was accepted
+  const myUser = users.get(me)
+  const myName = (myUser && myUser.username) || me
+  await createNotification(other, `${myName} accepted your friend request`, 'friend-accepted', { fromEmail: me })
+  // Try deliver via WS
+  const otherUser = users.get(other)
+  if (otherUser && otherUser.wsId) {
+    const target = clients.get(otherUser.wsId)
+    if (target && target.readyState === 1) {
+      target.send(JSON.stringify({ type: 'friend-accepted', fromEmail: me, fromName: myName }))
+    }
+  }
+  res.json({ ok: true })
+})
+
+// Decline a friend request
+app.post('/api/friends/decline', async (req, res) => {
+  const { email, requestId } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  const other = String(friendRequests[idx].from || '').toLowerCase()
+  friendRequests[idx].status = 'declined'
+  saveFriendRequests()
+  // Notify the original sender that their request was declined
+  const myUser = users.get(me)
+  const myName = (myUser && myUser.username) || me
+  await createNotification(other, `${myName} declined your friend request`, 'friend-declined', { fromEmail: me })
+  // Try deliver via WS
+  const otherUser = users.get(other)
+  if (otherUser && otherUser.wsId) {
+    const target = clients.get(otherUser.wsId)
+    if (target && target.readyState === 1) {
+      target.send(JSON.stringify({ type: 'friend-declined', fromEmail: me, fromName: myName }))
+    }
+  }
+  res.json({ ok: true })
+})
+
+// Cancel an outgoing friend request
+app.post('/api/friends/cancel', async (req, res) => {
+  const { email, requestId } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.from || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  friendRequests[idx].status = 'cancelled'
+  saveFriendRequests()
   res.json({ ok: true })
 })
 

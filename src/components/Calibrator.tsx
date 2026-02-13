@@ -45,6 +45,7 @@ import {
 import { apiFetch } from "../utils/api";
 import { useMatch } from "../store/match";
 import { useWS } from "./WSProvider";
+import { makeQrDataUrlWithLogo } from "../utils/qr";
 
 declare const DROPDOWN_DEBUG: boolean | undefined;
 const isTestEnv =
@@ -661,6 +662,8 @@ export default function Calibrator() {
 
     return canvas.toDataURL("image/png");
   }, []);
+  // QR code data URL for phone pairing
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   // Pairing / phone-camera state (some of these were accidentally removed during edits)
   const [pairCode, setPairCode] = useState<string | null>(null);
   const pairCodeRef = useRef<string | null>(null);
@@ -969,6 +972,31 @@ export default function Calibrator() {
       return "/mobile-cam.html";
     }
   }, [mobileUrl]);
+
+  // Generate QR code when mobileUrl changes
+  useEffect(() => {
+    if (!mobileUrl || !pairCode) {
+      setQrDataUrl(null);
+      return;
+    }
+    let cancelled = false;
+    makeQrDataUrlWithLogo(mobileUrl, {
+      width: 256,
+      margin: 2,
+      errorCorrectionLevel: "H",
+      color: { dark: "#000000", light: "#ffffff" },
+      logo: false,
+    })
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mobileUrl, pairCode]);
 
   useEffect(() => {
     localStorage.setItem("ndn:cal:mode", mode);
@@ -5052,6 +5080,19 @@ export default function Calibrator() {
             {mode === "phone" && (
               <section className="space-y-3 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
                 <div className="font-semibold">Phone pairing</div>
+                {qrDataUrl && pairCode && (
+                  <div className="flex flex-col items-center gap-2 rounded-xl bg-white p-3">
+                    <img
+                      src={qrDataUrl}
+                      alt="Scan to pair mobile camera"
+                      className="w-48 h-48"
+                      draggable={false}
+                    />
+                    <div className="text-[11px] text-slate-700 text-center font-medium">
+                      Scan with your phone to pair
+                    </div>
+                  </div>
+                )}
                 <button
                   type="button"
                   className="w-full text-left px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition flex items-center gap-2"

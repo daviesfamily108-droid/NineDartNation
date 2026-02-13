@@ -2539,35 +2539,167 @@ app.get('/api/friends/thread', (req, res) => {
 // Stored in `friendRequests` array and persisted to FRIEND_REQUESTS_FILE.
 // Shape: { from: string, to: string, ts: number, status?: 'pending'|'accepted'|'declined'|'cancelled' }
 app.get('/api/friends/requests', (req, res) => {
-  const email = String(req.query.email || '').toLowerCase()
-  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+const email = String(req.query.email || '').toLowerCase()
+if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+const users = global.users || new Map()
 
-  const incoming = (friendRequests || [])
+const incoming = (friendRequests || [])
     .filter((r) => r && String(r.to || '').toLowerCase() === email && String(r.status || 'pending') === 'pending')
     .map((r) => {
       const from = String(r.from || '').toLowerCase()
       const u = users.get(from) || { email: from, username: from, status: 'offline' }
-      return { ...r, from, to: email, fromName: u.username }
+      return { id: r.id, fromEmail: from, fromUsername: u.username, toEmail: email, toUsername: (users.get(email) || {}).username || email, requestedAt: r.ts }
     })
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0))
 
   res.json({ ok: true, requests: incoming })
 })
 
 app.get('/api/friends/outgoing', (req, res) => {
-  const email = String(req.query.email || '').toLowerCase()
-  if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+const email = String(req.query.email || '').toLowerCase()
+if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+const users = global.users || new Map()
 
-  const outgoing = (friendRequests || [])
+const outgoing = (friendRequests || [])
     .filter((r) => r && String(r.from || '').toLowerCase() === email && String(r.status || 'pending') === 'pending')
     .map((r) => {
       const to = String(r.to || '').toLowerCase()
       const u = users.get(to) || { email: to, username: to, status: 'offline' }
-      return { ...r, from: email, to, toName: u.username }
+      return { id: r.id, fromEmail: email, fromUsername: (users.get(email) || {}).username || email, toEmail: to, toUsername: u.username, requestedAt: r.ts }
     })
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0))
 
   res.json({ ok: true, requests: outgoing })
+})
+
+// Send a friend request (creates a pending request instead of instant friendship)
+app.post('/api/friends/add', (req, res) => {
+  const { email, friend } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  const other = String(friend || '').toLowerCase()
+  if (!me || !other || me === other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  // If already friends, skip
+  const mySet = friendships.get(me) || new Set()
+  if (mySet.has(other)) return res.json({ ok: true, already: true })
+  // If a pending request already exists from me to them, skip
+  const existing = friendRequests.find(r => r && String(r.from || '').toLowerCase() === me && String(r.to || '').toLowerCase() === other && String(r.status || 'pending') === 'pending')
+  if (existing) return res.json({ ok: true, already: true })
+  const id = nanoid(10)
+  const request = { id, from: me, to: other, ts: Date.now(), status: 'pending' }
+  friendRequests.push(request)
+  saveFriendRequests()
+  // Create notification for the recipient
+  const users = global.users || new Map()
+  const clients = global.clients || new Map()
+  const fromUser = users.get(me)
+  const fromName = (fromUser && fromUser.username) || me
+  createNotification(other, `${fromName} sent you a friend request`, 'friend-request', { fromEmail: me, requestId: id })
+  // Try deliver via WS
+  const recipientUser = users.get(other)
+  if (recipientUser && recipientUser.wsId && clients.get) {
+    const target = clients.get(recipientUser.wsId)
+    if (target && target.readyState === 1) {
+      target.send(JSON.stringify({ type: 'friend-request', fromEmail: me, fromName, requestId: id }))
+    }
+  }
+  res.json({ ok: true })
+})
+
+// Remove a friend (mutual removal)
+app.post('/api/friends/remove', (req, res) => {
+  const { email, friend } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  const other = String(friend || '').toLowerCase()
+  const mySet = friendships.get(me)
+  if (mySet) mySet.delete(other)
+  const otherSet = friendships.get(other)
+  if (otherSet) otherSet.delete(me)
+  saveFriendships()
+  const users = global.users || new Map()
+  const clients = global.clients || new Map()
+  const myUser = users.get(me)
+  const myName = (myUser && myUser.username) || me
+  createNotification(other, `${myName} removed you from their friends list`, 'friend-removed', { fromEmail: me })
+  // Try deliver via WS
+  const otherUser = users.get(other)
+  if (otherUser && otherUser.wsId && clients.get) {
+    const target = clients.get(otherUser.wsId)
+    if (target && target.readyState === 1) {
+      target.send(JSON.stringify({ type: 'friend-removed', fromEmail: me, fromName: myName }))
+    }
+  }
+  res.json({ ok: true })
+})
+
+// Accept a friend request
+app.post('/api/friends/accept', (req, res) => {
+  const { email, requestId } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  const other = String(friendRequests[idx].from || '').toLowerCase()
+  friendRequests[idx].status = 'accepted'
+  saveFriendRequests()
+  // Add mutual friendship
+  const mySet = friendships.get(me) || new Set()
+  mySet.add(other)
+  friendships.set(me, mySet)
+  const otherSet = friendships.get(other) || new Set()
+  otherSet.add(me)
+  friendships.set(other, otherSet)
+  saveFriendships()
+  // Notify the original sender
+  const users = global.users || new Map()
+  const clients = global.clients || new Map()
+  const myUser = users.get(me)
+  const myName = (myUser && myUser.username) || me
+  createNotification(other, `${myName} accepted your friend request`, 'friend-accepted', { fromEmail: me })
+  const otherUser = users.get(other)
+  if (otherUser && otherUser.wsId && clients.get) {
+    const target = clients.get(otherUser.wsId)
+    if (target && target.readyState === 1) {
+      target.send(JSON.stringify({ type: 'friend-accepted', fromEmail: me, fromName: myName }))
+    }
+  }
+  res.json({ ok: true })
+})
+
+// Decline a friend request
+app.post('/api/friends/decline', (req, res) => {
+  const { email, requestId } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  const other = String(friendRequests[idx].from || '').toLowerCase()
+  friendRequests[idx].status = 'declined'
+  saveFriendRequests()
+  const users = global.users || new Map()
+  const clients = global.clients || new Map()
+  const myUser = users.get(me)
+  const myName = (myUser && myUser.username) || me
+  createNotification(other, `${myName} declined your friend request`, 'friend-declined', { fromEmail: me })
+  const otherUser = users.get(other)
+  if (otherUser && otherUser.wsId && clients.get) {
+    const target = clients.get(otherUser.wsId)
+    if (target && target.readyState === 1) {
+      target.send(JSON.stringify({ type: 'friend-declined', fromEmail: me, fromName: myName }))
+    }
+  }
+  res.json({ ok: true })
+})
+
+// Cancel an outgoing friend request
+app.post('/api/friends/cancel', (req, res) => {
+  const { email, requestId } = req.body || {}
+  const me = String(email || '').toLowerCase()
+  if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.from || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  friendRequests[idx].status = 'cancelled'
+  saveFriendRequests()
+  res.json({ ok: true })
 })
 
 if (!global.__NDN_PATCHED) {
@@ -2612,6 +2744,16 @@ function requireSelfOrAdminForEmail(getEmailFromReq) {
 const notifications = new Map(); // id -> { id, email, message, read }
 
 function makeId() { return nanoid(10) }
+
+// Helper: create a notification entry in-memory
+function createNotification(email, message, type, meta) {
+  if (!email || !message) return null
+  const e = String(email).toLowerCase()
+  const id = makeId()
+  const rec = { id, email: e, message: String(message), read: false, type: type || 'generic', createdAt: Date.now(), meta: meta || null }
+  notifications.set(id, rec)
+  return rec
+}
 
 app.get('/api/notifications', requireAuth, (req, res) => {
   const email = (req.query.email || req.user?.email || '').toLowerCase()
@@ -3876,6 +4018,28 @@ function loadFriendRequests() {
   } catch {}
 }
 loadFriendRequests()
+
+// Persistence helpers for friendships
+const FRIENDS_FILE = './friends.json'
+function saveFriendships() {
+  try {
+    const obj = {}
+    for (const [k, v] of friendships.entries()) obj[k] = Array.from(v)
+    fs.writeFileSync(FRIENDS_FILE, JSON.stringify({ friendships: obj }, null, 2))
+  } catch {}
+}
+function loadFriendships() {
+  try {
+    if (!fs.existsSync(FRIENDS_FILE)) return
+    const j = JSON.parse(fs.readFileSync(FRIENDS_FILE, 'utf8'))
+    if (j && j.friendships) {
+      for (const [k, arr] of Object.entries(j.friendships)) {
+        friendships.set(k, new Set(arr))
+      }
+    }
+  } catch {}
+}
+loadFriendships()
 
 // Admin-configurable demo users (for quick setup)
 // NOTE: In production, use real user signup with email verification!
