@@ -1447,6 +1447,18 @@ app.post('/api/user/stats', express.json(), async (req, res) => {
   }
 });
 
+// Public stats endpoint - fetch another user's stats (no auth required, for friend comparison)
+app.get('/api/user/stats/public/:username', async (req, res) => {
+  try {
+    const username = req.params.username;
+    if (!username) return res.status(400).json({ error: 'Username required.' });
+    const stats = await getUserStatsPersistent(username);
+    return res.json({ stats: stats || null });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch stats.' });
+  }
+});
+
 // Avatar save / fetch
 app.post('/api/user/avatar', express.json(), (req, res) => {
   const authHeader = req.headers.authorization;

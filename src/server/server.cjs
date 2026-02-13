@@ -852,6 +852,18 @@ app.post('/api/user/stats', requireAuth, async (req, res) => {
   }
 });
 
+// Public stats endpoint - fetch another user's stats (no auth required, for friend comparison)
+app.get('/api/user/stats/public/:username', async (req, res) => {
+  try {
+    const username = req.params.username;
+    if (!username) return res.status(400).json({ error: 'Username required.' });
+    const stats = await getUserStatsPersistent(username);
+    return res.json({ stats: stats || null });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to fetch stats.' });
+  }
+});
+
 // Placeholder webhook (accepts JSON; in production use Stripe raw body & verify signature)
 app.post('/webhook/stripe', async (req, res) => {
   const { type, data } = req.body || {};
