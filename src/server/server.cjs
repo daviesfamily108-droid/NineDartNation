@@ -373,16 +373,40 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Route to verify token and get user info
-app.get('/api/auth/me', (req, res) => {
+app.get('/api/auth/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    // Find user by username
+    // Find user by username in memory first
     for (const u of users.values()) {
       if (u.username === decoded.username) {
         return res.json({ user: u });
+      }
+    }
+    // Not in memory - try Supabase (server may have restarted)
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', decoded.username)
+          .single();
+        if (!error && data) {
+          const u = {
+            email: data.email,
+            username: data.username,
+            password: data.password,
+            admin: data.admin || false,
+            subscription: data.subscription || { fullAccess: false }
+          };
+          users.set(data.email, u);
+          logger.info('[AUTH/ME] Re-cached user from Supabase:', u.username);
+          return res.json({ user: u });
+        }
+      } catch (dbErr) {
+        startLogger.warn('[AUTH/ME] Supabase lookup failed:', dbErr && dbErr.message);
       }
     }
     return res.status(404).json({ error: 'User not found.' });

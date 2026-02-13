@@ -1127,26 +1127,27 @@ app.post('/api/auth/signup', async (req, res) => {
   const hashed = await bcrypt.hash(String(password), 12)
   const user = { email, username, password: hashed, admin: false, subscription: { fullAccess: false } }
 
-    // Save to Supabase if available (async, don't wait for response)
+    // Save to Supabase - AWAIT so user is guaranteed persisted
     if (supabase) {
-      // Fire and forget - log errors but don't block signup response
-      supabase
-        .from('users')
-        .insert([{
-          email: user.email,
-          username: user.username,
-          password: user.password, // hashed
-          admin: user.admin,
-          subscription: user.subscription,
-          created_at: new Date().toISOString()
-        }])
-        .then(({ error }) => {
-          if (error) {
-            console.error('[DB] Failed to save user to Supabase:', error);
-            // Note: User is already in memory, so they can still use the app
-          }
-        })
-        .catch(err => console.error('[DB] Supabase insert failed:', err));
+      try {
+        const { error: insertErr } = await supabase
+          .from('users')
+          .insert([{
+            email: user.email,
+            username: user.username,
+            password: user.password, // hashed
+            admin: user.admin,
+            subscription: user.subscription,
+            created_at: new Date().toISOString()
+          }]);
+        if (insertErr) {
+          console.error('[DB] Failed to save user to Supabase:', insertErr);
+        } else {
+          console.log('[SIGNUP] User persisted to Supabase:', user.username);
+        }
+      } catch (dbErr) {
+        console.error('[DB] Supabase insert exception:', dbErr);
+      }
     }
 
     // Store in memory immediately (fast response)
@@ -1243,16 +1244,40 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Route to verify token and get user info
-app.get('/api/auth/me', (req, res) => {
+app.get('/api/auth/me', async (req, res) => {
   const authHeader = req.headers.authorization;
   if (!authHeader) return res.status(401).json({ error: 'No token provided.' });
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    // Find user by username
+    // Find user by username in memory first
     for (const u of users.values()) {
       if (u.username === decoded.username) {
         return res.json({ user: u });
+      }
+    }
+    // Not in memory - try Supabase (server may have restarted)
+    if (supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('*')
+          .eq('username', decoded.username)
+          .single();
+        if (!error && data) {
+          const u = {
+            email: data.email,
+            username: data.username,
+            password: data.password,
+            admin: data.admin || false,
+            subscription: data.subscription || { fullAccess: false }
+          };
+          users.set(data.email, u);
+          console.log('[AUTH/ME] Re-cached user from Supabase:', u.username);
+          return res.json({ user: u });
+        }
+      } catch (dbErr) {
+        console.warn('[AUTH/ME] Supabase lookup failed:', dbErr && dbErr.message);
       }
     }
     return res.status(404).json({ error: 'User not found.' });
