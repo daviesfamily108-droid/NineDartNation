@@ -1700,6 +1700,21 @@ app.post('/cam/signal/:code', async (req, res) => {
     // Store the signal as a pending message for the other peer
     sess.pendingMessages.push({ type, payload, source });
     
+    // CRITICAL FIX: Refresh WebSocket references from live clients map before relaying
+    // The stored sess.desktopWs / sess.phoneWs might be stale if the connection reconnected
+    if (sess.desktopId) {
+      const freshDesktop = clients.get(sess.desktopId);
+      if (freshDesktop && freshDesktop.readyState === WebSocket.OPEN) {
+        sess.desktopWs = freshDesktop;
+      }
+    }
+    if (sess.phoneId) {
+      const freshPhone = clients.get(sess.phoneId);
+      if (freshPhone && freshPhone.readyState === WebSocket.OPEN) {
+        sess.phoneWs = freshPhone;
+      }
+    }
+    
     // If both peers connected via WebSocket, relay immediately to the other peer
     if (source === 'phone' && sess.desktopWs && sess.desktopWs.readyState === WebSocket.OPEN) {
       try {
