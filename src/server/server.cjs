@@ -1730,6 +1730,61 @@ function loadFriendships() {
 }
 loadFriendships()
 
+// Supabase-backed persistence for friendships (keeps data across restarts)
+async function loadFriendshipsFromSupabase() {
+  if (!supabase) return
+  try {
+    const { data, error } = await supabase
+      .from('friendships')
+      .select('user_email, friend_email')
+    if (error) throw error
+    if (Array.isArray(data)) {
+      let added = 0
+      for (const row of data) {
+        const a = String(row.user_email || '').toLowerCase()
+        const b = String(row.friend_email || '').toLowerCase()
+        if (!a || !b || a === b) continue
+        const setA = friendships.get(a) || new Set()
+        setA.add(b)
+        friendships.set(a, setA)
+        added++
+      }
+      if (added > 0) saveFriendships()
+      console.log(`[Friends] Loaded ${added} friendship links from Supabase`)
+    }
+  } catch (err) {
+    console.warn('[Friends] Failed to load friendships from Supabase:', err?.message || err)
+  }
+}
+
+async function upsertFriendshipSupabase(a, b) {
+  if (!supabase) return
+  try {
+    const rows = [
+      { user_email: a, friend_email: b },
+      { user_email: b, friend_email: a },
+    ]
+    await supabase.from('friendships').upsert(rows, { onConflict: 'user_email,friend_email' })
+  } catch (err) {
+    console.warn('[Friends] Supabase upsert failed:', err?.message || err)
+  }
+}
+
+async function deleteFriendshipSupabase(a, b) {
+  if (!supabase) return
+  try {
+    await supabase
+      .from('friendships')
+      .delete()
+      .or(`and(user_email.eq.${a},friend_email.eq.${b}),and(user_email.eq.${b},friend_email.eq.${a})`)
+  } catch (err) {
+    console.warn('[Friends] Supabase delete failed:', err?.message || err)
+  }
+}
+
+// Hydrate friendships from Supabase on startup (in addition to local file)
+loadFriendshipsFromSupabase()
+
 // Friend requests persistence
 const friendRequests = [];
 const FRIEND_REQUESTS_FILE = './friend-requests.json'
@@ -2553,8 +2608,11 @@ wss.on('connection', (ws, req) => {
 });
 
 // Friends HTTP API (demo)
-app.get('/api/friends/list', (req, res) => {
+app.get('/api/friends/list', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
+  if (!friendships.size && supabase) {
+    await loadFriendshipsFromSupabase()
+  }
   const set = friendships.get(email) || new Set()
   const list = Array.from(set).map(e => {
     const u = users.get(e) || { email: e, username: e, status: 'offline' }
@@ -2742,6 +2800,7 @@ app.post('/api/friends/remove', async (req, res) => {
   const otherSet = friendships.get(other)
   if (otherSet) otherSet.delete(me)
   saveFriendships()
+  await deleteFriendshipSupabase(me, other)
   // Create notification for the removed friend
   const myUser = users.get(me)
   const myName = (myUser && myUser.username) || me
@@ -2776,6 +2835,7 @@ app.post('/api/friends/accept', async (req, res) => {
   otherSet.add(me)
   friendships.set(other, otherSet)
   saveFriendships()
+  await upsertFriendshipSupabase(me, other)
   // Notify the original sender that their request was accepted
   const myUser = users.get(me)
   const myName = (myUser && myUser.username) || me

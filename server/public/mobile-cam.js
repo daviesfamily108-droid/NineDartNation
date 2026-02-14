@@ -106,6 +106,22 @@
     const downloadDiagBtn = document.getElementById('downloadDiag');
     const diagOut = document.getElementById('diagOut');
 
+    function apiHostAndProto() {
+        const serverParam = params.get('server') || params.get('ws');
+        if (serverParam) {
+            try {
+                const u = new URL(serverParam);
+                const proto = u.protocol === 'https:' ? 'https' : 'http';
+                return { proto, host: u.host };
+            } catch (e) { console.warn('Invalid server param', e); }
+        }
+        const fallbackHost = 'ninedartnation.onrender.com';
+        const isRender = location.host.includes('render') || location.hostname === 'ninedartnation.onrender.com';
+        const host = isRender ? location.host : fallbackHost;
+        const proto = location.protocol === 'https:' ? 'https' : 'http';
+        return { proto, host };
+    }
+
     function wsUrl() {
         const serverParam = params.get('server') || params.get('ws');
         if (serverParam) {
@@ -115,14 +131,8 @@
                 return `${proto}://${url.host}/ws`;
             } catch (e) { console.warn('Invalid server param', e); }
         }
-        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-        const fallbackHost = 'ninedartnation.onrender.com';
-        let host = location.host && location.host !== '' ? location.host : fallbackHost;
-        if (!location.host.includes('render') && location.hostname !== 'ninedartnation.onrender.com') {
-            host = fallbackHost;
-        }
-        let base = `${proto}://${host}/ws`;
-        return base;
+        const { proto, host } = apiHostAndProto();
+        return `${proto === 'https' ? 'wss' : 'ws'}://${host}/ws`;
     }
 
     function sendDiagnostic(msg, details) {
@@ -139,8 +149,9 @@
     async function postSignal(type, payload) {
         try {
             const code = (input.value || '').trim().toUpperCase();
-            const url = new URL(`/cam/signal/${code}`, window.location.origin);
-            await fetch(url.toString(), { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ type, payload, source: 'phone' }) });
+            const { proto, host } = apiHostAndProto();
+            const url = `${proto}://${host}/cam/signal/${code}`;
+            await fetch(url, { method: 'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ type, payload, source: 'phone' }) });
         } catch (e) { console.warn('postSignal failed', e); sendDiagnostic('postSignal-fail', { err: String(e) }); }
     }
 
@@ -165,8 +176,9 @@
         if (pollInterval) clearInterval(pollInterval);
         pollInterval = setInterval(async () => {
             try {
-                const url = new URL(`/cam/signal/${code}`, window.location.origin);
-                const res = await fetch(url.toString());
+                const { proto, host } = apiHostAndProto();
+                const url = `${proto}://${host}/cam/signal/${code}`;
+                const res = await fetch(url);
                 const j = await res.json();
                 if (j && Array.isArray(j.messages)) {
                     for (const m of j.messages) {
