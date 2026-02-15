@@ -1764,9 +1764,22 @@ async function upsertFriendshipSupabase(a, b) {
       { user_email: a, friend_email: b },
       { user_email: b, friend_email: a },
     ]
-    await supabase.from('friendships').upsert(rows, { onConflict: 'user_email,friend_email' })
+    
+    // Use upsert with ignoreDuplicates to handle conflicts gracefully
+    // This will insert new rows and silently skip if they already exist
+    const { error } = await supabase
+      .from('friendships')
+      .upsert(rows, { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
+    
+    if (error) {
+      startLogger.error('[Friends] Supabase upsert failed: %s', error.message || JSON.stringify(error))
+      return // Don't throw, just log and continue
+    }
+    
+    startLogger.info('[Friends] Successfully created friendship: %s <-> %s', a, b)
   } catch (err) {
-    console.warn('[Friends] Supabase upsert failed:', err?.message || err)
+    startLogger.error('[Friends] Supabase upsert exception: %s', err?.message || err)
+    // Don't rethrow - let the operation continue even if DB fails
   }
 }
 
