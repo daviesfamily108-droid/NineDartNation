@@ -1708,6 +1708,16 @@ if (!users.has('daviesfamily108@gmail.com')) {
 const friendships = new Map();
 // simple messages store: recipientEmail -> [{ id, from, message, ts }]
 const messages = new Map();
+// Disable caching for dynamic JSON responses (avoid stale 304s after mutations)
+function noCache(res) {
+  try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+    res.set('ETag', `${Date.now()}-${Math.random().toString(36).slice(2,8)}`);
+  } catch {}
+}
 // Persistence helpers (demo)
 const FRIENDS_FILE = './friends.json'
 function saveFriendships() {
@@ -2634,6 +2644,7 @@ wss.on('connection', (ws, req) => {
 // Friends HTTP API (demo)
 app.get('/api/friends/list', async (req, res) => {
 const email = String(req.query.email || '').toLowerCase()
+  noCache(res)
   
 console.log('[FRIENDS-LIST-START] email=%s', email)
 console.log('[FRIENDS-LIST-MEMORY] In-memory friendships before Supabase: %s', JSON.stringify(Array.from(friendships.get(email) || [])))
@@ -2779,6 +2790,7 @@ app.get('/api/friends/search', async (req, res) => {
 
 app.get('/api/friends/suggested', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
+  noCache(res)
   const set = friendships.get(email) || new Set()
   const suggestions = []
   for (const [e, u] of users.entries()) {
@@ -2798,6 +2810,7 @@ app.get('/api/friends/suggested', (req, res) => {
 // Shape: { from: string, to: string, ts: number, status?: 'pending'|'accepted'|'declined'|'cancelled' }
 app.get('/api/friends/requests', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
+  noCache(res)
   if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
 
   // Debug: log all friend requests to see what we have
@@ -2819,6 +2832,7 @@ app.get('/api/friends/requests', (req, res) => {
 
 app.get('/api/friends/outgoing', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
+  noCache(res)
   if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
 
   // Debug: log outgoing requests
@@ -3058,6 +3072,7 @@ app.post('/api/friends/message', (req, res) => {
 // Fetch recent inbox messages (legacy endpoint)
 app.get('/api/friends/messages', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
+  noCache(res)
   if (!email) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   const arr = messages.get(email) || []
   res.json({ ok: true, messages: arr.slice(-200).sort((a,b)=>b.ts-a.ts) })
@@ -3067,6 +3082,7 @@ app.get('/api/friends/messages', (req, res) => {
 app.get('/api/friends/thread', (req, res) => {
   const me = String(req.query.email || '').toLowerCase()
   const other = String(req.query.other || '').toLowerCase()
+  noCache(res)
   if (!me || !other || me === other) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   const threadKey = [me, other].sort().join('|')
   const dmThreads = global.dmThreads || new Map()
