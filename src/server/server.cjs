@@ -2610,9 +2610,36 @@ wss.on('connection', (ws, req) => {
 // Friends HTTP API (demo)
 app.get('/api/friends/list', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
-  if (!friendships.size && supabase) {
-    await loadFriendshipsFromSupabase()
+  
+  // CRITICAL FIX: Always query Supabase directly if available to ensure friends persist across server restarts
+  // The in-memory friendships Map is only a cache and may be empty after restart
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('friendships')
+        .select('friend_email')
+        .eq('user_email', email)
+      
+      if (!error && Array.isArray(data)) {
+        // Rebuild this user's friendships from Supabase (authoritative source)
+        const freshSet = new Set()
+        for (const row of data) {
+          const friendEmail = String(row.friend_email || '').toLowerCase()
+          if (friendEmail && friendEmail !== email) freshSet.add(friendEmail)
+        }
+        // Update in-memory cache
+        friendships.set(email, freshSet)
+      }
+    } catch (err) {
+      console.warn('[Friends] Failed to load user friendships from Supabase:', err?.message || err)
+    }
+  } else {
+    // Fallback: Load from in-memory if Supabase is unavailable (development/test mode)
+    if (!friendships.size) {
+      await loadFriendshipsFromSupabase()
+    }
   }
+  
   const set = friendships.get(email) || new Set()
   const list = Array.from(set).map(e => {
     const u = users.get(e) || { email: e, username: e, status: 'offline' }
