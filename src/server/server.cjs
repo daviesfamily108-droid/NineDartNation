@@ -1758,28 +1758,39 @@ async function loadFriendshipsFromSupabase() {
 }
 
 async function upsertFriendshipSupabase(a, b) {
-  if (!supabase) return
+  console.log('[SUPABASE-UPSERT-START] a=%s b=%s supabase=%s', a, b, !!supabase)
+  if (!supabase) {
+    console.log('[SUPABASE-UPSERT-SKIP] Supabase not configured')
+    return
+  }
+  
   try {
     const rows = [
       { user_email: a, friend_email: b },
       { user_email: b, friend_email: a },
     ]
     
+    console.log('[SUPABASE-UPSERT-CALL] Calling supabase.from(friendships).upsert with rows:', JSON.stringify(rows))
+    
     // Use upsert with ignoreDuplicates to handle conflicts gracefully
     // This will insert new rows and silently skip if they already exist
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('friendships')
       .upsert(rows, { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
+      .select()
     
     if (error) {
+      console.error('[SUPABASE-UPSERT-ERROR] error:', JSON.stringify(error))
       startLogger.error('[Friends] Supabase upsert failed: %s', error.message || JSON.stringify(error))
-      return // Don't throw, just log and continue
+      throw new Error(error.message || 'Supabase upsert failed')
     }
     
+    console.log('[SUPABASE-UPSERT-SUCCESS] Created friendship: %s <-> %s, data:', a, b, JSON.stringify(data))
     startLogger.info('[Friends] Successfully created friendship: %s <-> %s', a, b)
   } catch (err) {
+    console.error('[SUPABASE-UPSERT-EXCEPTION] exception:', err)
     startLogger.error('[Friends] Supabase upsert exception: %s', err?.message || err)
-    // Don't rethrow - let the operation continue even if DB fails
+    throw err // Re-throw so caller knows it failed
   }
 }
 
@@ -2624,21 +2635,23 @@ wss.on('connection', (ws, req) => {
 app.get('/api/friends/list', async (req, res) => {
 const email = String(req.query.email || '').toLowerCase()
   
-logger.info('[DEBUG] /api/friends/list called for email=%s', email)
-logger.info('[DEBUG] In-memory friendships before Supabase query: %o', Array.from(friendships.get(email) || []))
+console.log('[FRIENDS-LIST-START] email=%s', email)
+console.log('[FRIENDS-LIST-MEMORY] In-memory friendships before Supabase: %s', JSON.stringify(Array.from(friendships.get(email) || [])))
+startLogger.info('[FRIENDS-LIST] Called for email=%s, in-memory count=%d', email, (friendships.get(email) || new Set()).size)
   
 // CRITICAL FIX: Always query Supabase directly if available to ensure friends persist across server restarts
 // The in-memory friendships Map is only a cache and may be empty after restart
 if (supabase) {
   try {
+    console.log('[FRIENDS-LIST-QUERY] Querying Supabase for friendships')
     const { data, error } = await supabase
       .from('friendships')
       .select('friend_email')
       .eq('user_email', email)
       
-    logger.info('[DEBUG] Supabase query result: error=%s dataLength=%d', error?.message || 'none', data?.length || 0)
+    console.log('[FRIENDS-LIST-RESULT] Supabase query: error=%s dataLength=%d', error?.message || 'none', data?.length || 0)
     if (data && data.length > 0) {
-      logger.info('[DEBUG] Supabase data: %o', data)
+      console.log('[FRIENDS-LIST-DATA] Supabase returned: %s', JSON.stringify(data))
     }
       
     if (!error && Array.isArray(data)) {
@@ -2648,17 +2661,21 @@ if (supabase) {
         const friendEmail = String(row.friend_email || '').toLowerCase()
         if (friendEmail && friendEmail !== email) freshSet.add(friendEmail)
       }
-      logger.info('[DEBUG] Rebuilt friendships set from Supabase: %o', Array.from(freshSet))
+      console.log('[FRIENDS-LIST-REBUILT] Rebuilt friendships set: %s', JSON.stringify(Array.from(freshSet)))
+      startLogger.info('[FRIENDS-LIST] Rebuilt %d friendships from Supabase for %s', freshSet.size, email)
       // Update in-memory cache
       friendships.set(email, freshSet)
     } else if (error) {
-      logger.error('[DEBUG] Supabase error, keeping in-memory friendships: %s', error.message)
+      console.error('[FRIENDS-LIST-ERROR] Supabase error:', error)
+      startLogger.error('[FRIENDS-LIST] Supabase error, keeping in-memory: %s', error.message)
     }
   } catch (err) {
-    logger.error('[Friends] Failed to load user friendships from Supabase:', err?.message || err)
+    console.error('[FRIENDS-LIST-EXCEPTION] Exception:', err)
+    startLogger.error('[Friends] Failed to load user friendships from Supabase:', err?.message || err)
   }
 } else {
-  logger.warn('[DEBUG] Supabase not configured - using in-memory only')
+  console.log('[FRIENDS-LIST-NO-SUPABASE] Supabase not configured')
+  startLogger.warn('[FRIENDS-LIST] Supabase not configured - using in-memory only')
   // Fallback: Load from in-memory if Supabase is unavailable (development/test mode)
   if (!friendships.size) {
     await loadFriendshipsFromSupabase()
@@ -2881,19 +2898,24 @@ app.post('/api/friends/remove', async (req, res) => {
 app.post('/api/friends/accept', async (req, res) => {
   const { email, requestId } = req.body || {}
   const me = String(email || '').toLowerCase()
-  if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   
-  logger.info('[DEBUG] /api/friends/accept called: me=%s requestId=%s', me, requestId)
+  // Force console log for visibility in Render logs
+  console.log('[ACCEPT-START] email=%s requestId=%s', me, requestId)
+  startLogger.info('[ACCEPT-START] email=%s requestId=%s', me, requestId)
+  
+  if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   
   // Find matching pending request by id
   const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
   if (idx === -1) {
-    logger.warn('[DEBUG] Request not found: requestId=%s me=%s', requestId, me)
+    console.log('[ACCEPT-ERROR] Request not found: requestId=%s me=%s', requestId, me)
+    startLogger.warn('[ACCEPT-ERROR] Request not found: requestId=%s me=%s', requestId, me)
     return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
   }
   
   const other = String(friendRequests[idx].from || '').toLowerCase()
-  logger.info('[DEBUG] Accepting request from %s to %s', other, me)
+  console.log('[ACCEPT-FOUND] Accepting request from=%s to=%s', other, me)
+  startLogger.info('[ACCEPT-FOUND] Accepting request from=%s to=%s', other, me)
   
   friendRequests[idx].status = 'accepted'
   saveFriendRequests()
@@ -2907,14 +2929,27 @@ app.post('/api/friends/accept', async (req, res) => {
   friendships.set(other, otherSet)
   saveFriendships()
   
-  logger.info('[DEBUG] In-memory friendships updated: %s has %d friends, %s has %d friends', me, mySet.size, other, otherSet.size)
-  logger.info('[DEBUG] Calling upsertFriendshipSupabase...')
+  console.log('[ACCEPT-MEMORY] In-memory updated: %s has %d friends, %s has %d friends', me, mySet.size, other, otherSet.size)
+  startLogger.info('[ACCEPT-MEMORY] In-memory updated: %s has %d friends, %s has %d friends', me, mySet.size, other, otherSet.size)
   
-  await upsertFriendshipSupabase(me, other)
+  console.log('[ACCEPT-DB] Calling upsertFriendshipSupabase supabase=%s', !!supabase)
+  startLogger.info('[ACCEPT-DB] Calling upsertFriendshipSupabase supabase=%s', !!supabase)
+  
+  try {
+    await upsertFriendshipSupabase(me, other)
+    console.log('[ACCEPT-DB-DONE] upsertFriendshipSupabase completed')
+    startLogger.info('[ACCEPT-DB-DONE] upsertFriendshipSupabase completed')
+  } catch (err) {
+    console.error('[ACCEPT-DB-ERROR] upsertFriendshipSupabase failed:', err)
+    startLogger.error('[ACCEPT-DB-ERROR] upsertFriendshipSupabase failed:', err)
+  }
+  
+  
   // Notify the original sender that their request was accepted
   const myUser = users.get(me)
   const myName = (myUser && myUser.username) || me
   await createNotification(other, `${myName} accepted your friend request`, 'friend-accepted', { fromEmail: me })
+  
   // Try deliver via WS
   const otherUser = users.get(other)
   if (otherUser && otherUser.wsId) {
@@ -2923,6 +2958,10 @@ app.post('/api/friends/accept', async (req, res) => {
       target.send(JSON.stringify({ type: 'friend-accepted', fromEmail: me, fromName: myName }))
     }
   }
+  
+  console.log('[ACCEPT-COMPLETE] Friendship created successfully: %s <-> %s', me, other)
+  startLogger.info('[ACCEPT-COMPLETE] Friendship created successfully: %s <-> %s', me, other)
+  
   res.json({ ok: true })
 })
 
