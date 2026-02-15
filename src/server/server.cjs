@@ -2771,6 +2771,10 @@ app.get('/api/friends/requests', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
 
+  // Debug: log all friend requests to see what we have
+  logger.info('[DEBUG] /api/friends/requests called for email=%s', email)
+  logger.info('[DEBUG] All friendRequests: %o', friendRequests.map(r => ({ id: r?.id, from: r?.from, to: r?.to, status: r?.status })))
+
   const incoming = (friendRequests || [])
     .filter((r) => r && String(r.to || '').toLowerCase() === email && String(r.status || 'pending') === 'pending')
     .map((r) => {
@@ -2780,12 +2784,16 @@ app.get('/api/friends/requests', (req, res) => {
     })
     .sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0))
 
+  logger.info('[DEBUG] Filtered incoming requests for %s: %o', email, incoming)
   res.json({ ok: true, requests: incoming })
 })
 
 app.get('/api/friends/outgoing', (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+
+  // Debug: log outgoing requests
+  logger.info('[DEBUG] /api/friends/outgoing called for email=%s', email)
 
   const outgoing = (friendRequests || [])
     .filter((r) => r && String(r.from || '').toLowerCase() === email && String(r.status || 'pending') === 'pending')
@@ -2796,6 +2804,7 @@ app.get('/api/friends/outgoing', (req, res) => {
     })
     .sort((a, b) => (b.requestedAt || 0) - (a.requestedAt || 0))
 
+  logger.info('[DEBUG] Filtered outgoing requests for %s: %o', email, outgoing)
   res.json({ ok: true, requests: outgoing })
 })
 
