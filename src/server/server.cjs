@@ -1773,28 +1773,32 @@ async function upsertFriendshipSupabase(a, b) {
     console.log('[SUPABASE-UPSERT-SKIP] Supabase not configured')
     return
   }
-  
+
+  const rows = [
+    { user_email: a, friend_email: b },
+    { user_email: b, friend_email: a },
+  ]
+
   try {
-    const rows = [
-      { user_email: a, friend_email: b },
-      { user_email: b, friend_email: a },
-    ]
-    
     console.log('[SUPABASE-UPSERT-CALL] Calling supabase.from(friendships).upsert with rows:', JSON.stringify(rows))
-    
-    // Use upsert with ignoreDuplicates to handle conflicts gracefully
-    // This will insert new rows and silently skip if they already exist
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('friendships')
       .upsert(rows, { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
       .select()
-    
+
+    // Some databases may not have a unique constraint for the specified onConflict columns.
+    // If so, fall back to a simple insert to persist the rows instead of failing.
+    if (error && /unique|exclusion constraint|conflict/i.test(error.message || '')) {
+      console.warn('[SUPABASE-UPSERT-FALLBACK] Upsert failed due to missing constraint; retrying with insert')
+      ;({ data, error } = await supabase.from('friendships').insert(rows).select())
+    }
+
     if (error) {
       console.error('[SUPABASE-UPSERT-ERROR] error:', JSON.stringify(error))
       startLogger.error('[Friends] Supabase upsert failed: %s', error.message || JSON.stringify(error))
       throw new Error(error.message || 'Supabase upsert failed')
     }
-    
+
     console.log('[SUPABASE-UPSERT-SUCCESS] Created friendship: %s <-> %s, data:', a, b, JSON.stringify(data))
     startLogger.info('[Friends] Successfully created friendship: %s <-> %s', a, b)
   } catch (err) {
@@ -2665,7 +2669,7 @@ if (supabase) {
       console.log('[FRIENDS-LIST-DATA] Supabase returned: %s', JSON.stringify(data))
     }
       
-    if (!error && Array.isArray(data)) {
+    if (!error && Array.isArray(data) && data.length > 0) {
       // Rebuild this user's friendships from Supabase (authoritative source)
       const freshSet = new Set()
       for (const row of data) {
@@ -2674,11 +2678,14 @@ if (supabase) {
       }
       console.log('[FRIENDS-LIST-REBUILT] Rebuilt friendships set: %s', JSON.stringify(Array.from(freshSet)))
       startLogger.info('[FRIENDS-LIST] Rebuilt %d friendships from Supabase for %s', freshSet.size, email)
-      // Update in-memory cache
+      // Update in-memory cache only when Supabase returned rows; avoid wiping cache when table is empty
       friendships.set(email, freshSet)
     } else if (error) {
       console.error('[FRIENDS-LIST-ERROR] Supabase error:', error)
       startLogger.error('[FRIENDS-LIST] Supabase error, keeping in-memory: %s', error.message)
+    } else if (!error && Array.isArray(data) && data.length === 0) {
+      // Do not clear the in-memory friendships if Supabase has no rows yet
+      console.log('[FRIENDS-LIST-NO-ROWS] Supabase returned 0 rows; keeping existing in-memory friendships')
     }
   } catch (err) {
     console.error('[FRIENDS-LIST-EXCEPTION] Exception:', err)
