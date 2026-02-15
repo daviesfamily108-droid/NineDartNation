@@ -2622,36 +2622,48 @@ wss.on('connection', (ws, req) => {
 
 // Friends HTTP API (demo)
 app.get('/api/friends/list', async (req, res) => {
-  const email = String(req.query.email || '').toLowerCase()
+const email = String(req.query.email || '').toLowerCase()
   
-  // CRITICAL FIX: Always query Supabase directly if available to ensure friends persist across server restarts
-  // The in-memory friendships Map is only a cache and may be empty after restart
-  if (supabase) {
-    try {
-      const { data, error } = await supabase
-        .from('friendships')
-        .select('friend_email')
-        .eq('user_email', email)
+logger.info('[DEBUG] /api/friends/list called for email=%s', email)
+logger.info('[DEBUG] In-memory friendships before Supabase query: %o', Array.from(friendships.get(email) || []))
+  
+// CRITICAL FIX: Always query Supabase directly if available to ensure friends persist across server restarts
+// The in-memory friendships Map is only a cache and may be empty after restart
+if (supabase) {
+  try {
+    const { data, error } = await supabase
+      .from('friendships')
+      .select('friend_email')
+      .eq('user_email', email)
       
-      if (!error && Array.isArray(data)) {
-        // Rebuild this user's friendships from Supabase (authoritative source)
-        const freshSet = new Set()
-        for (const row of data) {
-          const friendEmail = String(row.friend_email || '').toLowerCase()
-          if (friendEmail && friendEmail !== email) freshSet.add(friendEmail)
-        }
-        // Update in-memory cache
-        friendships.set(email, freshSet)
+    logger.info('[DEBUG] Supabase query result: error=%s dataLength=%d', error?.message || 'none', data?.length || 0)
+    if (data && data.length > 0) {
+      logger.info('[DEBUG] Supabase data: %o', data)
+    }
+      
+    if (!error && Array.isArray(data)) {
+      // Rebuild this user's friendships from Supabase (authoritative source)
+      const freshSet = new Set()
+      for (const row of data) {
+        const friendEmail = String(row.friend_email || '').toLowerCase()
+        if (friendEmail && friendEmail !== email) freshSet.add(friendEmail)
       }
-    } catch (err) {
-      console.warn('[Friends] Failed to load user friendships from Supabase:', err?.message || err)
+      logger.info('[DEBUG] Rebuilt friendships set from Supabase: %o', Array.from(freshSet))
+      // Update in-memory cache
+      friendships.set(email, freshSet)
+    } else if (error) {
+      logger.error('[DEBUG] Supabase error, keeping in-memory friendships: %s', error.message)
     }
-  } else {
-    // Fallback: Load from in-memory if Supabase is unavailable (development/test mode)
-    if (!friendships.size) {
-      await loadFriendshipsFromSupabase()
-    }
+  } catch (err) {
+    logger.error('[Friends] Failed to load user friendships from Supabase:', err?.message || err)
   }
+} else {
+  logger.warn('[DEBUG] Supabase not configured - using in-memory only')
+  // Fallback: Load from in-memory if Supabase is unavailable (development/test mode)
+  if (!friendships.size) {
+    await loadFriendshipsFromSupabase()
+  }
+}
   
   const set = friendships.get(email) || new Set()
   const list = Array.from(set).map(e => {
@@ -2870,12 +2882,22 @@ app.post('/api/friends/accept', async (req, res) => {
   const { email, requestId } = req.body || {}
   const me = String(email || '').toLowerCase()
   if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  
+  logger.info('[DEBUG] /api/friends/accept called: me=%s requestId=%s', me, requestId)
+  
   // Find matching pending request by id
   const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
-  if (idx === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  if (idx === -1) {
+    logger.warn('[DEBUG] Request not found: requestId=%s me=%s', requestId, me)
+    return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  }
+  
   const other = String(friendRequests[idx].from || '').toLowerCase()
+  logger.info('[DEBUG] Accepting request from %s to %s', other, me)
+  
   friendRequests[idx].status = 'accepted'
   saveFriendRequests()
+  
   // Add mutual friendship
   const mySet = friendships.get(me) || new Set()
   mySet.add(other)
@@ -2884,6 +2906,10 @@ app.post('/api/friends/accept', async (req, res) => {
   otherSet.add(me)
   friendships.set(other, otherSet)
   saveFriendships()
+  
+  logger.info('[DEBUG] In-memory friendships updated: %s has %d friends, %s has %d friends', me, mySet.size, other, otherSet.size)
+  logger.info('[DEBUG] Calling upsertFriendshipSupabase...')
+  
   await upsertFriendshipSupabase(me, other)
   // Notify the original sender that their request was accepted
   const myUser = users.get(me)
