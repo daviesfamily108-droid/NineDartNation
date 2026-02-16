@@ -115,6 +115,12 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joinMatch, setJoinMatch] = useState<any | null>(null);
   const joinAcceptRef = React.useRef<HTMLButtonElement | null>(null);
+  // Incoming invite popup: shown to the creator when a joiner wants to join
+  const [pendingInvite, setPendingInvite] = useState<any | null>(null);
+  // Waiting state: shown to the joiner while waiting for the creator to accept
+  const [waitingForCreator, setWaitingForCreator] = useState<string | null>(
+    null,
+  );
   // Preserve match info across handleJoinAccept → match-start gap
   // (handleJoinAccept clears joinMatch before the server sends match-start)
   const pendingMatchRef = useRef<any | null>(null);
@@ -359,32 +365,32 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       try {
         console.log("[OnlinePlay] handleInviteOrPrestart:", msg?.type, msg);
         if (msg?.type === "invite") {
-          const inviteMatch = normalizeMatch({
+          // Creator receives an invite — show accept/decline popup
+          const inviteData = {
             id: msg.matchId,
             game: msg.game,
-            modeType: msg.mode || "firstto",
-            legs: msg.value || 1,
+            mode: msg.mode || "firstto",
+            value: msg.value || 1,
             startingScore: msg.startingScore || 501,
-            createdBy: user?.username || "You",
-            creatorName: user?.username || "You",
-            joinerName: msg.fromName || "Opponent",
-            joinerId: msg.fromId,
-            _isCreatorView: true,
-          });
-          serverPrestartRef.current = true;
-          setJoinMatch(inviteMatch);
-          setJoinTimer(60);
-          setTimeout(() => {
-            serverPrestartRef.current = false;
-          }, 0);
-          setJoinChoice(null);
-          setRemoteChoices({});
-          setBullActive(false);
-          setBullThrow(null);
-          setBullWinner(null);
-          setBullTied(false);
+            fromName: msg.fromName || "Opponent",
+            fromId: msg.fromId,
+          };
+          setPendingInvite(inviteData);
+          // Play a notification sound if available
+          try {
+            const audio = new Audio("/sounds/notify.mp3");
+            audio.volume = 0.5;
+            audio.play().catch(() => {});
+          } catch {}
+        }
+        if (msg?.type === "invite-waiting") {
+          // Joiner is waiting for the creator to accept
+          setWaitingForCreator(msg.creatorName || "Creator");
         }
         if (msg?.type === "match-prestart") {
+          // Both players enter prestart after creator accepted the invite
+          setPendingInvite(null);
+          setWaitingForCreator(null);
           const m = normalizeMatch(msg.match || null);
           if (m) m.prestartEndsAt = msg.prestartEndsAt;
           // Determine if the local user is the creator so we can set the
@@ -427,11 +433,15 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           setBullTied(false);
         }
         if (msg?.type === "invite-expired") {
+          setPendingInvite(null);
+          setWaitingForCreator(null);
           setJoinMatch((prev: any) =>
             prev && msg.matchId === prev.id ? null : prev,
           );
         }
         if (msg?.type === "declined") {
+          setPendingInvite(null);
+          setWaitingForCreator(null);
           setJoinMatch((prev: any) =>
             prev && msg.matchId === prev.id ? null : prev,
           );
@@ -1099,6 +1109,122 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           }}
         />
 
+        {/* ── Incoming invite popup (creator sees this) ── */}
+        {pendingInvite && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="relative w-full max-w-md mx-4 p-6 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 border border-indigo-500/30 shadow-2xl shadow-indigo-500/20">
+              {/* Glow accent */}
+              <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 ring-2 ring-indigo-500/30">
+                    <Zap className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white">
+                      Match Invite!
+                    </h3>
+                    <p className="text-sm text-white/60">
+                      Someone wants to play
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-white/5 border border-white/10 mb-5">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white font-bold text-sm">
+                      {(pendingInvite.fromName || "?")
+                        .substring(0, 2)
+                        .toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-bold text-white text-lg">
+                        {pendingInvite.fromName || "Opponent"}
+                      </div>
+                      <div className="text-xs text-white/50">
+                        wants to join your match
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap text-sm text-white/70">
+                    <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 font-medium">
+                      {pendingInvite.game || "X01"}
+                    </span>
+                    <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10">
+                      {pendingInvite.mode === "bestof" ? "Best Of" : "First To"}{" "}
+                      {pendingInvite.value || 1}
+                    </span>
+                    <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 font-mono text-amber-300">
+                      {pendingInvite.startingScore || 501}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-lg shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all hover:scale-[1.02] active:scale-95"
+                    onClick={() => {
+                      // Send invite-accept to start prestart for both
+                      try {
+                        if (wsGlobal?.connected && pendingInvite?.id) {
+                          wsGlobal.send({
+                            type: "invite-accept",
+                            matchId: pendingInvite.id,
+                          });
+                        }
+                      } catch {}
+                      setPendingInvite(null);
+                    }}
+                  >
+                    ✅ Accept
+                  </button>
+                  <button
+                    className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-rose-600/80 text-white/80 hover:text-white font-bold text-lg border border-white/10 hover:border-rose-500/50 transition-all hover:scale-[1.02] active:scale-95"
+                    onClick={() => {
+                      // Send invite-decline
+                      try {
+                        if (wsGlobal?.connected && pendingInvite?.id) {
+                          wsGlobal.send({
+                            type: "invite-decline",
+                            matchId: pendingInvite.id,
+                          });
+                        }
+                      } catch {}
+                      setPendingInvite(null);
+                    }}
+                  >
+                    ❌ Decline
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Waiting for creator (joiner sees this) ── */}
+        {waitingForCreator && !joinMatch && (
+          <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="w-full max-w-sm mx-4 p-6 rounded-2xl bg-slate-900 border border-slate-700/50 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-indigo-500/10 flex items-center justify-center">
+                <Clock className="w-8 h-8 text-indigo-400 animate-pulse" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">
+                Waiting for {waitingForCreator}
+              </h3>
+              <p className="text-sm text-white/50 mb-5">
+                The match creator needs to accept your request…
+              </p>
+              <button
+                className="px-6 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 transition-all text-sm font-medium"
+                onClick={() => setWaitingForCreator(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Modern join / prestart overlay */}
         <MatchPrestart
           open={!!joinMatch}
@@ -1146,7 +1272,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           }}
           onAccept={handleJoinAccept}
           onCancel={() => {
-            // If the creator declines, notify the server so the joiner is informed
+            // If the creator cancels during prestart, notify the server
             try {
               if (
                 wsGlobal?.connected &&
@@ -1154,10 +1280,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 joinMatch._isCreatorView
               ) {
                 wsGlobal.send({
-                  type: "invite-response",
+                  type: "invite-decline",
                   matchId: joinMatch.id,
-                  accept: false,
-                  toId: joinMatch.joinerId,
                 });
               }
             } catch {}

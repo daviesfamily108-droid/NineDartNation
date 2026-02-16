@@ -138,6 +138,8 @@ export default function App() {
   //   1. Switch to the online tab so OnlinePlay mounts
   //   2. Stash the message on window so OnlinePlay can grab it on mount
   //   3. Also dispatch a delayed DOM event as a backup
+  //   4. Show a toast notification so the user sees it immediately
+  const [wsMatchInviteCount, setWsMatchInviteCount] = useState(0);
   useEffect(() => {
     if (!ws) return;
     const unsub = ws.addListener((msg: any) => {
@@ -146,9 +148,33 @@ export default function App() {
           msg?.type === "invite" ||
           msg?.type === "match-prestart" ||
           msg?.type === "invite-expired" ||
+          msg?.type === "invite-waiting" ||
           msg?.type === "declined" ||
           msg?.type === "match-start"
         ) {
+          // Show a toast notification for invites so the creator notices
+          if (msg?.type === "invite") {
+            const fromName = msg.fromName || "Someone";
+            setWsMatchInviteCount((c) => c + 1);
+            toast(`🎯 ${fromName} wants to join your match!`, {
+              type: "info",
+              timeout: 8000,
+              actionLabel: "View",
+              onAction: () => setTab("online"),
+            });
+          }
+          if (msg?.type === "match-prestart") {
+            toast("⚡ Match starting — get ready!", {
+              type: "info",
+              timeout: 5000,
+            });
+          }
+          if (msg?.type === "declined") {
+            setWsMatchInviteCount((c) => Math.max(0, c - 1));
+          }
+          if (msg?.type === "match-start") {
+            setWsMatchInviteCount(0);
+          }
           // Stash message so OnlinePlay can read it immediately on mount
           (window as any).__ndn_pending_invite = msg;
           // Switch to online tab so the OnlinePlay component mounts
@@ -174,7 +200,7 @@ export default function App() {
       } catch {}
     });
     return unsub;
-  }, [ws]);
+  }, [ws, toast]);
 
   // Globally catch unhandled promise rejections and surface as warnings so the
   // devtools console is less noisy. We still log the reason so developers can
@@ -992,7 +1018,7 @@ export default function App() {
       key: "match-invites",
       label: "Match Invites",
       description: "Pending matches ready to accept.",
-      count: matchInviteNotifs,
+      count: matchInviteNotifs + wsMatchInviteCount,
       icon: Handshake,
     },
     {
@@ -1381,7 +1407,7 @@ export default function App() {
                         )
                           setTab("friends");
                         if (item.key === "tournaments") setTab("tournaments");
-                        // Add other navigations as needed
+                        if (item.key === "match-invites") setTab("online");
                       }}
                     >
                       <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-400 group-hover:bg-indigo-500/20 group-hover:text-indigo-300 group-hover:scale-110 transition-all duration-300 ring-1 ring-white/5">

@@ -3709,6 +3709,7 @@ wss.on('connection', (ws, req) => {
           id,
           creatorId: ws._id,
           creatorName: ws._username || `user-${ws._id}`,
+          creatorEmail: ws._email || '',
           mode: data.mode === 'firstto' ? 'firstto' : 'bestof',
           value: Number(data.value) || 1,
           startingScore: Number(data.startingScore) || 501,
@@ -3735,21 +3736,26 @@ wss.on('connection', (ws, req) => {
         m.joinerName = ws._username || `user-${ws._id}`
         m.joinerEmail = ws._email || ''
         matches.set(matchId, m)
-        const prestartEndsAt = Date.now() + 15000
-        // Notify both creator and joiner with match-prestart
-        const prestartPayload = JSON.stringify({
-          type: 'match-prestart',
-          match: { ...m, modeType: m.mode || 'firstto', legs: m.value || 1, createdBy: m.creatorName },
-          prestartEndsAt
+        // Send an invite notification to the CREATOR so they can accept/decline.
+        // The joiner receives a waiting acknowledgement.
+        const invitePayload = JSON.stringify({
+          type: 'invite',
+          matchId: m.id,
+          game: m.game,
+          mode: m.mode,
+          value: m.value,
+          startingScore: m.startingScore,
+          fromId: ws._id,
+          fromName: m.joinerName
         })
-        // Send to joiner
-        try { ws.send(prestartPayload) } catch {}
-        // Send to creator — try by ID first, then by username as fallback
+        // Send waiting ack to joiner
+        try { ws.send(JSON.stringify({ type: 'invite-waiting', matchId: m.id, creatorName: m.creatorName })) } catch {}
+        // Send invite to creator — try by ID first, then by username as fallback
         let creatorFound = false
         try {
           for (const client of wss.clients) {
             if (client.readyState === 1 && client._id === m.creatorId) {
-              client.send(prestartPayload)
+              client.send(invitePayload)
               creatorFound = true
               break
             }
@@ -3758,7 +3764,7 @@ wss.on('connection', (ws, req) => {
           if (!creatorFound && m.creatorName) {
             for (const client of wss.clients) {
               if (client.readyState === 1 && client._username === m.creatorName && client._id !== ws._id) {
-                client.send(prestartPayload)
+                client.send(invitePayload)
                 // Update the match's creatorId to the new connection
                 m.creatorId = client._id
                 matches.set(matchId, m)
@@ -3769,10 +3775,22 @@ wss.on('connection', (ws, req) => {
             }
           }
         } catch {}
-        // Initialise prestart state
-        if (!global._prestartState) global._prestartState = new Map()
-        global._prestartState.set(matchId, { choices: {}, throws: {}, prestartEndsAt })
-        console.log('[JOIN-MATCH] %s joined match %s (creator=%s creatorId=%s creatorFound=%s)', ws._username, matchId, m.creatorName, m.creatorId, creatorFound)
+        // Also try email-based lookup as a last resort
+        if (!creatorFound) {
+          try {
+            for (const client of wss.clients) {
+              if (client.readyState === 1 && client._email && m.creatorEmail && client._email === m.creatorEmail && client._id !== ws._id) {
+                client.send(invitePayload)
+                m.creatorId = client._id
+                matches.set(matchId, m)
+                creatorFound = true
+                console.log('[JOIN-MATCH] creator found by email fallback, updated creatorId to %s', client._id)
+                break
+              }
+            }
+          } catch {}
+        }
+        console.log('[JOIN-MATCH] %s wants to join match %s (creator=%s creatorId=%s creatorFound=%s)', ws._username, matchId, m.creatorName, m.creatorId, creatorFound)
       }
       // ── Prestart choice: bull or skip ──
       else if (data.type === 'prestart-choice') {
@@ -3800,7 +3818,7 @@ wss.on('connection', (ws, req) => {
           const anyBull = choiceValues.some(c => c === 'bull')
           if (allSkip) {
             // Both skipped → creator throws first → start match
-            const startPayload = JSON.stringify({ type: 'match-start', roomId, firstThrowerId: m?.creatorId, firstThrowerName: m?.creatorName })
+            const startPayload = JSON.stringify({ type: 'match-start', roomId, firstThrowerId: m?.creatorId, firstThrowerName: m?.creatorName, match: { game: m?.game, mode: m?.mode, value: m?.value, startingScore: m?.startingScore, creatorName: m?.creatorName, creatorId: m?.creatorId, joinerName: m?.joinerName, joinerId: m?.joinerId } })
             for (const client of wss.clients) {
               if (client.readyState === 1 && m && (client._id === m.creatorId || client._id === m.joinerId)) {
                 try { client.send(startPayload) } catch {}
@@ -3879,8 +3897,49 @@ wss.on('connection', (ws, req) => {
               try { client.send(startPayload) } catch {}
             }
           }
-          console.log('[INVITE] accepted match %s', matchId)
+          console.log('[INVITE-RESPONSE] accepted match %s — match-start sent', matchId)
         }
+      }
+      // ── Invite accept: creator accepts an incoming invite → start prestart for both ──
+      else if (data.type === 'invite-accept') {
+        const matchId = String(data.matchId || '')
+        const m = matches.get(matchId)
+        if (!m) return
+        const prestartEndsAt = Date.now() + 15000
+        const prestartPayload = JSON.stringify({
+          type: 'match-prestart',
+          match: { ...m, modeType: m.mode || 'firstto', legs: m.value || 1, createdBy: m.creatorName },
+          prestartEndsAt
+        })
+        // Initialise prestart state
+        if (!global._prestartState) global._prestartState = new Map()
+        global._prestartState.set(matchId, { choices: {}, throws: {}, prestartEndsAt })
+        // Send prestart to both creator and joiner
+        for (const client of wss.clients) {
+          if (client.readyState === 1 && (client._id === m.creatorId || client._id === m.joinerId)) {
+            try { client.send(prestartPayload) } catch {}
+          }
+        }
+        console.log('[INVITE-ACCEPT] creator accepted invite for match %s — prestart sent to both', matchId)
+      }
+      // ── Invite decline: creator declines an incoming invite ──
+      else if (data.type === 'invite-decline') {
+        const matchId = String(data.matchId || '')
+        const m = matches.get(matchId)
+        if (!m) return
+        // Notify the joiner
+        const declinePayload = JSON.stringify({ type: 'declined', matchId })
+        for (const client of wss.clients) {
+          if (client.readyState === 1 && client._id === m.joinerId) {
+            try { client.send(declinePayload) } catch {}
+          }
+        }
+        // Clear joiner info so someone else can join
+        m.joinerId = null
+        m.joinerName = null
+        m.joinerEmail = null
+        matches.set(matchId, m)
+        console.log('[INVITE-DECLINE] creator declined match %s', matchId)
       }
       else if (data.type === 'set-match-autocommit') {
         // Host or admin may toggle server-side autocommit allowed flag for a room
