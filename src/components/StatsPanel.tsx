@@ -1,5 +1,6 @@
 import { useMatch } from "../store/match.js";
 import { formatAvg } from "../utils/stats.js";
+import { apiFetch } from "../utils/api.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BarChart from "./BarChart.js";
 import {
@@ -51,7 +52,7 @@ export default function StatsPanel({ user }: { user?: any }) {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/friends/list?email=${encodeURIComponent(me)}`,
         );
         const j = await res.json().catch(() => ({ friends: [] }));
@@ -103,7 +104,7 @@ export default function StatsPanel({ user }: { user?: any }) {
       searchTimerRef.current = window.setTimeout(async () => {
         setSearching(true);
         try {
-          const res = await fetch(
+          const res = await apiFetch(
             `/api/friends/search?q=${encodeURIComponent(term)}`,
           );
           const j = await res.json().catch(() => ({ results: [] }));

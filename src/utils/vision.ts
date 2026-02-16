@@ -463,16 +463,16 @@ export function scoreAtBoardPoint(p: Point): {
 
   // Apply minimal tolerance for wire-shots (0.75mm is approx half a wire width)
   const tol = 0.75;
-  // Use a more generous tolerance for the board's outer edge to prevent
-  // calibration drift from rejecting valid double-drifts as MISS.
-  const outerTol = 6.0;
+  // Minimal outer tolerance: allow a tiny buffer for detection noise but treat
+  // anything beyond the double ring as a miss.
+  const outerTol = 0.5;
 
   // Outside board edge
   if (r > doubleOuter + outerTol)
     return { base: 0, ring: "MISS", sector: null, mult: 0 };
 
-  // Double band
-  if (r >= doubleInner - tol)
+  // Double band (clamp to outer edge tolerance)
+  if (r >= doubleInner - tol && r <= doubleOuter + outerTol)
     return { base: sector * 2, ring: "DOUBLE", sector, mult: 2 };
 
   // Single outer band

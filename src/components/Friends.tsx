@@ -99,7 +99,7 @@ export default function Friends({ user }: { user?: any }) {
       const other = String(otherEmail || "").toLowerCase();
       if (!email || !other || other === email) return;
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/friends/thread?email=${encodeURIComponent(email)}&other=${encodeURIComponent(other)}`,
         );
         const data = await res.json();
@@ -154,18 +154,18 @@ export default function Friends({ user }: { user?: any }) {
     if (!email) return;
     try {
       const [fl, sg, rq, out] = await Promise.all([
-        fetch(`/api/friends/list?email=${encodeURIComponent(email)}`).then(
+        apiFetch(`/api/friends/list?email=${encodeURIComponent(email)}`).then(
           (r) => r.json(),
         ),
-        fetch(`/api/friends/suggested?email=${encodeURIComponent(email)}`).then(
-          (r) => r.json(),
-        ),
-        fetch(`/api/friends/requests?email=${encodeURIComponent(email)}`).then(
-          (r) => r.json(),
-        ),
-        fetch(`/api/friends/outgoing?email=${encodeURIComponent(email)}`).then(
-          (r) => r.json(),
-        ),
+        apiFetch(
+          `/api/friends/suggested?email=${encodeURIComponent(email)}`,
+        ).then((r) => r.json()),
+        apiFetch(
+          `/api/friends/requests?email=${encodeURIComponent(email)}`,
+        ).then((r) => r.json()),
+        apiFetch(
+          `/api/friends/outgoing?email=${encodeURIComponent(email)}`,
+        ).then((r) => r.json()),
       ]);
       setFriends(fl.friends || []);
       setSuggested(sg.suggestions || []);
@@ -181,7 +181,7 @@ export default function Friends({ user }: { user?: any }) {
   // Load inbox on mount/user change.
   useEffect(() => {
     if (!email) return;
-    fetch(`/api/friends/messages?email=${encodeURIComponent(email)}`)
+    apiFetch(`/api/friends/messages?email=${encodeURIComponent(email)}`)
       .then((r) => r.json())
       .then((d) => {
         if (d?.ok && Array.isArray(d.messages)) msgs.load(d.messages);
@@ -210,7 +210,7 @@ export default function Friends({ user }: { user?: any }) {
       return;
     }
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/friends/search?q=${encodeURIComponent(term)}&email=${encodeURIComponent(email)}`,
       );
       const data = await res.json();
@@ -259,7 +259,7 @@ export default function Friends({ user }: { user?: any }) {
     if (!email || !target) return;
     setLoading(true);
     try {
-      await fetch("/api/friends/add", {
+      await apiFetch("/api/friends/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, friend: target }),
@@ -277,7 +277,7 @@ export default function Friends({ user }: { user?: any }) {
     if (!email || !target) return;
     setLoading(true);
     try {
-      await fetch("/api/friends/remove", {
+      await apiFetch("/api/friends/remove", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, friend: target }),
@@ -291,7 +291,7 @@ export default function Friends({ user }: { user?: any }) {
 
   async function acceptFriend(requestId: string) {
     try {
-      await fetch("/api/friends/accept", {
+      await apiFetch("/api/friends/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, requestId }),
@@ -303,7 +303,7 @@ export default function Friends({ user }: { user?: any }) {
 
   async function declineFriend(requestId: string) {
     try {
-      await fetch("/api/friends/decline", {
+      await apiFetch("/api/friends/decline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, requestId }),
@@ -315,7 +315,7 @@ export default function Friends({ user }: { user?: any }) {
 
   async function cancelRequest(requestId: string) {
     try {
-      await fetch("/api/friends/cancel", {
+      await apiFetch("/api/friends/cancel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, requestId }),
@@ -332,7 +332,7 @@ export default function Friends({ user }: { user?: any }) {
     const message = input?.value;
     if (!message || !messagePopup.toEmail) return;
     try {
-      await fetch("/api/friends/message", {
+      await apiFetch("/api/friends/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -351,7 +351,7 @@ export default function Friends({ user }: { user?: any }) {
     const message = chatDraft.trim();
     if (!message) return;
     try {
-      await fetch("/api/friends/message", {
+      await apiFetch("/api/friends/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -952,19 +952,22 @@ export default function Friends({ user }: { user?: any }) {
                                         );
                                         if (!reason) return;
                                         try {
-                                          await fetch("/api/friends/report", {
-                                            method: "POST",
-                                            headers: {
-                                              "Content-Type":
-                                                "application/json",
+                                          await apiFetch(
+                                            "/api/friends/report",
+                                            {
+                                              method: "POST",
+                                              headers: {
+                                                "Content-Type":
+                                                  "application/json",
+                                              },
+                                              body: JSON.stringify({
+                                                reporterEmail: email,
+                                                offenderEmail: m.from,
+                                                reason,
+                                                messageId: m.id,
+                                              }),
                                             },
-                                            body: JSON.stringify({
-                                              reporterEmail: email,
-                                              offenderEmail: m.from,
-                                              reason,
-                                              messageId: m.id,
-                                            }),
-                                          });
+                                          );
                                           toast("Report sent to admin", {
                                             type: "info",
                                           });

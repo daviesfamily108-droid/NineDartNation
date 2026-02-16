@@ -2670,16 +2670,16 @@ if (supabase) {
     }
       
     if (!error && Array.isArray(data) && data.length > 0) {
-      // Rebuild this user's friendships from Supabase (authoritative source)
-      const freshSet = new Set()
+      // Merge Supabase rows with any existing in-memory cache to avoid losing recent local updates
+      const existing = friendships.get(email) || new Set()
+      const merged = new Set(existing)
       for (const row of data) {
         const friendEmail = String(row.friend_email || '').toLowerCase()
-        if (friendEmail && friendEmail !== email) freshSet.add(friendEmail)
+        if (friendEmail && friendEmail !== email) merged.add(friendEmail)
       }
-      console.log('[FRIENDS-LIST-REBUILT] Rebuilt friendships set: %s', JSON.stringify(Array.from(freshSet)))
-      startLogger.info('[FRIENDS-LIST] Rebuilt %d friendships from Supabase for %s', freshSet.size, email)
-      // Update in-memory cache only when Supabase returned rows; avoid wiping cache when table is empty
-      friendships.set(email, freshSet)
+      console.log('[FRIENDS-LIST-REBUILT] Merged friendships set: %s', JSON.stringify(Array.from(merged)))
+      startLogger.info('[FRIENDS-LIST] Merged %d friendships from Supabase for %s', merged.size, email)
+      friendships.set(email, merged)
     } else if (error) {
       console.error('[FRIENDS-LIST-ERROR] Supabase error:', error)
       startLogger.error('[FRIENDS-LIST] Supabase error, keeping in-memory: %s', error.message)

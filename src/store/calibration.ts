@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Homography } from "../utils/vision.js";
+import { useUserSettings } from "./userSettings.js";
 
 /**
  * Simplified Calibration Store for Manual-Only Mode
@@ -74,7 +75,27 @@ export const useCalibration = create<CalibrationState>()((set) => ({
   confidence: null,
   anchors: null,
 
-  setCalibration: (partial) => set(partial as any),
+  setCalibration: (partial) =>
+    set((state) => {
+      try {
+        const preserve =
+          useUserSettings.getState?.()?.preserveCalibrationOnCameraChange;
+        const incomingCamera = (partial as any)?.cameraId;
+        if (
+          preserve &&
+          state.locked &&
+          incomingCamera &&
+          incomingCamera !== state.cameraId
+        ) {
+          // Ignore camera/homography changes while locked when preserve flag is set
+          const nextPartial = { ...(partial as any) };
+          nextPartial.cameraId = state.cameraId;
+          if ("H" in nextPartial) nextPartial.H = state.H;
+          return { ...state, ...nextPartial } as any;
+        }
+      } catch {}
+      return { ...state, ...(partial as any) } as any;
+    }),
 
   lockCameraView: (scale, aspect, fitMode, cameraId) =>
     set({

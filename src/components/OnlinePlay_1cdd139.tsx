@@ -167,7 +167,7 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
   const [pairingExpiryAt, setPairingExpiryAt] = useState<number | null>(null)
   const pairingTimerRef = useRef<number | null>(null)
   const pairingPendingTimeoutRef = useRef<number | null>(null)
-  const [cameraTab, setCameraTab] = useState<'connection' | 'preview'>(initialCameraTab ?? 'connection')
+  const [cameraTab, setCameraTab] = useState<'connection' | 'preview'>(initialCameraTab ?? 'preview')
   const [availableCameras, setAvailableCameras] = useState<MediaDeviceInfo[]>([])
   const [cameraAccessError, setCameraAccessError] = useState<string | null>(null)
   // Copy pairing code to clipboard

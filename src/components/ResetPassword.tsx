@@ -1,4 +1,5 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { apiFetch } from "../utils/api.js";
 
 function validatePassword(password: string) {
   return (
@@ -42,7 +43,7 @@ export default function ResetPassword() {
       return;
     }
     try {
-      const r = await fetch("/api/auth/confirm-reset", {
+      const r = await apiFetch("/api/auth/confirm-reset", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, newPassword: password }),

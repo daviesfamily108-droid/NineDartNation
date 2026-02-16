@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { apiFetch } from "../utils/api.js";
 import BarChart from "./BarChart.js";
 import TabPills from "./ui/TabPills.js";
 import { getGameModeStats } from "../store/profileStats.js";
@@ -86,7 +87,7 @@ export default function AdminDashboard({ user }: { user: any }) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${localStorage.getItem("authToken")}`,
       };
-      const res = await fetch("/api/admin/tournaments/broadcast", {
+      const res = await apiFetch("/api/admin/tournaments/broadcast", {
         method: "POST",
         headers,
       });
@@ -162,9 +163,9 @@ export default function AdminDashboard({ user }: { user: any }) {
         Authorization: `Bearer ${localStorage.getItem("authToken")}`,
       };
       const [hrRes, adminsRes, tRes] = await Promise.all([
-        fetch("/api/admin/help-requests", { headers }),
-        fetch("/api/admins", { headers }),
-        fetch("/api/tournaments", { headers }),
+        apiFetch("/api/admin/help-requests", { headers }),
+        apiFetch("/api/admins", { headers }),
+        apiFetch("/api/tournaments", { headers }),
       ]);
       if (hrRes.ok) {
         const d = await hrRes.json();
@@ -185,7 +186,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 
   async function revoke(target: string) {
     try {
-      await fetch("/api/admins/revoke", {
+      await apiFetch("/api/admins/revoke", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -200,7 +201,7 @@ export default function AdminDashboard({ user }: { user: any }) {
   async function grantPremium(email: string, days: number) {
     if (!email) return;
     try {
-      await fetch("/api/admin/premium/grant", {
+      await apiFetch("/api/admin/premium/grant", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -214,7 +215,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 
   async function revokePremium(email: string) {
     try {
-      await fetch("/api/admin/premium/revoke", {
+      await apiFetch("/api/admin/premium/revoke", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -229,7 +230,7 @@ export default function AdminDashboard({ user }: { user: any }) {
   async function sendAnnouncement() {
     if (!announcement.trim()) return;
     try {
-      await fetch("/api/admin/announce", {
+      await apiFetch("/api/admin/announce", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -244,7 +245,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 
   async function toggleMaintenance(next: boolean) {
     try {
-      await fetch("/api/admin/maintenance", {
+      await apiFetch("/api/admin/maintenance", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -312,7 +313,7 @@ export default function AdminDashboard({ user }: { user: any }) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${localStorage.getItem("authToken")}`,
       };
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/admin/help-requests/${encodeURIComponent(id)}/claim`,
         { method: "POST", headers, body: JSON.stringify({}) },
       );
@@ -328,7 +329,7 @@ export default function AdminDashboard({ user }: { user: any }) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${localStorage.getItem("authToken")}`,
       };
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/admin/help-requests/${encodeURIComponent(id)}/resolve`,
         { method: "POST", headers, body: JSON.stringify({}) },
       );
@@ -340,7 +341,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 
   async function grant() {
     if (!email) return;
-    await fetch("/api/admins/grant", {
+    await apiFetch("/api/admins/grant", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -357,7 +358,7 @@ export default function AdminDashboard({ user }: { user: any }) {
       const authHeader = {
         Authorization: `Bearer ${localStorage.getItem("authToken")}`,
       };
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/admin/users/search?q=${encodeURIComponent(userSearch)}`,
         { headers: authHeader },
       );
@@ -372,7 +373,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 
   async function banUser(email: string) {
     try {
-      await fetch("/api/admin/users/ban", {
+      await apiFetch("/api/admin/users/ban", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -388,7 +389,7 @@ export default function AdminDashboard({ user }: { user: any }) {
 
   async function unbanUser(email: string) {
     try {
-      await fetch("/api/admin/users/unban", {
+      await apiFetch("/api/admin/users/unban", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -408,7 +409,7 @@ export default function AdminDashboard({ user }: { user: any }) {
     setLoading(true);
     try {
       const start = new Date(createForm.startAt).getTime();
-      const res = await fetch("/api/tournaments/create", {
+      const res = await apiFetch("/api/tournaments/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -451,7 +452,7 @@ export default function AdminDashboard({ user }: { user: any }) {
   async function setWinner(tid: string, winnerEmail: string) {
     setLoading(true);
     try {
-      await fetch("/api/admin/tournaments/winner", {
+      await apiFetch("/api/admin/tournaments/winner", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -468,7 +469,7 @@ export default function AdminDashboard({ user }: { user: any }) {
   async function deleteTournament(tid: string) {
     setLoading(true);
     try {
-      await fetch("/api/admin/tournaments/delete", {
+      await apiFetch("/api/admin/tournaments/delete", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -485,7 +486,7 @@ export default function AdminDashboard({ user }: { user: any }) {
   async function reseedWeekly() {
     setLoading(true);
     try {
-      await fetch("/api/admin/tournaments/reseed-weekly", {
+      await apiFetch("/api/admin/tournaments/reseed-weekly", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -502,7 +503,7 @@ export default function AdminDashboard({ user }: { user: any }) {
   async function deleteMatch(id: string) {
     setLoading(true);
     try {
-      await fetch("/api/admin/matches/delete", {
+      await apiFetch("/api/admin/matches/delete", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -521,7 +522,7 @@ export default function AdminDashboard({ user }: { user: any }) {
       const authHeader = {
         Authorization: `Bearer ${localStorage.getItem("authToken")}`,
       };
-      const res = await fetch("/api/admin/logs", { headers: authHeader });
+      const res = await apiFetch("/api/admin/logs", { headers: authHeader });
       if (res.ok) {
         const data = await res.json();
         if (data?.ok) setLogs(data.logs || []);
@@ -536,7 +537,7 @@ export default function AdminDashboard({ user }: { user: any }) {
       const authHeader = {
         Authorization: `Bearer ${localStorage.getItem("authToken")}`,
       };
-      const res = await fetch("/api/admin/system-health", {
+      const res = await apiFetch("/api/admin/system-health", {
         headers: authHeader,
       });
       if (res.ok) {
@@ -563,7 +564,7 @@ export default function AdminDashboard({ user }: { user: any }) {
   async function toggleClustering(enable: boolean) {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/clustering", {
+      const res = await apiFetch("/api/admin/clustering", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -608,7 +609,9 @@ export default function AdminDashboard({ user }: { user: any }) {
       const authHeader = {
         Authorization: `Bearer ${localStorage.getItem("authToken")}`,
       };
-      const res = await fetch("/api/admin/email-copy", { headers: authHeader });
+      const res = await apiFetch("/api/admin/email-copy", {
+        headers: authHeader,
+      });
       if (res.ok) {
         const d = await res.json();
         if (d?.ok) setEmailCopy(d.copy || emailCopy);
@@ -627,7 +630,7 @@ export default function AdminDashboard({ user }: { user: any }) {
   }, [isOwner, activeTab]);
 
   async function saveEmailCopy(kind: string, payload: any) {
-    await fetch("/api/admin/email-copy", {
+    await apiFetch("/api/admin/email-copy", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -643,7 +646,7 @@ export default function AdminDashboard({ user }: { user: any }) {
       const authHeader = {
         Authorization: `Bearer ${localStorage.getItem("authToken")}`,
       };
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/email/preview?kind=${encodeURIComponent(kind)}`,
         { headers: authHeader },
       );
@@ -1317,7 +1320,7 @@ export default function AdminDashboard({ user }: { user: any }) {
                             className="btn bg-emerald-600 hover:bg-emerald-700"
                             disabled={loading}
                             onClick={async () => {
-                              await fetch("/api/admin/reports/resolve", {
+                              await apiFetch("/api/admin/reports/resolve", {
                                 method: "POST",
                                 headers: {
                                   "Content-Type": "application/json",
@@ -1341,7 +1344,7 @@ export default function AdminDashboard({ user }: { user: any }) {
                                 prompt(
                                   "Enter notes for action taken (e.g., warning, block):",
                                 ) || "";
-                              await fetch("/api/admin/reports/resolve", {
+                              await apiFetch("/api/admin/reports/resolve", {
                                 method: "POST",
                                 headers: {
                                   "Content-Type": "application/json",
