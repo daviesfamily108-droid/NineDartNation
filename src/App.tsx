@@ -619,6 +619,17 @@ export default function App() {
       window.removeEventListener("ndn:logout" as any, onLogout as any);
   }, []);
 
+  // Send presence to server whenever WS connects and user is authenticated
+  // This ensures the server knows this user is online for friends list status
+  useEffect(() => {
+    if (!ws?.connected || !user?.email) return;
+    try {
+      const email = String(user.email || "").toLowerCase();
+      const username = user.username || email;
+      ws.send({ type: "presence", username, email });
+    } catch {}
+  }, [ws?.connected, user?.email, user?.username]);
+
   // Apply username changes from Settings globally and propagate via WS presence
   useEffect(() => {
     const onName = (e: any) => {

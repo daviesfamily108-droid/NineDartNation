@@ -42,6 +42,17 @@ const app = express();
 // Trust proxy when behind render/netlify or nginx
 try { app.set('trust proxy', 1) } catch {}
 
+// Disable caching for dynamic JSON responses (avoid stale 304s after mutations)
+function noCache(res) {
+  try {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+    res.set('ETag', `${Date.now()}-${Math.random().toString(36).slice(2,8)}`);
+  } catch {}
+}
+
 // Global error handlers
 app.use((err, req, res, next) => {
   try {
@@ -2580,9 +2591,12 @@ app.post('/api/auth/confirm-reset', async (req, res) => {
 // Friends list
 app.get('/api/friends/list', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
+  noCache(res)
   
-  // CRITICAL FIX: Merge Supabase friendships with in-memory cache to avoid losing
-  // recent local updates. Never replace the cache with an empty set from Supabase.
+  console.log('[FRIENDS-LIST-START] email=%s', email)
+  
+  // CRITICAL FIX: Always query Supabase directly if available to ensure friends persist across server restarts
+  // The in-memory friendships Map is only a cache and may be empty after restart
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -2590,23 +2604,37 @@ app.get('/api/friends/list', async (req, res) => {
         .select('friend_email')
         .eq('user_email', email)
       
+      console.log('[FRIENDS-LIST-RESULT] Supabase query: error=%s dataLength=%d', error?.message || 'none', data?.length || 0)
+      
       if (!error && Array.isArray(data) && data.length > 0) {
-        // Merge Supabase rows with any existing in-memory cache
+        // Merge Supabase rows with any existing in-memory cache to avoid losing recent local updates
         const existing = friendships.get(email) || new Set()
         const merged = new Set(existing)
         for (const row of data) {
           const friendEmail = String(row.friend_email || '').toLowerCase()
           if (friendEmail && friendEmail !== email) merged.add(friendEmail)
         }
+        console.log('[FRIENDS-LIST-REBUILT] Merged friendships set: %s', JSON.stringify(Array.from(merged)))
         friendships.set(email, merged)
       } else if (error) {
-        console.warn('[Friends] Supabase error, keeping in-memory:', error.message)
+        console.error('[FRIENDS-LIST-ERROR] Supabase error:', error)
+      } else if (!error && Array.isArray(data) && data.length === 0) {
+        // Do not clear the in-memory friendships if Supabase has no rows yet
+        console.log('[FRIENDS-LIST-NO-ROWS] Supabase returned 0 rows; keeping existing in-memory friendships')
+        // REPAIR: If in-memory has friendships but Supabase doesn't, re-persist them
+        const existing = friendships.get(email)
+        if (existing && existing.size > 0) {
+          console.log('[FRIENDS-LIST-REPAIR] In-memory has %d friends but Supabase has 0; re-persisting to Supabase', existing.size)
+          for (const friendEmail of existing) {
+            try { await upsertFriendshipSupabase(email, friendEmail) } catch (e) {}
+          }
+        }
       }
-      // If data is empty array and no error, keep existing in-memory friendships
     } catch (err) {
-      console.warn('[Friends] Failed to load user friendships from Supabase:', err?.message || err)
+      console.error('[FRIENDS-LIST-EXCEPTION] Exception:', err)
     }
   } else {
+    console.log('[FRIENDS-LIST-NO-SUPABASE] Supabase not configured')
     // Fallback: Load from in-memory if Supabase is unavailable (development/test mode)
     if (!friendships.size) {
       await loadFriendshipsFromSupabase()
@@ -2620,7 +2648,7 @@ app.get('/api/friends/list', async (req, res) => {
     const uname = u.username || e
     const avatar = getUserAvatar(uname) || null
     const threeDartAvg = getUser3DA(uname)
-    return { email: e, username: uname, status: u.status, lastSeen: u.lastSeen, roomId: u.currentRoomId || null, match: u.currentMatch || null, avatar, threeDartAvg }
+    return { email: e, username: uname, status: u.status || 'offline', lastSeen: u.lastSeen, roomId: u.currentRoomId || null, match: u.currentMatch || null, avatar, threeDartAvg }
   })
   res.json({ ok: true, friends: list })
 })
@@ -2694,7 +2722,7 @@ app.get('/api/friends/suggested', (req, res) => {
       const uname = u.username || e
       const avatar = getUserAvatar(uname) || null
       const threeDartAvg = getUser3DA(uname)
-      suggestions.push({ email: e, username: uname, status: u.status, lastSeen: u.lastSeen, avatar, threeDartAvg })
+      suggestions.push({ email: e, username: uname, status: u.status || 'offline', lastSeen: u.lastSeen, avatar, threeDartAvg })
     }
     if (suggestions.length >= 10) break
   }
@@ -2793,6 +2821,7 @@ app.get('/api/friends/thread', (req, res) => {
 // Shape: { from: string, to: string, ts: number, status?: 'pending'|'accepted'|'declined'|'cancelled' }
 app.get('/api/friends/requests', (req, res) => {
 const email = String(req.query.email || '').toLowerCase()
+noCache(res)
 if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
 const users = global.users || new Map()
 
@@ -2889,10 +2918,18 @@ app.post('/api/friends/remove', async (req, res) => {
 app.post('/api/friends/accept', async (req, res) => {
   const { email, requestId } = req.body || {}
   const me = String(email || '').toLowerCase()
+  
+  console.log('[ACCEPT-START] email=%s requestId=%s', me, requestId)
+  
   if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
   const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
-  if (idx === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  if (idx === -1) {
+    console.log('[ACCEPT-ERROR] Request not found: requestId=%s me=%s', requestId, me)
+    return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
+  }
   const other = String(friendRequests[idx].from || '').toLowerCase()
+  console.log('[ACCEPT-FOUND] Accepting request from=%s to=%s', other, me)
+  
   friendRequests[idx].status = 'accepted'
   saveFriendRequests()
   // Add mutual friendship
@@ -2903,7 +2940,16 @@ app.post('/api/friends/accept', async (req, res) => {
   otherSet.add(me)
   friendships.set(other, otherSet)
   saveFriendships()
-   await upsertFriendshipSupabase(me, other)
+  
+  console.log('[ACCEPT-MEMORY] In-memory updated: %s has %d friends, %s has %d friends', me, mySet.size, other, otherSet.size)
+  
+  try {
+    await upsertFriendshipSupabase(me, other)
+    console.log('[ACCEPT-DB-DONE] upsertFriendshipSupabase completed')
+  } catch (err) {
+    console.error('[ACCEPT-DB-ERROR] upsertFriendshipSupabase failed:', err)
+    // Don't fail the response — in-memory friendship is already set
+  }
   // Notify the original sender
   const users = global.users || new Map()
   const clients = global.clients || new Map()
@@ -3312,6 +3358,16 @@ wss.on('connection', (ws, req) => {
             if (data.type !== 'auth' && data.type !== 'presence') return
           }
         }
+      }
+      // Handle heartbeat pings — keep user marked as online and update lastSeen
+      if (data.type === 'ping') {
+        if (ws._email && users.has(ws._email)) {
+          const u = users.get(ws._email)
+          u.lastSeen = Date.now()
+          if (u.status !== 'ingame') u.status = 'online'
+          users.set(ws._email, u)
+        }
+        return
       }
       if (data.type === 'join') {
         await leaveRoom(ws);
@@ -4237,7 +4293,9 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
             username: user.username,
             password: user.password,
             admin: user.admin || false,
-            subscription: user.subscription || { fullAccess: false }
+            subscription: user.subscription || { fullAccess: false },
+            status: 'offline',
+            lastSeen: null
           });
           loadedCount++;
         }
@@ -4254,11 +4312,14 @@ if (global.oldUsers && typeof global.oldUsers === 'object') {
 })();
 // Initialize demo admin user
 if (!users.has('daviesfamily108@gmail.com')) {
-  users.set('daviesfamily108@gmail.com', {
-    email: 'daviesfamily108@gmail.com',
-    username: 'DartsWithG',
-    password: 'Cymru-2015',
-    admin: true
+users.set('daviesfamily108@gmail.com', {
+  email: 'daviesfamily108@gmail.com',
+  username: 'DartsWithG',
+  password: 'Cymru-2015',
+  admin: true,
+  status: 'offline',
+  lastSeen: null
+});
   });
 }
 // friends: email -> Set(friendEmail)
@@ -4306,6 +4367,39 @@ function loadFriendships() {
 }
 loadFriendships()
 
+// Ensure the Supabase friendships table has the required unique constraint.
+// Without it, upsert with onConflict will fail and friends won't persist.
+async function ensureFriendshipsTable() {
+  if (!supabase) return
+  try {
+    const testRow = { user_email: '__test__@ndn.check', friend_email: '__test2__@ndn.check' }
+    const { error } = await supabase.from('friendships').upsert([testRow], { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
+    if (error) {
+      console.warn('[Friends] Friendships table upsert test failed:', error.message)
+      if (/relation.*does not exist|could not find/i.test(error.message || '')) {
+        console.warn('[Friends] The friendships table may not exist in Supabase. Please create it with:')
+        console.warn('  CREATE TABLE IF NOT EXISTS friendships (')
+        console.warn('    id BIGSERIAL PRIMARY KEY,')
+        console.warn('    user_email TEXT NOT NULL,')
+        console.warn('    friend_email TEXT NOT NULL,')
+        console.warn('    created_at TIMESTAMPTZ DEFAULT NOW(),')
+        console.warn('    UNIQUE(user_email, friend_email)')
+        console.warn('  );')
+      } else if (/there is no unique or exclusion constraint/i.test(error.message || '')) {
+        console.warn('[Friends] Missing unique constraint on friendships(user_email, friend_email).')
+        console.warn('[Friends] Please run: ALTER TABLE friendships ADD CONSTRAINT friendships_unique UNIQUE (user_email, friend_email);')
+      }
+    } else {
+      console.log('[Friends] Friendships table constraint verified OK')
+      try {
+        await supabase.from('friendships').delete().eq('user_email', '__test__@ndn.check')
+      } catch {}
+    }
+  } catch (err) {
+    console.warn('[Friends] ensureFriendshipsTable check failed:', err?.message || err)
+  }
+}
+
 // Supabase-backed persistence for friendships (keeps data across restarts in hosted environments)
 async function loadFriendshipsFromSupabase() {
   if (!supabase) return
@@ -4334,15 +4428,60 @@ async function loadFriendshipsFromSupabase() {
 }
 
 async function upsertFriendshipSupabase(a, b) {
-  if (!supabase) return
+  console.log('[SUPABASE-UPSERT-START] a=%s b=%s supabase=%s', a, b, !!supabase)
+  if (!supabase) {
+    console.log('[SUPABASE-UPSERT-SKIP] Supabase not configured')
+    return
+  }
+
+  const rows = [
+    { user_email: a, friend_email: b },
+    { user_email: b, friend_email: a },
+  ]
+
   try {
-    const rows = [
-      { user_email: a, friend_email: b },
-      { user_email: b, friend_email: a },
-    ]
-    await supabase.from('friendships').upsert(rows, { onConflict: 'user_email,friend_email' })
+    console.log('[SUPABASE-UPSERT-CALL] Calling supabase.from(friendships).upsert with rows:', JSON.stringify(rows))
+    let { data, error } = await supabase
+      .from('friendships')
+      .upsert(rows, { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
+      .select()
+
+    // Some databases may not have a unique constraint for the specified onConflict columns.
+    // If so, fall back to a simple insert to persist the rows instead of failing.
+    if (error && /unique|exclusion constraint|conflict/i.test(error.message || '')) {
+      console.warn('[SUPABASE-UPSERT-FALLBACK] Upsert failed due to missing constraint; retrying with insert')
+      ;({ data, error } = await supabase.from('friendships').insert(rows).select())
+    }
+
+    // If both upsert and insert fail, try inserting rows one at a time
+    // (handles partial duplicates where one row exists but the other doesn't)
+    if (error) {
+      console.warn('[SUPABASE-UPSERT-INDIVIDUAL] Batch failed, trying individual inserts')
+      for (const row of rows) {
+        try {
+          await supabase.from('friendships').upsert([row], { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
+        } catch (e2) {
+          // Try plain insert as last resort
+          try { await supabase.from('friendships').insert([row]) } catch (e3) {}
+        }
+      }
+      // Re-verify at least one row exists
+      const { data: verify } = await supabase.from('friendships').select('user_email').eq('user_email', a).eq('friend_email', b).limit(1)
+      if (verify && verify.length > 0) {
+        console.log('[SUPABASE-UPSERT-RECOVERED] Individual inserts succeeded')
+        error = null
+      }
+    }
+
+    if (error) {
+      console.error('[SUPABASE-UPSERT-ERROR] error:', JSON.stringify(error))
+      throw new Error(error.message || 'Supabase upsert failed')
+    }
+
+    console.log('[SUPABASE-UPSERT-SUCCESS] Created friendship: %s <-> %s', a, b)
   } catch (err) {
-    console.warn('[Friends] Supabase upsert failed:', err?.message || err)
+    console.error('[SUPABASE-UPSERT-EXCEPTION] exception:', err)
+    // Do NOT re-throw — friendships are still in-memory and will be retried on next list query
   }
 }
 
@@ -4361,7 +4500,8 @@ async function deleteFriendshipSupabase(a, b) {
 }
 
 // Attempt to hydrate friendships from Supabase on startup (in addition to local file)
-loadFriendshipsFromSupabase()
+// Also verify the table has the required unique constraint
+ensureFriendshipsTable().then(() => loadFriendshipsFromSupabase()).catch(() => loadFriendshipsFromSupabase())
 
 // Admin-configurable demo users (for quick setup)
 // NOTE: In production, use real user signup with email verification!
