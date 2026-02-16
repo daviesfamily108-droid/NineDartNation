@@ -2316,17 +2316,18 @@ wss.on('connection', (ws, req) => {
         }
         const id = nanoid(10)
         const m = {
-          id,
-          creatorId: ws._id,
-          creatorName: ws._username || `user-${ws._id}`,
-          mode: data.mode === 'firstto' ? 'firstto' : 'bestof',
-          value: Number(data.value) || 1,
-          startingScore: Number(data.startingScore) || 501,
-          creatorAvg: Number(data.creatorAvg) || 0,
-          game,
-          requireCalibration: !!data.requireCalibration,
-          createdAt: Date.now(),
-        }
+           id,
+           creatorId: ws._id,
+           creatorName: ws._username || `user-${ws._id}`,
+           creatorEmail: ws._email || '',
+           mode: data.mode === 'firstto' ? 'firstto' : 'bestof',
+           value: Number(data.value) || 1,
+           startingScore: Number(data.startingScore) || 501,
+           creatorAvg: Number(data.creatorAvg) || 0,
+           game,
+           requireCalibration: !!data.requireCalibration,
+           createdAt: Date.now(),
+         }
         matches.set(id, m)
   // Initialize server-side per-room flags for this match (creator can toggle later)
   try { roomAutocommitAllowed.set(id, false); roomCreator.set(id, String(ws._id)); } catch (e) {}
@@ -2375,42 +2376,163 @@ wss.on('connection', (ws, req) => {
           ws.send(JSON.stringify({ type: 'error', code: 'CALIBRATION_REQUIRED', message: 'Calibration required to join this match.' }))
           return
         }
+        // Store joiner info on the match
+        m.joinerId = ws._id
+        m.joinerName = ws._username || `user-${ws._id}`
+        m.joinerEmail = ws._email || ''
+        matches.set(data.matchId, m)
+        const invitePayload = JSON.stringify({
+          type: 'invite',
+          matchId: m.id,
+          fromId: ws._id,
+          fromName: ws._username || `user-${ws._id}`,
+          calibrated: !!data.calibrated,
+          boardPreview: (typeof data.boardPreview === 'string' && data.boardPreview.startsWith('data:image')) ? data.boardPreview : null,
+          game: m.game,
+          mode: m.mode,
+          value: m.value,
+          startingScore: m.startingScore,
+        })
+        // Send waiting ack to joiner
+        try { ws.send(JSON.stringify({ type: 'invite-waiting', matchId: m.id, creatorName: m.creatorName })) } catch {}
+        // Send invite to creator — 3-tier lookup: ID, username, email
+        let creatorFound = false
+        // 1) Direct ID lookup
         const creator = clients.get(m.creatorId)
         if (creator && creator.readyState === 1) {
-          creator.send(JSON.stringify({
-            type: 'invite',
-            matchId: m.id,
-            fromId: ws._id,
-            fromName: ws._username || `user-${ws._id}`,
-            calibrated: !!data.calibrated,
-            boardPreview: (typeof data.boardPreview === 'string' && data.boardPreview.startsWith('data:image')) ? data.boardPreview : null,
-            game: m.game,
-            mode: m.mode,
-            value: m.value,
-            startingScore: m.startingScore,
-          }))
-          // Start a 60-second timer; if creator does not respond, expire the match
-          try {
-            if (inviteTimers.has(m.id)) {
-              try { clearTimeout(inviteTimers.get(m.id)) } catch {}
-            }
-          } catch {}
-          const t = setTimeout(() => {
-            if (matches.has(m.id)) {
-              const reqClient = clients.get(ws._id)
-              try { if (reqClient && reqClient.readyState === 1) reqClient.send(JSON.stringify({ type: 'invite-expired', matchId: m.id })) } catch {}
-              matches.delete(m.id)
-              persistMatchesToDisk()
-              // broadcast updated lobby
-              const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
-              for (const c of wss.clients) {
-                if (c.readyState === 1) try { c.send(lobbyPayload) } catch {}
-              }
-            }
-            inviteTimers.delete(m.id)
-          }, 60 * 1000)
-          inviteTimers.set(m.id, t)
+          creator.send(invitePayload)
+          creatorFound = true
         }
+        // 2) Username fallback (creator reconnected with new ID)
+        if (!creatorFound && m.creatorName) {
+          for (const client of wss.clients) {
+            if (client.readyState === 1 && client._username === m.creatorName && client._id !== ws._id) {
+              client.send(invitePayload)
+              m.creatorId = client._id
+              matches.set(data.matchId, m)
+              creatorFound = true
+              console.log('[JOIN-MATCH] creator found by username fallback, updated creatorId to %s', client._id)
+              break
+            }
+          }
+        }
+        // 3) Email fallback
+        if (!creatorFound && m.creatorEmail) {
+          for (const client of wss.clients) {
+            if (client.readyState === 1 && client._email && client._email === m.creatorEmail && client._id !== ws._id) {
+              client.send(invitePayload)
+              m.creatorId = client._id
+              matches.set(data.matchId, m)
+              creatorFound = true
+              console.log('[JOIN-MATCH] creator found by email fallback, updated creatorId to %s', client._id)
+              break
+            }
+          }
+        }
+        console.log('[JOIN-MATCH] %s wants to join match %s (creator=%s creatorId=%s creatorFound=%s)', ws._username, data.matchId, m.creatorName, m.creatorId, creatorFound)
+        // Start a 60-second timer; if creator does not respond, expire the match
+        try {
+          if (inviteTimers.has(m.id)) {
+            try { clearTimeout(inviteTimers.get(m.id)) } catch {}
+          }
+        } catch {}
+        const t = setTimeout(() => {
+          if (matches.has(m.id)) {
+            const reqClient = clients.get(ws._id)
+            try { if (reqClient && reqClient.readyState === 1) reqClient.send(JSON.stringify({ type: 'invite-expired', matchId: m.id })) } catch {}
+            matches.delete(m.id)
+            persistMatchesToDisk()
+            // broadcast updated lobby
+            const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+            for (const c of wss.clients) {
+              if (c.readyState === 1) try { c.send(lobbyPayload) } catch {}
+            }
+          }
+          inviteTimers.delete(m.id)
+        }, 60 * 1000)
+        inviteTimers.set(m.id, t)
+      } else if (data.type === 'invite-accept') {
+        // Creator accepted the invite — start prestart for both players
+        const matchId = String(data.matchId || '')
+        const m = matches.get(matchId)
+        if (!m) return
+        // Clear invite timer
+        try { if (inviteTimers.has(matchId)) { clearTimeout(inviteTimers.get(matchId)); inviteTimers.delete(matchId) } } catch {}
+        const roomId = matchId
+        // Find creator and joiner connections (3-tier lookup)
+        let creatorWs = clients.get(m.creatorId)
+        if (!creatorWs || creatorWs.readyState !== 1) {
+          for (const c of wss.clients) {
+            if (c.readyState === 1 && ((m.creatorName && c._username === m.creatorName) || (m.creatorEmail && c._email === m.creatorEmail))) {
+              creatorWs = c; m.creatorId = c._id; break
+            }
+          }
+        }
+        let joinerWs = clients.get(m.joinerId)
+        if (!joinerWs || joinerWs.readyState !== 1) {
+          for (const c of wss.clients) {
+            if (c.readyState === 1 && ((m.joinerName && c._username === m.joinerName) || (m.joinerEmail && c._email === m.joinerEmail))) {
+              joinerWs = c; m.joinerId = c._id; break
+            }
+          }
+        }
+        const PRESTART_MS = (typeof PRESTART_SECONDS !== 'undefined' ? PRESTART_SECONDS : 15) * 1000
+        const payload = JSON.stringify({ type: 'match-prestart', roomId, match: m, prestartEndsAt: Date.now() + PRESTART_MS })
+        if (creatorWs && creatorWs.readyState === 1) try { creatorWs.send(payload) } catch {}
+        if (joinerWs && joinerWs.readyState === 1) try { joinerWs.send(payload) } catch {}
+        // Setup prestart state
+        try {
+          if (!global._prestartState) global._prestartState = new Map()
+          global._prestartState.set(roomId, { roomId, match: m, choices: {}, players: [m.creatorId, m.joinerId] })
+        } catch {}
+        // Auto-start after prestart period
+        if (typeof pendingPrestarts !== 'undefined') {
+          try {
+            const pre = { roomId, match: m, players: [m.creatorId, m.joinerId], choices: {}, bullRound: 0, bullThrows: {}, timer: null }
+            pendingPrestarts.set(roomId, pre)
+            pre.timer = setTimeout(() => {
+              try {
+                const startPayload = JSON.stringify({ type: 'match-start', roomId, match: m })
+                const cr = clients.get(m.creatorId)
+                const rq = clients.get(m.joinerId)
+                if (cr && cr.readyState === 1) cr.send(startPayload)
+                if (rq && rq.readyState === 1) rq.send(startPayload)
+                try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(m.creatorId)); } catch (e) {}
+              } catch (err) { console.warn('[Prestart] auto-start failed', err) }
+              pendingPrestarts.delete(roomId)
+            }, PRESTART_MS)
+          } catch {}
+        }
+        matches.delete(matchId)
+        persistMatchesToDisk()
+        console.log('[INVITE-ACCEPT] creator accepted invite for match %s — prestart sent to both', matchId)
+      } else if (data.type === 'invite-decline') {
+        // Creator declined the invite
+        const matchId = String(data.matchId || '')
+        const m = matches.get(matchId)
+        if (!m) return
+        // Clear invite timer
+        try { if (inviteTimers.has(matchId)) { clearTimeout(inviteTimers.get(matchId)); inviteTimers.delete(matchId) } } catch {}
+        // Notify the joiner
+        let joinerWs = clients.get(m.joinerId)
+        if (!joinerWs || joinerWs.readyState !== 1) {
+          for (const c of wss.clients) {
+            if (c.readyState === 1 && ((m.joinerName && c._username === m.joinerName) || (m.joinerEmail && c._email === m.joinerEmail))) {
+              joinerWs = c; break
+            }
+          }
+        }
+        if (joinerWs && joinerWs.readyState === 1) {
+          try { joinerWs.send(JSON.stringify({ type: 'declined', matchId })) } catch {}
+        }
+        // Clear joiner info but keep the match available
+        delete m.joinerId; delete m.joinerName; delete m.joinerEmail
+        matches.set(matchId, m)
+        persistMatchesToDisk()
+        // Broadcast updated lobby
+        const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+        for (const c of wss.clients) { if (c.readyState === 1) try { c.send(lobbyPayload) } catch {} }
+        console.log('[INVITE-DECLINE] creator declined match %s', matchId)
       } else if (data.type === 'invite-response') {
         const { matchId, accept, toId } = data
         const m = matches.get(matchId)
@@ -2680,10 +2802,45 @@ wss.on('connection', (ws, req) => {
     // Clean up room
     await leaveRoom(ws);
     try { wsConnections.dec() } catch {}
-    // Remove any matches created by this client
+    // Instead of immediately removing matches, keep them for a grace period
+    // (2 minutes) so the creator can reconnect.
     for (const [id, m] of Array.from(matches.entries())) {
-      if (m.creatorId === ws._id) matches.delete(id)
+      if (m.creatorId === ws._id) {
+        m._creatorDisconnectedAt = Date.now()
+        console.log('[WS] creator disconnected for match %s, keeping for grace period', id)
+      }
     }
+    // Schedule cleanup of orphaned matches after 2 minutes
+    const disconnectedId = ws._id
+    const disconnectedUsername = ws._username
+    setTimeout(() => {
+      try {
+        for (const [id, m] of Array.from(matches.entries())) {
+          if (m.creatorId === disconnectedId && m._creatorDisconnectedAt) {
+            let reconnected = false
+            try {
+              for (const client of wss.clients) {
+                if (client.readyState === 1 && client._username && client._username === disconnectedUsername) {
+                  reconnected = true
+                  m.creatorId = client._id
+                  delete m._creatorDisconnectedAt
+                  console.log('[WS] creator %s reconnected for match %s, new id=%s', disconnectedUsername, id, client._id)
+                  break
+                }
+              }
+            } catch {}
+            if (!reconnected) {
+              matches.delete(id)
+              console.log('[WS] deleted orphaned match %s (creator %s never reconnected)', id, disconnectedUsername)
+              try {
+                const lobbyUpdate = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+                for (const client of wss.clients) { if (client.readyState === 1) client.send(lobbyUpdate) }
+              } catch {}
+            }
+          }
+        }
+      } catch (e) { console.warn('[WS] orphaned match cleanup error:', e) }
+    }, 120000)
     clients.delete(ws._id)
     // Cleanup camera sessions involving this client
     for (const [code, sess] of Array.from(camSessions.entries())) {

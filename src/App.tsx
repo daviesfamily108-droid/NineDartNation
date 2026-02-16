@@ -237,6 +237,15 @@ export default function App() {
       .then((data) => {
         if (data?.user) {
           setUserWithMerge(data.user);
+          // Cache identity for WSProvider immediate presence on reconnect
+          try {
+            const email = (data.user.email || "").toLowerCase();
+            const uname = data.user.username || email;
+            localStorage.setItem(
+              "ndn:ws-identity",
+              JSON.stringify({ username: uname, email }),
+            );
+          } catch {}
           try {
             const cached = localStorage.getItem(
               `ndn:subscription:${data.user.email}`,
@@ -646,6 +655,15 @@ export default function App() {
       const email = String(user.email || "").toLowerCase();
       const username = user.username || email;
       ws.send({ type: "presence", username, email });
+      // Persist identity so WSProvider can re-send presence immediately on
+      // reconnect (before React effects fire) to avoid race conditions where
+      // join-match arrives before the server knows who we are.
+      try {
+        localStorage.setItem(
+          "ndn:ws-identity",
+          JSON.stringify({ username, email }),
+        );
+      } catch {}
     } catch {}
   }, [ws?.connected, user?.email, user?.username]);
 

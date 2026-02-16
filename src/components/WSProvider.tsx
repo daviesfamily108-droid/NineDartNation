@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   createContext,
   useCallback,
   useContext,
@@ -71,6 +71,24 @@ export function WSProvider({ children }: { children: ReactNode }) {
       setConnected(true);
       setStatus("connected");
       attemptsRef.current = 0;
+      // Immediately send presence so the server can identify this connection.
+      // This must happen BEFORE any React effects to avoid race conditions
+      // where a join-match arrives before the server knows who we are.
+      try {
+        const stored = localStorage.getItem("ndn:ws-identity");
+        if (stored) {
+          const u = JSON.parse(stored);
+          if (u?.username || u?.email) {
+            ws.send(
+              JSON.stringify({
+                type: "presence",
+                username: u.username || u.email || "",
+                email: (u.email || "").toLowerCase(),
+              }),
+            );
+          }
+        }
+      } catch {}
       // start heartbeat
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
       heartbeatRef.current = setInterval(() => {

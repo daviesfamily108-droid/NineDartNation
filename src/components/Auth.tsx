@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import {
   Eye,
   EyeOff,
@@ -74,6 +74,16 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
         );
       } else if (res.ok && data?.user && data?.token) {
         localStorage.setItem("authToken", data.token);
+        // Cache identity so WSProvider can send presence immediately on
+        // reconnect (before React effects fire).
+        try {
+          const email = (data.user.email || "").toLowerCase();
+          const uname = data.user.username || email;
+          localStorage.setItem(
+            "ndn:ws-identity",
+            JSON.stringify({ username: uname, email }),
+          );
+        } catch {}
         onAuth(data.user);
       } else {
         setError(data?.error || "Invalid username or password.");

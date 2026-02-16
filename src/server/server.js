@@ -1,4 +1,4 @@
-﻿const jwt = require('jsonwebtoken');
+const jwt = require('jsonwebtoken');
 const dotenv = require('dotenv'); dotenv.config();
 const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
@@ -1502,17 +1502,18 @@ if (wss) {
         }
         const id = nanoid(10)
         const m = {
-          id,
-          creatorId: ws._id,
-          creatorName: ws._username || `user-${ws._id}`,
-          mode: (typeof data.mode === 'string' && data.mode.length > 0) ? data.mode : 'bestof',
-          value: Number(data.value) || 1,
-          startingScore: Number(data.startingScore) || 501,
-          creatorAvg: Number(data.creatorAvg) || 0,
-          game,
-          requireCalibration: !!data.requireCalibration,
-          createdAt: Date.now(),
-        }
+           id,
+           creatorId: ws._id,
+           creatorName: ws._username || `user-${ws._id}`,
+           creatorEmail: ws._email || '',
+           mode: (typeof data.mode === 'string' && data.mode.length > 0) ? data.mode : 'bestof',
+           value: Number(data.value) || 1,
+           startingScore: Number(data.startingScore) || 501,
+           creatorAvg: Number(data.creatorAvg) || 0,
+           game,
+           requireCalibration: !!data.requireCalibration,
+           createdAt: Date.now(),
+         }
         await db.createMatch(m)
         // Broadcast lobby list to all (pre-stringified)
         const allMatches = await db.getMatches()
@@ -1542,21 +1543,119 @@ if (wss) {
           ws.send(JSON.stringify({ type: 'error', code: 'CALIBRATION_REQUIRED', message: 'Calibration required to join this match.' }))
           return
         }
+        // Store joiner info
+        m.joinerId = ws._id
+        m.joinerName = ws._username || `user-${ws._id}`
+        m.joinerEmail = ws._email || ''
+        try { await db.updateMatch(data.matchId, { joinerId: m.joinerId, joinerName: m.joinerName, joinerEmail: m.joinerEmail }) } catch {}
+        const invitePayload = JSON.stringify({
+          type: 'invite',
+          matchId: m.id,
+          fromId: ws._id,
+          fromName: ws._username || `user-${ws._id}`,
+          calibrated: !!data.calibrated,
+          boardPreview: (typeof data.boardPreview === 'string' && data.boardPreview.startsWith('data:image')) ? data.boardPreview : null,
+          game: m.game,
+          mode: m.mode,
+          value: m.value,
+          startingScore: m.startingScore,
+        })
+        // Send waiting ack to joiner
+        try { ws.send(JSON.stringify({ type: 'invite-waiting', matchId: m.id, creatorName: m.creatorName })) } catch {}
+        // Send invite to creator — 3-tier lookup: ID, username, email
+        let creatorFound = false
+        // 1) Direct ID lookup
         const creator = clients.get(m.creatorId)
         if (creator && creator.readyState === 1) {
-          creator.send(JSON.stringify({
-            type: 'invite',
-            matchId: m.id,
-            fromId: ws._id,
-            fromName: ws._username || `user-${ws._id}`,
-            calibrated: !!data.calibrated,
-            boardPreview: (typeof data.boardPreview === 'string' && data.boardPreview.startsWith('data:image')) ? data.boardPreview : null,
-            game: m.game,
-            mode: m.mode,
-            value: m.value,
-            startingScore: m.startingScore,
-          }))
+          creator.send(invitePayload)
+          creatorFound = true
         }
+        // 2) Username fallback
+        if (!creatorFound && m.creatorName) {
+          for (const client of wss.clients) {
+            if (client.readyState === 1 && client._username === m.creatorName && client._id !== ws._id) {
+              client.send(invitePayload)
+              m.creatorId = client._id
+              try { await db.updateMatch(data.matchId, { creatorId: client._id }) } catch {}
+              creatorFound = true
+              break
+            }
+          }
+        }
+        // 3) Email fallback
+        if (!creatorFound && m.creatorEmail) {
+          for (const client of wss.clients) {
+            if (client.readyState === 1 && client._email && client._email === m.creatorEmail && client._id !== ws._id) {
+              client.send(invitePayload)
+              m.creatorId = client._id
+              try { await db.updateMatch(data.matchId, { creatorId: client._id }) } catch {}
+              creatorFound = true
+              break
+            }
+          }
+        }
+        startLogger.info('[JOIN-MATCH] %s wants to join match %s (creator=%s creatorFound=%s)', ws._username, data.matchId, m.creatorName, creatorFound)
+      } else if (data.type === 'invite-accept') {
+        // Creator accepted the invite — start prestart for both players
+        const matchId = String(data.matchId || '')
+        const m = await db.getMatch(matchId)
+        if (!m) return
+        const roomId = matchId
+        const PRESTART_MS = (typeof PRESTART_SECONDS !== 'undefined' ? PRESTART_SECONDS : 15) * 1000
+        // Find creator and joiner connections (3-tier lookup)
+        let creatorWs = clients.get(m.creatorId)
+        if (!creatorWs || creatorWs.readyState !== 1) {
+          for (const c of wss.clients) {
+            if (c.readyState === 1 && ((m.creatorName && c._username === m.creatorName) || (m.creatorEmail && c._email === m.creatorEmail))) {
+              creatorWs = c; m.creatorId = c._id; break
+            }
+          }
+        }
+        let joinerWs = m.joinerId ? clients.get(m.joinerId) : null
+        if (!joinerWs || joinerWs.readyState !== 1) {
+          for (const c of wss.clients) {
+            if (c.readyState === 1 && ((m.joinerName && c._username === m.joinerName) || (m.joinerEmail && c._email === m.joinerEmail))) {
+              joinerWs = c; m.joinerId = c._id; break
+            }
+          }
+        }
+        const payload = JSON.stringify({ type: 'match-prestart', roomId, match: m, prestartEndsAt: Date.now() + PRESTART_MS })
+        if (creatorWs && creatorWs.readyState === 1) try { creatorWs.send(payload) } catch {}
+        if (joinerWs && joinerWs.readyState === 1) try { joinerWs.send(payload) } catch {}
+        await db.deleteMatch(matchId)
+        // Broadcast updated lobby
+        try {
+          const remaining = await db.getMatches()
+          const lobbyUpdate = JSON.stringify({ type: 'matches', matches: remaining })
+          for (const c of wss.clients) { if (c.readyState === 1) try { c.send(lobbyUpdate) } catch {} }
+        } catch {}
+        startLogger.info('[INVITE-ACCEPT] creator accepted invite for match %s — prestart sent to both', matchId)
+      } else if (data.type === 'invite-decline') {
+        // Creator declined the invite
+        const matchId = String(data.matchId || '')
+        const m = await db.getMatch(matchId)
+        if (!m) return
+        // Notify the joiner
+        let joinerWs = m.joinerId ? clients.get(m.joinerId) : null
+        if (!joinerWs || joinerWs.readyState !== 1) {
+          for (const c of wss.clients) {
+            if (c.readyState === 1 && ((m.joinerName && c._username === m.joinerName) || (m.joinerEmail && c._email === m.joinerEmail))) {
+              joinerWs = c; break
+            }
+          }
+        }
+        if (joinerWs && joinerWs.readyState === 1) {
+          try { joinerWs.send(JSON.stringify({ type: 'declined', matchId })) } catch {}
+        }
+        // Clear joiner info but keep the match available
+        try { await db.updateMatch(matchId, { joinerId: null, joinerName: null, joinerEmail: null }) } catch {}
+        // Broadcast updated lobby
+        try {
+          const remaining = await db.getMatches()
+          const lobbyUpdate = JSON.stringify({ type: 'matches', matches: remaining })
+          for (const c of wss.clients) { if (c.readyState === 1) try { c.send(lobbyUpdate) } catch {} }
+        } catch {}
+        startLogger.info('[INVITE-DECLINE] creator declined match %s', matchId)
       } else if (data.type === 'invite-response') {
         const { matchId, accept, toId } = data
         const m = await db.getMatch(matchId)
@@ -1747,11 +1846,35 @@ if (wss) {
     // Clean up room
     await leaveRoom(ws);
     try { wsConnections.dec() } catch {}
-    // Remove any matches created by this client
-    const allMatches = await db.getMatches()
-    for (const m of allMatches) {
-      if (m.creatorId === ws._id) await db.deleteMatch(m.id)
-    }
+    // Instead of immediately removing matches, keep them for a grace period
+    // (2 minutes) so the creator can reconnect.
+    const disconnectedId = ws._id
+    const disconnectedUsername = ws._username
+    setTimeout(async () => {
+      try {
+        const allMatches = await db.getMatches()
+        for (const m of allMatches) {
+          if (m.creatorId === disconnectedId) {
+            let reconnected = false
+            for (const client of wss.clients) {
+              if (client.readyState === 1 && client._username && client._username === disconnectedUsername) {
+                reconnected = true
+                try { await db.updateMatch(m.id, { creatorId: client._id }) } catch {}
+                break
+              }
+            }
+            if (!reconnected) {
+              await db.deleteMatch(m.id)
+              try {
+                const remaining = await db.getMatches()
+                const lobbyUpdate = JSON.stringify({ type: 'matches', matches: remaining })
+                for (const client of wss.clients) { if (client.readyState === 1) client.send(lobbyUpdate) }
+              } catch {}
+            }
+          }
+        }
+      } catch (e) { startLogger.warn('[WS] orphaned match cleanup error:', e) }
+    }, 120000)
     clients.delete(ws._id)
     // Cleanup camera sessions involving this client
     for (const [code, sess] of Array.from(camSessions.entries())) {
