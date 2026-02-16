@@ -1,19 +1,17 @@
-/* Mobile/Desktop Parity
-   The layout is now unified: both mobile and desktop use the same sidebar +
-   header + content structure.  Only a few safe-area and overflow-x guards
-   remain so the app behaves well on touch devices without changing the visual
-   layout.
-
-   NOTE: This file is loaded after Tailwind in `src/main.tsx`.
+/* Responsive Overrides
+   Loaded after Tailwind in `src/main.tsx`.
+   Provides device-specific polish for mobile (≤768px), tablet (769-1024px),
+   and desktop (>1024px) viewports.
 */
 
+/* ─── Mobile (≤768px) ─── */
 @media (max-width: 768px) {
   :root {
     --ndn-safe-top: env(safe-area-inset-top, 0px);
     --ndn-safe-bottom: env(safe-area-inset-bottom, 0px);
   }
 
-  /* Prevent iOS text-size auto bumping layouts */
+  /* Prevent iOS text-size auto bumping */
   html {
     -webkit-text-size-adjust: 100%;
   }
@@ -29,9 +27,66 @@
   [role="dialog"] {
     max-height: 100vh !important;
   }
+
+  /* Compact header on mobile */
+  #ndn-header {
+    padding: 0.375rem 0.75rem !important;
+  }
+
+  /* Larger touch targets for buttons */
+  .btn-sm,
+  button.tab {
+    min-height: 40px;
+    min-width: 40px;
+  }
+
+  /* Stack filter bar vertically on mobile */
+  .ndn-filterbar {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* Match cards: single column, more breathing room */
+  .ndn-card-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem;
+  }
+
+  /* Main content full width without padding cutting into space */
+  #ndn-main-scroll {
+    padding-right: 0;
+  }
+
+  /* Greeting area: tighter on mobile */
+  .ndn-greeting-avg {
+    display: none;
+  }
+
+  /* Safe-area bottom padding for iOS */
+  .ndn-page {
+    padding-bottom: var(--ndn-safe-bottom, 0px);
+  }
 }
 
-/* Small phones (iPhone SE, etc) — minor text size tweak */
+/* ─── Tablet (769px – 1024px) ─── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  /* Two-column match grid */
+  .ndn-card-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Slightly tighter header */
+  #ndn-header {
+    padding: 0.5rem 1rem !important;
+  }
+
+  /* Hide welcome text, keep avg */
+  .ndn-greeting-welcome {
+    display: none;
+  }
+}
+
+/* ─── Small phones (iPhone SE, etc) ─── */
 @media (max-width: 380px) {
   .home-content h2 {
     font-size: 26px !important;
@@ -39,5 +94,26 @@
 
   .home-content p {
     font-size: 14px !important;
+  }
+
+  /* Even more compact header */
+  #ndn-header {
+    padding: 0.25rem 0.5rem !important;
+  }
+}
+
+/* ─── Touch device helpers ─── */
+@media (hover: none) and (pointer: coarse) {
+  /* Ensure comfortable tap targets */
+  button,
+  a,
+  select,
+  input[type="text"] {
+    min-height: 36px;
+  }
+
+  /* Disable hover effects that feel stuck on touch */
+  .group:hover {
+    border-color: inherit;
   }
 }

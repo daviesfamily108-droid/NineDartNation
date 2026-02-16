@@ -26,9 +26,11 @@ import {
   Bell,
   CalendarDays,
   Handshake,
+  Menu,
   MessageCircle,
   Trophy,
   Users,
+  X,
 } from "lucide-react";
 import { useWS } from "./components/WSProvider.js";
 import {
@@ -61,6 +63,7 @@ import MatchPage from "./components/MatchPage.js";
 import { useToast } from "./store/toast.js";
 import { NDN_OPEN_NOTIFICATIONS_EVENT } from "./utils/events.js";
 import WSConnectionDot from "./components/WSConnectionDot.js";
+import { useBreakpoint } from "./hooks/useBreakpoint.js";
 
 export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
@@ -74,6 +77,24 @@ export default function App() {
     }
   })();
   const [tab, setTab] = useState<TabKey>("score");
+  const breakpoint = useBreakpoint();
+  const isMobile = breakpoint === "mobile";
+  const isTablet = breakpoint === "tablet";
+  const [navOpen, setNavOpen] = useState(false);
+
+  // Close mobile drawer on Escape and when switching away from mobile
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNavOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [navOpen]);
+
+  useEffect(() => {
+    if (!isMobile) setNavOpen(false);
+  }, [isMobile]);
   const [user, setUser] = useState<any>(null);
   // Use this helper to set user without losing previously fetched subscription data
   // This avoids toggles/flicker in the UI during partial user refreshes
@@ -952,18 +973,50 @@ export default function App() {
         className={`${user?.fullAccess ? "premium-body" : ""} h-screen overflow-hidden pt-1 pb-0 px-1 xs:pt-2 xs:pb-0 xs:px-2 sm:pt-3 sm:pb-0 sm:px-3 md:pt-4 md:pb-0 md:px-4`}
       >
         <Toaster />
-        <div className="max-w-[1600px] mx-auto grid grid-cols-[auto,1fr] gap-4 sm:gap-6 h-full overflow-hidden">
-          {/* Sidebar — always present on all screen sizes */}
-          <div className="relative w-56 sm:w-64 lg:w-72 shrink-0">
-            <Sidebar
-              className="w-full h-full"
-              active={tab}
-              onChange={(k) => {
-                setTab(k);
-              }}
-              user={user}
-            />
-          </div>
+        <div
+          className={`max-w-[1600px] mx-auto ${isMobile ? "flex flex-col" : "grid grid-cols-[auto,1fr] gap-4 sm:gap-6"} h-full overflow-hidden`}
+        >
+          {/* Sidebar — hidden on mobile (shown via drawer), visible on tablet & desktop */}
+          {!isMobile && (
+            <div className={`relative shrink-0 ${isTablet ? "w-56" : "w-72"}`}>
+              <Sidebar
+                className="w-full h-full"
+                active={tab}
+                onChange={(k) => {
+                  setTab(k);
+                }}
+                user={user}
+              />
+            </div>
+          )}
+
+          {/* Mobile sidebar drawer */}
+          {isMobile && navOpen && (
+            <div className="fixed inset-0 z-[200] flex">
+              <div
+                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                onClick={() => setNavOpen(false)}
+              />
+              <div className="relative z-10 w-72 h-full animate-in slide-in-from-left duration-200">
+                <Sidebar
+                  className="w-full h-full"
+                  active={tab}
+                  onChange={(k) => {
+                    setTab(k);
+                    setNavOpen(false);
+                  }}
+                  user={user}
+                />
+                <button
+                  className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-20"
+                  onClick={() => setNavOpen(false)}
+                  aria-label="Close menu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          )}
           {/* Fixed hamburger menu button removed - integrated into header */}
 
           {/* Wrap header + scroller in a column so header stays static and only content scrolls below it */}
@@ -977,8 +1030,17 @@ export default function App() {
                 }`}
                 style={{ willChange: "transform" }}
               >
-                {/* Left: Brand + Greeting - compact single-line with avg */}
+                {/* Left: Hamburger (mobile) + Brand + Greeting */}
                 <div className="flex items-center gap-3 min-w-0 shrink ndn-greeting">
+                  {isMobile && (
+                    <button
+                      className="shrink-0 p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors"
+                      onClick={() => setNavOpen(true)}
+                      aria-label="Open menu"
+                    >
+                      <Menu className="w-5 h-5" />
+                    </button>
+                  )}
                   <div className="relative shrink-0">
                     <img
                       src={avatar || fallbackAvatar}
