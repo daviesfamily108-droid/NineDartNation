@@ -5,8 +5,7 @@ import React, {
   useState,
   Suspense,
 } from "react";
-import { Sidebar, TabKey, buildTabList } from "./components/Sidebar.js";
-import { useIsAdmin } from "./utils/admin.js";
+import { Sidebar, TabKey } from "./components/Sidebar.js";
 const Home = React.lazy(() => import("./components/Home.js"));
 import ScrollFade from "./components/ScrollFade.js";
 // Lazy-load CameraView to avoid importing a large camera module at app
@@ -24,17 +23,12 @@ import { ThemeProvider } from "./components/ThemeContext.js";
 import {
   ArrowDownRight,
   ArrowUpRight,
-  BarChart2,
   Bell,
   CalendarDays,
-  Gamepad2,
-  Globe,
   Handshake,
-  Menu,
   MessageCircle,
   Trophy,
   Users,
-  X,
 } from "lucide-react";
 import { useWS } from "./components/WSProvider.js";
 import {
@@ -45,7 +39,6 @@ import {
 import { useMatch } from "./store/match.js";
 import { useUserSettings } from "./store/userSettings.js";
 import { apiFetch, getApiBaseUrl } from "./utils/api.js";
-import { DISCORD_INVITE_URL } from "./utils/config.js";
 import "./styles/premium.css";
 import "./styles/themes.css";
 const OnlinePlay = React.lazy(() => import("./components/OnlinePlay.clean"));
@@ -54,7 +47,6 @@ const Tournaments = React.lazy(() => import("./components/Tournaments.js"));
 const AdminAccess = React.lazy(() => import("./components/AdminAccess.js"));
 const CameraSetup = React.lazy(() => import("./components/CameraSetup.js"));
 // AdminAccess already imported above
-import Drawer from "./components/ui/Drawer.js";
 const OpsDashboard = React.lazy(() => import("./components/OpsDashboard.js"));
 import HelpAssistant from "./components/HelpAssistant.js";
 import GlobalCameraLogger from "./components/GlobalCameraLogger.js";
@@ -82,8 +74,6 @@ export default function App() {
     }
   })();
   const [tab, setTab] = useState<TabKey>("score");
-  const [isMobile, setIsMobile] = useState<boolean>(false);
-  const [navOpen, setNavOpen] = useState<boolean>(false);
   const [user, setUser] = useState<any>(null);
   // Use this helper to set user without losing previously fetched subscription data
   // This avoids toggles/flicker in the UI during partial user refreshes
@@ -519,36 +509,8 @@ export default function App() {
     }
   }, [user?.email]);
 
-  // Universal responsive breakpoint: navigation mode is based on viewport width,
-  // not device type/UA. This ensures consistent UI across all devices.
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 768px)");
-    const update = () => setIsMobile(mq.matches);
-    update();
-
-    try {
-      mq.addEventListener("change", update);
-    } catch {
-      // Safari/older browsers
-      mq.addListener(update);
-    }
-
-    window.addEventListener("resize", update);
-    window.addEventListener("orientationchange", update);
-
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("orientationchange", update);
-      try {
-        mq.removeEventListener("change", update);
-      } catch {
-        mq.removeListener(update);
-      }
-    };
-  }, []);
-
   // Keep the CSS header height token in sync with the actual header element so
-  // mobile offsets (drawer / main scroll padding) are accurate.
+  // layout offsets are accurate.
   useEffect(() => {
     function updateHeaderHeight() {
       const el = document.getElementById("ndn-header");
@@ -567,40 +529,6 @@ export default function App() {
       window.removeEventListener("orientationchange", updateHeaderHeight);
     };
   }, [isCompact]);
-
-  // On mobile, shift the hamburger when the user scrolls upward.
-  useEffect(() => {
-    if (!isMobile) return;
-    const scroller = document.getElementById("ndn-main-scroll");
-    if (!scroller) return;
-    let lastTop = scroller.scrollTop;
-    const onScroll = () => {
-      const currentTop = scroller.scrollTop;
-      if (currentTop < lastTop) {
-        document.documentElement.classList.add("ndn-menu-scrolled");
-      } else if (currentTop > lastTop) {
-        document.documentElement.classList.remove("ndn-menu-scrolled");
-      }
-      lastTop = currentTop;
-    };
-    scroller.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      scroller.removeEventListener("scroll", onScroll);
-      document.documentElement.classList.remove("ndn-menu-scrolled");
-    };
-  }, [isMobile]);
-
-  useEffect(() => {
-    if (!isMobile) return;
-    if (navOpen) {
-      document.documentElement.classList.add("ndn-menu-open");
-    } else {
-      document.documentElement.classList.remove("ndn-menu-open");
-    }
-    return () => {
-      document.documentElement.classList.remove("ndn-menu-open");
-    };
-  }, [isMobile, navOpen]);
 
   // Global logout handler: return to sign-in screen and clear minimal local user context
   useEffect(() => {
@@ -673,49 +601,6 @@ export default function App() {
           ].includes(tab)
         ) {
           setTab(tab as TabKey);
-          // Ensure the mobile hamburger sits in a visible "free" spot after
-          // navigating to a new tab (the header layout can change per tab).
-          // Compute the right edge of the left brand pill (if present) and
-          // nudge the CSS var so the hamburger sits just to its right.
-          try {
-            const brand = document.querySelector(
-              ".ndn-mobile-brand",
-            ) as HTMLElement | null;
-            if (
-              brand &&
-              typeof window !== "undefined" &&
-              typeof window.getComputedStyle === "function"
-            ) {
-              const rect = brand.getBoundingClientRect();
-              const leftPx = Math.max(8, Math.round(rect.right + 8));
-              document.documentElement.style.setProperty(
-                "--ndn-mobile-menu-left",
-                `${leftPx}px`,
-              );
-            }
-            // Also set a small per-tab section gap variable so specific pages
-            // can have precise spacing below the header on mobile.
-            const tabGapMap: Record<string, string> = {
-              score: "1mm",
-              online: "1mm",
-              offline: "1mm",
-              tournaments: "1mm",
-              friends: "1mm",
-              stats: "1mm",
-              calibrate: "1mm",
-              settings: "1mm",
-              admin: "1mm",
-              fullaccess: "1mm",
-            };
-            const gap = tabGapMap[tab] || "1mm";
-            document.documentElement.style.setProperty(
-              "--ndn-section-gap",
-              gap,
-            );
-          } catch (err) {
-            // best-effort only
-            // console.warn('Could not reposition mobile hamburger', err);
-          }
         }
       } catch (e) {}
     };
@@ -1067,20 +952,18 @@ export default function App() {
         className={`${user?.fullAccess ? "premium-body" : ""} h-screen overflow-hidden pt-1 pb-0 px-1 xs:pt-2 xs:pb-0 xs:px-2 sm:pt-3 sm:pb-0 sm:px-3 md:pt-4 md:pb-0 md:px-4`}
       >
         <Toaster />
-        <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-[auto,1fr] gap-4 sm:gap-6 h-full overflow-hidden">
-          {/* Desktop sidebar; hidden on mobile/tablet */}
-          {!isMobile && (
-            <div className="relative hidden lg:block w-72">
-              <Sidebar
-                className="w-full h-full"
-                active={tab}
-                onChange={(k) => {
-                  setTab(k);
-                }}
-                user={user}
-              />
-            </div>
-          )}
+        <div className="max-w-[1600px] mx-auto grid grid-cols-[auto,1fr] gap-4 sm:gap-6 h-full overflow-hidden">
+          {/* Sidebar — always present on all screen sizes */}
+          <div className="relative w-56 sm:w-64 lg:w-72 shrink-0">
+            <Sidebar
+              className="w-full h-full"
+              active={tab}
+              onChange={(k) => {
+                setTab(k);
+              }}
+              user={user}
+            />
+          </div>
           {/* Fixed hamburger menu button removed - integrated into header */}
 
           {/* Wrap header + scroller in a column so header stays static and only content scrolls below it */}
@@ -1094,45 +977,19 @@ export default function App() {
                 }`}
                 style={{ willChange: "transform" }}
               >
-                {isMobile && (
-                  <button
-                    className="ndn-mobile-brand shrink-0 text-sm font-black px-3 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all border border-white/10"
-                    onClick={() => {
-                      setTab("score");
-                      setNavOpen(false);
-                    }}
-                    aria-label="Go Home"
-                    title="Go Home"
-                  >
-                    NDN 🎯
-                  </button>
-                )}
-
                 {/* Left: Brand + Greeting - compact single-line with avg */}
                 <div className="flex items-center gap-3 min-w-0 shrink ndn-greeting">
-                  {!isMobile && (
-                    <div className="relative shrink-0">
-                      <img
-                        src={avatar || fallbackAvatar}
-                        alt="avatar"
-                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
-                      />
-                      <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
-                    </div>
-                  )}
+                  <div className="relative shrink-0">
+                    <img
+                      src={avatar || fallbackAvatar}
+                      alt="avatar"
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
+                    />
+                    <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
+                  </div>
                   <div className="min-w-0">
                     <div className="flex flex-col gap-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        {isMobile && (
-                          <div className="relative mr-0">
-                            <img
-                              src={avatar || fallbackAvatar}
-                              alt="avatar"
-                              className="w-8 h-8 rounded-full ring-1 ring-indigo-400/50 object-cover shadow-sm"
-                            />
-                            <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-500 border border-[#13111C] rounded-full"></div>
-                          </div>
-                        )}
                         <span className="truncate text-xs text-white/70 ndn-greeting-welcome">
                           Welcome,{" "}
                           <span className="font-bold text-white">
@@ -1172,26 +1029,23 @@ export default function App() {
                 </div>
 
                 {/* Center brand display */}
-                {/* Center brand display (hidden on mobile; we show compact brand above hamburger) */}
-                {!isMobile && (
-                  <div className="flex-1 flex justify-center px-2">
-                    <h1 className="w-full sm:w-auto">
-                      <button
-                        type="button"
-                        className="w-full sm:w-auto flex items-center justify-center rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-base xs:text-xl sm:text-2xl font-black text-white tracking-tighter drop-shadow-lg whitespace-nowrap cursor-pointer select-none hover:bg-black/50 transition-colors"
-                        onClick={() => {
-                          setTab("score");
-                        }}
-                        title={"Go Home"}
-                      >
-                        <span className="xs:hidden">NDN 🎯</span>
-                        <span className="hidden xs:inline">
-                          NINE-DART-NATION 🎯
-                        </span>
-                      </button>
-                    </h1>
-                  </div>
-                )}
+                <div className="flex-1 flex justify-center px-2">
+                  <h1 className="w-full sm:w-auto">
+                    <button
+                      type="button"
+                      className="w-full sm:w-auto flex items-center justify-center rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-base xs:text-xl sm:text-2xl font-black text-white tracking-tighter drop-shadow-lg whitespace-nowrap cursor-pointer select-none hover:bg-black/50 transition-colors"
+                      onClick={() => {
+                        setTab("score");
+                      }}
+                      title={"Go Home"}
+                    >
+                      <span className="xs:hidden">NDN 🎯</span>
+                      <span className="hidden xs:inline">
+                        NINE-DART-NATION 🎯
+                      </span>
+                    </button>
+                  </h1>
+                </div>
 
                 {/* Right: Status + Actions */}
                 <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
@@ -1221,25 +1075,7 @@ export default function App() {
                   {/* Notifications bell removed from header — kept in main Notifications panel */}
                 </div>
               </header>
-              {/* A fixed, visible slot that marks the hamburger's dedicated spot on mobile.
-                  It is rendered just under the header so it remains visible across pages
-                  and gives the hamburger a consistent "box" to sit in. */}
-              {isMobile && <div aria-hidden className="ndn-mobile-menu-slot" />}
             </div>
-            {/* Mobile drawer navigation */}
-            {isMobile && (
-              <MobileNav
-                open={navOpen}
-                onClose={() => setNavOpen(false)}
-                active={tab}
-                onChange={(k) => {
-                  setTab(k);
-                  setNavOpen(false);
-                }}
-                user={user}
-                avatar={avatar || fallbackAvatar}
-              />
-            )}
             <main
               id="ndn-main-scroll"
               className="space-y-4 flex-1 overflow-y-auto pr-1 flex flex-col"
@@ -1341,13 +1177,6 @@ export default function App() {
                 </Suspense>
               )}
             </main>
-            {isMobile && (
-              <MobileBottomNav
-                active={tab}
-                onChange={setTab}
-                onMore={() => setNavOpen(true)}
-              />
-            )}
           </div>
         </div>
       </div>
@@ -1648,261 +1477,4 @@ export default function App() {
   );
 }
 
-function MobileBottomNav({
-  active,
-  onChange,
-  onMore,
-}: {
-  active: TabKey;
-  onChange: (k: TabKey) => void;
-  onMore: () => void;
-}) {
-  const navItems = [
-    { key: "score", label: "Play", icon: Gamepad2 },
-    { key: "online", label: "Online", icon: Globe },
-    { key: "tournaments", label: "Compete", icon: Trophy },
-    { key: "stats", label: "Stats", icon: BarChart2 },
-  ];
-
-  return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] w-full max-w-[360px] px-4 pointer-events-none">
-      <div className="flex items-center justify-between bg-zinc-900/90 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl shadow-black/50 ring-1 ring-white/5 pointer-events-auto">
-        {navItems.map((item) => {
-          const isActive = active === item.key;
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.key}
-              onClick={() => onChange(item.key as TabKey)}
-              className={`relative flex flex-col items-center justify-center gap-1 w-16 h-14 rounded-xl transition-all duration-300 active:scale-90 ${
-                isActive
-                  ? "text-white bg-indigo-600 shadow-lg shadow-indigo-500/30"
-                  : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
-              }`}
-            >
-              <Icon
-                className={`w-5 h-5 transition-transform duration-300 ${
-                  isActive ? "-translate-y-0.5 scale-110" : ""
-                }`}
-                strokeWidth={isActive ? 2.5 : 2}
-              />
-              <span
-                className={`text-[9px] font-bold tracking-wide transition-opacity duration-300 ${
-                  isActive ? "opacity-100" : "opacity-70"
-                }`}
-              >
-                {item.label}
-              </span>
-              {isActive && (
-                <span className="absolute -bottom-1 w-1 h-1 bg-indigo-300 rounded-full opacity-50 blur-[1px]" />
-              )}
-            </button>
-          );
-        })}
-        <div className="w-px h-8 bg-white/10 mx-1" />
-        <button
-          onClick={onMore}
-          className={`flex flex-col items-center justify-center gap-1 w-16 h-14 rounded-xl text-zinc-500 hover:text-white hover:bg-white/5 transition-all duration-200 active:scale-95`}
-        >
-          <Menu className="w-6 h-6" />
-          <span className="text-[9px] font-bold tracking-wide opacity-70">
-            More
-          </span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Modern grid-based mobile menu
-function MobileNav({
-  open,
-  onClose,
-  active,
-  onChange,
-  user,
-  avatar,
-}: {
-  open: boolean;
-  onClose: () => void;
-  active: TabKey;
-  onChange: (k: TabKey) => void;
-  user: any;
-  avatar?: string;
-}) {
-  const isAdmin = useIsAdmin(user?.email);
-  const tabs = buildTabList(user, isAdmin);
-  const [showDiscord, setShowDiscord] = React.useState(false);
-  const [showNDNDiscord, setShowNDNDiscord] = React.useState(false);
-
-  const fallback = `https://ui-avatars.com/api/?name=${encodeURIComponent(
-    user?.username || "NDN",
-  )}&background=8F43EE&color=fff&bold=true&rounded=true&size=64`;
-  const displayAvatar = avatar || fallback;
-  const isPremium = !!user?.fullAccess;
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[150] bg-[#0f0e13]/95 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-white/5 bg-white/[0.02]">
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <img
-              src={displayAvatar}
-              className={`w-12 h-12 rounded-full object-cover ring-2 ${
-                isPremium
-                  ? "ring-indigo-500 shadow-lg shadow-indigo-500/30"
-                  : "ring-white/10"
-              }`}
-              alt={user.username}
-            />
-            {isPremium && (
-              <div className="absolute -bottom-1 -right-1 bg-indigo-500 text-white rounded-full p-1 border border-[#0f0e13]">
-                <Trophy className="w-3 h-3" />
-              </div>
-            )}
-          </div>
-          <div className="flex flex-col">
-            <span className="font-bold text-white text-xl tracking-tight">
-              {user.username}
-            </span>
-            <span
-              className={`text-xs font-medium uppercase tracking-wider ${isPremium ? "text-indigo-400" : "text-white/40"}`}
-            >
-              {isPremium ? "Premium Member" : "Free Account"}
-            </span>
-          </div>
-        </div>
-        <button
-          onClick={onClose}
-          className="p-3 rounded-full bg-white/5 text-white/70 hover:bg-white/10 hover:text-white transition-all active:scale-95 border border-white/5 shadow-lg"
-        >
-          <X className="w-6 h-6" />
-        </button>
-      </div>
-
-      {/* Content */}
-      <div
-        className="flex-1 overflow-y-auto p-6"
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        <h3 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-4">
-          Menu
-        </h3>
-        <div className="grid grid-cols-2 gap-3 mb-8">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = active === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => {
-                  onChange(tab.key as TabKey);
-                  onClose();
-                }}
-                className={`group flex flex-col items-start gap-3 p-4 rounded-2xl border transition-all duration-200 active:scale-95 ${
-                  isActive
-                    ? "bg-indigo-600 border-indigo-500 text-white shadow-xl shadow-indigo-900/30"
-                    : "bg-white/5 border-white/5 text-slate-400 hover:bg-white/10 hover:text-white hover:border-white/10"
-                }`}
-              >
-                <div
-                  className={`p-2 rounded-xl ${isActive ? "bg-white/20" : "bg-black/20 group-hover:bg-white/10"}`}
-                >
-                  <Icon className="w-6 h-6" />
-                </div>
-                <span className="font-bold text-sm">{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <h3 className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] mb-4">
-          Community
-        </h3>
-        <div className="space-y-3 pb-24">
-          <button
-            onClick={() => setShowDiscord(true)}
-            className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#5865F2]/10 border border-[#5865F2]/20 text-[#5865F2] hover:bg-[#5865F2]/20 transition-all active:scale-98"
-          >
-            <MessageCircle className="w-6 h-6" />
-            <div className="flex flex-col items-start">
-              <span className="font-bold">Bulleye Darts League</span>
-              <span className="text-xs opacity-70">Join the competition</span>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setShowNDNDiscord(true)}
-            className="w-full flex items-center gap-4 p-4 rounded-2xl bg-[#5865F2]/10 border border-[#5865F2]/20 text-[#5865F2] hover:bg-[#5865F2]/20 transition-all active:scale-98"
-          >
-            <MessageCircle className="w-6 h-6" />
-            <div className="flex flex-col items-start">
-              <span className="font-bold">NDN Community</span>
-              <span className="text-xs opacity-70">Get help & support</span>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      {/* Discord Dialogs */}
-      {showDiscord && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#1a1825] border border-white/10 rounded-3xl p-6 max-w-sm w-full shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-2">
-              Join Bulleye Darts League
-            </h2>
-            <p className="text-slate-400 text-sm mb-6">
-              Connect with enthusiasts and compete in tourneys!
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setShowDiscord(false)}
-                className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-bold"
-              >
-                Cancel
-              </button>
-              <a
-                href={DISCORD_INVITE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-bold text-center"
-              >
-                Join
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showNDNDiscord && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#1a1825] border border-white/10 rounded-3xl p-6 max-w-sm w-full shadow-2xl">
-            <h2 className="text-xl font-bold text-white mb-2">NDN Community</h2>
-            <p className="text-slate-400 text-sm mb-6">
-              Official Nine Dart Nation community.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setShowNDNDiscord(false)}
-                className="px-4 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-bold"
-              >
-                Cancel
-              </button>
-              <a
-                href="https://discord.gg/ninedartnation"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-3 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-bold text-center"
-              >
-                Join
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// MobileBottomNav and MobileNav removed — sidebar is now used on all screen sizes.
