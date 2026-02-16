@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 
 /* ── Board constants ─────────────────────────────────────────────── */
-const BOARD_SIZE = 300;
+const BOARD_SIZE = 400;
 const CX = BOARD_SIZE / 2;
 const CY = BOARD_SIZE / 2;
 const BULL_INNER_R = 6.35;
@@ -37,7 +37,7 @@ const TREBLE_INNER_R = 99;
 const TREBLE_OUTER_R = 107;
 const DOUBLE_INNER_R = 162;
 const DOUBLE_OUTER_R = 170;
-const SCALE = (BOARD_SIZE / 2 - 10) / DOUBLE_OUTER_R;
+const SCALE = (BOARD_SIZE / 2 - 15) / DOUBLE_OUTER_R;
 
 const SECTOR_ORDER = [
   20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5,
@@ -160,25 +160,44 @@ function DartboardBullUp({
   onSelect,
   selectedPoint,
   disabled,
+  label,
 }: {
   onSelect: (x: number, y: number, distMm: number) => void;
   selectedPoint: { x: number; y: number } | null;
   disabled?: boolean;
+  label?: string;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
+
+  const coordsFromEvent = useCallback((clientX: number, clientY: number) => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * BOARD_SIZE;
+    const y = ((clientY - rect.top) / rect.height) * BOARD_SIZE;
+    const dist = distFromBull(x, y);
+    return { x, y, dist: Math.round(dist * 10) / 10 };
+  }, []);
 
   const handleClick = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       if (disabled) return;
-      const svg = svgRef.current;
-      if (!svg) return;
-      const rect = svg.getBoundingClientRect();
-      const x = ((e.clientX - rect.left) / rect.width) * BOARD_SIZE;
-      const y = ((e.clientY - rect.top) / rect.height) * BOARD_SIZE;
-      const dist = distFromBull(x, y);
-      onSelect(x, y, Math.round(dist * 10) / 10);
+      const c = coordsFromEvent(e.clientX, e.clientY);
+      if (c) onSelect(c.x, c.y, c.dist);
     },
-    [onSelect, disabled],
+    [onSelect, disabled, coordsFromEvent],
+  );
+
+  const handleTouch = useCallback(
+    (e: React.TouchEvent<SVGSVGElement>) => {
+      if (disabled) return;
+      e.preventDefault();
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+      const c = coordsFromEvent(touch.clientX, touch.clientY);
+      if (c) onSelect(c.x, c.y, c.dist);
+    },
+    [onSelect, disabled, coordsFromEvent],
   );
 
   // Build sector paths
@@ -248,7 +267,7 @@ function DartboardBullUp({
       const labelPos = polarToXY(
         CX,
         CY,
-        (DOUBLE_OUTER_R + 10) * SCALE,
+        (DOUBLE_OUTER_R + 12) * SCALE,
         i * degPerSector,
       );
       paths.push(
@@ -258,9 +277,10 @@ function DartboardBullUp({
           y={labelPos.y}
           textAnchor="middle"
           dominantBaseline="central"
-          fill="rgba(255,255,255,0.7)"
-          fontSize="9"
+          fill="rgba(255,255,255,0.8)"
+          fontSize="11"
           fontWeight="bold"
+          fontFamily="system-ui, sans-serif"
         >
           {sector}
         </text>,
@@ -271,82 +291,164 @@ function DartboardBullUp({
   }, []);
 
   return (
-    <svg
-      ref={svgRef}
-      viewBox={`0 0 ${BOARD_SIZE} ${BOARD_SIZE}`}
-      className={`w-full h-full ${disabled ? "opacity-50 pointer-events-none" : "cursor-crosshair"}`}
-      onClick={handleClick}
-    >
-      {/* Background */}
-      <circle cx={CX} cy={CY} r={CX} fill="#0a0a1a" />
-
-      {/* Sector paths */}
-      {sectorPaths}
-
-      {/* Bull outer (green) */}
-      <circle
-        cx={CX}
-        cy={CY}
-        r={BULL_OUTER_R * SCALE}
-        fill="#27ae60"
-        stroke="rgba(255,255,255,0.15)"
-        strokeWidth={0.5}
-      />
-      {/* Bull inner (red) */}
-      <circle
-        cx={CX}
-        cy={CY}
-        r={BULL_INNER_R * SCALE}
-        fill="#c0392b"
-        stroke="rgba(255,255,255,0.15)"
-        strokeWidth={0.5}
-      />
-
-      {/* Crosshair at center */}
-      <line
-        x1={CX - 4}
-        y1={CY}
-        x2={CX + 4}
-        y2={CY}
-        stroke="rgba(255,255,255,0.3)"
-        strokeWidth={0.5}
-      />
-      <line
-        x1={CX}
-        y1={CY - 4}
-        x2={CX}
-        y2={CY + 4}
-        stroke="rgba(255,255,255,0.3)"
-        strokeWidth={0.5}
-      />
-
-      {/* Selected dart position */}
-      {selectedPoint && (
-        <>
-          {/* Line from bull to dart */}
-          <line
-            x1={CX}
-            y1={CY}
-            x2={selectedPoint.x}
-            y2={selectedPoint.y}
-            stroke="rgba(234,179,8,0.5)"
-            strokeWidth={1}
-            strokeDasharray="3,3"
-          />
-          {/* Dart marker */}
-          <circle
-            cx={selectedPoint.x}
-            cy={selectedPoint.y}
-            r={5}
-            fill="#eab308"
-            stroke="#fff"
-            strokeWidth={1.5}
-            className="drop-shadow-lg"
-          />
-          <circle cx={selectedPoint.x} cy={selectedPoint.y} r={2} fill="#fff" />
-        </>
+    <div className="relative">
+      {label && (
+        <div className="text-center mb-2">
+          <span className="text-xs font-bold uppercase tracking-widest text-white/50">
+            {label}
+          </span>
+        </div>
       )}
-    </svg>
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${BOARD_SIZE} ${BOARD_SIZE}`}
+        className={`w-full h-full touch-none ${disabled ? "opacity-50 pointer-events-none" : "cursor-crosshair"}`}
+        onClick={handleClick}
+        onTouchEnd={handleTouch}
+      >
+        {/* Background */}
+        <circle cx={CX} cy={CY} r={CX} fill="#0a0a1a" />
+
+        {/* Sector paths */}
+        {sectorPaths}
+
+        {/* Wire rings for realism */}
+        <circle
+          cx={CX}
+          cy={CY}
+          r={TREBLE_INNER_R * SCALE}
+          fill="none"
+          stroke="rgba(192,192,192,0.15)"
+          strokeWidth={0.8}
+        />
+        <circle
+          cx={CX}
+          cy={CY}
+          r={TREBLE_OUTER_R * SCALE}
+          fill="none"
+          stroke="rgba(192,192,192,0.15)"
+          strokeWidth={0.8}
+        />
+        <circle
+          cx={CX}
+          cy={CY}
+          r={DOUBLE_INNER_R * SCALE}
+          fill="none"
+          stroke="rgba(192,192,192,0.15)"
+          strokeWidth={0.8}
+        />
+        <circle
+          cx={CX}
+          cy={CY}
+          r={DOUBLE_OUTER_R * SCALE}
+          fill="none"
+          stroke="rgba(192,192,192,0.2)"
+          strokeWidth={1}
+        />
+
+        {/* Bull outer (green) */}
+        <circle
+          cx={CX}
+          cy={CY}
+          r={BULL_OUTER_R * SCALE}
+          fill="#27ae60"
+          stroke="rgba(192,192,192,0.2)"
+          strokeWidth={0.8}
+        />
+        {/* Bull inner (red) */}
+        <circle
+          cx={CX}
+          cy={CY}
+          r={BULL_INNER_R * SCALE}
+          fill="#c0392b"
+          stroke="rgba(192,192,192,0.2)"
+          strokeWidth={0.8}
+        />
+
+        {/* Pulsing bullseye guide when no dart placed */}
+        {!selectedPoint && !disabled && (
+          <circle
+            cx={CX}
+            cy={CY}
+            r={BULL_OUTER_R * SCALE * 1.8}
+            fill="none"
+            stroke="rgba(234,179,8,0.4)"
+            strokeWidth={1.5}
+            strokeDasharray="4,4"
+          >
+            <animate
+              attributeName="r"
+              values={`${BULL_OUTER_R * SCALE * 1.5};${BULL_OUTER_R * SCALE * 2.2};${BULL_OUTER_R * SCALE * 1.5}`}
+              dur="2s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.5;0.15;0.5"
+              dur="2s"
+              repeatCount="indefinite"
+            />
+          </circle>
+        )}
+
+        {/* Crosshair at center */}
+        <line
+          x1={CX - 6}
+          y1={CY}
+          x2={CX + 6}
+          y2={CY}
+          stroke="rgba(255,255,255,0.25)"
+          strokeWidth={0.5}
+        />
+        <line
+          x1={CX}
+          y1={CY - 6}
+          x2={CX}
+          y2={CY + 6}
+          stroke="rgba(255,255,255,0.25)"
+          strokeWidth={0.5}
+        />
+
+        {/* Selected dart position */}
+        {selectedPoint && (
+          <>
+            {/* Line from bull to dart */}
+            <line
+              x1={CX}
+              y1={CY}
+              x2={selectedPoint.x}
+              y2={selectedPoint.y}
+              stroke="rgba(234,179,8,0.5)"
+              strokeWidth={1}
+              strokeDasharray="3,3"
+            />
+            {/* Dart shadow */}
+            <circle
+              cx={selectedPoint.x + 1}
+              cy={selectedPoint.y + 1}
+              r={6}
+              fill="rgba(0,0,0,0.4)"
+            />
+            {/* Dart marker */}
+            <circle
+              cx={selectedPoint.x}
+              cy={selectedPoint.y}
+              r={6}
+              fill="#eab308"
+              stroke="#fff"
+              strokeWidth={2}
+              className="drop-shadow-lg"
+            />
+            <circle
+              cx={selectedPoint.x}
+              cy={selectedPoint.y}
+              r={2.5}
+              fill="#fff"
+            />
+          </>
+        )}
+      </svg>
+    </div>
   );
 }
 
@@ -704,7 +806,12 @@ export default function MatchPrestart({
                   🎯 Bull Up!
                 </h2>
                 <p className="text-sm text-white/50 mt-1">
-                  Tap the board where your dart landed
+                  Throw your dart at the bullseye, then tap where it landed on
+                  the board
+                </p>
+                <p className="text-[10px] text-white/30 mt-0.5">
+                  Both players mark their throw — closest to the bull throws
+                  first
                 </p>
               </div>
             )}
@@ -879,43 +986,52 @@ export default function MatchPrestart({
 
           {/* Bull-up phase — dartboard */}
           {phase === "bull" && (
-            <div className="flex flex-col items-center gap-4 animate-in fade-in zoom-in-95 duration-500">
-              <div className="w-full max-w-xs mx-auto">
+            <div className="flex flex-col items-center gap-5 animate-in fade-in zoom-in-95 duration-500">
+              {/* Full-size interactive dartboard */}
+              <div className="w-full max-w-sm sm:max-w-md mx-auto rounded-2xl border border-white/10 bg-black/40 p-3 sm:p-4 shadow-2xl shadow-black/50">
                 <DartboardBullUp
                   onSelect={handleDartSelect}
                   selectedPoint={dartPoint}
                   disabled={dartSubmitted}
+                  label="Tap where your dart landed"
                 />
               </div>
 
+              {/* Distance readout */}
               {dartDistMm != null && (
-                <div className="text-center animate-in fade-in duration-300">
-                  <div className="text-3xl font-black text-white tabular-nums">
-                    {dartDistMm.toFixed(1)}{" "}
-                    <span className="text-lg text-white/50">mm</span>
+                <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-white/5 border border-white/10">
+                    <Target className="w-5 h-5 text-amber-400" />
+                    <div>
+                      <span className="text-3xl font-black text-white tabular-nums">
+                        {dartDistMm.toFixed(1)}
+                      </span>
+                      <span className="text-base text-white/50 ml-1">mm</span>
+                    </div>
+                    <span className="text-xs text-white/40">from bull</span>
                   </div>
-                  <div className="text-xs text-white/40">from the bullseye</div>
                 </div>
               )}
 
+              {/* Confirm / Waiting */}
               {!dartSubmitted ? (
                 <button
-                  className="px-8 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-black text-lg hover:shadow-xl hover:shadow-emerald-500/30 hover:scale-105 transition-all disabled:opacity-30 disabled:pointer-events-none"
+                  className="px-10 py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-black text-lg hover:shadow-xl hover:shadow-emerald-500/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-30 disabled:pointer-events-none border border-emerald-400/30"
                   disabled={dartDistMm == null}
                   onClick={handleSubmitDart}
                 >
-                  Confirm Dart Position
+                  ✅ Confirm Dart Position
                 </button>
               ) : (
-                <div className="flex items-center gap-2 text-sm text-white/70 animate-pulse">
-                  <Zap className="w-4 h-4 text-amber-400" />
+                <div className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white/5 border border-white/10 text-sm text-white/70">
+                  <div className="w-4 h-4 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
                   Waiting for opponent's throw…
                 </div>
               )}
 
               {bullTied && (
-                <div className="text-sm text-amber-300 font-bold animate-bounce">
-                  It's a tie! Throw again.
+                <div className="text-sm text-amber-300 font-bold animate-bounce px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                  🔄 It's a tie! Throw again.
                 </div>
               )}
             </div>
