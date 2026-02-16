@@ -3435,6 +3435,16 @@ wss.on('connection', (ws, req) => {
           if (typeof data.allowSpectate === 'boolean') u.allowSpectate = !!data.allowSpectate
           users.set(ws._email, u)
         }
+        // Re-associate any matches created by this user (they may have reconnected
+        // with a new ws._id but the match still has the old creatorId)
+        try {
+          for (const [_mid, m] of matches.entries()) {
+            if (m.creatorName && ws._username && m.creatorName === ws._username && m.creatorId !== ws._id) {
+              console.log('[PRESENCE] re-associating match %s creator %s: old=%s new=%s', _mid, ws._username, m.creatorId, ws._id)
+              m.creatorId = ws._id
+            }
+          }
+        } catch (e) { console.warn('[PRESENCE] match re-association error:', e) }
         if (ws._roomId) {
           broadcastToRoom(ws._roomId, { type: 'presence', id: ws._id, username: data.username }, null)
         }
@@ -3734,18 +3744,35 @@ wss.on('connection', (ws, req) => {
         })
         // Send to joiner
         try { ws.send(prestartPayload) } catch {}
-        // Send to creator
+        // Send to creator — try by ID first, then by username as fallback
+        let creatorFound = false
         try {
           for (const client of wss.clients) {
             if (client.readyState === 1 && client._id === m.creatorId) {
               client.send(prestartPayload)
+              creatorFound = true
+              break
+            }
+          }
+          // Fallback: find creator by username if ID lookup failed (reconnected with new ID)
+          if (!creatorFound && m.creatorName) {
+            for (const client of wss.clients) {
+              if (client.readyState === 1 && client._username === m.creatorName && client._id !== ws._id) {
+                client.send(prestartPayload)
+                // Update the match's creatorId to the new connection
+                m.creatorId = client._id
+                matches.set(matchId, m)
+                creatorFound = true
+                console.log('[JOIN-MATCH] creator found by username fallback, updated creatorId to %s', client._id)
+                break
+              }
             }
           }
         } catch {}
         // Initialise prestart state
         if (!global._prestartState) global._prestartState = new Map()
         global._prestartState.set(matchId, { choices: {}, throws: {}, prestartEndsAt })
-        console.log('[JOIN-MATCH] %s joined match %s (creator=%s)', ws._username, matchId, m.creatorName)
+        console.log('[JOIN-MATCH] %s joined match %s (creator=%s creatorId=%s creatorFound=%s)', ws._username, matchId, m.creatorName, m.creatorId, creatorFound)
       }
       // ── Prestart choice: bull or skip ──
       else if (data.type === 'prestart-choice') {
@@ -3960,10 +3987,52 @@ wss.on('connection', (ws, req) => {
     // Clean up room
     await leaveRoom(ws);
     try { wsConnections.dec() } catch {}
-    // Remove any matches created by this client
+    // Instead of immediately removing matches created by this client, keep them
+    // for a grace period (2 minutes) so the creator can reconnect.  Mark with a
+    // timestamp so a periodic cleanup can prune truly orphaned matches later.
     for (const [id, m] of Array.from(matches.entries())) {
-      if (m.creatorId === ws._id) matches.delete(id)
+      if (m.creatorId === ws._id) {
+        m._creatorDisconnectedAt = Date.now()
+        console.log('[WS] creator disconnected for match %s, keeping for grace period', id)
+      }
     }
+    // Schedule cleanup of orphaned matches after 2 minutes
+    const disconnectedId = ws._id
+    const disconnectedUsername = ws._username
+    setTimeout(() => {
+      try {
+        for (const [id, m] of Array.from(matches.entries())) {
+          // Only delete if the match still points to the disconnected ID
+          // (i.e. the creator did NOT reconnect and re-associate)
+          if (m.creatorId === disconnectedId && m._creatorDisconnectedAt) {
+            // Check if the creator reconnected with a different ID by looking
+            // for a client with the same username
+            let reconnected = false
+            try {
+              for (const client of wss.clients) {
+                if (client.readyState === 1 && client._username && client._username === disconnectedUsername) {
+                  reconnected = true
+                  // Re-associate the match with the new connection
+                  m.creatorId = client._id
+                  delete m._creatorDisconnectedAt
+                  console.log('[WS] creator %s reconnected for match %s, new id=%s', disconnectedUsername, id, client._id)
+                  break
+                }
+              }
+            } catch {}
+            if (!reconnected) {
+              matches.delete(id)
+              console.log('[WS] deleted orphaned match %s (creator %s never reconnected)', id, disconnectedUsername)
+              // Broadcast updated lobby
+              try {
+                const lobbyUpdate = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+                for (const client of wss.clients) { if (client.readyState === 1) client.send(lobbyUpdate) }
+              } catch {}
+            }
+          }
+        }
+      } catch (e) { console.warn('[WS] orphaned match cleanup error:', e) }
+    }, 120000) // 2 minutes grace period
     clients.delete(ws._id)
     // Cleanup camera sessions involving this client
     for (const [code, sess] of camSessions.entries()) {
