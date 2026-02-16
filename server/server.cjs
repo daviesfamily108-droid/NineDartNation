@@ -4589,7 +4589,6 @@ users.set('daviesfamily108@gmail.com', {
   status: 'offline',
   lastSeen: null
 });
-  });
 }
 // friends: email -> Set(friendEmail)
 const friendships = new Map();
