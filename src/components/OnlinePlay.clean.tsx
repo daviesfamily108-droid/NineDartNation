@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import CreateMatchModal from "./ui/CreateMatchModal.js";
 import MatchStartShowcase from "./ui/MatchStartShowcase.js";
+import MatchPrestart from "./ui/MatchPrestart.js";
 import { useMatch } from "../store/match.js";
 import { useWS } from "./WSProvider.js";
 import { launchInPlayDemo } from "../utils/inPlayDemo.js";
@@ -132,6 +133,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [bullWinner, setBullWinner] = useState<string | null>(null);
   const [bullLocalThrow, setBullLocalThrow] = useState<number | null>(null);
   const [bullThrown, setBullThrown] = useState(false);
+  const [bullTied, setBullTied] = useState(false);
 
   // Filter & Sort State
   const [searchQuery, setSearchQuery] = useState("");
@@ -402,6 +404,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           setBullActive(false);
           setBullThrow(null);
           setBullWinner(null);
+          setBullTied(false);
         }
         if (msg?.type === "match-start") {
           // If the started match matches our current join request, close the modal
@@ -423,15 +426,19 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           setBullLocalThrow(null);
         }
         if (msg?.type === "prestart-bull-winner") {
-          setBullWinner(msg.winnerId || null);
+          setBullWinner(msg.winnerName || msg.winnerId || null);
           setBullActive(false);
           setBullThrown(false);
+          setBullTied(false);
         }
         if (msg?.type === "prestart-bull-tie") {
           // reset to allow another round
           setBullWinner(null);
           setBullActive(false);
           setBullThrown(false);
+          setBullTied(true);
+          // Auto-reset tied state after 2s so the dartboard reappears
+          setTimeout(() => setBullTied(false), 2000);
         }
       } catch (err) {}
     });
@@ -476,8 +483,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
   const requestJoin = (m: any) => {
     setJoinMatch(m);
-    // Show the pre-game overlay immediately while the server processes the join.
-    setShowStartShowcase(true);
+    // MatchPrestart overlay handles the pre-game flow now; MatchStartShowcase
+    // is shown later when the user accepts via handleJoinAccept.
     try {
       if (wsGlobal?.connected) {
         // Ensure presence is sent before joining
@@ -857,168 +864,40 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           }}
         />
 
-        {/* Join Modal (simplified) */}
-        {joinMatch && (
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="join-heading"
-            tabIndex={-1}
-            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4"
-          >
-            <div className="bg-slate-800 rounded-2xl p-6 max-w-md w-full">
-              <div id="join-heading" className="text-lg font-bold mb-2">
-                Join Match ⚔️
-              </div>
-              <div className="mb-3">
-                {joinMatch.game} - {joinMatch.modeType} · {joinMatch.legs} legs
-              </div>
-              <div className="text-sm opacity-80 mb-3">
-                Created by {joinMatch.createdBy}
-              </div>
-              {joinMatch.startingScore && (
-                <div className="mb-3">
-                  Starting score:{" "}
-                  <span className="font-mono">{joinMatch.startingScore}</span>
-                </div>
-              )}
-              {/* Match start showcase overlay */}
-              <MatchStartShowcase
-                open={showStartShowcase}
-                players={players as any}
-                user={user}
-                onRequestClose={() => {}}
-                onDone={() => {}}
-              />
-              <div className="mb-3">
-                Timer: <span className="font-mono">{joinTimer}s</span>
-              </div>
-              {(joinTimer <= 15 || (joinMatch as any)?.prestartEndsAt) && (
-                <div className="mb-3">
-                  Choose:{" "}
-                  <div className="flex gap-2">
-                    <button
-                      className={`btn ${joinChoice === "bull" ? "btn-primary" : "btn-ghost"}`}
-                      onClick={() => sendPrestartChoice("bull")}
-                    >
-                      Bull Up
-                    </button>
-                    <button
-                      className={`btn ${joinChoice === "skip" ? "btn-primary" : "btn-ghost"}`}
-                      onClick={() => sendPrestartChoice("skip")}
-                    >
-                      Skip
-                    </button>
-                  </div>
-                  <div className="text-xs opacity-70 mt-2">
-                    {joinChoice
-                      ? `You chose: ${joinChoice}`
-                      : "Please choose Bull Up or Skip before accepting"}
-                  </div>
-                  {Object.keys(remoteChoices).length > 0 && (
-                    <div
-                      className="text-xs opacity-70 mt-2"
-                      role="status"
-                      aria-live="polite"
-                    >
-                      {Object.entries(remoteChoices).map(([pid, choice]) => (
-                        <div key={pid}>
-                          {participants[pid] || pid} chose: {choice}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {joinChoice === "skip" && (
-                    <div className="text-xs opacity-70 mt-2">
-                      Skip requires both players to click Skip. Waiting for
-                      other player…
-                    </div>
-                  )}
-                  {joinChoice === "skip" &&
-                    Object.values(remoteChoices).some((c) => c === "skip") && (
-                      <div className="text-sm font-semibold mt-2">
-                        Both players skipped — Left player throws first
-                      </div>
-                    )}
-                  {bullActive && (
-                    <div className="text-xs opacity-70 mt-2">
-                      Bull Up active —
-                      {bullThrown
-                        ? ` you threw ${bullLocalThrow ?? 50}`
-                        : " throw to win the bull!"}
-                    </div>
-                  )}
-                  {bullActive && !bullThrown && (
-                    <div className="flex items-center gap-2 mt-2">
-                      <input
-                        className="input input-sm"
-                        aria-label="bull-throw"
-                        type="number"
-                        min={0}
-                        max={50}
-                        value={bullThrow ?? 50}
-                        onChange={(e) =>
-                          setBullThrow(
-                            Math.max(
-                              0,
-                              Math.min(50, Number(e.target.value || 0)),
-                            ),
-                          )
-                        }
-                      />
-                      <button
-                        className="btn btn-primary"
-                        onClick={() => {
-                          try {
-                            if (wsGlobal?.connected && joinMatch?.id)
-                              wsGlobal.send({
-                                type: "prestart-bull-throw",
-                                roomId: joinMatch.id,
-                                score: bullThrow ?? 50,
-                              });
-                          } catch {}
-                          setBullLocalThrow(bullThrow ?? 50);
-                          setBullThrown(true);
-                        }}
-                      >
-                        Throw Bull
-                      </button>
-                    </div>
-                  )}
-                  {bullThrown && (
-                    <div className="text-sm font-semibold mt-2 animate-pulse">
-                      You threw: {bullLocalThrow ?? 50}
-                    </div>
-                  )}
-                  {bullWinner && (
-                    <div className="text-sm font-semibold mt-2">
-                      Bull winner: {bullWinner}
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <button
-                  ref={joinAcceptRef}
-                  aria-label="Accept invitation"
-                  className="btn btn-primary"
-                  onClick={handleJoinAccept}
-                  disabled={joinTimer <= 15 && !joinChoice}
-                >
-                  Accept
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => {
-                    setJoinMatch(null);
-                  }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Modern join / prestart overlay */}
+        <MatchPrestart
+          open={!!joinMatch}
+          matchInfo={joinMatch}
+          localUser={user}
+          opponentName={
+            joinMatch?.createdBy ||
+            joinMatch?.creatorName ||
+            (joinMatch?.creatorId
+              ? participants[joinMatch.creatorId] || joinMatch.creatorId
+              : "Opponent")
+          }
+          countdown={15}
+          onChoice={sendPrestartChoice}
+          onBullThrow={(distanceMm: number) => {
+            try {
+              if (wsGlobal?.connected && joinMatch?.id) {
+                wsGlobal.send({
+                  type: "prestart-bull-throw",
+                  roomId: joinMatch.id,
+                  score: distanceMm,
+                });
+              }
+            } catch {}
+            setBullLocalThrow(distanceMm);
+            setBullThrown(true);
+          }}
+          onAccept={handleJoinAccept}
+          onCancel={() => setJoinMatch(null)}
+          remoteChoice={Object.values(remoteChoices)[0] || null}
+          bullActive={bullActive}
+          bullWinner={bullWinner}
+          bullTied={bullTied}
+        />
       </div>
     </div>
   );

@@ -2513,44 +2513,47 @@ wss.on('connection', (ws, req) => {
         const sess = pendingPrestarts.get(roomId)
         if (!sess) return
         const pid = ws._id
-        const score = Math.max(0, Number(data.score || 0))
+        // score is now mm distance from bullseye (lower = closer = better)
+        const score = Math.max(0, Number(data.score || 999))
         sess.bullThrows[pid] = sess.bullThrows[pid] || []
         sess.bullThrows[pid].push(score)
         // If both players submitted a throw for this round
         const haveBoth = sess.players.every(p => (sess.bullThrows[p] || []).length > 0)
         if (!haveBoth) return
-        // Evaluate last throw
+        // Evaluate last throw — lower distance wins
         const p0 = sess.players[0]
         const p1 = sess.players[1]
-        const s0 = sess.bullThrows[p0][sess.bullThrows[p0].length - 1] || 0
-        const s1 = sess.bullThrows[p1][sess.bullThrows[p1].length - 1] || 0
-        const hit0 = s0 === 50
-        const hit1 = s1 === 50
-        if (hit0 && !hit1) {
-          const payload = { type: 'prestart-bull-winner', roomId, winnerId: p0 }
-          for (const pid of sess.players) {
-            const c = clients.get(pid)
+        const s0 = sess.bullThrows[p0][sess.bullThrows[p0].length - 1] || 999
+        const s1 = sess.bullThrows[p1][sess.bullThrows[p1].length - 1] || 999
+        if (s0 < s1) {
+          // p0 wins (closer to bull)
+          const winnerName = (() => { try { const c = clients.get(p0); return c?._username || `user-${p0}` } catch { return `user-${p0}` } })()
+          const payload = { type: 'prestart-bull-winner', roomId, winnerId: p0, winnerName, throws: { [p0]: s0, [p1]: s1 } }
+          for (const ppid of sess.players) {
+            const c = clients.get(ppid)
             if (c && c.readyState === 1) c.send(JSON.stringify(payload))
           }
-              const startPayload = { type: 'match-start', roomId, match: sess.match, firstPlayerId: p0 }
-          for (const pid of sess.players) {
-            const c = clients.get(pid)
+          const startPayload = { type: 'match-start', roomId, match: sess.match, firstPlayerId: p0 }
+          for (const ppid of sess.players) {
+            const c = clients.get(ppid)
             if (c && c.readyState === 1) c.send(JSON.stringify(startPayload))
           }
-              try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(sess.match.creatorId)); } catch (e) {}
+          try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(sess.match.creatorId)); } catch (e) {}
           try { if (sess.timer) clearTimeout(sess.timer) } catch {}
           pendingPrestarts.delete(roomId)
           matches.delete(sess.match.id)
           persistMatchesToDisk()
-        } else if (hit1 && !hit0) {
-          const payload = { type: 'prestart-bull-winner', roomId, winnerId: p1 }
-          for (const pid of sess.players) {
-            const c = clients.get(pid)
+        } else if (s1 < s0) {
+          // p1 wins (closer to bull)
+          const winnerName = (() => { try { const c = clients.get(p1); return c?._username || `user-${p1}` } catch { return `user-${p1}` } })()
+          const payload = { type: 'prestart-bull-winner', roomId, winnerId: p1, winnerName, throws: { [p0]: s0, [p1]: s1 } }
+          for (const ppid of sess.players) {
+            const c = clients.get(ppid)
             if (c && c.readyState === 1) c.send(JSON.stringify(payload))
           }
           const startPayload = { type: 'match-start', roomId, match: sess.match, firstPlayerId: p1 }
-          for (const pid of sess.players) {
-            const c = clients.get(pid)
+          for (const ppid of sess.players) {
+            const c = clients.get(ppid)
             if (c && c.readyState === 1) c.send(JSON.stringify(startPayload))
           }
           try { roomAutocommitAllowed.set(roomId, false); roomCreator.set(roomId, String(sess.match.creatorId)); } catch (e) {}
@@ -2559,10 +2562,10 @@ wss.on('connection', (ws, req) => {
           matches.delete(sess.match.id)
           persistMatchesToDisk()
         } else {
-          // Tie (both hit or both missed), tell clients to repeat the round
+          // Tie (same distance), tell clients to repeat the round
           const tiePayload = { type: 'prestart-bull-tie', roomId }
-          for (const pid of sess.players) {
-            const c = clients.get(pid)
+          for (const ppid of sess.players) {
+            const c = clients.get(ppid)
             if (c && c.readyState === 1) c.send(JSON.stringify(tiePayload))
           }
           // Keep bullThrows arrays; next round will push additional entries

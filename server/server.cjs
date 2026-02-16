@@ -3714,7 +3714,148 @@ wss.on('connection', (ws, req) => {
         for (const client of wss.clients) { if (client.readyState === 1) client.send(lobbyPayload) }
       } else if (data.type === 'list-matches') {
         ws.send(JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) }))
-      } else if (data.type === 'set-match-autocommit') {
+      }
+      // ── Join-match: opponent wants to join a match ──
+      else if (data.type === 'join-match') {
+        const matchId = String(data.matchId || '')
+        const m = matches.get(matchId)
+        if (!m) { try { ws.send(JSON.stringify({ type: 'error', code: 'NOT_FOUND', message: 'Match not found' })) } catch {} ; return }
+        // Store the joiner info on the match
+        m.joinerId = ws._id
+        m.joinerName = ws._username || `user-${ws._id}`
+        m.joinerEmail = ws._email || ''
+        matches.set(matchId, m)
+        const prestartEndsAt = Date.now() + 15000
+        // Notify both creator and joiner with match-prestart
+        const prestartPayload = JSON.stringify({
+          type: 'match-prestart',
+          match: { ...m, modeType: m.mode || 'firstto', legs: m.value || 1, createdBy: m.creatorName },
+          prestartEndsAt
+        })
+        // Send to joiner
+        try { ws.send(prestartPayload) } catch {}
+        // Send to creator
+        try {
+          for (const client of wss.clients) {
+            if (client.readyState === 1 && client._id === m.creatorId) {
+              client.send(prestartPayload)
+            }
+          }
+        } catch {}
+        // Initialise prestart state
+        if (!global._prestartState) global._prestartState = new Map()
+        global._prestartState.set(matchId, { choices: {}, throws: {}, prestartEndsAt })
+        console.log('[JOIN-MATCH] %s joined match %s (creator=%s)', ws._username, matchId, m.creatorName)
+      }
+      // ── Prestart choice: bull or skip ──
+      else if (data.type === 'prestart-choice') {
+        const roomId = String(data.roomId || '')
+        const choice = data.choice === 'bull' ? 'bull' : 'skip'
+        if (!global._prestartState) global._prestartState = new Map()
+        const state = global._prestartState.get(roomId)
+        if (!state) return
+        state.choices[ws._id] = choice
+        global._prestartState.set(roomId, state)
+        // Notify the other player of this choice
+        const m = matches.get(roomId)
+        if (m) {
+          const notifyPayload = JSON.stringify({ type: 'prestart-choice-notify', roomId, playerId: ws._id, playerName: ws._username, choice })
+          for (const client of wss.clients) {
+            if (client.readyState === 1 && (client._id === m.creatorId || client._id === m.joinerId) && client._id !== ws._id) {
+              try { client.send(notifyPayload) } catch {}
+            }
+          }
+        }
+        // Check if both players have chosen
+        const choiceValues = Object.values(state.choices)
+        if (choiceValues.length >= 2) {
+          const allSkip = choiceValues.every(c => c === 'skip')
+          const anyBull = choiceValues.some(c => c === 'bull')
+          if (allSkip) {
+            // Both skipped → creator throws first → start match
+            const startPayload = JSON.stringify({ type: 'match-start', roomId, firstThrowerId: m?.creatorId, firstThrowerName: m?.creatorName })
+            for (const client of wss.clients) {
+              if (client.readyState === 1 && m && (client._id === m.creatorId || client._id === m.joinerId)) {
+                try { client.send(startPayload) } catch {}
+              }
+            }
+            console.log('[PRESTART] both skipped in %s, creator %s goes first', roomId, m?.creatorName)
+          } else if (anyBull) {
+            // At least one chose bull → activate bull-up
+            const bullPayload = JSON.stringify({ type: 'prestart-bull', roomId })
+            for (const client of wss.clients) {
+              if (client.readyState === 1 && m && (client._id === m.creatorId || client._id === m.joinerId)) {
+                try { client.send(bullPayload) } catch {}
+              }
+            }
+            console.log('[PRESTART] bull-up activated in %s', roomId)
+          }
+        }
+      }
+      // ── Prestart bull throw: player reports distance in mm ──
+      else if (data.type === 'prestart-bull-throw') {
+        const roomId = String(data.roomId || '')
+        const score = Number(data.score || 999)
+        if (!global._prestartState) global._prestartState = new Map()
+        const state = global._prestartState.get(roomId)
+        if (!state) return
+        if (!state.throws) state.throws = {}
+        state.throws[ws._id] = { score, name: ws._username }
+        global._prestartState.set(roomId, state)
+        const m = matches.get(roomId)
+        if (!m) return
+        // Check if both players have thrown
+        const throwEntries = Object.entries(state.throws)
+        if (throwEntries.length >= 2) {
+          const sorted = throwEntries.sort((a, b) => a[1].score - b[1].score)
+          if (sorted[0][1].score === sorted[1][1].score) {
+            // Tie — reset throws for another round
+            state.throws = {}
+            global._prestartState.set(roomId, state)
+            const tiePayload = JSON.stringify({ type: 'prestart-bull-tie', roomId })
+            for (const client of wss.clients) {
+              if (client.readyState === 1 && (client._id === m.creatorId || client._id === m.joinerId)) {
+                try { client.send(tiePayload) } catch {}
+              }
+            }
+            // Re-activate bull-up
+            const bullPayload = JSON.stringify({ type: 'prestart-bull', roomId })
+            for (const client of wss.clients) {
+              if (client.readyState === 1 && (client._id === m.creatorId || client._id === m.joinerId)) {
+                try { client.send(bullPayload) } catch {}
+              }
+            }
+            console.log('[PRESTART] bull-up tie in %s, going again', roomId)
+          } else {
+            const winnerId = sorted[0][0]
+            const winnerName = sorted[0][1].name
+            const winnerPayload = JSON.stringify({ type: 'prestart-bull-winner', roomId, winnerId, winnerName, throws: state.throws })
+            for (const client of wss.clients) {
+              if (client.readyState === 1 && (client._id === m.creatorId || client._id === m.joinerId)) {
+                try { client.send(winnerPayload) } catch {}
+              }
+            }
+            console.log('[PRESTART] bull winner in %s: %s (%.1fmm)', roomId, winnerName, sorted[0][1].score)
+          }
+        }
+      }
+      // ── Invite response (accept/decline) ──
+      else if (data.type === 'invite-response') {
+        const matchId = String(data.matchId || '')
+        const accept = !!data.accept
+        const m = matches.get(matchId)
+        if (!m) return
+        if (accept) {
+          const startPayload = JSON.stringify({ type: 'match-start', roomId: matchId, firstThrowerId: m.creatorId, firstThrowerName: m.creatorName })
+          for (const client of wss.clients) {
+            if (client.readyState === 1 && (client._id === m.creatorId || client._id === m.joinerId)) {
+              try { client.send(startPayload) } catch {}
+            }
+          }
+          console.log('[INVITE] accepted match %s', matchId)
+        }
+      }
+      else if (data.type === 'set-match-autocommit') {
         // Host or admin may toggle server-side autocommit allowed flag for a room
         const roomId = String(data.roomId || '')
         const allow = !!data.allow
