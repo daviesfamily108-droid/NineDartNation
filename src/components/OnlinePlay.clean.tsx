@@ -441,6 +441,70 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     [normalizeMatch, user],
   );
 
+  // Shared handler for match-start messages (used by WS listener and forwarded events)
+  const handleMatchStart = React.useCallback(
+    (msg: any) => {
+      if (msg?.type !== "match-start") return;
+      // Prevent double-init if match is already running
+      if (useMatch.getState().inProgress) return;
+
+      const serverMatch = msg.match || {};
+      const saved = pendingMatchRef.current || {};
+      const roomId = msg.roomId || saved.id || "";
+      const startScore =
+        serverMatch.startingScore || saved.startingScore || 501;
+      const localName = username;
+      const creatorName =
+        serverMatch.creatorName || saved.creatorName || saved.createdBy || "";
+      const joinerName = serverMatch.joinerName || saved.joinerName || "";
+
+      // Determine player order: first thrower goes first
+      // Dev server sends firstPlayerId, deployed server sends firstThrowerId
+      const firstId = msg.firstThrowerId || msg.firstPlayerId || null;
+      const isLocalCreator =
+        saved._isCreatorView ||
+        creatorName.toLowerCase() === localName.toLowerCase();
+      const opponentName = isLocalCreator
+        ? joinerName || "Opponent"
+        : creatorName || "Opponent";
+
+      let localGoesFirst: boolean;
+      if (firstId) {
+        const creatorId = serverMatch.creatorId || saved.creatorId;
+        localGoesFirst = isLocalCreator
+          ? firstId === creatorId
+          : firstId !== creatorId;
+      } else {
+        localGoesFirst = isLocalCreator;
+      }
+
+      const playerNames = localGoesFirst
+        ? [localName, opponentName]
+        : [opponentName, localName];
+
+      // Initialize the match in the store — sets inProgress = true
+      try {
+        useMatch.getState().newMatch(playerNames, startScore, roomId);
+      } catch (e) {
+        console.error("[OnlinePlay] newMatch failed:", e);
+      }
+
+      // Join the WS room so we receive real-time score updates
+      try {
+        if (wsGlobal?.connected) {
+          wsGlobal.send({ type: "join", roomId });
+        }
+      } catch {}
+
+      // Clean up prestart state
+      pendingMatchRef.current = null;
+      setJoinMatch(null);
+      setJoinChoice(null);
+      setRemoteChoices({});
+    },
+    [username, wsGlobal],
+  );
+
   // WS: subscribe to lobby and prestart events
   useEffect(() => {
     if (!wsGlobal) return;
@@ -474,66 +538,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         handleInviteOrPrestart(msg);
 
         if (msg?.type === "match-start") {
-          // Start the actual game. Gather match details from the server
-          // payload (enriched) or from the saved pendingMatchRef.
-          const serverMatch = msg.match || {};
-          const saved = pendingMatchRef.current || joinMatch || {};
-          const roomId = msg.roomId || saved.id || "";
-          const startScore =
-            serverMatch.startingScore || saved.startingScore || 501;
-          const localName = username;
-          const creatorName =
-            serverMatch.creatorName ||
-            saved.creatorName ||
-            saved.createdBy ||
-            "";
-          const joinerName = serverMatch.joinerName || saved.joinerName || "";
-
-          // Determine player order: first thrower goes first
-          // Dev server sends firstPlayerId, deployed server sends firstThrowerId
-          const firstId = msg.firstThrowerId || msg.firstPlayerId || null;
-          const isLocalCreator =
-            saved._isCreatorView ||
-            creatorName.toLowerCase() === localName.toLowerCase();
-          const opponentName = isLocalCreator
-            ? joinerName || "Opponent"
-            : creatorName || "Opponent";
-
-          let localGoesFirst: boolean;
-          if (firstId) {
-            // Server specified who throws first
-            const creatorId = serverMatch.creatorId || saved.creatorId;
-            localGoesFirst = isLocalCreator
-              ? firstId === creatorId
-              : firstId !== creatorId;
-          } else {
-            // No first-thrower info — default: creator goes first
-            localGoesFirst = isLocalCreator;
-          }
-
-          const playerNames = localGoesFirst
-            ? [localName, opponentName]
-            : [opponentName, localName];
-
-          // Initialize the match in the store — sets inProgress = true
-          try {
-            useMatch.getState().newMatch(playerNames, startScore, roomId);
-          } catch (e) {
-            console.error("[OnlinePlay] newMatch failed:", e);
-          }
-
-          // Join the WS room so we receive real-time score updates
-          try {
-            if (wsGlobal?.connected) {
-              wsGlobal.send({ type: "join", roomId });
-            }
-          } catch {}
-
-          // Clean up prestart state
-          pendingMatchRef.current = null;
-          setJoinMatch(null);
-          setJoinChoice(null);
-          setRemoteChoices({});
+          handleMatchStart(msg);
         }
         if (msg?.type === "prestart-choice-notify") {
           const { roomId, playerId, choice } = msg;
@@ -569,32 +574,42 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     filterMatches,
     currentRoomIdx,
     handleInviteOrPrestart,
+    handleMatchStart,
   ]);
 
-  // Listen for forwarded invite/prestart events from App.tsx (global listener)
-  // This fires when the creator is on a different tab and App.tsx switches to
+  // Listen for forwarded invite/prestart/match-start events from App.tsx (global listener)
+  // This fires when the user is on a different tab and App.tsx switches to
   // the online tab + dispatches the WS message via a CustomEvent.
-  // Also check for a stashed pending invite on mount (the event may have fired
+  // Also check for a stashed pending message on mount (the event may have fired
   // before this component mounted).
   useEffect(() => {
-    // Check for a pending invite stashed by App.tsx before we mounted
+    // Check for a pending message stashed by App.tsx before we mounted
     try {
       const pending = (window as any).__ndn_pending_invite;
       if (pending) {
         (window as any).__ndn_pending_invite = null;
-        handleInviteOrPrestart(pending);
+        if (pending.type === "match-start") {
+          handleMatchStart(pending);
+        } else {
+          handleInviteOrPrestart(pending);
+        }
       }
     } catch {}
 
     const onInviteEvent = (e: Event) => {
       try {
         const msg = (e as CustomEvent).detail;
-        if (msg) handleInviteOrPrestart(msg);
+        if (!msg) return;
+        if (msg.type === "match-start") {
+          handleMatchStart(msg);
+        } else {
+          handleInviteOrPrestart(msg);
+        }
       } catch {}
     };
     window.addEventListener("ndn:match-invite", onInviteEvent);
     return () => window.removeEventListener("ndn:match-invite", onInviteEvent);
-  }, [handleInviteOrPrestart]);
+  }, [handleInviteOrPrestart, handleMatchStart]);
 
   // Join timer
   useEffect(() => {

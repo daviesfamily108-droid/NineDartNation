@@ -146,7 +146,8 @@ export default function App() {
           msg?.type === "invite" ||
           msg?.type === "match-prestart" ||
           msg?.type === "invite-expired" ||
-          msg?.type === "declined"
+          msg?.type === "declined" ||
+          msg?.type === "match-start"
         ) {
           // Stash message so OnlinePlay can read it immediately on mount
           (window as any).__ndn_pending_invite = msg;
