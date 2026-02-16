@@ -132,6 +132,36 @@ export default function App() {
   const API_URL = getApiBaseUrl();
   const userSettings = useUserSettings();
 
+  // ── Global WS listener for match invites / prestart ──────────────
+  // The OnlinePlay component only mounts when the "online" tab is active.
+  // If the creator is on a different tab and someone joins, we need to:
+  //   1. Switch to the online tab so OnlinePlay mounts
+  //   2. Forward the WS message via a DOM event so OnlinePlay can handle it
+  useEffect(() => {
+    if (!ws) return;
+    const unsub = ws.addListener((msg: any) => {
+      try {
+        if (
+          msg?.type === "invite" ||
+          msg?.type === "match-prestart" ||
+          msg?.type === "invite-expired" ||
+          msg?.type === "declined"
+        ) {
+          // Switch to online tab so the OnlinePlay component mounts
+          setTab("online");
+          // Fire a custom event with the WS message so OnlinePlay picks it up
+          // even if it mounts slightly after this listener runs
+          try {
+            window.dispatchEvent(
+              new CustomEvent("ndn:match-invite", { detail: msg }),
+            );
+          } catch {}
+        }
+      } catch {}
+    });
+    return unsub;
+  }, [ws]);
+
   // Globally catch unhandled promise rejections and surface as warnings so the
   // devtools console is less noisy. We still log the reason so developers can
   // inspect real issues, but avoid uncaught exceptions flooding the console.

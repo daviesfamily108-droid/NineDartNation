@@ -344,6 +344,80 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     });
   };
 
+  // Shared handler for invite / prestart messages
+  const handleInviteOrPrestart = React.useCallback(
+    (msg: any) => {
+      try {
+        if (msg?.type === "invite") {
+          const inviteMatch = normalizeMatch({
+            id: msg.matchId,
+            game: msg.game,
+            modeType: msg.mode || "firstto",
+            legs: msg.value || 1,
+            startingScore: msg.startingScore || 501,
+            createdBy: user?.username || "You",
+            creatorName: user?.username || "You",
+            joinerName: msg.fromName || "Opponent",
+            joinerId: msg.fromId,
+            _isCreatorView: true,
+          });
+          serverPrestartRef.current = true;
+          setJoinMatch(inviteMatch);
+          setJoinTimer(60);
+          setTimeout(() => {
+            serverPrestartRef.current = false;
+          }, 0);
+          setJoinChoice(null);
+          setRemoteChoices({});
+          setBullActive(false);
+          setBullThrow(null);
+          setBullWinner(null);
+          setBullTied(false);
+        }
+        if (msg?.type === "match-prestart") {
+          const m = normalizeMatch(msg.match || null);
+          if (m) m.prestartEndsAt = msg.prestartEndsAt;
+          try {
+            if (m?.creatorId && m?.creatorName)
+              setParticipants((prev) => ({
+                ...prev,
+                [m.creatorId]: m.creatorName,
+              }));
+          } catch {}
+          serverPrestartRef.current = true;
+          setJoinMatch(m);
+          const endsAt = msg.prestartEndsAt || Date.now();
+          setJoinTimer(
+            Math.max(
+              0,
+              Math.ceil(((endsAt || Date.now()) - Date.now()) / 1000),
+            ),
+          );
+          setTimeout(() => {
+            serverPrestartRef.current = false;
+          }, 0);
+          setJoinChoice(null);
+          setRemoteChoices({});
+          setBullActive(false);
+          setBullThrow(null);
+          setBullWinner(null);
+          setBullTied(false);
+        }
+        if (msg?.type === "invite-expired") {
+          setJoinMatch((prev: any) =>
+            prev && msg.matchId === prev.id ? null : prev,
+          );
+        }
+        if (msg?.type === "declined") {
+          setJoinMatch((prev: any) =>
+            prev && msg.matchId === prev.id ? null : prev,
+          );
+        }
+      } catch {}
+    },
+    [normalizeMatch, user],
+  );
+
   // WS: subscribe to lobby and prestart events
   useEffect(() => {
     if (!wsGlobal) return;
@@ -373,85 +447,15 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             ),
           );
         }
-        if (msg?.type === "invite") {
-          // Creator receives this when a player wants to join their match
-          const inviteMatch = normalizeMatch({
-            id: msg.matchId,
-            game: msg.game,
-            modeType: msg.mode || "firstto",
-            legs: msg.value || 1,
-            startingScore: msg.startingScore || 501,
-            createdBy: user?.username || "You",
-            creatorName: user?.username || "You",
-            joinerName: msg.fromName || "Opponent",
-            joinerId: msg.fromId,
-            _isCreatorView: true,
-          });
-          serverPrestartRef.current = true;
-          setJoinMatch(inviteMatch);
-          setJoinTimer(60);
-          setTimeout(() => {
-            serverPrestartRef.current = false;
-          }, 0);
-          setJoinChoice(null);
-          setRemoteChoices({});
-          setBullActive(false);
-          setBullThrow(null);
-          setBullWinner(null);
-          setBullTied(false);
-        }
-        if (msg?.type === "invite-expired") {
-          // The invite timed out before the creator responded
-          if (joinMatch && msg.matchId === joinMatch.id) {
-            setJoinMatch(null);
-          }
-        }
-        if (msg?.type === "declined") {
-          // Creator declined the invite
-          if (joinMatch && msg.matchId === joinMatch.id) {
-            setJoinMatch(null);
-          }
-        }
-        if (msg?.type === "match-prestart") {
-          // Someone accepted the invite; show prestart and update join match if it matches
-          const m = normalizeMatch(msg.match || null);
-          if (m) m.prestartEndsAt = msg.prestartEndsAt;
-          // Ensure we know the creator's username
-          try {
-            if (m?.creatorId && m?.creatorName)
-              setParticipants((prev) => ({
-                ...prev,
-                [m.creatorId]: m.creatorName,
-              }));
-          } catch {}
-          serverPrestartRef.current = true;
-          setJoinMatch(m);
-          const endsAt = msg.prestartEndsAt || Date.now();
-          setJoinTimer(
-            Math.max(
-              0,
-              Math.ceil(((endsAt || Date.now()) - Date.now()) / 1000),
-            ),
-          );
-          setTimeout(() => {
-            serverPrestartRef.current = false;
-          }, 0);
-          // store on joinMatch as prestartEndsAt
-          // reset diffuse state
-          setJoinChoice(null);
-          setRemoteChoices({});
-          setBullActive(false);
-          setBullThrow(null);
-          setBullWinner(null);
-          setBullTied(false);
-        }
+        // Invite / prestart / expired / declined
+        handleInviteOrPrestart(msg);
+
         if (msg?.type === "match-start") {
           // If the started match matches our current join request, close the modal
           if (joinMatch && msg.roomId === joinMatch.id) {
             setJoinMatch(null);
             setJoinChoice(null);
             setRemoteChoices({});
-            // (joinPrestart ends were attached to joinMatch; no-op)
           }
         }
         if (msg?.type === "prestart-choice-notify") {
@@ -482,7 +486,27 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       } catch (err) {}
     });
     return unsub;
-  }, [wsGlobal, joinChoice, filterMatches, currentRoomIdx]);
+  }, [
+    wsGlobal,
+    joinChoice,
+    filterMatches,
+    currentRoomIdx,
+    handleInviteOrPrestart,
+  ]);
+
+  // Listen for forwarded invite/prestart events from App.tsx (global listener)
+  // This fires when the creator is on a different tab and App.tsx switches to
+  // the online tab + dispatches the WS message via a CustomEvent.
+  useEffect(() => {
+    const onInviteEvent = (e: Event) => {
+      try {
+        const msg = (e as CustomEvent).detail;
+        if (msg) handleInviteOrPrestart(msg);
+      } catch {}
+    };
+    window.addEventListener("ndn:match-invite", onInviteEvent);
+    return () => window.removeEventListener("ndn:match-invite", onInviteEvent);
+  }, [handleInviteOrPrestart]);
 
   // Join timer
   useEffect(() => {
