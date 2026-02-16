@@ -348,6 +348,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const handleInviteOrPrestart = React.useCallback(
     (msg: any) => {
       try {
+        console.log("[OnlinePlay] handleInviteOrPrestart:", msg?.type, msg);
         if (msg?.type === "invite") {
           const inviteMatch = normalizeMatch({
             id: msg.matchId,
@@ -377,6 +378,19 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         if (msg?.type === "match-prestart") {
           const m = normalizeMatch(msg.match || null);
           if (m) m.prestartEndsAt = msg.prestartEndsAt;
+          // Determine if the local user is the creator so we can set the
+          // correct opponent name and send the right toId in handleJoinAccept
+          if (m) {
+            const localName = (user?.username || "").toLowerCase();
+            const creatorLower = (
+              m.creatorName ||
+              m.createdBy ||
+              ""
+            ).toLowerCase();
+            if (localName && creatorLower === localName) {
+              m._isCreatorView = true;
+            }
+          }
           try {
             if (m?.creatorId && m?.creatorName)
               setParticipants((prev) => ({
@@ -497,7 +511,18 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   // Listen for forwarded invite/prestart events from App.tsx (global listener)
   // This fires when the creator is on a different tab and App.tsx switches to
   // the online tab + dispatches the WS message via a CustomEvent.
+  // Also check for a stashed pending invite on mount (the event may have fired
+  // before this component mounted).
   useEffect(() => {
+    // Check for a pending invite stashed by App.tsx before we mounted
+    try {
+      const pending = (window as any).__ndn_pending_invite;
+      if (pending) {
+        (window as any).__ndn_pending_invite = null;
+        handleInviteOrPrestart(pending);
+      }
+    } catch {}
+
     const onInviteEvent = (e: Event) => {
       try {
         const msg = (e as CustomEvent).detail;

@@ -136,7 +136,8 @@ export default function App() {
   // The OnlinePlay component only mounts when the "online" tab is active.
   // If the creator is on a different tab and someone joins, we need to:
   //   1. Switch to the online tab so OnlinePlay mounts
-  //   2. Forward the WS message via a DOM event so OnlinePlay can handle it
+  //   2. Stash the message on window so OnlinePlay can grab it on mount
+  //   3. Also dispatch a delayed DOM event as a backup
   useEffect(() => {
     if (!ws) return;
     const unsub = ws.addListener((msg: any) => {
@@ -147,15 +148,27 @@ export default function App() {
           msg?.type === "invite-expired" ||
           msg?.type === "declined"
         ) {
+          // Stash message so OnlinePlay can read it immediately on mount
+          (window as any).__ndn_pending_invite = msg;
           // Switch to online tab so the OnlinePlay component mounts
           setTab("online");
-          // Fire a custom event with the WS message so OnlinePlay picks it up
-          // even if it mounts slightly after this listener runs
-          try {
-            window.dispatchEvent(
-              new CustomEvent("ndn:match-invite", { detail: msg }),
-            );
-          } catch {}
+          // Dispatch the event after a short delay so React has time to
+          // mount OnlinePlay and register its event listener
+          setTimeout(() => {
+            try {
+              window.dispatchEvent(
+                new CustomEvent("ndn:match-invite", { detail: msg }),
+              );
+            } catch {}
+          }, 100);
+          // Dispatch again after a longer delay as a safety net
+          setTimeout(() => {
+            try {
+              window.dispatchEvent(
+                new CustomEvent("ndn:match-invite", { detail: msg }),
+              );
+            } catch {}
+          }, 500);
         }
       } catch {}
     });
