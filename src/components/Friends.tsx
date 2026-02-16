@@ -11,6 +11,7 @@ import {
   getGameModeStats,
 } from "../store/profileStats.js";
 import { formatAvg } from "../utils/stats.js";
+import { useWS } from "./WSProvider.js";
 
 type Friend = {
   email: string;
@@ -42,6 +43,13 @@ function timeAgo(ts?: number) {
 }
 
 export default function Friends({ user }: { user?: any }) {
+  const ws = (() => {
+    try {
+      return useWS();
+    } catch {
+      return null;
+    }
+  })();
   const toast = useToast();
   const email = String(user?.email || "").toLowerCase();
   const [friends, setFriends] = useState<Friend[]>([]);
@@ -177,6 +185,37 @@ export default function Friends({ user }: { user?: any }) {
   useEffect(() => {
     refresh();
   }, [email]);
+
+  // Periodic refresh to keep friends list and statuses up to date
+  useEffect(() => {
+    if (!email) return;
+    const iv = setInterval(() => {
+      refresh();
+    }, 30_000);
+    return () => clearInterval(iv);
+  }, [email]);
+
+  // Listen for WS friend events to refresh immediately
+  useEffect(() => {
+    if (!ws) return;
+    const unsub = ws.addListener((data: any) => {
+      try {
+        if (
+          data?.type === "friend-accepted" ||
+          data?.type === "friend-removed" ||
+          data?.type === "friend-request" ||
+          data?.type === "friend-declined"
+        ) {
+          refresh();
+        }
+      } catch {}
+    });
+    return () => {
+      try {
+        unsub();
+      } catch {}
+    };
+  }, [ws, email]);
 
   // Load inbox on mount/user change.
   useEffect(() => {

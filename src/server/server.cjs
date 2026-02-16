@@ -2966,6 +2966,7 @@ app.post('/api/friends/accept', async (req, res) => {
   }
   
   
+  
   // Notify the original sender that their request was accepted
   const myUser = users.get(me)
   const myName = (myUser && myUser.username) || me
@@ -2973,10 +2974,19 @@ app.post('/api/friends/accept', async (req, res) => {
   
   // Try deliver via WS
   const otherUser = users.get(other)
+  const otherName = (otherUser && otherUser.username) || other
+  // Notify the original sender via WS
   if (otherUser && otherUser.wsId) {
     const target = clients.get(otherUser.wsId)
     if (target && target.readyState === 1) {
       target.send(JSON.stringify({ type: 'friend-accepted', fromEmail: me, fromName: myName }))
+    }
+  }
+  // Also notify the acceptor via WS so their friends list refreshes immediately
+  if (myUser && myUser.wsId) {
+    const selfTarget = clients.get(myUser.wsId)
+    if (selfTarget && selfTarget.readyState === 1) {
+      selfTarget.send(JSON.stringify({ type: 'friend-accepted', fromEmail: other, fromName: otherName }))
     }
   }
   

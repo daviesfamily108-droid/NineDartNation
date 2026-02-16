@@ -2581,8 +2581,8 @@ app.post('/api/auth/confirm-reset', async (req, res) => {
 app.get('/api/friends/list', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
   
-  // CRITICAL FIX: Always query Supabase directly if available to ensure friends persist across server restarts
-  // The in-memory friendships Map is only a cache and may be empty after restart
+  // CRITICAL FIX: Merge Supabase friendships with in-memory cache to avoid losing
+  // recent local updates. Never replace the cache with an empty set from Supabase.
   if (supabase) {
     try {
       const { data, error } = await supabase
@@ -2590,16 +2590,19 @@ app.get('/api/friends/list', async (req, res) => {
         .select('friend_email')
         .eq('user_email', email)
       
-      if (!error && Array.isArray(data)) {
-        // Rebuild this user's friendships from Supabase (authoritative source)
-        const freshSet = new Set()
+      if (!error && Array.isArray(data) && data.length > 0) {
+        // Merge Supabase rows with any existing in-memory cache
+        const existing = friendships.get(email) || new Set()
+        const merged = new Set(existing)
         for (const row of data) {
           const friendEmail = String(row.friend_email || '').toLowerCase()
-          if (friendEmail && friendEmail !== email) freshSet.add(friendEmail)
+          if (friendEmail && friendEmail !== email) merged.add(friendEmail)
         }
-        // Update in-memory cache
-        friendships.set(email, freshSet)
+        friendships.set(email, merged)
+      } else if (error) {
+        console.warn('[Friends] Supabase error, keeping in-memory:', error.message)
       }
+      // If data is empty array and no error, keep existing in-memory friendships
     } catch (err) {
       console.warn('[Friends] Failed to load user friendships from Supabase:', err?.message || err)
     }
@@ -2908,10 +2911,19 @@ app.post('/api/friends/accept', async (req, res) => {
   const myName = (myUser && myUser.username) || me
   createNotification(other, `${myName} accepted your friend request`, 'friend-accepted', { fromEmail: me })
   const otherUser = users.get(other)
+  const otherName = (otherUser && otherUser.username) || other
+  // Notify the original sender via WS
   if (otherUser && otherUser.wsId && clients.get) {
     const target = clients.get(otherUser.wsId)
     if (target && target.readyState === 1) {
       target.send(JSON.stringify({ type: 'friend-accepted', fromEmail: me, fromName: myName }))
+    }
+  }
+  // Also notify the acceptor via WS so their friends list refreshes immediately
+  if (myUser && myUser.wsId && clients.get) {
+    const selfTarget = clients.get(myUser.wsId)
+    if (selfTarget && selfTarget.readyState === 1) {
+      selfTarget.send(JSON.stringify({ type: 'friend-accepted', fromEmail: other, fromName: otherName }))
     }
   }
   res.json({ ok: true })

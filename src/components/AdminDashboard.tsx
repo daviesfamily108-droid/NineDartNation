@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "../utils/api.js";
 import BarChart from "./BarChart.js";
 import TabPills from "./ui/TabPills.js";
@@ -20,6 +20,79 @@ import {
 } from "../utils/gameCalibrationRequirements.js";
 
 const OWNER_EMAIL = "daviesfamily108@gmail.com";
+
+function EmailEditor({
+  kind,
+  label,
+  emailCopy,
+  onSave,
+  onPreview,
+}: {
+  kind: string;
+  label: string;
+  emailCopy: any;
+  onSave: (kind: string, payload: any) => void;
+  onPreview: (kind: string, openInNewTab?: boolean) => void;
+}) {
+  const key =
+    kind === "confirm-email"
+      ? "confirmEmail"
+      : kind === "changed"
+        ? "changed"
+        : kind;
+  const cfg = emailCopy?.[key] || { title: "", intro: "", buttonLabel: "" };
+  const [title, setTitle] = useState(cfg.title || "");
+  const [intro, setIntro] = useState(cfg.intro || "");
+  const [btn, setBtn] = useState(cfg.buttonLabel || "");
+  useEffect(() => {
+    setTitle(cfg.title || "");
+    setIntro(cfg.intro || "");
+    setBtn(cfg.buttonLabel || "");
+  }, [cfg.title, cfg.intro, cfg.buttonLabel]);
+
+  return (
+    <div className="p-2 rounded bg-black/20 space-y-2">
+      <div className="font-semibold">{label}</div>
+      <input
+        className="input w-full"
+        placeholder="Title (optional)"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+      />
+      <textarea
+        className="input w-full"
+        rows={2}
+        placeholder="Intro line (optional)"
+        value={intro}
+        onChange={(e) => setIntro(e.target.value)}
+      />
+      <input
+        className="input w-full"
+        placeholder="Button label (optional)"
+        value={btn}
+        onChange={(e) => setBtn(e.target.value)}
+      />
+      <div className="flex gap-2 justify-end">
+        <button
+          className="btn"
+          type="button"
+          onClick={() => onPreview(kind, true)}
+        >
+          Preview
+        </button>
+        <button className="btn" type="button" onClick={() => onPreview(kind)}>
+          Popup
+        </button>
+        <button
+          className="btn"
+          onClick={() => onSave(kind, { title, intro, buttonLabel: btn })}
+        >
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function AdminDashboard({ user }: { user: any }) {
   const ws = (() => {
@@ -127,6 +200,11 @@ export default function AdminDashboard({ user }: { user: any }) {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [preview.open]);
+
+  // Fetch admin data on mount
+  useEffect(() => {
+    refresh();
+  }, []);
 
   // Calibration quality display
   const calibQuality = useMemo(() => {
@@ -289,15 +367,17 @@ export default function AdminDashboard({ user }: { user: any }) {
     });
     const iv = setInterval(() => {
       const now = Date.now();
-      let changed = false;
-      const copy = { ...helpTyping };
-      for (const k of Object.keys(copy)) {
-        if (now - copy[k].ts > 3500) {
-          delete copy[k];
-          changed = true;
+      setHelpTyping((prev) => {
+        let changed = false;
+        const copy = { ...prev };
+        for (const k of Object.keys(copy)) {
+          if (now - copy[k].ts > 3500) {
+            delete copy[k];
+            changed = true;
+          }
         }
-      }
-      if (changed) setHelpTyping(copy);
+        return changed ? copy : prev;
+      });
     }, 1500);
     return () => {
       try {
@@ -670,81 +750,15 @@ export default function AdminDashboard({ user }: { user: any }) {
     }
   }
 
-  useEffect(() => {
-    if (!preview.open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setPreview({ open: false });
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [preview.open]);
-
-  function EmailEditor({ kind, label }: { kind: string; label: string }) {
-    const key =
-      kind === "confirm-email"
-        ? "confirmEmail"
-        : kind === "changed"
-          ? "changed"
-          : kind;
-    const cfg = emailCopy?.[key] || { title: "", intro: "", buttonLabel: "" };
-    const [title, setTitle] = useState(cfg.title || "");
-    const [intro, setIntro] = useState(cfg.intro || "");
-    const [btn, setBtn] = useState(cfg.buttonLabel || "");
-    useEffect(() => {
-      setTitle(cfg.title || "");
-      setIntro(cfg.intro || "");
-      setBtn(cfg.buttonLabel || "");
-    }, [cfg.title, cfg.intro, cfg.buttonLabel]);
-
-    return (
-      <div className="p-2 rounded bg-black/20 space-y-2">
-        <div className="font-semibold">{label}</div>
-        <input
-          className="input w-full"
-          placeholder="Title (optional)"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <textarea
-          className="input w-full"
-          rows={2}
-          placeholder="Intro line (optional)"
-          value={intro}
-          onChange={(e) => setIntro(e.target.value)}
-        />
-        <input
-          className="input w-full"
-          placeholder="Button label (optional)"
-          value={btn}
-          onChange={(e) => setBtn(e.target.value)}
-        />
-        <div className="flex gap-2 justify-end">
-          <button
-            className="btn"
-            type="button"
-            onClick={() => openInlinePreview(kind, true)}
-          >
-            Preview
-          </button>
-          <button
-            className="btn"
-            type="button"
-            onClick={() => openInlinePreview(kind)}
-          >
-            Popup
-          </button>
-          <button
-            className="btn"
-            onClick={() =>
-              saveEmailCopy(kind, { title, intro, buttonLabel: btn })
-            }
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const handleEmailSave = useCallback(
+    (kind: string, payload: any) => saveEmailCopy(kind, payload),
+    [],
+  );
+  const handleEmailPreview = useCallback(
+    (kind: string, openInNewTab?: boolean) =>
+      openInlinePreview(kind, openInNewTab),
+    [],
+  );
 
   if (!isOwner) {
     return (
@@ -1069,10 +1083,34 @@ export default function AdminDashboard({ user }: { user: any }) {
                 a new tab or as a popup.
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <EmailEditor kind="reset" label="Password reset" />
-                <EmailEditor kind="reminder" label="Password reset reminder" />
-                <EmailEditor kind="confirm-email" label="Confirm new email" />
-                <EmailEditor kind="changed" label="Password changed notice" />
+                <EmailEditor
+                  kind="reset"
+                  label="Password reset"
+                  emailCopy={emailCopy}
+                  onSave={handleEmailSave}
+                  onPreview={handleEmailPreview}
+                />
+                <EmailEditor
+                  kind="reminder"
+                  label="Password reset reminder"
+                  emailCopy={emailCopy}
+                  onSave={handleEmailSave}
+                  onPreview={handleEmailPreview}
+                />
+                <EmailEditor
+                  kind="confirm-email"
+                  label="Confirm new email"
+                  emailCopy={emailCopy}
+                  onSave={handleEmailSave}
+                  onPreview={handleEmailPreview}
+                />
+                <EmailEditor
+                  kind="changed"
+                  label="Password changed notice"
+                  emailCopy={emailCopy}
+                  onSave={handleEmailSave}
+                  onPreview={handleEmailPreview}
+                />
               </div>
             </div>
           )}
