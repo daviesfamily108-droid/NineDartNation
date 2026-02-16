@@ -373,6 +373,45 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             ),
           );
         }
+        if (msg?.type === "invite") {
+          // Creator receives this when a player wants to join their match
+          const inviteMatch = normalizeMatch({
+            id: msg.matchId,
+            game: msg.game,
+            modeType: msg.mode || "firstto",
+            legs: msg.value || 1,
+            startingScore: msg.startingScore || 501,
+            createdBy: user?.username || "You",
+            creatorName: user?.username || "You",
+            joinerName: msg.fromName || "Opponent",
+            joinerId: msg.fromId,
+            _isCreatorView: true,
+          });
+          serverPrestartRef.current = true;
+          setJoinMatch(inviteMatch);
+          setJoinTimer(60);
+          setTimeout(() => {
+            serverPrestartRef.current = false;
+          }, 0);
+          setJoinChoice(null);
+          setRemoteChoices({});
+          setBullActive(false);
+          setBullThrow(null);
+          setBullWinner(null);
+          setBullTied(false);
+        }
+        if (msg?.type === "invite-expired") {
+          // The invite timed out before the creator responded
+          if (joinMatch && msg.matchId === joinMatch.id) {
+            setJoinMatch(null);
+          }
+        }
+        if (msg?.type === "declined") {
+          // Creator declined the invite
+          if (joinMatch && msg.matchId === joinMatch.id) {
+            setJoinMatch(null);
+          }
+        }
         if (msg?.type === "match-prestart") {
           // Someone accepted the invite; show prestart and update join match if it matches
           const m = normalizeMatch(msg.match || null);
@@ -467,14 +506,17 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const handleJoinAccept = () => {
     // Show the pre-game overlay immediately for snappy UX.
     setShowStartShowcase(true);
-    // Send accept (invite-response) to server if we have a match prestart
+    // Send accept (invite-response) to server
     try {
       if (wsGlobal?.connected && joinMatch?.id) {
+        // If the local user is the creator accepting an invite, toId is the joiner
+        // If the local user is the joiner, toId is the creator
+        const isCreatorAccepting = !!joinMatch._isCreatorView;
         wsGlobal.send({
           type: "invite-response",
           matchId: joinMatch.id,
           accept: true,
-          toId: joinMatch.creatorId,
+          toId: isCreatorAccepting ? joinMatch.joinerId : joinMatch.creatorId,
         });
       }
     } catch {}
@@ -869,13 +911,31 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           open={!!joinMatch}
           matchInfo={joinMatch}
           localUser={user}
-          opponentName={
-            joinMatch?.createdBy ||
-            joinMatch?.creatorName ||
-            (joinMatch?.creatorId
-              ? participants[joinMatch.creatorId] || joinMatch.creatorId
-              : "Opponent")
-          }
+          opponentName={(() => {
+            if (!joinMatch) return "Opponent";
+            const localName = (user?.username || "").toLowerCase();
+            const creatorName =
+              joinMatch.createdBy || joinMatch.creatorName || "";
+            // If local user is the creator, opponent is the joiner
+            if (
+              joinMatch._isCreatorView ||
+              creatorName.toLowerCase() === localName
+            ) {
+              return (
+                joinMatch.joinerName ||
+                (joinMatch.joinerId
+                  ? participants[joinMatch.joinerId] || joinMatch.joinerId
+                  : "Opponent")
+              );
+            }
+            // Otherwise, local user is the joiner — opponent is the creator
+            return (
+              creatorName ||
+              (joinMatch.creatorId
+                ? participants[joinMatch.creatorId] || joinMatch.creatorId
+                : "Opponent")
+            );
+          })()}
           countdown={15}
           onChoice={sendPrestartChoice}
           onBullThrow={(distanceMm: number) => {
@@ -892,7 +952,24 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             setBullThrown(true);
           }}
           onAccept={handleJoinAccept}
-          onCancel={() => setJoinMatch(null)}
+          onCancel={() => {
+            // If the creator declines, notify the server so the joiner is informed
+            try {
+              if (
+                wsGlobal?.connected &&
+                joinMatch?.id &&
+                joinMatch._isCreatorView
+              ) {
+                wsGlobal.send({
+                  type: "invite-response",
+                  matchId: joinMatch.id,
+                  accept: false,
+                  toId: joinMatch.joinerId,
+                });
+              }
+            } catch {}
+            setJoinMatch(null);
+          }}
           remoteChoice={Object.values(remoteChoices)[0] || null}
           bullActive={bullActive}
           bullWinner={bullWinner}
