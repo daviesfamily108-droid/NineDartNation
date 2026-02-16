@@ -11,6 +11,7 @@ import {
 import CreateMatchModal from "./ui/CreateMatchModal.js";
 import MatchStartShowcase from "./ui/MatchStartShowcase.js";
 import MatchPrestart from "./ui/MatchPrestart.js";
+import InGameShell from "./InGameShell.js";
 import { useMatch } from "../store/match.js";
 import { useWS } from "./WSProvider.js";
 import { launchInPlayDemo } from "../utils/inPlayDemo.js";
@@ -114,6 +115,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [joinMatch, setJoinMatch] = useState<any | null>(null);
   const joinAcceptRef = React.useRef<HTMLButtonElement | null>(null);
+  // Preserve match info across handleJoinAccept → match-start gap
+  // (handleJoinAccept clears joinMatch before the server sends match-start)
+  const pendingMatchRef = useRef<any | null>(null);
   const [_selfId, setSelfId] = useState<string | null>(null);
   const [participants, setParticipants] = useState<Record<string, string>>({});
   const [joinTimer, setJoinTimer] = useState(30);
@@ -123,6 +127,11 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   useEffect(() => {
     serverMatchesRef.current = serverMatches || [];
   }, [serverMatches]);
+  // Keep pendingMatchRef in sync with joinMatch so the WS listener
+  // (which has a stale closure over joinMatch) can always read current data.
+  useEffect(() => {
+    if (joinMatch) pendingMatchRef.current = { ...joinMatch };
+  }, [joinMatch]);
   const serverPrestartRef = React.useRef(false);
   const [joinChoice, setJoinChoice] = useState<null | "bull" | "skip">(null);
   const [remoteChoices, setRemoteChoices] = useState<
@@ -465,12 +474,66 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         handleInviteOrPrestart(msg);
 
         if (msg?.type === "match-start") {
-          // If the started match matches our current join request, close the modal
-          if (joinMatch && msg.roomId === joinMatch.id) {
-            setJoinMatch(null);
-            setJoinChoice(null);
-            setRemoteChoices({});
+          // Start the actual game. Gather match details from the server
+          // payload (enriched) or from the saved pendingMatchRef.
+          const serverMatch = msg.match || {};
+          const saved = pendingMatchRef.current || joinMatch || {};
+          const roomId = msg.roomId || saved.id || "";
+          const startScore =
+            serverMatch.startingScore || saved.startingScore || 501;
+          const localName = username;
+          const creatorName =
+            serverMatch.creatorName ||
+            saved.creatorName ||
+            saved.createdBy ||
+            "";
+          const joinerName = serverMatch.joinerName || saved.joinerName || "";
+
+          // Determine player order: first thrower goes first
+          // Dev server sends firstPlayerId, deployed server sends firstThrowerId
+          const firstId = msg.firstThrowerId || msg.firstPlayerId || null;
+          const isLocalCreator =
+            saved._isCreatorView ||
+            creatorName.toLowerCase() === localName.toLowerCase();
+          const opponentName = isLocalCreator
+            ? joinerName || "Opponent"
+            : creatorName || "Opponent";
+
+          let localGoesFirst: boolean;
+          if (firstId) {
+            // Server specified who throws first
+            const creatorId = serverMatch.creatorId || saved.creatorId;
+            localGoesFirst = isLocalCreator
+              ? firstId === creatorId
+              : firstId !== creatorId;
+          } else {
+            // No first-thrower info — default: creator goes first
+            localGoesFirst = isLocalCreator;
           }
+
+          const playerNames = localGoesFirst
+            ? [localName, opponentName]
+            : [opponentName, localName];
+
+          // Initialize the match in the store — sets inProgress = true
+          try {
+            useMatch.getState().newMatch(playerNames, startScore, roomId);
+          } catch (e) {
+            console.error("[OnlinePlay] newMatch failed:", e);
+          }
+
+          // Join the WS room so we receive real-time score updates
+          try {
+            if (wsGlobal?.connected) {
+              wsGlobal.send({ type: "join", roomId });
+            }
+          } catch {}
+
+          // Clean up prestart state
+          pendingMatchRef.current = null;
+          setJoinMatch(null);
+          setJoinChoice(null);
+          setRemoteChoices({});
         }
         if (msg?.type === "prestart-choice-notify") {
           const { roomId, playerId, choice } = msg;
@@ -555,6 +618,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const handleJoinAccept = () => {
     // Show the pre-game overlay immediately for snappy UX.
     setShowStartShowcase(true);
+    // Save match info so the match-start handler can use it after joinMatch is cleared
+    if (joinMatch) {
+      pendingMatchRef.current = { ...joinMatch };
+    }
     // Send accept (invite-response) to server
     try {
       if (wsGlobal?.connected && joinMatch?.id) {
@@ -606,6 +673,15 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
   // No local state for the start showcase; MatchStartShowcase reads from `match.inProgress` directly
 
+  const sendState = React.useCallback(() => {
+    try {
+      if (wsGlobal?.connected) {
+        const st = useMatch.getState();
+        wsGlobal.send({ type: "sync", match: st });
+      }
+    } catch {}
+  }, [wsGlobal]);
+
   const runOnlineInPlayDemo = () => {
     launchInPlayDemo({
       players: [username, "Opponent"],
@@ -614,6 +690,59 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       visits: [{ score: 60 }, { score: 85 }, { score: 100 }],
     });
   };
+
+  // ── When a match is in progress, render the full in-game shell ──
+  if (inProgress) {
+    const matchState = useMatch.getState();
+    const localIdx = (matchState.players || []).findIndex(
+      (p: any) => p?.name && p.name.toLowerCase() === username.toLowerCase(),
+    );
+    return (
+      <InGameShell
+        user={user}
+        showStartShowcase={showStartShowcase}
+        onShowStartShowcaseChange={setShowStartShowcase}
+        onCommitVisit={(score, _darts, _meta) => {
+          try {
+            const m = useMatch.getState();
+            const p = m.players[m.currentPlayerIdx];
+            const leg = p?.legs?.[p.legs.length - 1];
+            const preRem = leg ? leg.totalScoreRemaining : m.startingScore;
+            const postRem = Math.max(0, preRem - score);
+            const attempts = preRem <= 50 ? 3 : postRem <= 50 ? 1 : 0;
+            const finished = postRem === 0;
+            m.addVisit(score, 3, {
+              preOpenDarts: 0,
+              doubleWindowDarts: attempts,
+              finishedByDouble: finished,
+              visitTotal: score,
+            });
+            if (leg && leg.totalScoreRemaining === 0) {
+              m.endLeg(score);
+            } else {
+              m.nextPlayer();
+            }
+          } catch {
+            useMatch.getState().addVisit(score, 3);
+            useMatch.getState().nextPlayer();
+          }
+          sendState();
+        }}
+        onQuit={() => {
+          try {
+            useMatch.getState().endGame();
+          } catch {}
+          sendState();
+          try {
+            window.dispatchEvent(new Event("ndn:match-quit"));
+          } catch {}
+        }}
+        onStateChange={sendState}
+        localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}
+        isOnline={true}
+      />
+    );
+  }
 
   return (
     <div

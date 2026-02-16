@@ -3873,7 +3873,7 @@ wss.on('connection', (ws, req) => {
         const m = matches.get(matchId)
         if (!m) return
         if (accept) {
-          const startPayload = JSON.stringify({ type: 'match-start', roomId: matchId, firstThrowerId: m.creatorId, firstThrowerName: m.creatorName })
+          const startPayload = JSON.stringify({ type: 'match-start', roomId: matchId, firstThrowerId: m.creatorId, firstThrowerName: m.creatorName, match: { game: m.game, mode: m.mode, value: m.value, startingScore: m.startingScore, creatorName: m.creatorName, creatorId: m.creatorId, joinerName: m.joinerName, joinerId: m.joinerId } })
           for (const client of wss.clients) {
             if (client.readyState === 1 && (client._id === m.creatorId || client._id === m.joinerId)) {
               try { client.send(startPayload) } catch {}
