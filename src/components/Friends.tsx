@@ -470,8 +470,35 @@ export default function Friends({ user }: { user?: any }) {
     } catch {}
   }
 
-  // Friend Requests pill: use real requests data
-  const requestsCount = requests.length + outgoingRequests.length;
+  // Friend Requests pill: normalize incoming/outgoing in case backend misclassifies
+  const {
+    incomingRequests,
+    outgoingRequests: outgoingRequestsResolved,
+    requestsCount,
+  } = useMemo(() => {
+    const me = String(email || "").toLowerCase();
+    const all = [...requests, ...outgoingRequests];
+    const seen = new Set<string>();
+    const unique = all.filter((r) => {
+      const key = r.id || `${r.fromEmail}|${r.toEmail}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    const incoming = unique.filter(
+      (r) => String(r.toEmail || "").toLowerCase() === me,
+    );
+    const outgoing = unique.filter(
+      (r) =>
+        String(r.fromEmail || "").toLowerCase() === me &&
+        String(r.toEmail || "").toLowerCase() !== me,
+    );
+    return {
+      incomingRequests: incoming,
+      outgoingRequests: outgoing,
+      requestsCount: incoming.length + outgoing.length,
+    };
+  }, [email, requests, outgoingRequests]);
 
   // My own stats for comparison
   const myUsername = user?.username || "Player 1";
@@ -599,7 +626,7 @@ export default function Friends({ user }: { user?: any }) {
                 Friend Requests
               </div>
               <ul className="space-y-3">
-                {requests.map((r) => (
+                {incomingRequests.map((r) => (
                   <li
                     key={`incoming-${r.id || r.fromEmail}`}
                     className="p-3 rounded-2xl border border-white/10 bg-slate-900/40 flex flex-col gap-3"
@@ -628,7 +655,7 @@ export default function Friends({ user }: { user?: any }) {
                     </div>
                   </li>
                 ))}
-                {outgoingRequests.map((r) => (
+                {outgoingRequestsResolved.map((r) => (
                   <li
                     key={`outgoing-${r.id || r.toEmail}`}
                     className="p-3 rounded-2xl border border-white/10 bg-slate-900/40 flex flex-col gap-3"
@@ -1290,7 +1317,7 @@ export default function Friends({ user }: { user?: any }) {
                 ) : r.relationship === "pending-incoming" ? (
                   <button
                     onClick={() => {
-                      const req = requests.find(
+                      const req = incomingRequests.find(
                         (rq) =>
                           rq.fromEmail.toLowerCase() === r.email.toLowerCase(),
                       );
