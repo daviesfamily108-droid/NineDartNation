@@ -2081,7 +2081,11 @@ app.get('/api/admin/system-health', (req, res) => {
   const uptime = process.uptime()
   const memUsage = process.memoryUsage()
   
-  const isHttps = req.secure || (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'
+  const isHttps = req.secure
+    || (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'
+    || (req.headers['host'] || '').includes('.onrender.com')
+    || (req.headers['origin'] || '').startsWith('https://')
+    || (req.headers['referer'] || '').startsWith('https://')
   res.json({
     ok: true,
     health: {

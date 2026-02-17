@@ -623,10 +623,16 @@ export default function AdminDashboard({ user }: { user: any }) {
       if (res.ok) {
         const data = await res.json();
         if (data?.ok && data?.health) {
+          // If the browser loaded the page over https, HTTPS is working
+          // regardless of what the server reports (reverse proxy may strip
+          // the x-forwarded-proto header).
+          const clientHttps =
+            typeof window !== "undefined" &&
+            window.location.protocol === "https:";
           setSystemHealth({
             database: data.health.database || false,
             websocket: data.health.websocket || false,
-            https: data.health.https || false,
+            https: data.health.https || clientHttps,
             maintenance: data.health.maintenance || false,
             clustering: data.health.clustering || false,
             uptime: data.health.uptime || 0,
