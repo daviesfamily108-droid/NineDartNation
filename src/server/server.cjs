@@ -3333,20 +3333,45 @@ app.post('/api/friends/accept', async (req, res) => {
   
   // Find matching pending request by id
   const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
-  if (idx === -1) {
+  let requestIdx = idx
+  if (requestIdx === -1 && supabase) {
+    try {
+      const { data: row, error: reqErr } = await supabase
+        .from('friend_requests')
+        .select('*')
+        .eq('id', requestId)
+        .eq('to_email', me)
+        .eq('status', 'pending')
+        .maybeSingle()
+      if (!reqErr && row) {
+        const hydrated = {
+          id: row.id,
+          from: row.from_email,
+          to: row.to_email,
+          ts: row.ts || Date.now(),
+          status: row.status || 'pending',
+        }
+        friendRequests.push(hydrated)
+        requestIdx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
+      }
+    } catch (err) {
+      startLogger.warn('[ACCEPT-ERROR] Supabase lookup failed for requestId=%s: %s', requestId, err?.message || err)
+    }
+  }
+  if (requestIdx === -1) {
     console.log('[ACCEPT-ERROR] Request not found: requestId=%s me=%s', requestId, me)
     startLogger.warn('[ACCEPT-ERROR] Request not found: requestId=%s me=%s', requestId, me)
     return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
   }
   
-  const other = String(friendRequests[idx].from || '').toLowerCase()
+  const other = String(friendRequests[requestIdx].from || '').toLowerCase()
   console.log('[ACCEPT-FOUND] Accepting request from=%s to=%s', other, me)
   startLogger.info('[ACCEPT-FOUND] Accepting request from=%s to=%s', other, me)
   
-  friendRequests[idx].status = 'accepted'
+  friendRequests[requestIdx].status = 'accepted'
   saveFriendRequests()
   // Update the request status in Supabase
-  try { await upsertFriendRequestSupabase(friendRequests[idx]) } catch {}
+  try { await upsertFriendRequestSupabase(friendRequests[requestIdx]) } catch {}
   
   // Add mutual friendship
   const mySet = friendships.get(me) || new Set()

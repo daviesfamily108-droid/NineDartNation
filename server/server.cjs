@@ -2975,13 +2975,13 @@ app.post('/api/friends/accept', async (req, res) => {
     console.log('[ACCEPT-ERROR] Request not found: requestId=%s me=%s', requestId, me)
     return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
   }
-  const other = String(friendRequests[idx].from || '').toLowerCase()
+  const other = String(friendRequests[requestIdx].from || '').toLowerCase()
   console.log('[ACCEPT-FOUND] Accepting request from=%s to=%s', other, me)
   
-  friendRequests[idx].status = 'accepted'
+  friendRequests[requestIdx].status = 'accepted'
   saveFriendRequests()
   // Update the request status in Supabase
-  try { await upsertFriendRequestSupabase(friendRequests[idx]) } catch {}
+  try { await upsertFriendRequestSupabase(friendRequests[requestIdx]) } catch {}
 
   // Add mutual friendship
   const mySet = friendships.get(me) || new Set()
