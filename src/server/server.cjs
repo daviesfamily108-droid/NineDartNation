@@ -3319,8 +3319,9 @@ app.post('/api/friends/remove', async (req, res) => {
 
 // Accept a friend request
 app.post('/api/friends/accept', async (req, res) => {
-  const { email, requestId } = req.body || {}
+  const { email, requestId, fromEmail } = req.body || {}
   const me = String(email || '').toLowerCase()
+  const fallbackFrom = String(fromEmail || '').toLowerCase()
   
   // Force console log for visibility in Render logs
   console.log('[ACCEPT-START] email=%s requestId=%s', me, requestId)
@@ -3334,15 +3335,21 @@ app.post('/api/friends/accept', async (req, res) => {
   // Find matching pending request by id
   const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
   let requestIdx = idx
+  if (requestIdx === -1 && fallbackFrom) {
+    requestIdx = friendRequests.findIndex(
+      r => r && String(r.from || '').toLowerCase() === fallbackFrom && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending',
+    )
+  }
   if (requestIdx === -1 && supabase) {
     try {
-      const { data: row, error: reqErr } = await supabase
+      let query = supabase
         .from('friend_requests')
         .select('*')
-        .eq('id', requestId)
         .eq('to_email', me)
         .eq('status', 'pending')
-        .maybeSingle()
+      if (requestId) query = query.eq('id', requestId)
+      if (fallbackFrom) query = query.eq('from_email', fallbackFrom)
+      const { data: row, error: reqErr } = await query.maybeSingle()
       if (!reqErr && row) {
         const hydrated = {
           id: row.id,

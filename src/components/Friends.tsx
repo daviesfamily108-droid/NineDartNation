@@ -350,12 +350,12 @@ export default function Friends({ user }: { user?: any }) {
     }
   }
 
-  async function acceptFriend(requestId: string) {
+  async function acceptFriend(requestId?: string, fromEmail?: string) {
     try {
       await apiFetch("/api/friends/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, requestId }),
+        body: JSON.stringify({ email, requestId, fromEmail }),
       });
       await refresh();
       toast("Friend request accepted", { type: "success" });
@@ -614,7 +614,7 @@ export default function Friends({ user }: { user?: any }) {
                     </div>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => acceptFriend(r.id)}
+                        onClick={() => acceptFriend(r.id, r.fromEmail)}
                         className="px-3 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/30 transition-colors"
                       >
                         Accept ✅
@@ -1294,7 +1294,7 @@ export default function Friends({ user }: { user?: any }) {
                         (rq) =>
                           rq.fromEmail.toLowerCase() === r.email.toLowerCase(),
                       );
-                      if (req) acceptFriend(req.id);
+                      if (req) acceptFriend(req.id, req.fromEmail);
                     }}
                     className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-400 text-xs font-bold hover:bg-emerald-500/30 transition-colors"
                   >

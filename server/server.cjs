@@ -2960,8 +2960,9 @@ app.post('/api/friends/remove', async (req, res) => {
 
 // Accept a friend request
 app.post('/api/friends/accept', async (req, res) => {
-  const { email, requestId } = req.body || {}
+  const { email, requestId, fromEmail } = req.body || {}
   const me = String(email || '').toLowerCase()
+  const fallbackFrom = String(fromEmail || '').toLowerCase()
   
   console.log('[ACCEPT-START] email=%s requestId=%s', me, requestId)
   
