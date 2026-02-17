@@ -744,18 +744,19 @@ export default function MatchPrestart({
     [onChoice],
   );
 
-  if (!open || !portalElRef.current || !matchInfo) return null;
-
   const localName = localUser?.username || "You";
-  const isLocalWinner = bullWinner === localName;
-  const isOpponentWinner = bullWinner === opponentName;
-  const bothSkipped = localChoice === "skip" && remoteChoice === "skip";
   const headToHead = useMemo(
     () => getHeadToHeadLegDiff(localName, opponentName),
     [localName, opponentName],
   );
   const localLegDiff = headToHead.played ? headToHead.diffA : null;
   const opponentLegDiff = headToHead.played ? headToHead.diffB : null;
+
+  if (!open || !portalElRef.current || !matchInfo) return null;
+
+  const isLocalWinner = bullWinner === localName;
+  const isOpponentWinner = bullWinner === opponentName;
+  const bothSkipped = localChoice === "skip" && remoteChoice === "skip";
 
   const overlay = (
     <div
