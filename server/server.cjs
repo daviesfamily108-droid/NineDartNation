@@ -2634,6 +2634,35 @@ app.get('/api/friends/list', async (req, res) => {
             try { await upsertFriendshipSupabase(email, friendEmail) } catch (e) {}
           }
         }
+
+        // RECOVERY: If friendships table is empty, rebuild from accepted friend requests
+        try {
+          const { data: accepted, error: acceptedError } = await supabase
+            .from('friend_requests')
+            .select('from_email,to_email,status')
+            .eq('status', 'accepted')
+            .or(`from_email.eq.${email},to_email.eq.${email}`)
+
+          console.log('[FRIENDS-LIST-ACCEPTED] Supabase accepted requests: error=%s dataLength=%d', acceptedError?.message || 'none', accepted?.length || 0)
+
+          if (!acceptedError && Array.isArray(accepted) && accepted.length > 0) {
+            const merged = new Set(existing ? Array.from(existing) : [])
+            for (const row of accepted) {
+              const from = String(row.from_email || '').toLowerCase()
+              const to = String(row.to_email || '').toLowerCase()
+              const friendEmail = from === email ? to : from
+              if (friendEmail && friendEmail !== email) merged.add(friendEmail)
+            }
+            if (merged.size > 0) {
+              friendships.set(email, merged)
+              for (const friendEmail of merged) {
+                try { await upsertFriendshipSupabase(email, friendEmail) } catch (e) {}
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[FRIENDS-LIST-ACCEPTED] Failed to rebuild from friend_requests:', err?.message || err)
+        }
       }
     } catch (err) {
       console.error('[FRIENDS-LIST-EXCEPTION] Exception:', err)

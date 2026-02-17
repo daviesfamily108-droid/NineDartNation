@@ -3040,18 +3040,47 @@ if (supabase) {
     } else if (error) {
       console.error('[FRIENDS-LIST-ERROR] Supabase error:', error)
       startLogger.error('[FRIENDS-LIST] Supabase error, keeping in-memory: %s', error.message)
-    } else if (!error && Array.isArray(data) && data.length === 0) {
-      // Do not clear the in-memory friendships if Supabase has no rows yet
-      console.log('[FRIENDS-LIST-NO-ROWS] Supabase returned 0 rows; keeping existing in-memory friendships')
-      // REPAIR: If in-memory has friendships but Supabase doesn't, re-persist them
-      const existing = friendships.get(email)
-      if (existing && existing.size > 0) {
-        console.log('[FRIENDS-LIST-REPAIR] In-memory has %d friends but Supabase has 0; re-persisting to Supabase', existing.size)
-        for (const friendEmail of existing) {
-          try { await upsertFriendshipSupabase(email, friendEmail) } catch (e) {}
+      } else if (!error && Array.isArray(data) && data.length === 0) {
+        // Do not clear the in-memory friendships if Supabase has no rows yet
+        console.log('[FRIENDS-LIST-NO-ROWS] Supabase returned 0 rows; keeping existing in-memory friendships')
+        // REPAIR: If in-memory has friendships but Supabase doesn't, re-persist them
+        const existing = friendships.get(email)
+        if (existing && existing.size > 0) {
+          console.log('[FRIENDS-LIST-REPAIR] In-memory has %d friends but Supabase has 0; re-persisting to Supabase', existing.size)
+          for (const friendEmail of existing) {
+            try { await upsertFriendshipSupabase(email, friendEmail) } catch (e) {}
+          }
+        }
+
+        // RECOVERY: If friendships table is empty, rebuild from accepted friend requests
+        try {
+          const { data: accepted, error: acceptedError } = await supabase
+            .from('friend_requests')
+            .select('from_email,to_email,status')
+            .eq('status', 'accepted')
+            .or(`from_email.eq.${email},to_email.eq.${email}`)
+
+          console.log('[FRIENDS-LIST-ACCEPTED] Supabase accepted requests: error=%s dataLength=%d', acceptedError?.message || 'none', accepted?.length || 0)
+
+          if (!acceptedError && Array.isArray(accepted) && accepted.length > 0) {
+            const merged = new Set(existing ? Array.from(existing) : [])
+            for (const row of accepted) {
+              const from = String(row.from_email || '').toLowerCase()
+              const to = String(row.to_email || '').toLowerCase()
+              const friendEmail = from === email ? to : from
+              if (friendEmail && friendEmail !== email) merged.add(friendEmail)
+            }
+            if (merged.size > 0) {
+              friendships.set(email, merged)
+              for (const friendEmail of merged) {
+                try { await upsertFriendshipSupabase(email, friendEmail) } catch (e) {}
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[FRIENDS-LIST-ACCEPTED] Failed to rebuild from friend_requests:', err?.message || err)
         }
       }
-    }
   } catch (err) {
     console.error('[FRIENDS-LIST-EXCEPTION] Exception:', err)
     startLogger.error('[Friends] Failed to load user friendships from Supabase:', err?.message || err)
