@@ -459,13 +459,17 @@ function PlayerCard({
   isLocal,
   showCamera,
   isWinner,
+  legDiff,
 }: {
   name: string;
   stats: ReturnType<typeof getPlayerStats>;
   isLocal: boolean;
   showCamera?: boolean;
   isWinner?: boolean;
+  legDiff?: number | null;
 }) {
+  const legDiffValue =
+    typeof legDiff === "number" ? `${legDiff > 0 ? "+" : ""}${legDiff}` : null;
   return (
     <div
       className={`relative rounded-2xl border p-4 transition-all duration-500 ${
@@ -507,7 +511,10 @@ function PlayerCard({
         <StatPill label="Avg" value={stats.avg3} highlight />
         <StatPill label="F9" value={stats.best9} />
         <StatPill label="CO" value={String(stats.bestCheckout)} />
-        <StatPill label="Leg" value={String(stats.bestLeg)} />
+        <StatPill
+          label={legDiffValue !== null ? "Leg Δ" : "Leg"}
+          value={legDiffValue ?? String(stats.bestLeg)}
+        />
       </div>
 
       <div className="grid grid-cols-3 gap-1.5 text-[10px]">
@@ -743,6 +750,12 @@ export default function MatchPrestart({
   const isLocalWinner = bullWinner === localName;
   const isOpponentWinner = bullWinner === opponentName;
   const bothSkipped = localChoice === "skip" && remoteChoice === "skip";
+  const headToHead = useMemo(
+    () => getHeadToHeadLegDiff(localName, opponentName),
+    [localName, opponentName],
+  );
+  const localLegDiff = headToHead.played ? headToHead.diffA : null;
+  const opponentLegDiff = headToHead.played ? headToHead.diffB : null;
 
   const overlay = (
     <div
@@ -885,6 +898,7 @@ export default function MatchPrestart({
                 stats={localStats}
                 isLocal
                 showCamera={phase === "preview"}
+                legDiff={localLegDiff}
                 isWinner={
                   phase === "result" &&
                   (isLocalWinner ||
@@ -912,6 +926,7 @@ export default function MatchPrestart({
                 stats={oppStats}
                 isLocal={false}
                 showCamera={phase === "preview"}
+                legDiff={opponentLegDiff}
                 isWinner={
                   phase === "result" &&
                   (isOpponentWinner ||

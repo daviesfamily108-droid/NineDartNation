@@ -1,4 +1,4 @@
-// --- REQUIRED FOR PREMIUM PAYMENTS ---
+ // --- REQUIRED FOR PREMIUM PAYMENTS ---
 // Set this in your Render environment variables:
 //   STRIPE_PREMIUM_PAYMENT_LINK=https://buy.stripe.com/your_live_payment_link
 // You can find this link in your Stripe dashboard under Payment Links.

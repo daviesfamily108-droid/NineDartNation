@@ -1,4 +1,4 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
 import { useAudit } from "./audit.js";
 import { broadcastMessage } from "../utils/broadcast.js";
 // Use a dynamic import for profileStats to avoid circular import / TDZ during
@@ -355,6 +355,9 @@ export const useMatch = create<MatchState & Actions>((set) => ({
         import("./profileStats.js").then((m) => {
           try {
             m.addMatchToAllTime(newPlayers, { recordSeries: true });
+          } catch {}
+          try {
+            m.updateHeadToHeadLegs(newPlayers);
           } catch {}
         });
       } catch {}

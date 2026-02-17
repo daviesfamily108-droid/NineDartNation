@@ -44,6 +44,106 @@ type UserStatsPayload = {
 const syncTimers = new Map<string, number>();
 const syncInFlight = new Set<string>();
 
+function resolveCanonicalName(name: string): string {
+  const raw = (name || "").trim();
+  if (!raw || raw.toLowerCase() === "you") {
+    try {
+      const stored = localStorage.getItem("ndn:currentUser");
+      if (stored) return stored.toLowerCase();
+      const fallback = (window as any)?.ndnCurrentUser;
+      if (typeof fallback === "string" && fallback.length)
+        return fallback.toLowerCase();
+    } catch {}
+  }
+  return raw.toLowerCase();
+}
+
+function loadHeadToHead(): Record<string, HeadToHeadRecord> {
+  try {
+    const raw = localStorage.getItem(headToHeadKey);
+    const parsed = raw ? JSON.parse(raw) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveHeadToHead(records: Record<string, HeadToHeadRecord>) {
+  try {
+    localStorage.setItem(headToHeadKey, JSON.stringify(records));
+  } catch {}
+}
+
+export function updateHeadToHeadLegs(players: Player[]) {
+  if (!Array.isArray(players) || players.length !== 2) return;
+  const [p1, p2] = players;
+  const nameA = resolveCanonicalName(p1?.name || "");
+  const nameB = resolveCanonicalName(p2?.name || "");
+  if (!nameA || !nameB || nameA === nameB) return;
+  const legsA = Math.max(0, Number(p1?.legsWon || 0));
+  const legsB = Math.max(0, Number(p2?.legsWon || 0));
+  if (legsA === 0 && legsB === 0) return;
+
+  const ordered = [nameA, nameB].sort();
+  const key = `${ordered[0]}|${ordered[1]}`;
+  const aIsFirst = ordered[0] === nameA;
+  const records = loadHeadToHead();
+  const existing = records[key] || {
+    a: ordered[0],
+    b: ordered[1],
+    legsA: 0,
+    legsB: 0,
+    updatedAt: 0,
+  };
+  if (aIsFirst) {
+    existing.legsA += legsA;
+    existing.legsB += legsB;
+  } else {
+    existing.legsA += legsB;
+    existing.legsB += legsA;
+  }
+  existing.updatedAt = Date.now();
+  records[key] = existing;
+  saveHeadToHead(records);
+}
+
+export function getHeadToHeadLegDiff(nameA: string, nameB: string) {
+  const resolvedA = resolveCanonicalName(nameA || "");
+  const resolvedB = resolveCanonicalName(nameB || "");
+  if (!resolvedA || !resolvedB || resolvedA === resolvedB) {
+    return {
+      played: false,
+      legsA: 0,
+      legsB: 0,
+      diffA: 0,
+      diffB: 0,
+    };
+  }
+  const ordered = [resolvedA, resolvedB].sort();
+  const key = `${ordered[0]}|${ordered[1]}`;
+  const record = loadHeadToHead()[key];
+  if (!record) {
+    return {
+      played: false,
+      legsA: 0,
+      legsB: 0,
+      diffA: 0,
+      diffB: 0,
+    };
+  }
+  const aIsFirst = ordered[0] === resolvedA;
+  const legsA = aIsFirst ? record.legsA : record.legsB;
+  const legsB = aIsFirst ? record.legsB : record.legsA;
+  const total = Math.max(0, legsA + legsB);
+  return {
+    played: total > 0,
+    legsA,
+    legsB,
+    diffA: legsA - legsB,
+    diffB: legsB - legsA,
+  };
+}
+
 function getAuthToken(): string | null {
   try {
     return localStorage.getItem("authToken");

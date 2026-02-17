@@ -385,7 +385,7 @@ export default function InGameShell({
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-amber-950/80" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.03),transparent_70%)]" />
 
-        <div className="relative grid grid-cols-[1fr_auto_1fr] items-center py-4 sm:py-6 px-3 sm:px-8">
+        <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(0,1fr)] items-center py-4 sm:py-6 px-3 sm:px-8">
           {/* Player 1 (local) */}
           <div className="flex flex-col items-center gap-1">
             <div
@@ -432,13 +432,41 @@ export default function InGameShell({
             </div>
           </div>
 
-          {/* Centre divider — VS */}
-          <div className="flex flex-col items-center gap-1 px-3 sm:px-6">
-            <div className="w-px h-8 sm:h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-            <div className="text-lg sm:text-2xl font-black text-white/30 tracking-widest">
-              VS
+          {/* Centre divider — VS + Online score box */}
+          <div className="flex flex-col items-center gap-2 px-2 sm:px-4 min-w-[120px]">
+            <div className="flex flex-col items-center gap-1">
+              <div className="w-px h-6 sm:h-10 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+              <div className="text-xs sm:text-lg font-black text-white/30 tracking-widest">
+                VS
+              </div>
+              <div className="w-px h-6 sm:h-10 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
             </div>
-            <div className="w-px h-8 sm:h-12 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+            {isOnline && (
+              <button
+                type="button"
+                className={`w-full rounded-xl border px-3 py-2 text-center transition-all ${
+                  isUsersTurn
+                    ? "bg-emerald-500/15 border-emerald-400/30 text-emerald-100 hover:bg-emerald-500/25"
+                    : "bg-white/5 border-white/10 text-white/40 cursor-not-allowed"
+                }`}
+                onClick={() => {
+                  if (!isUsersTurn) return;
+                  setNumpadValue("");
+                  setShowNumpad(true);
+                }}
+                disabled={!isUsersTurn}
+              >
+                <div className="text-[9px] sm:text-[10px] uppercase tracking-widest font-semibold opacity-80">
+                  {isUsersTurn ? "Enter Score" : "Waiting"}
+                </div>
+                <div className="font-mono text-2xl sm:text-3xl font-black tabular-nums">
+                  {isUsersTurn ? "Tap" : "—"}
+                </div>
+                <div className="text-[9px] sm:text-[10px] uppercase tracking-wider opacity-70">
+                  {isUsersTurn ? "Open Numpad" : "Opponent Turn"}
+                </div>
+              </button>
+            )}
           </div>
 
           {/* Player 2 (away) */}
