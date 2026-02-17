@@ -2822,12 +2822,16 @@ app.get('/api/friends/thread', (req, res) => {
 })
 
 // Friend requests (incoming/outgoing)
-// Stored in `friendRequests` array and persisted to FRIEND_REQUESTS_FILE.
+// Stored in `friendRequests` array and persisted to FRIEND_REQUESTS_FILE + Supabase.
 // Shape: { from: string, to: string, ts: number, status?: 'pending'|'accepted'|'declined'|'cancelled' }
-app.get('/api/friends/requests', (req, res) => {
+app.get('/api/friends/requests', async (req, res) => {
 const email = String(req.query.email || '').toLowerCase()
 noCache(res)
 if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+
+// Hydrate from Supabase to pick up any requests persisted across restarts
+try { await loadFriendRequestsFromSupabase() } catch {}
+
 const users = global.users || new Map()
 
 const incoming = (friendRequests || [])
@@ -2842,9 +2846,13 @@ const incoming = (friendRequests || [])
   res.json({ ok: true, requests: incoming })
 })
 
-app.get('/api/friends/outgoing', (req, res) => {
+app.get('/api/friends/outgoing', async (req, res) => {
 const email = String(req.query.email || '').toLowerCase()
 if (!email) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+
+// Hydrate from Supabase to pick up any requests persisted across restarts
+try { await loadFriendRequestsFromSupabase() } catch {}
+
 const users = global.users || new Map()
 
 const outgoing = (friendRequests || [])
@@ -2860,7 +2868,7 @@ const outgoing = (friendRequests || [])
 })
 
 // Send a friend request (creates a pending request instead of instant friendship)
-app.post('/api/friends/add', (req, res) => {
+app.post('/api/friends/add', async (req, res) => {
   const { email, friend } = req.body || {}
   const me = String(email || '').toLowerCase()
   const other = String(friend || '').toLowerCase()
@@ -2875,6 +2883,8 @@ app.post('/api/friends/add', (req, res) => {
   const request = { id, from: me, to: other, ts: Date.now(), status: 'pending' }
   friendRequests.push(request)
   saveFriendRequests()
+  // Also persist individual request to Supabase immediately
+  try { await upsertFriendRequestSupabase(request) } catch {}
   // Create notification for the recipient
   const users = global.users || new Map()
   const clients = global.clients || new Map()
@@ -2927,6 +2937,10 @@ app.post('/api/friends/accept', async (req, res) => {
   console.log('[ACCEPT-START] email=%s requestId=%s', me, requestId)
   
   if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+
+  // Hydrate from Supabase first to ensure we have all requests
+  try { await loadFriendRequestsFromSupabase() } catch {}
+
   const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
   if (idx === -1) {
     console.log('[ACCEPT-ERROR] Request not found: requestId=%s me=%s', requestId, me)
@@ -2937,6 +2951,9 @@ app.post('/api/friends/accept', async (req, res) => {
   
   friendRequests[idx].status = 'accepted'
   saveFriendRequests()
+  // Update the request status in Supabase
+  try { await upsertFriendRequestSupabase(friendRequests[idx]) } catch {}
+
   // Add mutual friendship
   const mySet = friendships.get(me) || new Set()
   mySet.add(other)
@@ -2981,15 +2998,17 @@ app.post('/api/friends/accept', async (req, res) => {
 })
 
 // Decline a friend request
-app.post('/api/friends/decline', (req, res) => {
+app.post('/api/friends/decline', async (req, res) => {
   const { email, requestId } = req.body || {}
   const me = String(email || '').toLowerCase()
   if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  try { await loadFriendRequestsFromSupabase() } catch {}
   const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
   if (idx === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
   const other = String(friendRequests[idx].from || '').toLowerCase()
   friendRequests[idx].status = 'declined'
   saveFriendRequests()
+  try { await upsertFriendRequestSupabase(friendRequests[idx]) } catch {}
   const users = global.users || new Map()
   const clients = global.clients || new Map()
   const myUser = users.get(me)
@@ -3006,14 +3025,16 @@ app.post('/api/friends/decline', (req, res) => {
 })
 
 // Cancel an outgoing friend request
-app.post('/api/friends/cancel', (req, res) => {
+app.post('/api/friends/cancel', async (req, res) => {
   const { email, requestId } = req.body || {}
   const me = String(email || '').toLowerCase()
   if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  try { await loadFriendRequestsFromSupabase() } catch {}
   const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.from || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
   if (idx === -1) return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
   friendRequests[idx].status = 'cancelled'
   saveFriendRequests()
+  try { await upsertFriendRequestSupabase(friendRequests[idx]) } catch {}
   res.json({ ok: true })
 })
 
@@ -4639,6 +4660,8 @@ function saveFriendRequests() {
   try {
     fs.writeFileSync(FRIEND_REQUESTS_FILE, JSON.stringify({ requests: friendRequests }, null, 2))
   } catch {}
+  // Also persist to Supabase
+  saveFriendRequestsSupabase().catch(() => {})
 }
 function loadFriendRequests() {
   try {
@@ -4650,6 +4673,104 @@ function loadFriendRequests() {
   } catch {}
 }
 loadFriendRequests()
+
+// Supabase-backed persistence for friend requests
+async function loadFriendRequestsFromSupabase() {
+  if (!supabase) return
+  try {
+    const { data, error } = await supabase
+      .from('friend_requests')
+      .select('*')
+    if (error) {
+      // Table might not exist — log instructions for manual creation
+      if (/relation.*does not exist|could not find/i.test(error.message || '')) {
+        console.warn('[FriendRequests] friend_requests table does not exist in Supabase.')
+        console.warn('[FriendRequests] Please create it in the Supabase SQL editor:')
+        console.warn('  CREATE TABLE IF NOT EXISTS friend_requests (')
+        console.warn('    id TEXT PRIMARY KEY,')
+        console.warn('    from_email TEXT NOT NULL,')
+        console.warn('    to_email TEXT NOT NULL,')
+        console.warn('    status TEXT NOT NULL DEFAULT \'pending\',')
+        console.warn('    ts BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,')
+        console.warn('    created_at TIMESTAMPTZ DEFAULT NOW()')
+        console.warn('  );')
+        console.warn('  CREATE INDEX IF NOT EXISTS idx_friend_requests_to ON friend_requests(to_email);')
+        console.warn('  CREATE INDEX IF NOT EXISTS idx_friend_requests_from ON friend_requests(from_email);')
+      } else {
+        console.error('[FriendRequests] Supabase load error:', error.message)
+      }
+      return
+    }
+    if (Array.isArray(data) && data.length > 0) {
+      const existingIds = new Set(friendRequests.map(r => r.id))
+      let added = 0
+      for (const row of data) {
+        if (!existingIds.has(row.id)) {
+          friendRequests.push({
+            id: row.id,
+            from: row.from_email,
+            to: row.to_email,
+            ts: row.ts || Date.now(),
+            status: row.status || 'pending',
+          })
+          added++
+        }
+      }
+      if (added > 0) {
+        console.log(`[FriendRequests] Loaded ${added} friend requests from Supabase`)
+      }
+    }
+  } catch (err) {
+    console.warn('[FriendRequests] Failed to load from Supabase:', err?.message || err)
+  }
+}
+
+async function saveFriendRequestsSupabase() {
+  if (!supabase) return
+  try {
+    // Upsert all current requests
+    const rows = friendRequests.map(r => ({
+      id: r.id,
+      from_email: String(r.from || '').toLowerCase(),
+      to_email: String(r.to || '').toLowerCase(),
+      status: r.status || 'pending',
+      ts: r.ts || Date.now(),
+    }))
+    if (rows.length === 0) return
+    const { error } = await supabase
+      .from('friend_requests')
+      .upsert(rows, { onConflict: 'id', ignoreDuplicates: false })
+    if (error) {
+      // If table doesn't exist, skip silently (it will be created on next load)
+      if (!/relation.*does not exist/i.test(error.message || '')) {
+        console.warn('[FriendRequests] Supabase save error:', error.message)
+      }
+    }
+  } catch (err) {
+    console.warn('[FriendRequests] Supabase save exception:', err?.message || err)
+  }
+}
+
+async function upsertFriendRequestSupabase(req) {
+  if (!supabase) return
+  try {
+    const row = {
+      id: req.id,
+      from_email: String(req.from || '').toLowerCase(),
+      to_email: String(req.to || '').toLowerCase(),
+      status: req.status || 'pending',
+      ts: req.ts || Date.now(),
+    }
+    const { error } = await supabase
+      .from('friend_requests')
+      .upsert([row], { onConflict: 'id', ignoreDuplicates: false })
+    if (error && !/relation.*does not exist/i.test(error.message || '')) {
+      console.warn('[FriendRequests] Supabase upsert error:', error.message)
+    }
+  } catch (err) {
+    console.warn('[FriendRequests] Supabase upsert exception:', err?.message || err)
+  }
+}
 
 // Persistence helpers for friendships
 const FRIENDS_FILE = './friends.json'
@@ -4808,6 +4929,11 @@ async function deleteFriendshipSupabase(a, b) {
 // Attempt to hydrate friendships from Supabase on startup (in addition to local file)
 // Also verify the table has the required unique constraint
 ensureFriendshipsTable().then(() => loadFriendshipsFromSupabase()).catch(() => loadFriendshipsFromSupabase())
+
+// Also hydrate friend requests from Supabase on startup
+loadFriendRequestsFromSupabase().catch((err) => {
+  console.warn('[FriendRequests] Startup load from Supabase failed:', err?.message || err)
+})
 
 // Admin-configurable demo users (for quick setup)
 // NOTE: In production, use real user signup with email verification!

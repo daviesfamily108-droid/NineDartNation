@@ -160,6 +160,11 @@ export default function Friends({ user }: { user?: any }) {
 
   async function refresh() {
     if (!email) return;
+    // Clear API disable flag to ensure friends fetch isn't blocked by a prior transient failure
+    try {
+      (window as any).__ndnApiDisabled = false;
+      (window as any).__ndnApiDisabledAt = 0;
+    } catch {}
     try {
       const [fl, sg, rq, out] = await Promise.all([
         apiFetch(`/api/friends/list?email=${encodeURIComponent(email)}`).then(
@@ -175,15 +180,32 @@ export default function Friends({ user }: { user?: any }) {
           `/api/friends/outgoing?email=${encodeURIComponent(email)}`,
         ).then((r) => r.json()),
       ]);
-      setFriends(fl.friends || []);
-      setSuggested(sg.suggestions || []);
-      setRequests(rq.requests || []);
-      setOutgoingRequests(out.requests || []);
+      if (fl.ok !== false) setFriends(fl.friends || []);
+      if (sg.ok !== false) setSuggested(sg.suggestions || []);
+      if (rq.ok !== false) setRequests(rq.requests || []);
+      if (out.ok !== false) setOutgoingRequests(out.requests || []);
     } catch {}
   }
 
   useEffect(() => {
-    refresh();
+    if (!email) return;
+    let cancelled = false;
+    // Retry on mount to handle Render cold starts
+    async function initialLoad() {
+      await refresh();
+      // If friends are still empty after first attempt, retry a couple of times
+      // (Render cold starts can cause the first request to time out)
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (cancelled) return;
+        await new Promise((r) => setTimeout(r, 3000));
+        if (cancelled) return;
+        await refresh();
+      }
+    }
+    initialLoad();
+    return () => {
+      cancelled = true;
+    };
   }, [email]);
 
   // Periodic refresh to keep friends list and statuses up to date
