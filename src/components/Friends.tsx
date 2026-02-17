@@ -486,12 +486,10 @@ export default function Friends({ user }: { user?: any }) {
       return true;
     });
     const incoming = unique.filter(
-      (r) => String(r.toEmail || "").toLowerCase() === me,
+      (r) => String(r.fromEmail || "").toLowerCase() !== me,
     );
     const outgoing = unique.filter(
-      (r) =>
-        String(r.fromEmail || "").toLowerCase() === me &&
-        String(r.toEmail || "").toLowerCase() !== me,
+      (r) => String(r.fromEmail || "").toLowerCase() === me,
     );
     return {
       incomingRequests: incoming,
