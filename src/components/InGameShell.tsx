@@ -27,6 +27,8 @@ export default function InGameShell({
   onShowStartShowcaseChange,
   onCommitVisit,
   onQuit: onQuitProp,
+  onPause: onPauseProp,
+  onResume: onResumeProp,
   onStateChange,
   localPlayerIndexOverride,
   gameModeOverride,
@@ -39,6 +41,10 @@ export default function InGameShell({
   onCommitVisit?: (score: number, darts: number, meta?: any) => void;
   /** Override default quit behaviour. */
   onQuit?: () => void;
+  /** Override default pause behaviour (for online WS sync). */
+  onPause?: () => void;
+  /** Override default resume behaviour (for online WS sync). */
+  onResume?: () => void;
   /** Called after any match state mutation for external sync. */
   onStateChange?: () => void;
   /** Explicit local player index for online (skips name matching). */
@@ -395,9 +401,16 @@ export default function InGameShell({
             >
               {heroValues.local.primary}
             </div>
-            {isUsersTurn && (
+            {isUsersTurn ? (
               <div className="mt-1 px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
                 ● Throwing
+              </div>
+            ) : (
+              <div
+                className="mt-1 px-3 py-0.5 text-[10px] sm:text-xs invisible"
+                aria-hidden
+              >
+                ● &nbsp;
               </div>
             )}
             <div className="flex items-center gap-3 mt-1">
@@ -443,9 +456,16 @@ export default function InGameShell({
             >
               {heroValues.away.primary}
             </div>
-            {!isUsersTurn && (
+            {!isUsersTurn ? (
               <div className="mt-1 px-3 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
                 ● Throwing
+              </div>
+            ) : (
+              <div
+                className="mt-1 px-3 py-0.5 text-[10px] sm:text-xs invisible"
+                aria-hidden
+              >
+                ● &nbsp;
               </div>
             )}
             <div className="flex items-center gap-3 mt-1">
@@ -787,6 +807,8 @@ export default function InGameShell({
                 pauseInitiator: localPlayerName,
               });
             } catch {}
+            // Notify opponent via WS (online matches)
+            if (onPauseProp) onPauseProp();
             setShowQuitPause(false);
           }}
         />
@@ -799,6 +821,8 @@ export default function InGameShell({
           try {
             broadcastMessage({ type: "unpause" });
           } catch {}
+          // Notify opponent via WS (online matches)
+          if (onResumeProp) onResumeProp();
         }}
       />
     </div>

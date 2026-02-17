@@ -2150,7 +2150,38 @@ wss.on('connection', (ws, req) => {
           broadcastToRoom(ws._roomId, { type: 'celebration', kind, by: data.by || (ws._username || `user-${ws._id}`), ts: Date.now() }, null)
         }
       } else if (data.type === 'report') {
-  } else if (data.type === 'set-match-autocommit') {
+  } else if (data.type === 'match-quit') {
+        // A player quit the match — notify everyone else in the room
+        const roomId = ws._roomId
+        if (roomId) {
+          broadcastToRoom(roomId, {
+            type: 'opponent-quit',
+            quitterName: ws._username || 'Opponent',
+            quitterId: ws._id
+          }, ws)
+        }
+      }
+      else if (data.type === 'match-pause') {
+        const roomId = ws._roomId
+        if (roomId) {
+          broadcastToRoom(roomId, {
+            type: 'opponent-paused',
+            pauserName: ws._username || 'Opponent',
+            pauseMinutes: data.pauseMinutes || null,
+            pauseStartedAt: Date.now()
+          }, ws)
+        }
+      }
+      else if (data.type === 'match-unpause') {
+        const roomId = ws._roomId
+        if (roomId) {
+          broadcastToRoom(roomId, {
+            type: 'opponent-unpaused',
+            resumerName: ws._username || 'Opponent'
+          }, ws)
+        }
+      }
+      else if (data.type === 'set-match-autocommit') {
         // Host or admin may toggle server-side autocommit allowed flag for a room
         const roomId = String(data.roomId || '')
         const allow = !!data.allow

@@ -164,10 +164,14 @@ export default function App() {
             });
           }
           if (msg?.type === "match-prestart") {
-            toast("⚡ Match starting — get ready!", {
-              type: "info",
-              timeout: 5000,
-            });
+            // Only show the toast if no match is already in progress
+            // (prevents phantom popup after quitting a match)
+            if (!useMatch.getState().inProgress) {
+              toast("⚡ Match starting — get ready!", {
+                type: "info",
+                timeout: 5000,
+              });
+            }
           }
           if (msg?.type === "declined") {
             setWsMatchInviteCount((c) => Math.max(0, c - 1));

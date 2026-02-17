@@ -13,6 +13,7 @@ import MatchStartShowcase from "./ui/MatchStartShowcase.js";
 import MatchPrestart from "./ui/MatchPrestart.js";
 import InGameShell from "./InGameShell.js";
 import { useMatch } from "../store/match.js";
+import { useMatchControl } from "../store/matchControl.js";
 import { useWS } from "./WSProvider.js";
 import { launchInPlayDemo } from "../utils/inPlayDemo.js";
 import { openMatchWindow } from "../utils/matchWindow.js";
@@ -111,6 +112,16 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       try {
         useMatch.getState().endGame();
       } catch (e) {}
+      // Clear all prestart / invite state to prevent phantom popups
+      setPendingInvite(null);
+      setWaitingForCreator(null);
+      setJoinMatch(null);
+      setJoinChoice(null);
+      setOpponentQuitName(null);
+      pendingMatchRef.current = null;
+      try {
+        (window as any).__ndn_pending_invite = null;
+      } catch {}
     };
     try {
       window.addEventListener("ndn:match-quit" as any, onQuit as any);
@@ -158,6 +169,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [bullLocalThrow, setBullLocalThrow] = useState<number | null>(null);
   const [bullThrown, setBullThrown] = useState(false);
   const [bullTied, setBullTied] = useState(false);
+  // Opponent quit notification — shown when the remote player leaves mid-match
+  const [opponentQuitName, setOpponentQuitName] = useState<string | null>(null);
 
   // Filter & Sort State
   const [searchQuery, setSearchQuery] = useState("");
@@ -397,6 +410,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           setWaitingForCreator(msg.creatorName || "Creator");
         }
         if (msg?.type === "match-prestart") {
+          // Ignore if a match is already running (prevents phantom prestart
+          // after quitting a match while a stale server message arrives)
+          if (useMatch.getState().inProgress) return;
           // Both players enter prestart after creator accepted the invite
           setPendingInvite(null);
           setWaitingForCreator(null);
@@ -584,6 +600,24 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           // Auto-reset tied state after 2s so the dartboard reappears
           setTimeout(() => setBullTied(false), 2000);
         }
+        // Opponent quit — show overlay so this player can leave gracefully
+        if (msg?.type === "opponent-quit") {
+          setOpponentQuitName(msg.quitterName || "Opponent");
+        }
+        // Opponent paused — sync pause state locally
+        if (msg?.type === "opponent-paused") {
+          try {
+            useMatchControl
+              .getState()
+              .setPaused(true, null, msg.pauserName || "Opponent");
+          } catch {}
+        }
+        // Opponent resumed — sync unpause state locally
+        if (msg?.type === "opponent-unpaused") {
+          try {
+            useMatchControl.getState().setPaused(false, null);
+          } catch {}
+        }
       } catch (err) {}
     });
     return unsub;
@@ -732,49 +766,125 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       (p: any) => p?.name && p.name.toLowerCase() === username.toLowerCase(),
     );
     return (
-      <InGameShell
-        user={user}
-        showStartShowcase={showStartShowcase}
-        onShowStartShowcaseChange={setShowStartShowcase}
-        onCommitVisit={(score, _darts, _meta) => {
-          try {
-            const m = useMatch.getState();
-            const p = m.players[m.currentPlayerIdx];
-            const leg = p?.legs?.[p.legs.length - 1];
-            const preRem = leg ? leg.totalScoreRemaining : m.startingScore;
-            const postRem = Math.max(0, preRem - score);
-            const attempts = preRem <= 50 ? 3 : postRem <= 50 ? 1 : 0;
-            const finished = postRem === 0;
-            m.addVisit(score, 3, {
-              preOpenDarts: 0,
-              doubleWindowDarts: attempts,
-              finishedByDouble: finished,
-              visitTotal: score,
-            });
-            if (leg && leg.totalScoreRemaining === 0) {
-              m.endLeg(score);
-            } else {
-              m.nextPlayer();
+      <>
+        <InGameShell
+          user={user}
+          showStartShowcase={showStartShowcase}
+          onShowStartShowcaseChange={setShowStartShowcase}
+          onCommitVisit={(score, _darts, _meta) => {
+            try {
+              const m = useMatch.getState();
+              const p = m.players[m.currentPlayerIdx];
+              const leg = p?.legs?.[p.legs.length - 1];
+              const preRem = leg ? leg.totalScoreRemaining : m.startingScore;
+              const postRem = Math.max(0, preRem - score);
+              const attempts = preRem <= 50 ? 3 : postRem <= 50 ? 1 : 0;
+              const finished = postRem === 0;
+              m.addVisit(score, 3, {
+                preOpenDarts: 0,
+                doubleWindowDarts: attempts,
+                finishedByDouble: finished,
+                visitTotal: score,
+              });
+              if (leg && leg.totalScoreRemaining === 0) {
+                m.endLeg(score);
+              } else {
+                m.nextPlayer();
+              }
+            } catch {
+              useMatch.getState().addVisit(score, 3);
+              useMatch.getState().nextPlayer();
             }
-          } catch {
-            useMatch.getState().addVisit(score, 3);
-            useMatch.getState().nextPlayer();
-          }
-          sendState();
-        }}
-        onQuit={() => {
-          try {
-            useMatch.getState().endGame();
-          } catch {}
-          sendState();
-          try {
-            window.dispatchEvent(new Event("ndn:match-quit"));
-          } catch {}
-        }}
-        onStateChange={sendState}
-        localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}
-        isOnline={true}
-      />
+            sendState();
+          }}
+          onQuit={() => {
+            try {
+              useMatch.getState().endGame();
+            } catch {}
+            // Notify opponent via WebSocket
+            try {
+              if (wsGlobal?.connected) {
+                wsGlobal.send({ type: "match-quit" });
+              }
+            } catch {}
+            // Clear any stale prestart / invite state so popups don't reappear
+            setPendingInvite(null);
+            setWaitingForCreator(null);
+            setJoinMatch(null);
+            setJoinChoice(null);
+            setOpponentQuitName(null);
+            pendingMatchRef.current = null;
+            try {
+              (window as any).__ndn_pending_invite = null;
+            } catch {}
+            sendState();
+            try {
+              window.dispatchEvent(new Event("ndn:match-quit"));
+            } catch {}
+          }}
+          onPause={() => {
+            try {
+              useMatchControl.getState().setPaused(true, null, username);
+            } catch {}
+            // Notify opponent via WebSocket
+            try {
+              if (wsGlobal?.connected) {
+                wsGlobal.send({ type: "match-pause" });
+              }
+            } catch {}
+          }}
+          onResume={() => {
+            try {
+              useMatchControl.getState().setPaused(false, null);
+            } catch {}
+            // Notify opponent via WebSocket
+            try {
+              if (wsGlobal?.connected) {
+                wsGlobal.send({ type: "match-unpause" });
+              }
+            } catch {}
+          }}
+          onStateChange={sendState}
+          localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}
+          isOnline={true}
+        />
+        {/* Opponent quit overlay */}
+        {opponentQuitName && (
+          <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-sm w-full mx-4 text-center shadow-2xl">
+              <div className="text-4xl mb-3">🚪</div>
+              <h3 className="text-lg font-bold text-white mb-2">
+                {opponentQuitName} left the match
+              </h3>
+              <p className="text-sm text-white/60 mb-5">
+                Your opponent has quit. You can leave the match now.
+              </p>
+              <button
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold hover:scale-[1.02] active:scale-[0.98] transition-all"
+                onClick={() => {
+                  try {
+                    useMatch.getState().endGame();
+                  } catch {}
+                  setOpponentQuitName(null);
+                  setPendingInvite(null);
+                  setWaitingForCreator(null);
+                  setJoinMatch(null);
+                  setJoinChoice(null);
+                  pendingMatchRef.current = null;
+                  try {
+                    (window as any).__ndn_pending_invite = null;
+                  } catch {}
+                  try {
+                    window.dispatchEvent(new Event("ndn:match-quit"));
+                  } catch {}
+                }}
+              >
+                Leave Match
+              </button>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
