@@ -175,27 +175,28 @@ export default function App() {
           if (msg?.type === "match-start") {
             setWsMatchInviteCount(0);
           }
-          // Stash message so OnlinePlay can read it immediately on mount
-          (window as any).__ndn_pending_invite = msg;
-          // Switch to online tab so the OnlinePlay component mounts
-          setTab("online");
-          // Dispatch the event after a short delay so React has time to
-          // mount OnlinePlay and register its event listener
-          setTimeout(() => {
-            try {
-              window.dispatchEvent(
-                new CustomEvent("ndn:match-invite", { detail: msg }),
-              );
-            } catch {}
-          }, 100);
-          // Dispatch again after a longer delay as a safety net
-          setTimeout(() => {
-            try {
-              window.dispatchEvent(
-                new CustomEvent("ndn:match-invite", { detail: msg }),
-              );
-            } catch {}
-          }, 500);
+          // Only stash + forward if OnlinePlay is NOT already mounted.
+          // When OnlinePlay is mounted, its own WS listener processes
+          // messages directly — forwarding would cause duplicate popups.
+          const onlineMounted = !!(window as any).__ndn_online_mounted;
+          if (!onlineMounted) {
+            // Stash message so OnlinePlay can read it immediately on mount
+            (window as any).__ndn_pending_invite = msg;
+            // Switch to online tab so the OnlinePlay component mounts
+            setTab("online");
+            // Dispatch the event once after a short delay so React has
+            // time to mount OnlinePlay and register its event listener
+            setTimeout(() => {
+              try {
+                window.dispatchEvent(
+                  new CustomEvent("ndn:match-invite", { detail: msg }),
+                );
+              } catch {}
+            }, 200);
+          } else {
+            // OnlinePlay is mounted — just make sure we're on its tab
+            setTab("online");
+          }
         }
       } catch {}
     });

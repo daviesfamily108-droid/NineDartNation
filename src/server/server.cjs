@@ -1031,12 +1031,13 @@ app.get('/api/admin/system-health', (req, res) => {
   const uptime = process.uptime()
   const memUsage = process.memoryUsage()
   
+  const isHttps = req.secure || (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https'
   res.json({
     ok: true,
     health: {
       database: true, // Would check actual DB
       websocket: true, // Would check WebSocket server status
-      https: process.env.NODE_ENV === 'production',
+      https: isHttps,
       maintenance: maintenanceMode || false,
       clustering: false, // Would check actual clustering status
       uptime: uptime,

@@ -96,6 +96,15 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     }
   }, [wsGlobal?.connected, user]);
 
+  // Signal to App.tsx that OnlinePlay is mounted so it doesn't double-dispatch
+  // invite/prestart events (OnlinePlay's own WS listener handles them directly)
+  useEffect(() => {
+    (window as any).__ndn_online_mounted = true;
+    return () => {
+      (window as any).__ndn_online_mounted = false;
+    };
+  }, []);
+
   // Global quit handler (from CameraView Quit / Pause modal)
   useEffect(() => {
     const onQuit = () => {

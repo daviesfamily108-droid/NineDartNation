@@ -984,10 +984,36 @@ export default function MatchPrestart({
             </div>
           )}
 
-          {/* Bull-up phase — dartboard */}
+          {/* Bull-up phase — camera feed + dartboard */}
           {phase === "bull" && (
             <div className="flex flex-col items-center gap-5 animate-in fade-in zoom-in-95 duration-500">
-              {/* Full-size interactive dartboard */}
+              {/* Live camera feed so the player can see their dart on the board */}
+              <div className="w-full max-w-sm sm:max-w-md mx-auto rounded-2xl border border-white/10 bg-black/60 overflow-hidden shadow-xl shadow-black/40">
+                <div className="relative aspect-video">
+                  <CameraTile
+                    autoStart
+                    forceAutoStart
+                    fill
+                    aspect="free"
+                    className="w-full h-full"
+                  />
+                  <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm border border-white/10">
+                    <Camera className="w-3 h-3 text-emerald-400" />
+                    <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider">
+                      Live
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs text-white/50">
+                <Target className="w-3.5 h-3.5 text-amber-400" />
+                <span>
+                  See your dart above, then tap the board below where it landed
+                </span>
+              </div>
+
+              {/* Interactive dartboard for marking position */}
               <div className="w-full max-w-sm sm:max-w-md mx-auto rounded-2xl border border-white/10 bg-black/40 p-3 sm:p-4 shadow-2xl shadow-black/50">
                 <DartboardBullUp
                   onSelect={handleDartSelect}
