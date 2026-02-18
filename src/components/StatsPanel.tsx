@@ -332,7 +332,7 @@ export default function StatsPanel({ user }: { user?: any }) {
           return (
             <div
               key={p.id}
-              className="p-4 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-700/6 to-indigo-900/6 shadow-sm transform transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg"
+              className="p-4 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-700/6 to-indigo-900/6 shadow-sm transform transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg min-h-[200px] md:min-h-0"
             >
               <div className="flex items-center justify-between mb-2">
                 <div className="font-semibold">
