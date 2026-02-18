@@ -14,6 +14,7 @@ import {
   getAllTimeBestLeg,
   getAllTime,
   getAllTime180s,
+  getHeadToHeadLegDiff,
 } from "../../store/profileStats.js";
 import {
   Target,
