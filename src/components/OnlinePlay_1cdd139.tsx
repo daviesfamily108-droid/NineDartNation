@@ -821,6 +821,40 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
         if (pc) pc.addIceCandidate(data.payload)
       } else if (data.type === 'match-autocommit-updated') {
         try { setRoomAutocommit(!!data.allow) } catch {}
+      } else if (data.type === 'opponent-paused') {
+        // Opponent requested a pause - sync pause state locally
+        console.log('[OnlinePlay] Opponent paused:', data.pauserName)
+        try {
+          setPausedLocal(true)
+          setPauseRequestedBy(data.pauserName || 'Opponent')
+          setPausedGlobal(true, data.pauseStartedAt || Date.now(), data.pauserName || 'Opponent')
+          if (data.pauseMinutes) {
+            const endsAt = (data.pauseStartedAt || Date.now()) + data.pauseMinutes * 60 * 1000
+            setPauseEndsAt(endsAt)
+            setPauseDurationSec(data.pauseMinutes * 60)
+          }
+          toast(`${data.pauserName || 'Opponent'} paused the match`, { type: 'info' })
+        } catch (e) { console.warn('[OnlinePlay] Failed to apply pause:', e) }
+      } else if (data.type === 'opponent-unpaused') {
+        // Opponent resumed the match
+        console.log('[OnlinePlay] Opponent unpaused:', data.resumerName)
+        try {
+          setPausedLocal(false)
+          setPauseRequestedBy(null)
+          setPausedGlobal(false, null)
+          setPauseEndsAt(null)
+          toast(`${data.resumerName || 'Opponent'} resumed the match`, { type: 'success' })
+        } catch (e) { console.warn('[OnlinePlay] Failed to apply unpause:', e) }
+      } else if (data.type === 'opponent-quit') {
+        // Opponent quit the match - end game locally and show notification
+        console.log('[OnlinePlay] Opponent quit:', data.quitterName)
+        try {
+          toast(`${data.quitterName || 'Opponent'} quit the match`, { type: 'error' })
+          // End the game locally
+          try { match.endGame() } catch {}
+          // Show end summary (opponent forfeit)
+          setShowX01EndSummary(true)
+        } catch (e) { console.warn('[OnlinePlay] Failed to handle opponent quit:', e) }
       } else if (data.type === 'visit-commit') {
         try {
           // received server-validated visit commit; apply locally using
@@ -1469,9 +1503,49 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
           submitVisitManual(score);
         }}
         onQuit={() => {
+          // Send quit message to opponent first
+          try {
+            if (wsGlobal) {
+              wsGlobal.send({ type: 'match-quit', roomId })
+            } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'match-quit', roomId }))
+            }
+          } catch (e) { console.warn('[OnlinePlay] Failed to send quit message:', e) }
           try { match.endGame(); } catch {}
           sendState();
           try { window.dispatchEvent(new Event("ndn:match-quit")); } catch {}
+        }}
+        onPause={() => {
+          // Send pause message to opponent
+          try {
+            const pauseMinutes = pauseDurationSec / 60
+            if (wsGlobal) {
+              wsGlobal.send({ type: 'match-pause', roomId, pauseMinutes })
+            } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'match-pause', roomId, pauseMinutes }))
+            }
+            // Set local pause state
+            setPausedLocal(true)
+            setPauseRequestedBy(localPlayerName)
+            setPausedGlobal(true, Date.now(), localPlayerName)
+            const endsAt = Date.now() + pauseDurationSec * 1000
+            setPauseEndsAt(endsAt)
+          } catch (e) { console.warn('[OnlinePlay] Failed to send pause message:', e) }
+        }}
+        onResume={() => {
+          // Send unpause message to opponent
+          try {
+            if (wsGlobal) {
+              wsGlobal.send({ type: 'match-unpause', roomId })
+            } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'match-unpause', roomId }))
+            }
+            // Clear local pause state
+            setPausedLocal(false)
+            setPauseRequestedBy(null)
+            setPausedGlobal(false, null)
+            setPauseEndsAt(null)
+          } catch (e) { console.warn('[OnlinePlay] Failed to send unpause message:', e) }
         }}
         onStateChange={sendState}
         localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}

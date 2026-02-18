@@ -254,6 +254,44 @@ export default function InGameShell({
   const [showNumpad, setShowNumpad] = useState(false);
   const [numpadValue, setNumpadValue] = useState("");
 
+  // Turn timer: tracks how long the opponent has been throwing
+  const [opponentTurnStart, setOpponentTurnStart] = useState<number | null>(
+    null,
+  );
+  const [opponentTurnElapsed, setOpponentTurnElapsed] = useState(0);
+
+  // Track when turn changes to start/stop timer
+  useEffect(() => {
+    if (!isUsersTurn) {
+      // Opponent's turn started
+      setOpponentTurnStart(Date.now());
+    } else {
+      // Our turn - reset
+      setOpponentTurnStart(null);
+      setOpponentTurnElapsed(0);
+    }
+  }, [isUsersTurn]);
+
+  // Update elapsed time every second when opponent is throwing
+  useEffect(() => {
+    if (!opponentTurnStart) return;
+    const interval = setInterval(() => {
+      setOpponentTurnElapsed(
+        Math.floor((Date.now() - opponentTurnStart) / 1000),
+      );
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [opponentTurnStart]);
+
+  // Format seconds as mm:ss
+  const formatTurnTime = (seconds: number) => {
+    const mm = Math.floor(seconds / 60)
+      .toString()
+      .padStart(2, "0");
+    const ss = (seconds % 60).toString().padStart(2, "0");
+    return `${mm}:${ss}`;
+  };
+
   const commitVisit = (score: number, darts: number, meta?: any) => {
     if (onCommitVisit) {
       onCommitVisit(score, darts, meta);

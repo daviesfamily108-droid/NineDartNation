@@ -1,4 +1,4 @@
-﻿import ResizableModal from "./ui/ResizableModal.js";
+import ResizableModal from "./ui/ResizableModal.js";
 import type { Player } from "../store/match.js";
 
 function computeTotals(p: Player) {
@@ -7,6 +7,15 @@ function computeTotals(p: Player) {
   let bestLeg: number | null = null;
   let worstLeg: number | null = null;
   let oneEighties = 0;
+  let oneForties = 0;
+  let tons = 0; // 100+
+  let highestVisit = 0;
+  let totalVisits = 0;
+  let checkoutAttempts = 0;
+  let checkoutsHit = 0;
+  let firstNineDarts = 0;
+  let firstNinePoints = 0;
+
   for (const L of p.legs || []) {
     points += L.totalScoreStart - L.totalScoreRemaining;
     const legDarts = (L.visits || []).reduce((a, v) => a + (v.darts || 0), 0);
@@ -16,13 +25,50 @@ function computeTotals(p: Player) {
       if (worstLeg === null || L.dartsThrown > worstLeg)
         worstLeg = L.dartsThrown;
     }
-    // Count 180s: any visit with 180 points
+    // Count 180s, 140+, 100+ and track highest visit
+    let legDartsCount = 0;
     for (const v of L.visits || []) {
-      if ((v?.score || 0) === 180) oneEighties += 1;
+      const score = v?.score || v?.visitTotal || 0;
+      totalVisits++;
+      if (score === 180) oneEighties += 1;
+      if (score >= 140 && score < 180) oneForties += 1;
+      if (score >= 100) tons += 1;
+      if (score > highestVisit) highestVisit = score;
+
+      // First 9 darts average (first 3 visits = 9 darts)
+      if (legDartsCount < 9) {
+        firstNineDarts += Math.min(v.darts || 3, 9 - legDartsCount);
+        firstNinePoints += score;
+      }
+      legDartsCount += v.darts || 3;
+
+      // Checkout tracking
+      if (v.doubleWindowDarts) checkoutAttempts += v.doubleWindowDarts;
+      if (v.finishedByDouble) checkoutsHit += 1;
     }
   }
   const threeDA = darts > 0 ? (points / darts) * 3 : 0;
-  return { points, darts, threeDA, bestLeg, worstLeg, oneEighties };
+  const firstNineAvg =
+    firstNineDarts > 0 ? (firstNinePoints / firstNineDarts) * 3 : 0;
+  const checkoutPct =
+    checkoutAttempts > 0 ? (checkoutsHit / checkoutAttempts) * 100 : 0;
+
+  return {
+    points,
+    darts,
+    threeDA,
+    bestLeg,
+    worstLeg,
+    oneEighties,
+    oneForties,
+    tons,
+    highestVisit,
+    totalVisits,
+    firstNineAvg,
+    checkoutAttempts,
+    checkoutsHit,
+    checkoutPct,
+  };
 }
 
 export default function MatchSummaryModal({
@@ -34,6 +80,7 @@ export default function MatchSummaryModal({
   doublesStats,
   allowRematch,
   onRematch,
+  winnerName,
 }: {
   open: boolean;
   onClose: () => void;
@@ -46,13 +93,18 @@ export default function MatchSummaryModal({
   >;
   allowRematch?: boolean;
   onRematch?: () => void;
+  winnerName?: string;
 }) {
   if (!open) return null;
+
   const cards = players.map((p) => {
     const t = computeTotals(p);
     const dbl = doublesStats?.[p.id] || {};
-    const att = Math.max(0, Number(dbl.dartsAtDouble || 0));
-    const hit = Math.max(0, Number(dbl.doublesHit || 0));
+    const att = Math.max(
+      0,
+      Number(dbl.dartsAtDouble || t.checkoutAttempts || 0),
+    );
+    const hit = Math.max(0, Number(dbl.doublesHit || t.checkoutsHit || 0));
     const pct = att > 0 ? Math.round((hit / att) * 100) : null;
     return {
       id: p.id,
@@ -64,138 +116,164 @@ export default function MatchSummaryModal({
       doublePct: pct,
     };
   });
+
+  // Determine winner
+  const winner =
+    winnerName ||
+    (cards.length === 2 && cards[0].legsWon !== cards[1].legsWon
+      ? cards[0].legsWon > cards[1].legsWon
+        ? cards[0].name
+        : cards[1].name
+      : null);
+
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[120]">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
       <ResizableModal
         storageKey="ndn:modal:match-summary"
-        className="ndn-modal w-full relative"
-        defaultWidth={860}
-        defaultHeight={540}
+        className="ndn-modal w-full relative overflow-hidden"
+        defaultWidth={960}
+        defaultHeight={680}
         minWidth={640}
-        minHeight={420}
+        minHeight={520}
         maxWidth={1400}
         maxHeight={1000}
         initialFitHeight
       >
-        <h3 className="text-xl font-extrabold mb-2">{title}</h3>
-        <div className="text-xs opacity-80 mb-3">
-          Players: {players.map((p) => p.name).join(" vs ")}
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {cards[0] && (
-            <div className="p-3 rounded-2xl glass border border-white/10">
-              <div className="text-sm font-semibold mb-1">{cards[0].name}</div>
-              <div className="text-3xl font-extrabold">{cards[0].legsWon}</div>
-              <div className="text-xs opacity-80">Legs Won</div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="opacity-70">Final 3DA</span>
-                  <div className="font-semibold">
-                    {cards[0].threeDA.toFixed(1)}
-                  </div>
-                </div>
-                <div>
-                  <span className="opacity-70">Darts At Double</span>
-                  <div className="font-semibold">
-                    {cards[0].dartsAtDouble ?? "—"}
-                  </div>
-                </div>
-                <div>
-                  <span className="opacity-70">Double %</span>
-                  <div className="font-semibold">
-                    {cards[0].doublePct !== null &&
-                    cards[0].doublePct !== undefined
-                      ? `${cards[0].doublePct}%`
-                      : "—"}
-                  </div>
-                </div>
-                <div>
-                  <span className="opacity-70">Best Dart Leg</span>
-                  <div className="font-semibold">
-                    {cards[0].bestLeg ? `${cards[0].bestLeg} darts` : "—"}
-                  </div>
-                </div>
-                <div>
-                  <span className="opacity-70">Worst Dart Leg</span>
-                  <div className="font-semibold">
-                    {cards[0].worstLeg ? `${cards[0].worstLeg} darts` : "—"}
-                  </div>
-                </div>
-                <div>
-                  <span className="opacity-70">180's Hit</span>
-                  <div className="font-semibold">{cards[0].oneEighties}</div>
-                </div>
-              </div>
-            </div>
-          )}
-          <div className="hidden md:flex items-center justify-center">
-            <div className="text-4xl font-black">
-              {centerScore ||
-                (players.length === 2
-                  ? `${cards[0]?.legsWon ?? 0} – ${cards[1]?.legsWon ?? 0}`
-                  : "")}
+        {/* Winner Banner */}
+        {winner && (
+          <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-amber-500/20 via-yellow-400/30 to-amber-500/20 py-3 text-center border-b border-yellow-400/30">
+            <div className="text-2xl font-black text-yellow-300 tracking-tight">
+              🏆 {winner} WINS! 🏆
             </div>
           </div>
-          {cards[1] && (
-            <div className="p-3 rounded-2xl glass border border-white/10">
-              <div className="text-sm font-semibold mb-1">{cards[1].name}</div>
-              <div className="text-3xl font-extrabold">{cards[1].legsWon}</div>
-              <div className="text-xs opacity-80">Legs Won</div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="opacity-70">Final 3DA</span>
-                  <div className="font-semibold">
-                    {cards[1].threeDA.toFixed(1)}
+        )}
+
+        <div className={winner ? "pt-14" : ""}>
+          <h3 className="text-2xl font-extrabold mb-1 text-center">{title}</h3>
+          <div className="text-sm opacity-80 mb-4 text-center">
+            {players.map((p) => p.name).join(" vs ")}
+          </div>
+
+          {/* Score Display */}
+          <div className="flex items-center justify-center gap-6 mb-6">
+            {cards[0] && (
+              <div
+                className={`text-5xl font-black ${cards[0].legsWon > (cards[1]?.legsWon || 0) ? "text-emerald-400" : "text-white"}`}
+              >
+                {cards[0].legsWon}
+              </div>
+            )}
+            <div className="text-3xl font-bold text-white/50">–</div>
+            {cards[1] && (
+              <div
+                className={`text-5xl font-black ${cards[1].legsWon > (cards[0]?.legsWon || 0) ? "text-emerald-400" : "text-white"}`}
+              >
+                {cards[1].legsWon}
+              </div>
+            )}
+          </div>
+
+          {/* Player Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            {cards.map((card, idx) => (
+              <div
+                key={card.id}
+                className={`p-4 rounded-2xl border ${
+                  card.legsWon > (cards[1 - idx]?.legsWon || 0)
+                    ? "bg-emerald-500/10 border-emerald-400/30"
+                    : "bg-white/5 border-white/10"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-lg font-bold">{card.name}</div>
+                  {card.legsWon > (cards[1 - idx]?.legsWon || 0) && (
+                    <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                      Winner
+                    </span>
+                  )}
+                </div>
+
+                {/* Key Stats */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="p-2 rounded-lg bg-white/5 text-center">
+                    <div className="text-2xl font-bold text-indigo-300">
+                      {card.threeDA.toFixed(1)}
+                    </div>
+                    <div className="text-[10px] opacity-70">3-Dart Avg</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/5 text-center">
+                    <div className="text-2xl font-bold text-amber-300">
+                      {card.firstNineAvg.toFixed(1)}
+                    </div>
+                    <div className="text-[10px] opacity-70">First 9 Avg</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/5 text-center">
+                    <div className="text-2xl font-bold text-emerald-300">
+                      {card.doublePct !== null ? `${card.doublePct}%` : "—"}
+                    </div>
+                    <div className="text-[10px] opacity-70">Checkout %</div>
                   </div>
                 </div>
-                <div>
-                  <span className="opacity-70">Darts At Double</span>
-                  <div className="font-semibold">
-                    {cards[1].dartsAtDouble ?? "—"}
+
+                {/* Detailed Stats Grid */}
+                <div className="grid grid-cols-4 gap-2 text-xs">
+                  <div className="p-1.5 rounded bg-white/5 text-center">
+                    <div className="font-bold text-rose-300">
+                      {card.oneEighties}
+                    </div>
+                    <div className="opacity-60">180's</div>
+                  </div>
+                  <div className="p-1.5 rounded bg-white/5 text-center">
+                    <div className="font-bold">{card.oneForties}</div>
+                    <div className="opacity-60">140+</div>
+                  </div>
+                  <div className="p-1.5 rounded bg-white/5 text-center">
+                    <div className="font-bold">{card.tons}</div>
+                    <div className="opacity-60">100+</div>
+                  </div>
+                  <div className="p-1.5 rounded bg-white/5 text-center">
+                    <div className="font-bold">{card.highestVisit}</div>
+                    <div className="opacity-60">High</div>
                   </div>
                 </div>
-                <div>
-                  <span className="opacity-70">Double %</span>
-                  <div className="font-semibold">
-                    {cards[1].doublePct !== null &&
-                    cards[1].doublePct !== undefined
-                      ? `${cards[1].doublePct}%`
-                      : "—"}
+
+                <div className="grid grid-cols-4 gap-2 text-xs mt-2">
+                  <div className="p-1.5 rounded bg-white/5 text-center">
+                    <div className="font-bold">{card.bestLeg || "—"}</div>
+                    <div className="opacity-60">Best Leg</div>
                   </div>
-                </div>
-                <div>
-                  <span className="opacity-70">Best Dart Leg</span>
-                  <div className="font-semibold">
-                    {cards[1].bestLeg ? `${cards[1].bestLeg} darts` : "—"}
+                  <div className="p-1.5 rounded bg-white/5 text-center">
+                    <div className="font-bold">{card.worstLeg || "—"}</div>
+                    <div className="opacity-60">Worst Leg</div>
                   </div>
-                </div>
-                <div>
-                  <span className="opacity-70">Worst Dart Leg</span>
-                  <div className="font-semibold">
-                    {cards[1].worstLeg ? `${cards[1].worstLeg} darts` : "—"}
+                  <div className="p-1.5 rounded bg-white/5 text-center">
+                    <div className="font-bold">{card.darts}</div>
+                    <div className="opacity-60">Darts</div>
                   </div>
-                </div>
-                <div>
-                  <span className="opacity-70">180's Hit</span>
-                  <div className="font-semibold">{cards[1].oneEighties}</div>
+                  <div className="p-1.5 rounded bg-white/5 text-center">
+                    <div className="font-bold">{card.dartsAtDouble}</div>
+                    <div className="opacity-60">At Double</div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-2 mt-4">
+
+        {/* Action Buttons */}
+        <div className="grid grid-cols-2 gap-3 mt-4">
           <button
-            className="btn bg-slate-700 hover:bg-slate-800"
+            className="btn bg-slate-700 hover:bg-slate-600 py-3 text-sm font-semibold"
             onClick={onClose}
           >
             Close
           </button>
           {allowRematch && (
             <button
-              className="btn bg-emerald-600 hover:bg-emerald-700"
+              className="btn bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 py-3 text-sm font-semibold"
               onClick={onRematch}
             >
-              Rematch
+              🔄 Rematch
             </button>
           )}
         </div>
