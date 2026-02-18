@@ -3327,7 +3327,9 @@ app.post('/api/friends/accept', async (req, res) => {
   console.log('[ACCEPT-START] email=%s requestId=%s', me, requestId)
   startLogger.info('[ACCEPT-START] email=%s requestId=%s', me, requestId)
   
-  if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  if (!me || (!requestId && !fallbackFrom)) {
+    return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  }
 
   // Hydrate from Supabase first to ensure we have all requests
   try { await loadFriendRequestsFromSupabase() } catch {}

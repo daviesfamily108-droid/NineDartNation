@@ -359,7 +359,9 @@ export default function Friends({ user }: { user?: any }) {
       });
       await refresh();
       toast("Friend request accepted", { type: "success" });
-    } catch {}
+    } catch {
+      toast("Failed to accept request", { type: "error" });
+    }
   }
 
   async function declineFriend(requestId: string) {

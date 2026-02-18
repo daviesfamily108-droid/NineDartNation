@@ -2963,16 +2963,34 @@ app.post('/api/friends/accept', async (req, res) => {
   const { email, requestId, fromEmail } = req.body || {}
   const me = String(email || '').toLowerCase()
   const fallbackFrom = String(fromEmail || '').toLowerCase()
-  
+
   console.log('[ACCEPT-START] email=%s requestId=%s', me, requestId)
-  
-  if (!me || !requestId) return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+
+  if (!me || (!requestId && !fallbackFrom)) {
+    return res.status(400).json({ ok: false, error: 'BAD_REQUEST' })
+  }
 
   // Hydrate from Supabase first to ensure we have all requests
   try { await loadFriendRequestsFromSupabase() } catch {}
 
-  const idx = friendRequests.findIndex(r => r && r.id === requestId && String(r.to || '').toLowerCase() === me && String(r.status || 'pending') === 'pending')
-  if (idx === -1) {
+  const idx = friendRequests.findIndex(
+    r =>
+      r &&
+      (!requestId || r.id === requestId) &&
+      String(r.to || '').toLowerCase() === me &&
+      String(r.status || 'pending') === 'pending',
+  )
+  let requestIdx = idx
+  if (requestIdx === -1 && fallbackFrom) {
+    requestIdx = friendRequests.findIndex(
+      r =>
+        r &&
+        String(r.from || '').toLowerCase() === fallbackFrom &&
+        String(r.to || '').toLowerCase() === me &&
+        String(r.status || 'pending') === 'pending',
+    )
+  }
+  if (requestIdx === -1) {
     console.log('[ACCEPT-ERROR] Request not found: requestId=%s me=%s', requestId, me)
     return res.status(404).json({ ok: false, error: 'REQUEST_NOT_FOUND' })
   }
