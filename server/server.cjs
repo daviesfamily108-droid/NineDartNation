@@ -172,9 +172,13 @@ function getAdminFromReq(req) {
 
 function getOwnerFromReq(req) {
   try {
-    const adm = getAdminFromReq(req)
-    if (!adm) return null
-    if ((adm.email || '').toLowerCase() === OWNER_EMAIL) return adm
+    const authHeader = String(req.headers && req.headers.authorization || '')
+    const token = authHeader.split(' ')[1]
+    if (!token) return null
+    const decoded = jwt.verify(token, JWT_SECRET)
+    const email = String(decoded.email || decoded.username || '').toLowerCase()
+    if (!email) return null
+    if (email === OWNER_EMAIL) return { email, user: users.get(email) || null }
     return null
   } catch { return null }
 }

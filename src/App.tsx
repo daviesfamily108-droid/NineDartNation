@@ -71,6 +71,7 @@ export default function App() {
   const appRef = useRef<HTMLDivElement | null>(null);
   const [avatar, setAvatar] = useState<string>("");
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const cardPaddingBottom = useUserSettings((s) => s.cardPaddingBottom);
   const ws = (() => {
     try {
       return useWS();

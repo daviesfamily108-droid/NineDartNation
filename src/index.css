@@ -341,6 +341,7 @@ body {
   box-shadow: 0 10px 32px -8px rgba(49,46,129,0.25), 0 1.5px 8px rgba(160,132,232,0.10);
   border-radius: 1.5rem;
   padding: 1.25rem;
+  padding-bottom: var(--ndn-card-padding-bottom, 1.25rem);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   color: #F5F5F5;

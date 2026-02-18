@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DartDetector } from "../utils/dartDetector";
 
 import { useCalibration } from "../store/calibration";
 import { useCameraSession } from "../store/cameraSession";

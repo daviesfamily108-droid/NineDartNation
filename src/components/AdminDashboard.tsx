@@ -626,7 +626,10 @@ export default function AdminDashboard({ user }: { user: any }) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
         },
-        body: JSON.stringify({ tournamentId: tid }),
+        body: JSON.stringify({
+          tournamentId: tid,
+          requesterEmail: user?.email,
+        }),
       });
       await refresh();
     } finally {
