@@ -1059,6 +1059,9 @@ export default function AdminDashboard({ user }: { user: any }) {
               <h3 className="text-xl font-semibold mb-2">UI Layout</h3>
               <div className="text-sm opacity-80 mb-3">
                 Adjust card dimensions to avoid text overlap or clipping.
+                <span className="ml-2 text-emerald-400">
+                  ✓ Changes auto-save
+                </span>
               </div>
               <div className="space-y-4">
                 <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3">
@@ -1078,7 +1081,7 @@ export default function AdminDashboard({ user }: { user: any }) {
                     onChange={(e) =>
                       setStatsCardMinHeight(Number(e.target.value))
                     }
-                    className="w-full"
+                    className="w-full accent-indigo-500 cursor-pointer"
                   />
                   <div className="text-xs opacity-70 mt-2">
                     Changes apply to the score distribution card in Match Stats.
@@ -1101,7 +1104,7 @@ export default function AdminDashboard({ user }: { user: any }) {
                     onChange={(e) =>
                       setCardPaddingBottom(Number(e.target.value))
                     }
-                    className="w-full"
+                    className="w-full accent-purple-500 cursor-pointer"
                   />
                   <div className="text-xs opacity-70 mt-2">
                     Controls the bottom padding of page cards (e.g. Stats, Score

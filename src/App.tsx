@@ -72,6 +72,7 @@ export default function App() {
   const [avatar, setAvatar] = useState<string>("");
   const [isFullscreen, setIsFullscreen] = useState(false);
   const cardPaddingBottom = useUserSettings((s) => s.cardPaddingBottom);
+  const statsCardMinHeight = useUserSettings((s) => s.statsCardMinHeight);
   const ws = (() => {
     try {
       return useWS();
@@ -84,6 +85,19 @@ export default function App() {
   const isMobile = breakpoint === "mobile";
   const isTablet = breakpoint === "tablet";
   const [navOpen, setNavOpen] = useState(false);
+
+  // Apply UI layout CSS variables when settings change
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty(
+      "--ndn-card-padding-bottom",
+      `${cardPaddingBottom ?? 200}px`,
+    );
+    root.style.setProperty(
+      "--ndn-stats-card-height",
+      `${statsCardMinHeight ?? 220}px`,
+    );
+  }, [cardPaddingBottom, statsCardMinHeight]);
 
   // Close mobile drawer on Escape and when switching away from mobile
   useEffect(() => {
