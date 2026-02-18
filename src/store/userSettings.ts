@@ -292,6 +292,17 @@ function load(): Pick<
         localStorage.setItem(KEY, JSON.stringify(migrated));
       } catch {}
     }
+    // Version 3: Fix stats panel padding to fully cover score distribution
+    if (version < 3) {
+      const migrated = {
+        ...j,
+        cardPaddingBottom: 680,
+        __version: 3,
+      };
+      try {
+        localStorage.setItem(KEY, JSON.stringify(migrated));
+      } catch {}
+    }
     return {
       favoriteDouble: j.favoriteDouble || "D16",
       callerEnabled:
@@ -427,7 +438,7 @@ function load(): Pick<
           : 220,
       cardPaddingBottom:
         typeof j.cardPaddingBottom === "number" && isFinite(j.cardPaddingBottom)
-          ? Math.max(0, Math.min(600, Math.round(j.cardPaddingBottom)))
+          ? Math.max(0, Math.min(1000, Math.round(j.cardPaddingBottom)))
           : 200,
       matchType: j.matchType === "doubles" ? "doubles" : "singles",
       teamAName: typeof j.teamAName === "string" ? j.teamAName : "Team A",
