@@ -2610,7 +2610,7 @@ app.get('/api/friends/list', async (req, res) => {
     try {
       const { data, error } = await supabase
         .from('friendships')
-        .select('friend_email')
+        .select('friend_email, friend_username')
         .eq('user_email', email)
       
       console.log('[FRIENDS-LIST-RESULT] Supabase query: error=%s dataLength=%d', error?.message || 'none', data?.length || 0)
@@ -2618,6 +2618,21 @@ app.get('/api/friends/list', async (req, res) => {
       if (!error && Array.isArray(data) && data.length > 0) {
         // Merge Supabase rows with any existing in-memory cache to avoid losing recent local updates
         const existing = friendships.get(email) || new Set()
+        const users = global.users || new Map()
+        // Populate global.users with persisted usernames from Supabase
+        for (const row of data) {
+          const friendEmail = String(row.friend_email || '').toLowerCase()
+          if (friendEmail && row.friend_username) {
+            if (!users.has(friendEmail)) {
+              users.set(friendEmail, { email: friendEmail, username: row.friend_username, status: 'offline' })
+            } else if (!users.get(friendEmail).username) {
+              const u = users.get(friendEmail)
+              u.username = row.friend_username
+              users.set(friendEmail, u)
+            }
+          }
+        }
+        global.users = users
         const merged = new Set(existing)
         for (const row of data) {
           const friendEmail = String(row.friend_email || '').toLowerCase()

@@ -268,7 +268,7 @@ function load(): Pick<
         textSize: "medium",
         boxSize: "medium",
         statsCardMinHeight: 220,
-        cardPaddingBottom: 200,
+        cardPaddingBottom: 680,
         matchType: "singles",
         teamAName: "Team A",
         teamBName: "Team B",
