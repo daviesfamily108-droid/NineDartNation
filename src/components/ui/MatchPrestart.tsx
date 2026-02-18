@@ -295,7 +295,11 @@ function DartboardBullUp({
     <div className="relative">
       {label && (
         <div className="text-center mb-2">
-          <span className="text-xs font-bold uppercase tracking-widest text-white/50">
+          <span
+            className={`text-xs font-bold uppercase tracking-widest ${
+              disabled && selectedPoint ? "text-emerald-400" : "text-white/50"
+            }`}
+          >
             {label}
           </span>
         </div>
@@ -303,7 +307,10 @@ function DartboardBullUp({
       <svg
         ref={svgRef}
         viewBox={`0 0 ${BOARD_SIZE} ${BOARD_SIZE}`}
-        className={`w-full h-full touch-none ${disabled ? "opacity-50 pointer-events-none" : "cursor-crosshair"}`}
+        className={`w-full h-full touch-none select-none ${
+          disabled ? "pointer-events-none" : "cursor-crosshair"
+        }`}
+        style={{ opacity: disabled && !selectedPoint ? 0.5 : 1 }}
         onClick={handleClick}
         onTouchEnd={handleTouch}
       >
@@ -419,7 +426,7 @@ function DartboardBullUp({
               y1={CY}
               x2={selectedPoint.x}
               y2={selectedPoint.y}
-              stroke="rgba(234,179,8,0.5)"
+              stroke={disabled ? "rgba(34,197,94,0.6)" : "rgba(234,179,8,0.5)"}
               strokeWidth={1}
               strokeDasharray="3,3"
             />
@@ -430,12 +437,12 @@ function DartboardBullUp({
               r={6}
               fill="rgba(0,0,0,0.4)"
             />
-            {/* Dart marker */}
+            {/* Dart marker - green when locked, yellow when editable */}
             <circle
               cx={selectedPoint.x}
               cy={selectedPoint.y}
               r={6}
-              fill="#eab308"
+              fill={disabled ? "#22c55e" : "#eab308"}
               stroke="#fff"
               strokeWidth={2}
               className="drop-shadow-lg"
@@ -446,6 +453,19 @@ function DartboardBullUp({
               r={2.5}
               fill="#fff"
             />
+            {/* Lock icon indicator when locked */}
+            {disabled && (
+              <text
+                x={selectedPoint.x}
+                y={selectedPoint.y - 14}
+                textAnchor="middle"
+                fill="#22c55e"
+                fontSize="10"
+                fontWeight="bold"
+              >
+                🔒
+              </text>
+            )}
           </>
         )}
       </svg>
@@ -598,6 +618,7 @@ export default function MatchPrestart({
     null,
   );
   const [dartDistMm, setDartDistMm] = useState<number | null>(null);
+  const [dartLocked, setDartLocked] = useState(false); // Lock dart position after first tap
   const [dartSubmitted, setDartSubmitted] = useState(false);
   const portalElRef = useRef<HTMLElement | null>(
     typeof document !== "undefined" ? document.createElement("div") : null,
@@ -643,6 +664,7 @@ export default function MatchPrestart({
     setLocalChoice(null);
     setDartPoint(null);
     setDartDistMm(null);
+    setDartLocked(false);
     setDartSubmitted(false);
   }, [open, countdown]);
 
@@ -681,6 +703,7 @@ export default function MatchPrestart({
       setPhase("bull");
       setDartPoint(null);
       setDartDistMm(null);
+      setDartLocked(false);
       setDartSubmitted(false);
     }
   }, [bullActive]);
@@ -700,6 +723,7 @@ export default function MatchPrestart({
     if (bullTied) {
       setDartPoint(null);
       setDartDistMm(null);
+      setDartLocked(false);
       setDartSubmitted(false);
       setPhase("bull");
     }
@@ -725,10 +749,13 @@ export default function MatchPrestart({
 
   const handleDartSelect = useCallback(
     (x: number, y: number, distMm: number) => {
+      // Once a dart is placed, lock it - no further changes allowed
+      if (dartLocked) return;
       setDartPoint({ x, y });
       setDartDistMm(distMm);
+      setDartLocked(true); // Lock immediately after first placement
     },
-    [],
+    [dartLocked],
   );
 
   const handleSubmitDart = useCallback(() => {
@@ -1041,8 +1068,12 @@ export default function MatchPrestart({
                 <DartboardBullUp
                   onSelect={handleDartSelect}
                   selectedPoint={dartPoint}
-                  disabled={dartSubmitted}
-                  label="Tap where your dart landed"
+                  disabled={dartLocked || dartSubmitted}
+                  label={
+                    dartLocked
+                      ? "Dart position locked"
+                      : "Tap where your dart landed"
+                  }
                 />
               </div>
 
