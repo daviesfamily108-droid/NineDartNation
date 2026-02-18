@@ -1,0 +1,12 @@
+[33mcommit ef9bdc6d5a865dcae550423be1d94f07984c440d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: daviesfamily108-droid <daviesfamily108@gmail.com>
+Date:   Wed Feb 18 12:49:45 2026 +0000
+
+    Update App, AdminDashboard, Sidebar, StatsPanel, userSettings
+
+ src/App.tsx                       |  59 [32m++[m[31m--[m
+ src/components/AdminDashboard.tsx | 135 [32m+++++++++[m
+ src/components/Sidebar.tsx        |  21 [32m+[m[31m-[m
+ src/components/StatsPanel.tsx     | 595 [32m++++++++++++++++++++[m[31m------------------[m
+ src/store/userSettings.ts         |  32 [32m++[m
+ 5 files changed, 536 insertions(+), 306 deletions(-)

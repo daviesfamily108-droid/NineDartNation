@@ -89,6 +89,8 @@ type SettingsState = {
   boxSize: "small" | "medium" | "large";
   // Stats UI tuning
   statsCardMinHeight?: number;
+  // Card depth (padding-bottom) applied to page cards like the stats card
+  cardPaddingBottom?: number;
   // Match configuration
   matchType?: "singles" | "doubles";
   teamAName?: string;
@@ -144,6 +146,7 @@ type SettingsState = {
   setTextSize: (size: "small" | "medium" | "large") => void;
   setBoxSize: (size: "small" | "medium" | "large") => void;
   setStatsCardMinHeight: (n: number) => void;
+  setCardPaddingBottom: (n: number) => void;
   setMatchType: (t: "singles" | "doubles") => void;
   setTeamAName: (name: string) => void;
   setTeamBName: (name: string) => void;
@@ -205,6 +208,7 @@ function load(): Pick<
   | "textSize"
   | "boxSize"
   | "statsCardMinHeight"
+  | "cardPaddingBottom"
   | "matchType"
   | "teamAName"
   | "teamBName"
@@ -264,6 +268,7 @@ function load(): Pick<
         textSize: "medium",
         boxSize: "medium",
         statsCardMinHeight: 220,
+        cardPaddingBottom: 200,
         matchType: "singles",
         teamAName: "Team A",
         teamBName: "Team B",
@@ -420,6 +425,10 @@ function load(): Pick<
         isFinite(j.statsCardMinHeight)
           ? Math.max(160, Math.min(520, Math.round(j.statsCardMinHeight)))
           : 220,
+      cardPaddingBottom:
+        typeof j.cardPaddingBottom === "number" && isFinite(j.cardPaddingBottom)
+          ? Math.max(0, Math.min(600, Math.round(j.cardPaddingBottom)))
+          : 200,
       matchType: j.matchType === "doubles" ? "doubles" : "singles",
       teamAName: typeof j.teamAName === "string" ? j.teamAName : "Team A",
       teamBName: typeof j.teamBName === "string" ? j.teamBName : "Team B",
@@ -474,6 +483,7 @@ function load(): Pick<
       textSize: "medium",
       boxSize: "medium",
       statsCardMinHeight: 220,
+      cardPaddingBottom: 200,
       matchType: "singles",
       teamAName: "Team A",
       teamBName: "Team B",
@@ -747,6 +757,11 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     const next = Math.max(160, Math.min(520, Math.round(n)));
     save({ statsCardMinHeight: next });
     set({ statsCardMinHeight: next });
+  },
+  setCardPaddingBottom: (n) => {
+    const next = Math.max(0, Math.min(600, Math.round(n)));
+    save({ cardPaddingBottom: next });
+    set({ cardPaddingBottom: next });
   },
   setMatchType: (t) => {
     const v = t === "doubles" ? "doubles" : "singles";
