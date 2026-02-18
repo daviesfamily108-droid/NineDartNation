@@ -81,10 +81,14 @@ type SettingsState = {
   offlineLayout?: "classic" | "modern";
   // Match UI
   hideInGameSidebar?: boolean;
+  // Admin-controlled section visibility
+  hiddenSections?: string[];
   // Text size
   textSize: "small" | "medium" | "large";
   // Box size
   boxSize: "small" | "medium" | "large";
+  // Stats UI tuning
+  statsCardMinHeight?: number;
   // Match configuration
   matchType?: "singles" | "doubles";
   teamAName?: string;
@@ -123,6 +127,7 @@ type SettingsState = {
   setIgnorePreferredCameraSync: (v: boolean) => void;
   setOfflineLayout: (mode: "classic" | "modern") => void;
   setHideInGameSidebar: (v: boolean) => void;
+  setHiddenSections: (sections: string[]) => void;
   setAutoscoreProvider: (
     p: "built-in" | "built-in-v2" | "external-ws" | "manual",
   ) => void;
@@ -138,6 +143,7 @@ type SettingsState = {
   setAllowAutocommitInOnline: (v: boolean) => void;
   setTextSize: (size: "small" | "medium" | "large") => void;
   setBoxSize: (size: "small" | "medium" | "large") => void;
+  setStatsCardMinHeight: (n: number) => void;
   setMatchType: (t: "singles" | "doubles") => void;
   setTeamAName: (name: string) => void;
   setTeamBName: (name: string) => void;
@@ -184,6 +190,7 @@ function load(): Pick<
   | "hideCameraOverlay"
   | "offlineLayout"
   | "hideInGameSidebar"
+  | "hiddenSections"
   | "autoscoreProvider"
   | "autoscoreWsUrl"
   | "autoCommitMode"
@@ -197,6 +204,7 @@ function load(): Pick<
   | "allowAutocommitInOnline"
   | "textSize"
   | "boxSize"
+  | "statsCardMinHeight"
   | "matchType"
   | "teamAName"
   | "teamBName"
@@ -241,6 +249,7 @@ function load(): Pick<
         hideCameraOverlay: false,
         offlineLayout: "modern",
         hideInGameSidebar: true,
+        hiddenSections: [],
         autoscoreProvider: "built-in",
         autoscoreWsUrl: "",
         autoCommitMode: "immediate",
@@ -254,6 +263,7 @@ function load(): Pick<
         allowAutocommitInOnline: false,
         textSize: "medium",
         boxSize: "medium",
+        statsCardMinHeight: 220,
         matchType: "singles",
         teamAName: "Team A",
         teamBName: "Team B",
@@ -396,12 +406,20 @@ function load(): Pick<
       offlineLayout: j.offlineLayout === "classic" ? "classic" : "modern",
       hideInGameSidebar:
         typeof j.hideInGameSidebar === "boolean" ? j.hideInGameSidebar : true,
+      hiddenSections: Array.isArray(j.hiddenSections)
+        ? j.hiddenSections.filter((v: any) => typeof v === "string")
+        : [],
       textSize:
         j.textSize === "small" || j.textSize === "large"
           ? j.textSize
           : "medium",
       boxSize:
         j.boxSize === "small" || j.boxSize === "large" ? j.boxSize : "medium",
+      statsCardMinHeight:
+        typeof j.statsCardMinHeight === "number" &&
+        isFinite(j.statsCardMinHeight)
+          ? Math.max(160, Math.min(520, Math.round(j.statsCardMinHeight)))
+          : 220,
       matchType: j.matchType === "doubles" ? "doubles" : "singles",
       teamAName: typeof j.teamAName === "string" ? j.teamAName : "Team A",
       teamBName: typeof j.teamBName === "string" ? j.teamBName : "Team B",
@@ -445,6 +463,7 @@ function load(): Pick<
       hideCameraOverlay: false,
       offlineLayout: "modern",
       hideInGameSidebar: true,
+      hiddenSections: [],
       autoscoreProvider: "built-in",
       autoscoreWsUrl: "",
       autoCommitMode: "immediate",
@@ -454,6 +473,7 @@ function load(): Pick<
       enhanceBigTrebles: false,
       textSize: "medium",
       boxSize: "medium",
+      statsCardMinHeight: 220,
       matchType: "singles",
       teamAName: "Team A",
       teamBName: "Team B",
@@ -708,6 +728,13 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     save({ hideInGameSidebar: v });
     set({ hideInGameSidebar: v });
   },
+  setHiddenSections: (sections) => {
+    const next = Array.isArray(sections)
+      ? sections.filter((v) => typeof v === "string")
+      : [];
+    save({ hiddenSections: next });
+    set({ hiddenSections: next });
+  },
   setTextSize: (size) => {
     save({ textSize: size });
     set({ textSize: size });
@@ -715,6 +742,11 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
   setBoxSize: (size) => {
     save({ boxSize: size });
     set({ boxSize: size });
+  },
+  setStatsCardMinHeight: (n) => {
+    const next = Math.max(160, Math.min(520, Math.round(n)));
+    save({ statsCardMinHeight: next });
+    set({ statsCardMinHeight: next });
   },
   setMatchType: (t) => {
     const v = t === "doubles" ? "doubles" : "singles";

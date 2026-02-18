@@ -3,6 +3,7 @@ import { apiFetch } from "../utils/api.js";
 import BarChart from "./BarChart.js";
 import TabPills from "./ui/TabPills.js";
 import { getGameModeStats } from "../store/profileStats.js";
+import { useUserSettings } from "../store/userSettings.js";
 import {
   allGames,
   labelForMode,
@@ -95,6 +96,74 @@ function EmailEditor({
 }
 
 export default function AdminDashboard({ user }: { user: any }) {
+  const {
+    statsCardMinHeight,
+    setStatsCardMinHeight,
+    hiddenSections,
+    setHiddenSections,
+  } = useUserSettings();
+  const hiddenSectionList = hiddenSections || [];
+  const sectionCatalog = useMemo(
+    () => [
+      { key: "tab:score", label: "Home tab", group: "Tabs" },
+      { key: "tab:camera", label: "Camera tab", group: "Tabs" },
+      { key: "tab:online", label: "Online Play tab", group: "Tabs" },
+      { key: "tab:offline", label: "Offline tab", group: "Tabs" },
+      { key: "tab:tournaments", label: "Tournaments tab", group: "Tabs" },
+      { key: "tab:friends", label: "Friends tab", group: "Tabs" },
+      { key: "tab:stats", label: "Stats tab", group: "Tabs" },
+      { key: "tab:settings", label: "Settings tab", group: "Tabs" },
+      { key: "tab:fullaccess", label: "Premium tab", group: "Tabs" },
+      { key: "tab:admin", label: "Admin tab", group: "Tabs" },
+      {
+        key: "stats:player-cards",
+        label: "Stats: player cards",
+        group: "Stats",
+      },
+      {
+        key: "stats:opponent-compare",
+        label: "Stats: opponent compare",
+        group: "Stats",
+      },
+      {
+        key: "stats:score-distribution",
+        label: "Stats: score distribution",
+        group: "Stats",
+      },
+      { key: "stats:other-modes", label: "Stats: other modes", group: "Stats" },
+      { key: "global:helpassistant", label: "Help assistant", group: "Global" },
+      { key: "global:footer", label: "Footer", group: "Global" },
+      { key: "global:camera-logger", label: "Camera logger", group: "Global" },
+      {
+        key: "global:camera-watchdog",
+        label: "Camera watchdog",
+        group: "Global",
+      },
+      {
+        key: "global:camera-recovery",
+        label: "Camera recovery toasts",
+        group: "Global",
+      },
+    ],
+    [],
+  );
+  const groupedSections = useMemo(() => {
+    const groups: Record<string, typeof sectionCatalog> = {};
+    for (const item of sectionCatalog) {
+      if (!groups[item.group]) groups[item.group] = [];
+      groups[item.group].push(item);
+    }
+    return groups;
+  }, [sectionCatalog]);
+  const toggleSection = useCallback(
+    (key: string) => {
+      const next = hiddenSectionList.includes(key)
+        ? hiddenSectionList.filter((s) => s !== key)
+        : [...hiddenSectionList, key];
+      setHiddenSections(next);
+    },
+    [hiddenSectionList, setHiddenSections],
+  );
   const ws = (() => {
     try {
       return useWS();
@@ -858,6 +927,40 @@ export default function AdminDashboard({ user }: { user: any }) {
         </div>
       )}
       {isOwner && (
+        <div className="card">
+          <h3 className="text-xl font-semibold mb-2">Site Sections</h3>
+          <div className="text-sm opacity-80 mb-3">
+            Hide sections across the site. Owner only.
+          </div>
+          <div className="grid gap-4">
+            {Object.entries(groupedSections).map(([group, items]) => (
+              <div
+                key={group}
+                className="rounded-xl border border-white/10 bg-white/5 p-3"
+              >
+                <div className="font-semibold mb-2">{group}</div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {items.map((item) => (
+                    <label
+                      key={item.key}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4"
+                        checked={!hiddenSectionList.includes(item.key)}
+                        onChange={() => toggleSection(item.key)}
+                      />
+                      <span>{item.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {isOwner && (
         <TabPills
           tabs={[
             { key: "general", label: "General" },
@@ -941,6 +1044,38 @@ export default function AdminDashboard({ user }: { user: any }) {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isOwner && (
+            <div className="card">
+              <h3 className="text-xl font-semibold mb-2">UI Layout</h3>
+              <div className="text-sm opacity-80 mb-3">
+                Adjust stats card height to avoid text overlap.
+              </div>
+              <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3">
+                <label
+                  className="block text-sm mb-2"
+                  htmlFor="statsCardMinHeight"
+                >
+                  Stats card height: {statsCardMinHeight ?? 220}px
+                </label>
+                <input
+                  id="statsCardMinHeight"
+                  type="range"
+                  min="160"
+                  max="520"
+                  step="10"
+                  value={statsCardMinHeight ?? 220}
+                  onChange={(e) =>
+                    setStatsCardMinHeight(Number(e.target.value))
+                  }
+                  className="w-full"
+                />
+                <div className="text-xs opacity-70 mt-2">
+                  Changes apply to the score distribution card in Match Stats.
                 </div>
               </div>
             </div>

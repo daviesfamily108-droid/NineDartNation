@@ -1,11 +1,12 @@
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   Suspense,
 } from "react";
-import { Sidebar, TabKey } from "./components/Sidebar.js";
+import { Sidebar, TabKey, buildTabList } from "./components/Sidebar.js";
 const Home = React.lazy(() => import("./components/Home.js"));
 import ScrollFade from "./components/ScrollFade.js";
 // Lazy-load CameraView to avoid importing a large camera module at app
@@ -40,6 +41,7 @@ import {
 } from "./store/profileStats.js";
 import { useMatch } from "./store/match.js";
 import { useUserSettings } from "./store/userSettings.js";
+import { useIsAdmin } from "./utils/admin.js";
 import { apiFetch, getApiBaseUrl } from "./utils/api.js";
 import "./styles/premium.css";
 import "./styles/themes.css";
@@ -123,7 +125,12 @@ export default function App() {
   const [minimalUI, setMinimalUI] = useState<boolean>(false);
   const [allTimeAvg, setAllTimeAvg] = useState<number>(0);
   const [avgDelta, setAvgDelta] = useState<number>(0);
-  const { avgMode } = useUserSettings();
+  const { avgMode, hiddenSections } = useUserSettings();
+  const hiddenSet = useMemo(
+    () => new Set(hiddenSections || []),
+    [hiddenSections],
+  );
+  const isAdmin = useIsAdmin(user?.email);
   const _cameraEnabled = useUserSettings((s) => s.cameraEnabled);
   const matchInProgress = useMatch((s) => s.inProgress);
   const isCompact = matchInProgress && tab !== "score";
@@ -131,6 +138,18 @@ export default function App() {
   const normalizedDelta = Math.abs(avgDelta) >= 0.05 ? avgDelta : 0;
   const API_URL = getApiBaseUrl();
   const userSettings = useUserSettings();
+  const availableTabs = useMemo(() => {
+    const userForTabs = user;
+    const tabs = buildTabList(userForTabs, isAdmin);
+    return tabs.map((t) => t.key).filter((key) => !hiddenSet.has(`tab:${key}`));
+  }, [user, isAdmin, hiddenSet]);
+
+  useEffect(() => {
+    if (!availableTabs.length) return;
+    if (hiddenSet.has(`tab:${tab}`)) {
+      setTab(availableTabs[0]);
+    }
+  }, [availableTabs, hiddenSet, tab]);
 
   // ── Global WS listener for match invites / prestart ──────────────
   // The OnlinePlay component only mounts when the "online" tab is active.
@@ -1240,7 +1259,7 @@ export default function App() {
                 WebkitOverflowScrolling: "touch", // Smooth scrolling on iOS
               }}
             >
-              {tab === "settings" && (
+              {tab === "settings" && !hiddenSet.has("tab:settings") && (
                 <Suspense
                   fallback={<div className="p-4">Loading settings...</div>}
                 >
@@ -1249,14 +1268,14 @@ export default function App() {
                   </ScrollFade>
                 </Suspense>
               )}
-              {tab === "score" && (
+              {tab === "score" && !hiddenSet.has("tab:score") && (
                 <Suspense fallback={<div className="p-4">Loading home...</div>}>
                   <ScrollFade className="flex-1 min-h-0">
                     <Home user={user} />
                   </ScrollFade>
                 </Suspense>
               )}
-              {tab === "online" && (
+              {tab === "online" && !hiddenSet.has("tab:online") && (
                 <Suspense
                   fallback={<div className="p-4">Loading online...</div>}
                 >
@@ -1265,7 +1284,7 @@ export default function App() {
                   </ScrollFade>
                 </Suspense>
               )}
-              {tab === "camera" && (
+              {tab === "camera" && !hiddenSet.has("tab:camera") && (
                 <Suspense
                   fallback={<div className="p-4">Loading camera...</div>}
                 >
@@ -1274,7 +1293,7 @@ export default function App() {
                   </ScrollFade>
                 </Suspense>
               )}
-              {tab === "offline" && (
+              {tab === "offline" && !hiddenSet.has("tab:offline") && (
                 <Suspense
                   fallback={<div className="p-4">Loading offline...</div>}
                 >
@@ -1283,7 +1302,7 @@ export default function App() {
                   </ScrollFade>
                 </Suspense>
               )}
-              {tab === "friends" && (
+              {tab === "friends" && !hiddenSet.has("tab:friends") && (
                 <Suspense
                   fallback={<div className="p-4">Loading friends...</div>}
                 >
@@ -1292,7 +1311,7 @@ export default function App() {
                   </ScrollFade>
                 </Suspense>
               )}
-              {tab === "stats" && (
+              {tab === "stats" && !hiddenSet.has("tab:stats") && (
                 <Suspense
                   fallback={<div className="p-4">Loading stats...</div>}
                 >
@@ -1301,7 +1320,7 @@ export default function App() {
                   </ScrollFade>
                 </Suspense>
               )}
-              {tab === "tournaments" && (
+              {tab === "tournaments" && !hiddenSet.has("tab:tournaments") && (
                 <Suspense
                   fallback={<div className="p-4">Loading tournaments...</div>}
                 >
@@ -1310,7 +1329,7 @@ export default function App() {
                   </ScrollFade>
                 </Suspense>
               )}
-              {tab === "admin" && (
+              {tab === "admin" && !hiddenSet.has("tab:admin") && (
                 <Suspense
                   fallback={<div className="p-4">Loading admin...</div>}
                 >
@@ -1322,7 +1341,7 @@ export default function App() {
                   </ScrollFade>
                 </Suspense>
               )}
-              {tab === "fullaccess" && (
+              {tab === "fullaccess" && !hiddenSet.has("tab:fullaccess") && (
                 <Suspense
                   fallback={<div className="p-4">Loading admin access...</div>}
                 >
@@ -1337,16 +1356,22 @@ export default function App() {
       </div>
 
       {/* Floating Help Assistant - Always visible */}
-      <HelpAssistant />
+      {!hiddenSet.has("global:helpassistant") && <HelpAssistant />}
       {/* App footer with legal notice */}
-      <Footer />
+      {!hiddenSet.has("global:footer") && <Footer />}
       {/* Debug banner removed - not shown to users in production builds */}
       {/* Global camera logger: logs stream lifecycle and video/pc events across site */}
-      {!minimalUI && <GlobalCameraLogger />}
+      {!minimalUI && !hiddenSet.has("global:camera-logger") && (
+        <GlobalCameraLogger />
+      )}
       {/* Global camera watchdog: auto-recovers stalled video/stream */}
-      {!minimalUI && <GlobalCameraWatchdog />}
+      {!minimalUI && !hiddenSet.has("global:camera-watchdog") && (
+        <GlobalCameraWatchdog />
+      )}
       {/* User-facing recovery toast + one-click retry */}
-      {!minimalUI && <GlobalCameraRecoveryToasts />}
+      {!minimalUI && !hiddenSet.has("global:camera-recovery") && (
+        <GlobalCameraRecoveryToasts />
+      )}
       {/* Full Screen Notification Modal - Moved to root level for proper overlay */}
       {notificationsOpen && (
         <div

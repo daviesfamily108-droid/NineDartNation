@@ -15,6 +15,7 @@ import { getFreeRemaining } from "../utils/quota.js";
 import { useIsAdmin } from "../utils/admin.js";
 import { DISCORD_INVITE_URL } from "../utils/config.js";
 import { apiFetch } from "../utils/api.js";
+import { useUserSettings } from "../store/userSettings.js";
 
 export type TabKey =
   | "score"
@@ -164,9 +165,16 @@ export function Sidebar({
   // no-op debug retention removed
   // When the server has not yet returned a subscription, prefer a cached
   // localStorage subscription (if present) to avoid flicker in the UI.
-  const userForTabs = resolveUserForTabs(user);
   const isAdmin = useIsAdmin(user?.email);
-  const tabs = buildTabList(userForTabs, isAdmin);
+  const userForTabs = resolveUserForTabs(user);
+  const hiddenSections = useUserSettings((s) => s.hiddenSections || []);
+  const hiddenSet = React.useMemo(
+    () => new Set(hiddenSections),
+    [hiddenSections],
+  );
+  const tabs = buildTabList(userForTabs, isAdmin).filter(
+    (t) => !hiddenSet.has(`tab:${t.key}`),
+  );
   const [showDiscord, setShowDiscord] = useState(false);
   const [showNDNDiscord, setShowNDNDiscord] = useState(false);
   const freeLeft =
@@ -489,7 +497,14 @@ export function MobileTabBar({
 }) {
   const isAdmin = useIsAdmin(user?.email);
   const userForTabs = resolveUserForTabs(user);
-  const tabs = buildTabList(userForTabs, isAdmin);
+  const hiddenSections = useUserSettings((s) => s.hiddenSections || []);
+  const hiddenSet = React.useMemo(
+    () => new Set(hiddenSections),
+    [hiddenSections],
+  );
+  const tabs = buildTabList(userForTabs, isAdmin).filter(
+    (t) => !hiddenSet.has(`tab:${t.key}`),
+  );
 
   // Helper to clean labels for mobile (remove emojis)
   const cleanLabel = (l: string) =>
