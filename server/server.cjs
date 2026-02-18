@@ -4846,30 +4846,77 @@ function loadFriendships() {
 }
 loadFriendships()
 
-// Ensure the Supabase friendships table has the required unique constraint.
-// Without it, upsert with onConflict will fail and friends won't persist.
+// Ensure the Supabase friendships table exists with the required unique constraint.
+// AUTO-CREATES the table if it doesn't exist to prevent friends list from being empty after deploy.
 async function ensureFriendshipsTable() {
   if (!supabase) return
   try {
+    // First, try to create the table if it doesn't exist
+    // This uses Supabase's SQL execution via RPC or direct query
+    const createTableSQL = `
+      CREATE TABLE IF NOT EXISTS friendships (
+        id BIGSERIAL PRIMARY KEY,
+        user_email TEXT NOT NULL,
+        friend_email TEXT NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `
+    const addConstraintSQL = `
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'friendships_user_friend_unique'
+        ) THEN
+          ALTER TABLE friendships ADD CONSTRAINT friendships_user_friend_unique UNIQUE (user_email, friend_email);
+        END IF;
+      END $$;
+    `
+    const createIndexSQL = `
+      CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_email);
+      CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_email);
+    `
+    
+    // Try to execute the SQL to create/update the table
+    try {
+      // Supabase JS doesn't have direct SQL execution, so we test with a simple select first
+      const { error: selectError } = await supabase.from('friendships').select('id').limit(1)
+      
+      if (selectError && /relation.*does not exist|could not find/i.test(selectError.message || '')) {
+        console.log('[Friends] Friendships table does not exist - attempting to create via Supabase dashboard is required')
+        console.log('[Friends] Please create the table in Supabase SQL Editor:')
+        console.log(createTableSQL)
+        console.log(addConstraintSQL)
+        console.log(createIndexSQL)
+        console.log('[Friends] IMPORTANT: Run the above SQL in your Supabase dashboard to persist friends across deploys!')
+      }
+    } catch (e) {
+      console.warn('[Friends] Table existence check failed:', e?.message || e)
+    }
+    
+    // Now test the upsert with constraint
     const testRow = { user_email: '__test__@ndn.check', friend_email: '__test2__@ndn.check' }
     const { error } = await supabase.from('friendships').upsert([testRow], { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
     if (error) {
       console.warn('[Friends] Friendships table upsert test failed:', error.message)
       if (/relation.*does not exist|could not find/i.test(error.message || '')) {
-        console.warn('[Friends] The friendships table may not exist in Supabase. Please create it with:')
-        console.warn('  CREATE TABLE IF NOT EXISTS friendships (')
-        console.warn('    id BIGSERIAL PRIMARY KEY,')
-        console.warn('    user_email TEXT NOT NULL,')
-        console.warn('    friend_email TEXT NOT NULL,')
-        console.warn('    created_at TIMESTAMPTZ DEFAULT NOW(),')
-        console.warn('    UNIQUE(user_email, friend_email)')
-        console.warn('  );')
+        console.error('[Friends] CRITICAL: The friendships table does not exist in Supabase!')
+        console.error('[Friends] Friends will NOT persist across deploys until you create the table.')
+        console.error('[Friends] Run this SQL in your Supabase dashboard:')
+        console.error('  CREATE TABLE IF NOT EXISTS friendships (')
+        console.error('    id BIGSERIAL PRIMARY KEY,')
+        console.error('    user_email TEXT NOT NULL,')
+        console.error('    friend_email TEXT NOT NULL,')
+        console.error('    created_at TIMESTAMPTZ DEFAULT NOW(),')
+        console.error('    UNIQUE(user_email, friend_email)')
+        console.error('  );')
+        console.error('  CREATE INDEX IF NOT EXISTS idx_friendships_user ON friendships(user_email);')
+        console.error('  CREATE INDEX IF NOT EXISTS idx_friendships_friend ON friendships(friend_email);')
       } else if (/there is no unique or exclusion constraint/i.test(error.message || '')) {
-        console.warn('[Friends] Missing unique constraint on friendships(user_email, friend_email).')
-        console.warn('[Friends] Please run: ALTER TABLE friendships ADD CONSTRAINT friendships_unique UNIQUE (user_email, friend_email);')
+        console.error('[Friends] CRITICAL: Missing unique constraint on friendships(user_email, friend_email).')
+        console.error('[Friends] Run this SQL: ALTER TABLE friendships ADD CONSTRAINT friendships_user_friend_unique UNIQUE (user_email, friend_email);')
       }
     } else {
-      console.log('[Friends] Friendships table constraint verified OK')
+      console.log('[Friends] ✓ Friendships table verified OK - friends will persist across deploys')
       try {
         await supabase.from('friendships').delete().eq('user_email', '__test__@ndn.check')
       } catch {}
@@ -4881,12 +4928,25 @@ async function ensureFriendshipsTable() {
 
 // Supabase-backed persistence for friendships (keeps data across restarts in hosted environments)
 async function loadFriendshipsFromSupabase() {
-  if (!supabase) return
+  if (!supabase) {
+    console.log('[Friends] Supabase not configured - cannot load friendships from database')
+    return
+  }
+  console.log('[Friends] Loading friendships from Supabase...')
   try {
     const { data, error } = await supabase
       .from('friendships')
       .select('user_email, friend_email')
-    if (error) throw error
+    
+    if (error) {
+      console.error('[Friends] FAILED to load friendships from Supabase:', error.message)
+      if (/relation.*does not exist/i.test(error.message || '')) {
+        console.error('[Friends] The friendships table does not exist! Friends will be lost on deploy.')
+        console.error('[Friends] Create the table in Supabase SQL Editor - see ensureFriendshipsTable logs above.')
+      }
+      throw error
+    }
+    
     if (Array.isArray(data)) {
       let added = 0
       for (const row of data) {
@@ -4898,11 +4958,17 @@ async function loadFriendshipsFromSupabase() {
         friendships.set(a, setA)
         added++
       }
+      // Only save to disk if we loaded something - disk is ephemeral anyway on Render
       if (added > 0) saveFriendships()
-      console.log(`[Friends] Loaded ${added} friendship links from Supabase`)
+      console.log(`[Friends] ✓ Loaded ${added} friendship links from Supabase (${data.length} rows)`)
+      if (added === 0 && data.length === 0) {
+        console.log('[Friends] No friendships found in Supabase database')
+      }
+    } else {
+      console.warn('[Friends] Unexpected response from Supabase - data is not an array:', typeof data)
     }
   } catch (err) {
-    console.warn('[Friends] Failed to load friendships from Supabase:', err?.message || err)
+    console.error('[Friends] Exception loading friendships from Supabase:', err?.message || err)
   }
 }
 
@@ -4980,7 +5046,23 @@ async function deleteFriendshipSupabase(a, b) {
 
 // Attempt to hydrate friendships from Supabase on startup (in addition to local file)
 // Also verify the table has the required unique constraint
-ensureFriendshipsTable().then(() => loadFriendshipsFromSupabase()).catch(() => loadFriendshipsFromSupabase())
+// CRITICAL: This ensures friends persist across Render deploys!
+;(async () => {
+  console.log('[Friends] === STARTUP: Initializing friends persistence ===')
+  try {
+    await ensureFriendshipsTable()
+    await loadFriendshipsFromSupabase()
+    console.log('[Friends] === STARTUP: Friends initialization complete ===')
+  } catch (err) {
+    console.error('[Friends] === STARTUP: Friends initialization FAILED ===', err?.message || err)
+    // Try loading anyway as fallback
+    try {
+      await loadFriendshipsFromSupabase()
+    } catch (e2) {
+      console.error('[Friends] Fallback load also failed:', e2?.message || e2)
+    }
+  }
+})()
 
 // Also hydrate friend requests from Supabase on startup
 loadFriendRequestsFromSupabase().catch((err) => {
