@@ -142,13 +142,13 @@ function StatPill({
 }) {
   return (
     <div
-      className={`flex flex-col items-center px-2 py-1.5 rounded-xl ${highlight ? "bg-indigo-500/20 ring-1 ring-indigo-500/30" : "bg-white/5"}`}
+      className={`flex flex-col items-center px-1.5 py-1 rounded-lg ${highlight ? "bg-indigo-500/20 ring-1 ring-indigo-500/30" : "bg-white/5"}`}
     >
-      <span className="text-[8px] uppercase tracking-wider font-bold text-white/50">
+      <span className="text-[7px] sm:text-[8px] uppercase tracking-wider font-bold text-white/50">
         {label}
       </span>
       <span
-        className={`text-sm font-black ${highlight ? "text-indigo-300" : "text-white"}`}
+        className={`text-xs sm:text-sm font-black ${highlight ? "text-indigo-300" : "text-white"}`}
       >
         {value}
       </span>
@@ -473,23 +473,23 @@ function PlayerCard({
     typeof legDiff === "number" ? `${legDiff > 0 ? "+" : ""}${legDiff}` : null;
   return (
     <div
-      className={`relative rounded-2xl border p-4 transition-all duration-500 ${
+      className={`relative rounded-xl border p-2 sm:p-3 transition-all duration-500 ${
         isWinner
           ? "border-amber-400/50 bg-gradient-to-br from-amber-500/10 to-amber-600/5 shadow-xl shadow-amber-500/10 ring-1 ring-amber-400/30"
           : "border-white/10 bg-white/5"
       }`}
     >
       {isWinner && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-amber-500 text-black text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg">
-          <Crown className="w-3 h-3 inline mr-1" />
+        <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-amber-500 text-black text-[9px] font-black uppercase tracking-widest rounded-full shadow-lg">
+          <Crown className="w-2.5 h-2.5 inline mr-0.5" />
           Throws First
         </div>
       )}
 
       {/* Header */}
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex items-center gap-2 mb-2">
         <div
-          className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-black ${
+          className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black ${
             isLocal
               ? "bg-gradient-to-br from-indigo-500 to-purple-600 text-white"
               : "bg-gradient-to-br from-rose-500 to-orange-500 text-white"
@@ -498,17 +498,17 @@ function PlayerCard({
           {name.substring(0, 2).toUpperCase()}
         </div>
         <div>
-          <div className="font-bold text-white text-lg tracking-tight">
+          <div className="font-bold text-white text-sm sm:text-base tracking-tight">
             {name}
           </div>
-          <div className="text-[10px] text-white/50 font-semibold uppercase tracking-wider">
+          <div className="text-[9px] text-white/50 font-semibold uppercase tracking-wider">
             {isLocal ? "You" : "Opponent"}
           </div>
         </div>
       </div>
 
       {/* Stats grid */}
-      <div className="grid grid-cols-4 gap-1.5 mb-3">
+      <div className="grid grid-cols-4 gap-1 mb-2">
         <StatPill label="Avg" value={stats.avg3} highlight />
         <StatPill label="F9" value={stats.best9} />
         <StatPill label="CO" value={String(stats.bestCheckout)} />
@@ -518,18 +518,18 @@ function PlayerCard({
         />
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 text-[10px]">
-        <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/5 border border-white/5">
+      <div className="grid grid-cols-3 gap-1 text-[9px]">
+        <div className="flex items-center justify-between px-1.5 py-0.5 rounded-lg bg-white/5 border border-white/5">
           <span className="text-white/50">180s</span>
           <span className="font-bold text-white">{stats.career180s}</span>
         </div>
-        <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/5 border border-white/5">
+        <div className="flex items-center justify-between px-1.5 py-0.5 rounded-lg bg-white/5 border border-white/5">
           <span className="text-white/50">Scored</span>
           <span className="font-bold text-white">
             {stats.lifetimeScored.toLocaleString()}
           </span>
         </div>
-        <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/5 border border-white/5">
+        <div className="flex items-center justify-between px-1.5 py-0.5 rounded-lg bg-white/5 border border-white/5">
           <span className="text-white/50">Darts</span>
           <span className="font-bold text-white">
             {stats.lifetimeDarts.toLocaleString()}
@@ -539,9 +539,9 @@ function PlayerCard({
 
       {/* Camera preview */}
       {showCamera && (
-        <div className="mt-3 rounded-xl overflow-hidden border border-white/10 bg-black/40">
-          <div className="px-3 py-1.5 flex items-center gap-2 text-[10px] text-white/60 border-b border-white/5">
-            <Camera className="w-3 h-3" />
+        <div className="mt-2 rounded-lg overflow-hidden border border-white/10 bg-black/40">
+          <div className="px-2 py-1 flex items-center gap-1.5 text-[9px] text-white/60 border-b border-white/5">
+            <Camera className="w-2.5 h-2.5" />
             <span className="font-semibold uppercase tracking-wider">
               {isLocal ? "Your Camera" : "Opponent Camera"}
             </span>
@@ -558,9 +558,9 @@ function PlayerCard({
                 scale={1}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-white/30 text-xs">
+              <div className="w-full h-full flex items-center justify-center text-white/30 text-[10px]">
                 <div className="text-center">
-                  <Camera className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <Camera className="w-6 h-6 mx-auto mb-1 opacity-30" />
                   Waiting for opponent's feed…
                 </div>
               </div>
@@ -761,7 +761,8 @@ export default function MatchPrestart({
 
   const overlay = (
     <div
-      className="fixed inset-0 z-[9998] overflow-y-auto bg-black/95 backdrop-blur-xl"
+      className="fixed inset-0 z-[9998] bg-black/95 backdrop-blur-xl flex flex-col"
+      style={{ height: "100dvh", maxHeight: "100dvh", overflow: "hidden" }}
       role="dialog"
       aria-modal="true"
       aria-label="Match pre-start"
@@ -773,8 +774,8 @@ export default function MatchPrestart({
         <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent" />
       </div>
 
-      <div className="min-h-full flex items-center justify-center p-4">
-        <div className="relative w-full max-w-5xl">
+      <div className="flex-1 flex items-center justify-center p-2 sm:p-4 min-h-0">
+        <div className="relative w-full max-w-5xl max-h-full flex flex-col">
           {/* Close button */}
           <button
             className="absolute -top-2 -right-2 z-20 p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-all border border-white/10"
@@ -785,9 +786,9 @@ export default function MatchPrestart({
           </button>
 
           {/* Match info header */}
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-bold uppercase tracking-widest text-white/60 mb-3">
-              <Target className="w-3.5 h-3.5" />
+          <div className="text-center mb-2 sm:mb-4 flex-shrink-0">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] sm:text-[11px] font-bold uppercase tracking-widest text-white/60 mb-2">
+              <Target className="w-3 h-3" />
               {matchInfo.game} ·{" "}
               {matchInfo.modeType === "bestof" ? "Best Of" : "First To"}{" "}
               {matchInfo.legs} · {matchInfo.startingScore || 501}
@@ -795,10 +796,10 @@ export default function MatchPrestart({
 
             {phase === "preview" && (
               <div className="animate-in fade-in duration-500">
-                <h2 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/50 tracking-tighter">
+                <h2 className="text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/50 tracking-tighter">
                   Match Found
                 </h2>
-                <p className="text-sm text-white/50 mt-1">
+                <p className="text-xs sm:text-sm text-white/50 mt-0.5">
                   Reviewing opponent stats…
                 </p>
               </div>
@@ -806,10 +807,10 @@ export default function MatchPrestart({
 
             {phase === "choice" && (
               <div className="animate-in fade-in duration-500">
-                <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tighter">
+                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tighter">
                   Who Throws First?
                 </h2>
-                <p className="text-sm text-white/50 mt-1">
+                <p className="text-xs sm:text-sm text-white/50 mt-0.5">
                   Bull up to decide, or skip and let the creator go first
                 </p>
               </div>
@@ -817,14 +818,14 @@ export default function MatchPrestart({
 
             {phase === "bull" && (
               <div className="animate-in fade-in duration-500">
-                <h2 className="text-3xl sm:text-4xl font-black text-amber-300 tracking-tighter">
+                <h2 className="text-2xl sm:text-3xl font-black text-amber-300 tracking-tighter">
                   🎯 Bull Up!
                 </h2>
-                <p className="text-sm text-white/50 mt-1">
+                <p className="text-[10px] sm:text-xs text-white/50 mt-0.5">
                   Throw your dart at the bullseye, then tap where it landed on
                   the board
                 </p>
-                <p className="text-[10px] text-white/30 mt-0.5">
+                <p className="text-[9px] text-white/30">
                   Both players mark their throw — closest to the bull throws
                   first
                 </p>
@@ -835,19 +836,19 @@ export default function MatchPrestart({
               <div className="animate-in fade-in zoom-in-95 duration-700">
                 {bullWinner ? (
                   <>
-                    <h2 className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-amber-500 tracking-tighter">
+                    <h2 className="text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-amber-500 tracking-tighter">
                       🎉 {bullWinner} Wins the Bull!
                     </h2>
-                    <p className="text-sm text-white/50 mt-2">
+                    <p className="text-xs sm:text-sm text-white/50 mt-1">
                       {bullWinner} throws first
                     </p>
                   </>
                 ) : bothSkipped ? (
                   <>
-                    <h2 className="text-4xl font-black text-white tracking-tighter">
+                    <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tighter">
                       Both Players Skipped
                     </h2>
-                    <p className="text-sm text-white/50 mt-1">
+                    <p className="text-xs sm:text-sm text-white/50 mt-0.5">
                       {matchInfo.createdBy ||
                         matchInfo.creatorName ||
                         localName}{" "}
@@ -860,7 +861,7 @@ export default function MatchPrestart({
 
             {phase === "go" && (
               <div className="animate-in fade-in zoom-in-50 duration-300">
-                <h2 className="text-7xl sm:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-emerald-500 tracking-tighter">
+                <h2 className="text-5xl sm:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 to-emerald-500 tracking-tighter">
                   GO!
                 </h2>
               </div>
@@ -869,17 +870,17 @@ export default function MatchPrestart({
 
           {/* Timer bar */}
           {phase !== "result" && phase !== "go" && (
-            <div className="mb-6">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <Timer className="w-4 h-4 text-white/40" />
-                <span className="text-2xl font-black text-white tabular-nums">
+            <div className="mb-2 sm:mb-4 flex-shrink-0">
+              <div className="flex items-center justify-center gap-2 mb-1">
+                <Timer className="w-3 h-3 sm:w-4 sm:h-4 text-white/40" />
+                <span className="text-xl sm:text-2xl font-black text-white tabular-nums">
                   {seconds}
                 </span>
-                <span className="text-xs text-white/40 font-semibold">
+                <span className="text-[10px] sm:text-xs text-white/40 font-semibold">
                   seconds
                 </span>
               </div>
-              <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+              <div className="h-0.5 sm:h-1 bg-white/5 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full transition-all duration-1000 ease-linear"
                   style={{
@@ -894,7 +895,7 @@ export default function MatchPrestart({
           {(phase === "preview" ||
             phase === "choice" ||
             phase === "result") && (
-            <div className="grid grid-cols-1 md:grid-cols-[1fr,auto,1fr] gap-4 items-start mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr,auto,1fr] gap-2 sm:gap-4 items-start mb-2 sm:mb-4 flex-shrink-0">
               <PlayerCard
                 name={localName}
                 stats={localStats}
@@ -942,30 +943,30 @@ export default function MatchPrestart({
 
           {/* Choice phase */}
           {phase === "choice" && !localChoice && (
-            <div className="flex flex-col items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex gap-4">
+            <div className="flex flex-col items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-500 flex-shrink-0">
+              <div className="flex gap-3">
                 <button
-                  className="group relative px-8 py-4 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white font-black text-lg hover:shadow-xl hover:shadow-amber-500/30 hover:scale-105 transition-all duration-200 border border-amber-400/30"
+                  className="group relative px-5 sm:px-8 py-3 sm:py-4 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white font-black text-base sm:text-lg hover:shadow-xl hover:shadow-amber-500/30 hover:scale-105 transition-all duration-200 border border-amber-400/30"
                   onClick={() => handleChoice("bull")}
                 >
-                  <div className="flex items-center gap-3">
-                    <Target className="w-6 h-6" />
+                  <div className="flex items-center gap-2">
+                    <Target className="w-5 h-5" />
                     <span>Bull Up</span>
                   </div>
-                  <div className="text-[10px] mt-1 font-medium opacity-80">
+                  <div className="text-[9px] sm:text-[10px] mt-0.5 font-medium opacity-80">
                     Throw at the bullseye to decide
                   </div>
                 </button>
 
                 <button
-                  className="group relative px-8 py-4 rounded-2xl bg-white/5 border border-white/10 text-white font-bold text-lg hover:bg-white/10 hover:border-white/20 hover:scale-105 transition-all duration-200"
+                  className="group relative px-5 sm:px-8 py-3 sm:py-4 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-base sm:text-lg hover:bg-white/10 hover:border-white/20 hover:scale-105 transition-all duration-200"
                   onClick={() => handleChoice("skip")}
                 >
-                  <div className="flex items-center gap-3">
-                    <ArrowRight className="w-6 h-6" />
+                  <div className="flex items-center gap-2">
+                    <ArrowRight className="w-5 h-5" />
                     <span>Skip</span>
                   </div>
-                  <div className="text-[10px] mt-1 font-medium opacity-50">
+                  <div className="text-[9px] sm:text-[10px] mt-0.5 font-medium opacity-50">
                     Creator throws first
                   </div>
                 </button>
@@ -1003,10 +1004,10 @@ export default function MatchPrestart({
 
           {/* Bull-up phase — camera feed + dartboard */}
           {phase === "bull" && (
-            <div className="flex flex-col items-center gap-5 animate-in fade-in zoom-in-95 duration-500">
+            <div className="flex flex-col items-center gap-2 sm:gap-3 animate-in fade-in zoom-in-95 duration-500 flex-1 min-h-0 overflow-hidden">
               {/* Live camera feed so the player can see their dart on the board */}
-              <div className="w-full max-w-sm sm:max-w-md mx-auto rounded-2xl border border-white/10 bg-black/60 overflow-hidden shadow-xl shadow-black/40">
-                <div className="relative aspect-video">
+              <div className="w-full max-w-[280px] sm:max-w-sm mx-auto rounded-xl border border-white/10 bg-black/60 overflow-hidden shadow-xl shadow-black/40 flex-shrink-0">
+                <div className="relative aspect-[16/10]">
                   <CameraTile
                     autoStart
                     forceAutoStart
@@ -1014,24 +1015,29 @@ export default function MatchPrestart({
                     aspect="free"
                     className="w-full h-full"
                   />
-                  <div className="absolute bottom-2 left-2 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm border border-white/10">
-                    <Camera className="w-3 h-3 text-emerald-400" />
-                    <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider">
-                      Live
+                  <div className="absolute top-1 left-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10">
+                    <Camera className="w-2.5 h-2.5 text-emerald-400" />
+                    <span className="text-[9px] font-bold text-white/80 uppercase tracking-wider">
+                      Live Feed
+                    </span>
+                  </div>
+                  <div className="absolute top-1 right-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30">
+                    <span className="text-[9px] font-bold text-emerald-400">
+                      ● LIVE
                     </span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 text-xs text-white/50">
-                <Target className="w-3.5 h-3.5 text-amber-400" />
+              <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-white/50 flex-shrink-0">
+                <Target className="w-3 h-3 text-amber-400" />
                 <span>
                   See your dart above, then tap the board below where it landed
                 </span>
               </div>
 
               {/* Interactive dartboard for marking position */}
-              <div className="w-full max-w-sm sm:max-w-md mx-auto rounded-2xl border border-white/10 bg-black/40 p-3 sm:p-4 shadow-2xl shadow-black/50">
+              <div className="w-full max-w-[240px] sm:max-w-[280px] md:max-w-xs mx-auto rounded-xl border border-white/10 bg-black/40 p-2 sm:p-3 shadow-2xl shadow-black/50 flex-1 min-h-0">
                 <DartboardBullUp
                   onSelect={handleDartSelect}
                   selectedPoint={dartPoint}
@@ -1040,40 +1046,37 @@ export default function MatchPrestart({
                 />
               </div>
 
-              {/* Distance readout */}
-              {dartDistMm != null && (
-                <div className="text-center animate-in fade-in slide-in-from-bottom-2 duration-300">
-                  <div className="inline-flex items-center gap-3 px-5 py-2.5 rounded-2xl bg-white/5 border border-white/10">
-                    <Target className="w-5 h-5 text-amber-400" />
-                    <div>
-                      <span className="text-3xl font-black text-white tabular-nums">
-                        {dartDistMm.toFixed(1)}
-                      </span>
-                      <span className="text-base text-white/50 ml-1">mm</span>
-                    </div>
-                    <span className="text-xs text-white/40">from bull</span>
+              {/* Distance readout + button row */}
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 flex-shrink-0">
+                {dartDistMm != null && (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 animate-in fade-in duration-300">
+                    <Target className="w-4 h-4 text-amber-400" />
+                    <span className="text-xl font-black text-white tabular-nums">
+                      {dartDistMm.toFixed(1)}
+                    </span>
+                    <span className="text-sm text-white/50">mm</span>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Confirm / Waiting */}
-              {!dartSubmitted ? (
-                <button
-                  className="px-10 py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-black text-lg hover:shadow-xl hover:shadow-emerald-500/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-30 disabled:pointer-events-none border border-emerald-400/30"
-                  disabled={dartDistMm == null}
-                  onClick={handleSubmitDart}
-                >
-                  ✅ Confirm Dart Position
-                </button>
-              ) : (
-                <div className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-white/5 border border-white/10 text-sm text-white/70">
-                  <div className="w-4 h-4 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
-                  Waiting for opponent's throw…
-                </div>
-              )}
+                {/* Confirm / Waiting */}
+                {!dartSubmitted ? (
+                  <button
+                    className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold text-sm sm:text-base hover:shadow-xl hover:shadow-emerald-500/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-30 disabled:pointer-events-none border border-emerald-400/30"
+                    disabled={dartDistMm == null}
+                    onClick={handleSubmitDart}
+                  >
+                    ✅ Confirm
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white/70">
+                    <div className="w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
+                    Waiting for opponent…
+                  </div>
+                )}
+              </div>
 
               {bullTied && (
-                <div className="text-sm text-amber-300 font-bold animate-bounce px-4 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <div className="text-xs text-amber-300 font-bold animate-bounce px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 flex-shrink-0">
                   🔄 It's a tie! Throw again.
                 </div>
               )}
@@ -1082,15 +1085,15 @@ export default function MatchPrestart({
 
           {/* Accept / Cancel row (for preview phase) */}
           {phase === "preview" && (
-            <div className="flex items-center justify-center gap-3 mt-4">
+            <div className="flex items-center justify-center gap-2 sm:gap-3 mt-2 sm:mt-4 flex-shrink-0">
               <button
-                className="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold hover:shadow-xl hover:shadow-indigo-500/30 hover:scale-105 transition-all"
+                className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm sm:text-base hover:shadow-xl hover:shadow-indigo-500/30 hover:scale-105 transition-all"
                 onClick={() => setPhase("choice")}
               >
                 Ready — Continue
               </button>
               <button
-                className="px-6 py-3 rounded-2xl bg-white/5 border border-white/10 text-white/70 font-semibold hover:bg-white/10 transition-all"
+                className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl bg-white/5 border border-white/10 text-white/70 font-semibold text-sm sm:text-base hover:bg-white/10 transition-all"
                 onClick={onCancel}
               >
                 Cancel
