@@ -4742,6 +4742,8 @@ async function loadFriendRequestsFromSupabase() {
         console.warn('    id TEXT PRIMARY KEY,')
         console.warn('    from_email TEXT NOT NULL,')
         console.warn('    to_email TEXT NOT NULL,')
+        console.warn('    from_username TEXT,')
+        console.warn('    to_username TEXT,')
         console.warn('    status TEXT NOT NULL DEFAULT \'pending\',')
         console.warn('    ts BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,')
         console.warn('    created_at TIMESTAMPTZ DEFAULT NOW()')
@@ -4755,6 +4757,7 @@ async function loadFriendRequestsFromSupabase() {
     }
     if (Array.isArray(data) && data.length > 0) {
       const existingIds = new Set(friendRequests.map(r => r.id))
+      const users = global.users || new Map()
       let added = 0
       for (const row of data) {
         if (!existingIds.has(row.id)) {
@@ -4762,12 +4765,23 @@ async function loadFriendRequestsFromSupabase() {
             id: row.id,
             from: row.from_email,
             to: row.to_email,
+            fromUsername: row.from_username || row.from_email,
+            toUsername: row.to_username || row.to_email,
             ts: row.ts || Date.now(),
             status: row.status || 'pending',
           })
           added++
+          
+          // Populate/update global.users with persisted usernames
+          if (row.from_username && !users.has(row.from_email)) {
+            users.set(row.from_email, { email: row.from_email, username: row.from_username, status: 'offline' })
+          }
+          if (row.to_username && !users.has(row.to_email)) {
+            users.set(row.to_email, { email: row.to_email, username: row.to_username, status: 'offline' })
+          }
         }
       }
+      global.users = users
       if (added > 0) {
         console.log(`[FriendRequests] Loaded ${added} friend requests from Supabase`)
       }
@@ -4780,14 +4794,23 @@ async function loadFriendRequestsFromSupabase() {
 async function saveFriendRequestsSupabase() {
   if (!supabase) return
   try {
-    // Upsert all current requests
-    const rows = friendRequests.map(r => ({
-      id: r.id,
-      from_email: String(r.from || '').toLowerCase(),
-      to_email: String(r.to || '').toLowerCase(),
-      status: r.status || 'pending',
-      ts: r.ts || Date.now(),
-    }))
+    const users = global.users || new Map()
+    // Upsert all current requests with usernames
+    const rows = friendRequests.map(r => {
+      const fromEmail = String(r.from || '').toLowerCase()
+      const toEmail = String(r.to || '').toLowerCase()
+      const fromUser = users.get(fromEmail)
+      const toUser = users.get(toEmail)
+      return {
+        id: r.id,
+        from_email: fromEmail,
+        to_email: toEmail,
+        from_username: r.fromUsername || (fromUser && fromUser.username) || fromEmail,
+        to_username: r.toUsername || (toUser && toUser.username) || toEmail,
+        status: r.status || 'pending',
+        ts: r.ts || Date.now(),
+      }
+    })
     if (rows.length === 0) return
     const { error } = await supabase
       .from('friend_requests')
@@ -4806,10 +4829,21 @@ async function saveFriendRequestsSupabase() {
 async function upsertFriendRequestSupabase(req) {
   if (!supabase) return
   try {
+    // Resolve usernames from global.users if available
+    const users = global.users || new Map()
+    const fromEmail = String(req.from || '').toLowerCase()
+    const toEmail = String(req.to || '').toLowerCase()
+    const fromUser = users.get(fromEmail)
+    const toUser = users.get(toEmail)
+    const fromUsername = req.fromUsername || (fromUser && fromUser.username) || fromEmail
+    const toUsername = req.toUsername || (toUser && toUser.username) || toEmail
+
     const row = {
       id: req.id,
-      from_email: String(req.from || '').toLowerCase(),
-      to_email: String(req.to || '').toLowerCase(),
+      from_email: fromEmail,
+      to_email: toEmail,
+      from_username: fromUsername,
+      to_username: toUsername,
       status: req.status || 'pending',
       ts: req.ts || Date.now(),
     }
@@ -4858,6 +4892,8 @@ async function ensureFriendshipsTable() {
         id BIGSERIAL PRIMARY KEY,
         user_email TEXT NOT NULL,
         friend_email TEXT NOT NULL,
+        user_username TEXT,
+        friend_username TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `
@@ -4868,6 +4904,17 @@ async function ensureFriendshipsTable() {
           SELECT 1 FROM pg_constraint WHERE conname = 'friendships_user_friend_unique'
         ) THEN
           ALTER TABLE friendships ADD CONSTRAINT friendships_user_friend_unique UNIQUE (user_email, friend_email);
+        END IF;
+      END $$;
+    `
+    const addUsernameColumnsSQL = `
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='friendships' AND column_name='user_username') THEN
+          ALTER TABLE friendships ADD COLUMN user_username TEXT;
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='friendships' AND column_name='friend_username') THEN
+          ALTER TABLE friendships ADD COLUMN friend_username TEXT;
         END IF;
       END $$;
     `
@@ -4888,13 +4935,18 @@ async function ensureFriendshipsTable() {
         console.log(addConstraintSQL)
         console.log(createIndexSQL)
         console.log('[Friends] IMPORTANT: Run the above SQL in your Supabase dashboard to persist friends across deploys!')
+      } else {
+        // Table exists, check if username columns need to be added
+        console.log('[Friends] Table exists, checking for username columns...')
+        console.log('[Friends] If usernames are not persisting, run this SQL in Supabase dashboard:')
+        console.log(addUsernameColumnsSQL)
       }
     } catch (e) {
       console.warn('[Friends] Table existence check failed:', e?.message || e)
     }
     
     // Now test the upsert with constraint
-    const testRow = { user_email: '__test__@ndn.check', friend_email: '__test2__@ndn.check' }
+    const testRow = { user_email: '__test__@ndn.check', friend_email: '__test2__@ndn.check', user_username: '__test__', friend_username: '__test2__' }
     const { error } = await supabase.from('friendships').upsert([testRow], { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
     if (error) {
       console.warn('[Friends] Friendships table upsert test failed:', error.message)
@@ -4936,7 +4988,7 @@ async function loadFriendshipsFromSupabase() {
   try {
     const { data, error } = await supabase
       .from('friendships')
-      .select('user_email, friend_email')
+      .select('user_email, friend_email, user_username, friend_username')
     
     if (error) {
       console.error('[Friends] FAILED to load friendships from Supabase:', error.message)
@@ -4949,6 +5001,7 @@ async function loadFriendshipsFromSupabase() {
     
     if (Array.isArray(data)) {
       let added = 0
+      const users = global.users || new Map()
       for (const row of data) {
         const a = String(row.user_email || '').toLowerCase()
         const b = String(row.friend_email || '').toLowerCase()
@@ -4957,7 +5010,24 @@ async function loadFriendshipsFromSupabase() {
         setA.add(b)
         friendships.set(a, setA)
         added++
+        
+        // Populate/update global.users with persisted usernames if not already present
+        if (row.user_username && !users.has(a)) {
+          users.set(a, { email: a, username: row.user_username, status: 'offline' })
+        } else if (row.user_username && users.has(a) && !users.get(a).username) {
+          const u = users.get(a)
+          u.username = row.user_username
+          users.set(a, u)
+        }
+        if (row.friend_username && !users.has(b)) {
+          users.set(b, { email: b, username: row.friend_username, status: 'offline' })
+        } else if (row.friend_username && users.has(b) && !users.get(b).username) {
+          const u = users.get(b)
+          u.username = row.friend_username
+          users.set(b, u)
+        }
       }
+      global.users = users
       // Only save to disk if we loaded something - disk is ephemeral anyway on Render
       if (added > 0) saveFriendships()
       console.log(`[Friends] ✓ Loaded ${added} friendship links from Supabase (${data.length} rows)`)
@@ -4972,51 +5042,59 @@ async function loadFriendshipsFromSupabase() {
   }
 }
 
-async function upsertFriendshipSupabase(a, b) {
-  console.log('[SUPABASE-UPSERT-START] a=%s b=%s supabase=%s', a, b, !!supabase)
-  if (!supabase) {
-    console.log('[SUPABASE-UPSERT-SKIP] Supabase not configured')
-    return
+async function upsertFriendshipSupabase(a, b, aUsername, bUsername) {
+console.log('[SUPABASE-UPSERT-START] a=%s b=%s supabase=%s', a, b, !!supabase)
+if (!supabase) {
+  console.log('[SUPABASE-UPSERT-SKIP] Supabase not configured')
+  return
+}
+
+// Resolve usernames from global.users if not provided
+const users = global.users || new Map()
+const userA = users.get(a)
+const userB = users.get(b)
+const usernameA = aUsername || (userA && userA.username) || a
+const usernameB = bUsername || (userB && userB.username) || b
+
+const rows = [
+  { user_email: a, friend_email: b, user_username: usernameA, friend_username: usernameB },
+  { user_email: b, friend_email: a, user_username: usernameB, friend_username: usernameA },
+]
+
+try {
+  console.log('[SUPABASE-UPSERT-CALL] Calling supabase.from(friendships).upsert with rows:', JSON.stringify(rows))
+  let { data, error } = await supabase
+    .from('friendships')
+    .upsert(rows, { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
+    .select()
+
+  // Some databases may not have a unique constraint for the specified onConflict columns.
+  // If so, fall back to a simple insert to persist the rows instead of failing.
+  if (error && /unique|exclusion constraint|conflict/i.test(error.message || '')) {
+    console.warn('[SUPABASE-UPSERT-FALLBACK] Upsert failed due to missing constraint; retrying with insert')
+    ;({ data, error } = await supabase.from('friendships').insert(rows).select())
   }
 
-  const rows = [
-    { user_email: a, friend_email: b },
-    { user_email: b, friend_email: a },
-  ]
-
-  try {
-    console.log('[SUPABASE-UPSERT-CALL] Calling supabase.from(friendships).upsert with rows:', JSON.stringify(rows))
-    let { data, error } = await supabase
-      .from('friendships')
-      .upsert(rows, { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
-      .select()
-
-    // Some databases may not have a unique constraint for the specified onConflict columns.
-    // If so, fall back to a simple insert to persist the rows instead of failing.
-    if (error && /unique|exclusion constraint|conflict/i.test(error.message || '')) {
-      console.warn('[SUPABASE-UPSERT-FALLBACK] Upsert failed due to missing constraint; retrying with insert')
-      ;({ data, error } = await supabase.from('friendships').insert(rows).select())
-    }
-
-    // If both upsert and insert fail, try inserting rows one at a time
-    // (handles partial duplicates where one row exists but the other doesn't)
-    if (error) {
-      console.warn('[SUPABASE-UPSERT-INDIVIDUAL] Batch failed, trying individual inserts')
-      for (const row of rows) {
-        try {
-          await supabase.from('friendships').upsert([row], { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
-        } catch (e2) {
-          // Try plain insert as last resort
-          try { await supabase.from('friendships').insert([row]) } catch (e3) {}
-        }
-      }
-      // Re-verify at least one row exists
-      const { data: verify } = await supabase.from('friendships').select('user_email').eq('user_email', a).eq('friend_email', b).limit(1)
-      if (verify && verify.length > 0) {
-        console.log('[SUPABASE-UPSERT-RECOVERED] Individual inserts succeeded')
-        error = null
+  // If both upsert and insert fail, try inserting rows one at a time
+  // (handles partial duplicates where one row exists but the other doesn't)
+  if (error) {
+    console.warn('[SUPABASE-UPSERT-INDIVIDUAL] Batch failed, trying individual inserts')
+    for (const row of rows) {
+      try {
+        await supabase.from('friendships').upsert([row], { onConflict: 'user_email,friend_email', ignoreDuplicates: true })
+      } catch (e2) {
+        // Try plain insert as last resort
+        try { await supabase.from('friendships').insert([row]) } catch (e3) {}
       }
     }
+    // Re-verify at least one row exists
+    const { data: verify } = await supabase.from('friendships').select('user_email').eq('user_email', a).eq('friend_email', b).limit(1)
+    if (verify && verify.length > 0) {
+      console.log('[SUPABASE-UPSERT-RECOVERED] Individual inserts succeeded')
+      error = null
+    }
+  }
+
 
     if (error) {
       console.error('[SUPABASE-UPSERT-ERROR] error:', JSON.stringify(error))
