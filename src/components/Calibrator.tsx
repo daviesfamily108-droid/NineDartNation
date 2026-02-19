@@ -505,7 +505,7 @@ export default function Calibrator() {
       }
     },
   );
-  const [isMobileDevice, setIsMobileDevice] = useState<boolean>(() => {
+  const [isMobileDev, setIsMobileDev] = useState<boolean>(() => {
     if (typeof navigator === "undefined") return false;
     return /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
   });
@@ -1025,7 +1025,7 @@ export default function Calibrator() {
       const coarse =
         typeof coarseQuery.matches === "boolean" ? coarseQuery.matches : false;
       const narrow = window.innerWidth <= 820;
-      setIsMobileDevice(uaMobile || coarse || narrow);
+      setIsMobileDev(uaMobile || coarse || narrow);
     };
     detect();
     try {
@@ -4531,7 +4531,7 @@ export default function Calibrator() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locked, pairCode]);
 
-  const showMobileLanding = isMobileDevice && !mobileLandingOverride;
+  const showMobileLanding = isMobileDev && !mobileLandingOverride;
 
   if (showMobileLanding) {
     const linkForMobile =
@@ -4588,7 +4588,7 @@ export default function Calibrator() {
 
   return (
     <div className="space-y-6">
-      {isMobileDevice && mobileLandingOverride && (
+      {isMobileDev && mobileLandingOverride && (
         <div className="rounded-2xl border border-indigo-400/30 bg-indigo-500/10 p-4 text-sm text-indigo-100">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="leading-relaxed">
@@ -4703,7 +4703,7 @@ export default function Calibrator() {
                       Local
                     </button>
                     {/* Phone pairing mode — desktop only */}
-                    {!isMobileDevice() && (
+                    {!isMobileDev && (
                       <button
                         className={`btn px-3 py-1 ${mode === "phone" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-700 hover:bg-slate-600"}`}
                         data-testid="mode-phone"
@@ -5082,7 +5082,7 @@ export default function Calibrator() {
               cameraConnected={streaming}
             />
 
-            {mode === "phone" && !isMobileDevice() && (
+            {mode === "phone" && !isMobileDev && (
               <section className="space-y-3 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
                 <div className="font-semibold">Phone pairing</div>
                 {qrDataUrl && pairCode && (
