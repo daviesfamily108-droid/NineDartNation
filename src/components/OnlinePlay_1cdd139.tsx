@@ -307,10 +307,17 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
       if (hasFinished) setShowX01EndSummary(true)
     }
     endSummaryPrevRef.current = now
-    // Reset the showcased flag when match ends
-    if (!now) startedShowcasedRef.current = false
-    // When match starts, show the start showcase once
-    if (now && !startedShowcasedRef.current) {
+    // When match ends, close the showcase and allow it to re-trigger for the next match
+    if (!now) {
+      startedShowcasedRef.current = false
+      setShowStartShowcase(false)
+      return
+    }
+    // When match starts AND no visits have been recorded yet, show the showcase once
+    const hasVisits = (match.players || []).some((p: any) =>
+      (p.legs || []).some((L: any) => (L.visits || []).length > 0)
+    )
+    if (now && !startedShowcasedRef.current && !hasVisits) {
       startedShowcasedRef.current = true
       setShowStartShowcase(true)
     }

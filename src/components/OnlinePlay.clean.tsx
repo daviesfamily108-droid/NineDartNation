@@ -56,8 +56,18 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [showStartShowcase, setShowStartShowcase] = useState<boolean>(false);
   const startedShowcasedRef = React.useRef(false);
   useEffect(() => {
-    if (!inProgress) return;
+    if (!inProgress) {
+      startedShowcasedRef.current = false;
+      setShowStartShowcase(false);
+      return;
+    }
     if (startedShowcasedRef.current) return;
+    // Only show the showcase if the match hasn't progressed yet
+    const st = useMatch.getState();
+    const hasVisits = (st.players || []).some((p: any) =>
+      (p.legs || []).some((L: any) => (L.visits || []).length > 0),
+    );
+    if (hasVisits) return;
     startedShowcasedRef.current = true;
     setShowStartShowcase(true);
   }, [inProgress]);

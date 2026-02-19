@@ -242,17 +242,20 @@ export default function InGameShell({
     }));
   }, [match.players]);
 
+  // Only show the showcase when the parent explicitly tells us to AND
+  // the match hasn't progressed yet (no visits recorded).
+  const matchHasVisits = useMemo(() => {
+    return (match.players || []).some((p: any) =>
+      (p.legs || []).some((leg: any) => (leg.visits || []).length > 0),
+    );
+  }, [match.players]);
   const showStartShowcaseLocal =
-    typeof showStartShowcaseProp === "boolean" ? showStartShowcaseProp : true;
+    typeof showStartShowcaseProp === "boolean"
+      ? showStartShowcaseProp && !matchHasVisits
+      : false;
   const setShowStartShowcase = (open: boolean) => {
     onShowStartShowcaseChange?.(open);
   };
-  const showcaseLockedOpenRef = useRef(true);
-  useEffect(() => {
-    if (!showcaseLockedOpenRef.current) return;
-    setShowStartShowcase(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const [showNumpad, setShowNumpad] = useState(false);
   const [numpadValue, setNumpadValue] = useState("");
@@ -385,11 +388,9 @@ export default function InGameShell({
           open={showStartShowcaseLocal}
           players={(match.players || []) as any}
           onDone={() => {
-            showcaseLockedOpenRef.current = false;
             setShowStartShowcase(false);
           }}
           onRequestClose={() => {
-            showcaseLockedOpenRef.current = false;
             setShowStartShowcase(false);
           }}
           showCalibrationDefault={true}
