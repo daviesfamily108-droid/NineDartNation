@@ -45,6 +45,7 @@ import { apiFetch } from "../utils/api";
 import { useMatch } from "../store/match";
 import { useWS } from "./WSProvider";
 import { makeQrDataUrlWithLogo } from "../utils/qr";
+import { isMobileDevice } from "../utils/deviceDetect";
 
 declare const DROPDOWN_DEBUG: boolean | undefined;
 const isTestEnv =
@@ -260,14 +261,16 @@ const DevicePicker: React.FC<DevicePickerProps> = ({
                     {device.label || "Camera"}
                   </button>
                 ))}
-                <button
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700"
-                  onClick={handlePhoneCamera}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  📱 Remote Device / Pair
-                </button>
+                {!isMobileDevice() && (
+                  <button
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-700"
+                    onClick={handlePhoneCamera}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    📱 Remote Device / Pair
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -4699,25 +4702,28 @@ export default function Calibrator() {
                     >
                       Local
                     </button>
-                    <button
-                      className={`btn px-3 py-1 ${mode === "phone" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-700 hover:bg-slate-600"}`}
-                      data-testid="mode-phone"
-                      onClick={() => {
-                        setMode("phone");
-                        if (
-                          typeof DROPDOWN_DEBUG !== "undefined" &&
-                          DROPDOWN_DEBUG
-                        )
-                          console.debug(
-                            "[Camera Connection] setMode(phone)",
-                            Date.now(),
-                          );
-                        stopCamera(false);
-                      }}
-                      title="Enable camera on this device"
-                    >
-                      Phone
-                    </button>
+                    {/* Phone pairing mode — desktop only */}
+                    {!isMobileDevice() && (
+                      <button
+                        className={`btn px-3 py-1 ${mode === "phone" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-700 hover:bg-slate-600"}`}
+                        data-testid="mode-phone"
+                        onClick={() => {
+                          setMode("phone");
+                          if (
+                            typeof DROPDOWN_DEBUG !== "undefined" &&
+                            DROPDOWN_DEBUG
+                          )
+                            console.debug(
+                              "[Camera Connection] setMode(phone)",
+                              Date.now(),
+                            );
+                          stopCamera(false);
+                        }}
+                        title="Enable camera on this device"
+                      >
+                        Phone
+                      </button>
+                    )}
                     <button
                       className={`btn px-3 py-1 ${mode === "wifi" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-700 hover:bg-slate-600"}`}
                       data-testid="mode-wifi"
@@ -5076,7 +5082,7 @@ export default function Calibrator() {
               cameraConnected={streaming}
             />
 
-            {mode === "phone" && (
+            {mode === "phone" && !isMobileDevice() && (
               <section className="space-y-3 rounded-2xl border border-indigo-400/30 bg-black/40 p-4 text-xs text-white">
                 <div className="font-semibold">Phone pairing</div>
                 {qrDataUrl && pairCode && (

@@ -13,6 +13,7 @@ import { getPreferredWsUrl } from "../utils/ws.js";
 import { ensureVideoPlays } from "../utils/ensureVideoPlays.js";
 import { Camera, Smartphone } from "lucide-react";
 import { dinfo } from "../utils/logger.js";
+import { isMobileDevice } from "../utils/deviceDetect.js";
 
 function clsx(...args: any[]) {
   return args.filter(Boolean).join(" ");
@@ -113,6 +114,8 @@ export default function CameraTile(props: CameraTileProps) {
     (s: any) => s.preferredCameraLabel,
   );
   const [mode, setMode] = useState<"local" | "phone" | "wifi">(() => {
+    // On mobile devices, always use the local camera directly — no phone pairing
+    if (isMobileDevice()) return "local";
     if (preferredCameraLabel === "Phone Camera") return "phone";
     const saved = localStorage.getItem("ndn:camera:mode") as any;
     return saved || "local";
@@ -231,6 +234,12 @@ export default function CameraTile(props: CameraTileProps) {
 
   const handleModeSelect = useCallback(
     (newMode: string) => {
+      // Block phone pairing mode on mobile — use local camera directly
+      if (newMode === "phone" && isMobileDevice()) {
+        setMode("local");
+        startLocal();
+        return;
+      }
       setMode(newMode as any);
       if (newMode === "local") startLocal();
       else if (newMode === "phone") startPhonePairing();
