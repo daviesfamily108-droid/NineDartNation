@@ -383,7 +383,12 @@
         if (stream) { try { stream.getTracks().forEach(t => t.stop()); } catch {} }
         try {
             clearFatalError();
-            let constraints = { video: {} };
+            // Request HD resolution for better quality feed
+            let constraints = { video: {
+                width: { ideal: 1920, min: 1280 },
+                height: { ideal: 1080, min: 720 },
+                frameRate: { ideal: 30, max: 30 }
+            } };
             if (deviceId) {
                 constraints.video.deviceId = { exact: deviceId };
             } else {
@@ -623,6 +628,23 @@
                         };
                         console.log('[Mobile WS] Adding', stream.getTracks().length, 'tracks to peer connection');
                         stream.getTracks().forEach(t => pc.addTrack(t, stream));
+                        // Boost video encoding quality for better feed
+                        try {
+                            const senders = pc.getSenders();
+                            const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                            if (videoSender) {
+                                const params = videoSender.getParameters();
+                                if (!params.encodings || params.encodings.length === 0) {
+                                    params.encodings = [{}];
+                                }
+                                params.encodings[0].maxBitrate = 2500000; // 2.5 Mbps for HD
+                                params.encodings[0].maxFramerate = 30;
+                                await videoSender.setParameters(params);
+                                console.log('[Mobile WS] Video encoding boosted to 2.5 Mbps');
+                            }
+                        } catch (encErr) {
+                            console.warn('[Mobile WS] Could not set encoding params:', encErr);
+                        }
                         pc.onicecandidate = (e) => { 
                             if (e.candidate) { 
                                 console.log('[Mobile WS] ICE candidate generated, sending');

@@ -62,7 +62,7 @@
 
     async function startCam(facing) {
   if (stream) { try { stream.getTracks().forEach(t => t.stop()) } catch (e) {} }
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing || 'environment' }, audio: false })
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing || 'environment', width: { ideal: 1920, min: 1280 }, height: { ideal: 1080, min: 720 }, frameRate: { ideal: 30, max: 30 } }, audio: false })
       v.srcObject = stream
       await v.play().catch(()=>{})
     }
@@ -107,6 +107,17 @@
             else if (pc.iceConnectionState === 'failed') log('ICE failed. Try same WiFi.')
           }
           stream.getTracks().forEach(t => pc.addTrack(t, stream))
+          // Boost video encoding quality
+          try {
+            const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video')
+            if (videoSender) {
+              const params = videoSender.getParameters()
+              if (!params.encodings || params.encodings.length === 0) params.encodings = [{}]
+              params.encodings[0].maxBitrate = 2500000
+              params.encodings[0].maxFramerate = 30
+              await videoSender.setParameters(params)
+            }
+          } catch (e) { console.warn('Could not set encoding params:', e) }
           pc.onicecandidate = (e) => { if (e.candidate) ws.send(JSON.stringify({ type: 'cam-ice', code, payload: e.candidate })) }
           await pc.setRemoteDescription(new RTCSessionDescription(data.payload))
           const answer = await pc.createAnswer()
