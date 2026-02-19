@@ -560,6 +560,192 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
     }
   }, [])
 
+  // Register a global WS listener so messages are processed even when using WSProvider
+  // (the legacy ws.onmessage only works for wsRef.current, not wsGlobal)
+  useEffect(() => {
+    if (!wsGlobal) return
+    const handleMessage = (data: any) => {
+      try {
+        if (data.type === 'state') {
+          match.importState(data.payload)
+          try {
+            const di = Number((data.payload as any)._dpIndex)
+            const dh = Number((data.payload as any)._dpHits)
+            if (Number.isFinite(di)) setDpIndex(Math.max(0, di))
+            if (Number.isFinite(dh)) setDpHits(Math.max(0, dh))
+            const ai = Number((data.payload as any)._atcIndex)
+            const ah = Number((data.payload as any)._atcHits)
+            if (Number.isFinite(ai)) setAtcIndex(Math.max(0, ai))
+            if (Number.isFinite(ah)) setAtcHits(Math.max(0, ah))
+          } catch {}
+          try {
+            const _cr = (data.payload as any)._cricketById; if (_cr && typeof _cr === 'object') setCricketById(_cr)
+            const _sh = (data.payload as any)._shanghaiById; if (_sh && typeof _sh === 'object') setShanghaiById(_sh)
+            const _hv = (data.payload as any)._halveById; if (_hv && typeof _hv === 'object') setHalveById(_hv)
+            const _hl = (data.payload as any)._highlowById; if (_hl && typeof _hl === 'object') setHighlowById(_hl)
+            const _kr = (data.payload as any)._killerById; if (_kr && typeof _kr === 'object') setKillerById(_kr)
+            const _am = (data.payload as any)._amCricketById; if (_am && typeof _am === 'object') setAmCricketById(_am)
+            const _bb = (data.payload as any)._baseballById; if (_bb && typeof _bb === 'object') setBaseballById(_bb)
+            const _gf = (data.payload as any)._golfById; if (_gf && typeof _gf === 'object') setGolfById(_gf)
+            const _tt = (data.payload as any)._tttState; if (_tt && typeof _tt === 'object') setTTT(_tt)
+          } catch {}
+          try {
+            const _td = Number((data.payload as any)._turnDarts)
+            if (Number.isFinite(_td)) setTurnDarts(Math.max(0, _td))
+          } catch {}
+          try {
+            const _di = (data.payload as any)._x01DoubleIn
+            if (typeof _di === 'boolean') setX01DoubleInMatch(_di)
+          } catch {}
+        } else if (data.type === 'joined') {
+          if (data.id) setSelfId(data.id)
+        } else if (data.type === 'presence' || data.type === 'peer-joined') {
+          setParticipants(prev => {
+            const set = new Set(prev)
+            if (data.id) set.add(data.id)
+            return Array.from(set)
+          })
+        } else if (data.type === 'chat') {
+          const isSelf = !!(data.from && selfId && data.from === selfId)
+          const label = isSelf ? (user?.username || 'me') : (data.from || 'peer')
+          const idKey = String(data.from || '')
+          if (!isSelf && idKey && blocklist.isBlocked(idKey)) return
+          if (isSelf && lastSentChatRef.current && String(data.message||'') === lastSentChatRef.current.text) {
+            lastSentChatRef.current = null
+            return
+          }
+          setChat(prev => [...prev, { from: label, message: data.message, fromId: idKey || undefined }])
+        } else if (data.type === 'matches') {
+          setLobby(Array.isArray(data.matches) ? data.matches : [])
+        } else if (data.type === 'invite') {
+          setPendingInvite({ matchId: data.matchId, fromId: data.fromId, fromName: data.fromName, calibrated: !!data.calibrated, boardPreview: data.boardPreview || null, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore })
+        } else if (data.type === 'match-start') {
+          setRoomId(data.roomId)
+          try { setRoomAutocommit(!!data.match?.allowAutocommit) } catch {}
+          wsGlobal.send({ type: 'join', roomId: data.roomId })
+          if (data.match?.creatorId) setRoomCreatorId(String(data.match.creatorId))
+          setShowMatchModal(true)
+          setShowCreate(false)
+          if (data.match?.game) setCurrentGame(data.match.game)
+          if (user?.username && !user?.fullAccess) { incOnlineUsage(user.username) }
+        } else if (data.type === 'declined') {
+          toast('Invite declined', { type: 'info' })
+        } else if (data.type === 'error') {
+          const msg = typeof data.message === 'string' ? data.message : 'Action not allowed'
+          setErrorMsg(msg)
+          if (data.code === 'SPECTATE_NOT_ALLOWED') {
+            try { toast('This player has spectating turned off.', { type: 'error' }) } catch {}
+          }
+          setTimeout(()=>setErrorMsg(''), 3500)
+        } else if (data.type === 'friend-invite') {
+          const accept = confirm(`${data.fromName || data.fromEmail} invited you to play ${data.game || 'X01'} (${data.mode==='firstto'?'First To':'Best Of'} ${data.value||1}). Accept?`)
+          if (accept) {
+            wsGlobal.send({ type: 'start-friend-match', toEmail: data.fromEmail, game: data.game, mode: data.mode, value: data.value, startingScore: data.startingScore })
+          } else {
+            toast('Invite declined', { type: 'info' })
+          }
+        } else if (data.type === 'friend-message') {
+          const ts = data.ts || Date.now()
+          const id = data.id || `${ts}-${data.from}`
+          const from = String(data.from || '').toLowerCase()
+          const to = String(data.to || user?.email || '').toLowerCase()
+          const message = String(data.message || '')
+          msgs.add({ id, from, message, ts })
+          try {
+            const other = from === String(user?.email || '').toLowerCase() ? to : from
+            if (other) msgs.pushThread(other, { id, from, to, message, ts, readBy: [from] })
+          } catch {}
+          if (!match.inProgress) toast(`${data.from}: ${data.message}`, { type: 'info' })
+        } else if (data.type === 'celebration') {
+          const who = data.by || 'Player'
+          const kind = data.kind === 'leg' ? 'leg' : '180'
+          triggerCelebration(kind, who)
+        } else if (data.type === 'match-autocommit-updated') {
+          try { setRoomAutocommit(!!data.allow) } catch {}
+        } else if (data.type === 'opponent-paused') {
+          console.log('[OnlinePlay] wsGlobal: Opponent paused:', data.pauserName)
+          try {
+            const startedAt = data.pauseStartedAt || Date.now()
+            const minutes = data.pauseMinutes ? Number(data.pauseMinutes) : null
+            const endsAt = minutes ? startedAt + minutes * 60 * 1000 : null
+            setPausedLocal(true)
+            setPauseRequestedBy(data.pauserName || 'Opponent')
+            if (minutes) setPauseDurationSec(minutes * 60)
+            if (endsAt) setPauseEndsAt(endsAt)
+            setPausedGlobal(true, endsAt, data.pauserName || 'Opponent')
+            const msg = minutes
+              ? `${data.pauserName || 'Opponent'} paused the match (${minutes} min)`
+              : `${data.pauserName || 'Opponent'} paused the match`
+            toast(msg, { type: 'info' })
+          } catch (e) { console.warn('[OnlinePlay] Failed to apply pause:', e) }
+        } else if (data.type === 'opponent-unpaused') {
+          console.log('[OnlinePlay] wsGlobal: Opponent unpaused:', data.resumerName)
+          try {
+            setPausedLocal(false)
+            setPauseRequestedBy(null)
+            setPauseEndsAt(null)
+            setPausedGlobal(false, null)
+            toast(`${data.resumerName || 'Opponent'} resumed the match`, { type: 'success' })
+          } catch (e) { console.warn('[OnlinePlay] Failed to apply unpause:', e) }
+        } else if (data.type === 'opponent-quit') {
+          console.log('[OnlinePlay] wsGlobal: Opponent quit:', data.quitterName)
+          try {
+            toast(`${data.quitterName || 'Opponent'} quit the match`, { type: 'error' })
+            try { match.endGame() } catch {}
+            setShowX01EndSummary(true)
+          } catch (e) { console.warn('[OnlinePlay] Failed to handle opponent quit:', e) }
+        } else if (data.type === 'visit-commit') {
+          try {
+            const visit = data.visit || { value: data.value, darts: data.darts };
+            try {
+              applyVisitCommit(useMatch.getState(), visit);
+              try {
+                const vt = Number(visit?.value ?? visit?.score ?? 0) || Number(visit?.visitTotal ?? 0);
+                if (vt === 180) {
+                  const p = useMatch.getState().players[useMatch.getState().currentPlayerIdx];
+                  try { triggerCelebration && triggerCelebration('180', p?.name || 'Player'); } catch {}
+                }
+              } catch (e) {}
+            } catch (e) {
+              try { submitVisitManual(Number(data.value || 0)); } catch {}
+            }
+          } catch (err) {}
+        } else if (data.type === 'cam-code') {
+          setPairingCode(data.code)
+          setPairingPending(false)
+          try { if (pairingPendingTimeoutRef.current) window.clearTimeout(pairingPendingTimeoutRef.current) } catch {}
+          const expiryMs = 120 * 1000
+          const at = Date.now() + expiryMs
+          setPairingExpiryAt(at)
+          toast(`Pairing code: ${data.code}`, { type: 'info' })
+          try { if (pairingTimerRef.current) window.clearInterval(pairingTimerRef.current) } catch {}
+          pairingTimerRef.current = window.setInterval(() => {
+            const rem = Math.max(0, Math.ceil((at - Date.now()) / 1000))
+            setPairCountdown(rem)
+            if (rem <= 0) {
+              try { if (pairingTimerRef.current) window.clearInterval(pairingTimerRef.current) } catch {}
+              pairingTimerRef.current = null
+              setPairingCode(null)
+              setPairingExpiryAt(null)
+            }
+          }, 1000) as unknown as number
+        } else if (data.type === 'cam-peer-joined') {
+          startMobileWebRTC(data.code)
+        } else if (data.type === 'cam-answer') {
+          const pc = (window as any).mobilePC
+          if (pc) pc.setRemoteDescription(new RTCSessionDescription(data.payload))
+        } else if (data.type === 'cam-ice') {
+          const pc = (window as any).mobilePC
+          if (pc) pc.addIceCandidate(data.payload)
+        }
+      } catch (err) {
+        console.warn('[OnlinePlay] wsGlobal message handler error:', err)
+      }
+    }
+    const unsub = wsGlobal.addListener(handleMessage)
+    return unsub
+  }, [wsGlobal, selfId])
+
   // Track in-game flag in messages store
   useEffect(() => {
     msgs.setInGame(match.inProgress)
@@ -825,15 +1011,20 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
         // Opponent requested a pause - sync pause state locally
         console.log('[OnlinePlay] Opponent paused:', data.pauserName)
         try {
+          const startedAt = data.pauseStartedAt || Date.now()
+          const minutes = data.pauseMinutes ? Number(data.pauseMinutes) : null
+          const endsAt = minutes ? startedAt + minutes * 60 * 1000 : null
           setPausedLocal(true)
           setPauseRequestedBy(data.pauserName || 'Opponent')
-          setPausedGlobal(true, data.pauseStartedAt || Date.now(), data.pauserName || 'Opponent')
-          if (data.pauseMinutes) {
-            const endsAt = (data.pauseStartedAt || Date.now()) + data.pauseMinutes * 60 * 1000
-            setPauseEndsAt(endsAt)
-            setPauseDurationSec(data.pauseMinutes * 60)
-          }
-          toast(`${data.pauserName || 'Opponent'} paused the match`, { type: 'info' })
+          if (minutes) setPauseDurationSec(minutes * 60)
+          if (endsAt) setPauseEndsAt(endsAt)
+          // setPausedGlobal sets the matchControl store which PauseOverlay reads
+          // Pass endsAt (or null if no duration selected yet)
+          setPausedGlobal(true, endsAt, data.pauserName || 'Opponent')
+          const msg = minutes
+            ? `${data.pauserName || 'Opponent'} paused the match (${minutes} min)`
+            : `${data.pauserName || 'Opponent'} paused the match`
+          toast(msg, { type: 'info' })
         } catch (e) { console.warn('[OnlinePlay] Failed to apply pause:', e) }
       } else if (data.type === 'opponent-unpaused') {
         // Opponent resumed the match
@@ -841,8 +1032,8 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
         try {
           setPausedLocal(false)
           setPauseRequestedBy(null)
-          setPausedGlobal(false, null)
           setPauseEndsAt(null)
+          setPausedGlobal(false, null)
           toast(`${data.resumerName || 'Opponent'} resumed the match`, { type: 'success' })
         } catch (e) { console.warn('[OnlinePlay] Failed to apply unpause:', e) }
       } else if (data.type === 'opponent-quit') {
@@ -1516,20 +1707,17 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
           try { window.dispatchEvent(new Event("ndn:match-quit")); } catch {}
         }}
         onPause={() => {
-          // Send pause message to opponent
+          // Notify opponent that we paused (no duration yet — duration picker shown locally)
           try {
-            const pauseMinutes = pauseDurationSec / 60
             if (wsGlobal) {
-              wsGlobal.send({ type: 'match-pause', roomId, pauseMinutes })
+              wsGlobal.send({ type: 'match-pause', roomId, pauseMinutes: null })
             } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({ type: 'match-pause', roomId, pauseMinutes }))
+              wsRef.current.send(JSON.stringify({ type: 'match-pause', roomId, pauseMinutes: null }))
             }
-            // Set local pause state
+            // Set local pause state - no endsAt yet so PauseOverlay shows duration picker
             setPausedLocal(true)
             setPauseRequestedBy(localPlayerName)
-            setPausedGlobal(true, Date.now(), localPlayerName)
-            const endsAt = Date.now() + pauseDurationSec * 1000
-            setPauseEndsAt(endsAt)
+            setPausedGlobal(true, null, localPlayerName)
           } catch (e) { console.warn('[OnlinePlay] Failed to send pause message:', e) }
         }}
         onResume={() => {
@@ -1546,6 +1734,16 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
             setPausedGlobal(false, null)
             setPauseEndsAt(null)
           } catch (e) { console.warn('[OnlinePlay] Failed to send unpause message:', e) }
+        }}
+        onPauseDurationSelected={(minutes, endsAt) => {
+          // When the initiator picks a timer duration, notify the opponent
+          try {
+            if (wsGlobal) {
+              wsGlobal.send({ type: 'match-pause', roomId, pauseMinutes: minutes })
+            } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(JSON.stringify({ type: 'match-pause', roomId, pauseMinutes: minutes }))
+            }
+          } catch (e) { console.warn('[OnlinePlay] Failed to send pause duration:', e) }
         }}
         onStateChange={sendState}
         localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}

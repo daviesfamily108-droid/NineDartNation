@@ -20,9 +20,11 @@ function fmt(ms: number) {
 export default function PauseOverlay({
   localPlayerName,
   onResume,
+  onDurationSelected,
 }: {
   localPlayerName?: string | null;
   onResume?: () => void;
+  onDurationSelected?: (minutes: number, endsAt: number) => void;
 }) {
   const paused = useMatchControl((s) => s.paused);
   const pauseEndsAt = useMatchControl((s) => s.pauseEndsAt);
@@ -72,6 +74,8 @@ export default function PauseOverlay({
   const selectDuration = (minutes: number) => {
     const endsAt = Date.now() + minutes * 60_000;
     setPaused(true, endsAt, pauseInitiator);
+    // Notify parent so online matches can sync with opponent
+    if (onDurationSelected) onDurationSelected(minutes, endsAt);
   };
 
   // Phase 1: timer duration selection (no pauseEndsAt yet)

@@ -29,6 +29,7 @@ export default function InGameShell({
   onQuit: onQuitProp,
   onPause: onPauseProp,
   onResume: onResumeProp,
+  onPauseDurationSelected: onPauseDurationSelectedProp,
   onStateChange,
   localPlayerIndexOverride,
   gameModeOverride,
@@ -45,6 +46,8 @@ export default function InGameShell({
   onPause?: () => void;
   /** Override default resume behaviour (for online WS sync). */
   onResume?: () => void;
+  /** Called when pause duration is selected (for online WS sync). */
+  onPauseDurationSelected?: (minutes: number, endsAt: number) => void;
   /** Called after any match state mutation for external sync. */
   onStateChange?: () => void;
   /** Explicit local player index for online (skips name matching). */
@@ -889,6 +892,11 @@ export default function InGameShell({
           } catch {}
           // Notify opponent via WS (online matches)
           if (onResumeProp) onResumeProp();
+        }}
+        onDurationSelected={(minutes, endsAt) => {
+          // Notify opponent via WS when duration is selected (online matches)
+          if (onPauseDurationSelectedProp)
+            onPauseDurationSelectedProp(minutes, endsAt);
         }}
       />
     </div>
