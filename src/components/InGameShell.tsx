@@ -6,6 +6,8 @@ import React, {
   useState,
 } from "react";
 import CameraView from "./CameraView.js";
+import MobileCamera from "./MobileCamera.js";
+import { isMobileDevice } from "../utils/deviceDetect.js";
 import GameScoreboard from "./scoreboards/GameScoreboard.js";
 import { useOnlineGameStats } from "./scoreboards/useGameStats.js";
 import { useMatch } from "../store/match.js";
@@ -673,7 +675,9 @@ export default function InGameShell({
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-amber-400 shadow-lg shadow-amber-400/50 animate-pulse" />
                   <span className="text-xs sm:text-sm font-semibold text-white/80">
-                    Opponent&apos;s Camera
+                    {isMobileDevice()
+                      ? "Board Camera"
+                      : "Opponent\u2019s Camera"}
                   </span>
                 </div>
                 <span className="text-[10px] sm:text-xs font-medium text-amber-300">
@@ -681,7 +685,14 @@ export default function InGameShell({
                 </span>
               </div>
               <div className="relative min-h-[12rem] max-h-[50vh] bg-black">
-                <CameraView hideInlinePanels={true} forceAutoStart={true} />
+                {isMobileDevice() ? (
+                  <MobileCamera
+                    autoStart
+                    className="min-h-[12rem] max-h-[50vh]"
+                  />
+                ) : (
+                  <CameraView hideInlinePanels={true} forceAutoStart={true} />
+                )}
                 {isX01 && (
                   <LetterboxScoreboardOverlay
                     checkoutRemaining={localRemaining}
@@ -735,6 +746,27 @@ export default function InGameShell({
         {/* ───── YOUR TURN: Scoreboard + Score Entry Box ───── */}
         {isUsersTurn && (
           <div className="flex flex-col gap-3">
+            {/* Mobile camera — show board camera during your turn too */}
+            {isMobileDevice() && (
+              <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50 animate-pulse" />
+                    <span className="text-xs sm:text-sm font-semibold text-white/80">
+                      Board Camera
+                    </span>
+                  </div>
+                  <span className="text-[10px] sm:text-xs font-medium text-emerald-300">
+                    Your throw
+                  </span>
+                </div>
+                <MobileCamera
+                  autoStart
+                  className="min-h-[10rem] max-h-[40vh]"
+                />
+              </div>
+            )}
+
             {/* Scoreboard — full width */}
             <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] to-transparent" />
