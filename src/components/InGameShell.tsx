@@ -891,17 +891,24 @@ export default function InGameShell({
         </div>
       )}
 
-      {/* ── Fixed bottom score input bar (always visible on your turn) ── */}
-      {isUsersTurn && !showNumpad && !showQuitPause && !paused && (
+      {/* ── Fixed bottom score input bar (always visible) ── */}
+      {!showNumpad && !showQuitPause && !paused && (
         <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 px-3 py-2 safe-bottom">
           <div className="flex items-center gap-2 max-w-lg mx-auto">
             <input
               type="number"
               inputMode="numeric"
               pattern="[0-9]*"
-              className="flex-1 bg-white/5 border border-white/15 rounded-xl px-4 py-3 font-mono text-xl font-bold text-white text-center outline-none focus:border-emerald-400/50 focus:ring-1 focus:ring-emerald-400/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:text-white/30"
-              placeholder="Type score..."
+              className={`flex-1 border rounded-xl px-4 py-3 font-mono text-xl font-bold text-center outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:text-white/30 ${
+                isUsersTurn
+                  ? "bg-white/5 border-white/15 text-white focus:border-emerald-400/50 focus:ring-1 focus:ring-emerald-400/30"
+                  : "bg-white/3 border-white/10 text-white/50"
+              }`}
+              placeholder={
+                isUsersTurn ? "Type score..." : "Waiting for opponent..."
+              }
               value={numpadValue}
+              disabled={!isUsersTurn}
               onChange={(e) => {
                 const raw = e.target.value.replace(/[^0-9]/g, "");
                 if (raw === "" || Number(raw) <= numpadMax) {
@@ -923,8 +930,12 @@ export default function InGameShell({
               }}
             />
             <button
-              className="px-5 py-3 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-400 text-white border border-emerald-400/30 shadow-lg shadow-emerald-600/20 transition-all active:scale-95 whitespace-nowrap"
-              disabled={numpadValue === ""}
+              className={`px-5 py-3 rounded-xl text-sm font-bold text-white border transition-all active:scale-95 whitespace-nowrap ${
+                isUsersTurn && numpadValue !== ""
+                  ? "bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-400 border-emerald-400/30 shadow-lg shadow-emerald-600/20"
+                  : "bg-slate-700 border-white/10 opacity-50 cursor-not-allowed"
+              }`}
+              disabled={!isUsersTurn || numpadValue === ""}
               onClick={() => {
                 const score = Math.max(
                   0,
@@ -936,15 +947,17 @@ export default function InGameShell({
             >
               Submit
             </button>
-            <button
-              className="px-3 py-3 rounded-xl text-sm font-semibold bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 transition-all"
-              onClick={() => {
-                setNumpadValue("");
-                setShowNumpad(true);
-              }}
-            >
-              ⌨
-            </button>
+            {isUsersTurn && (
+              <button
+                className="px-3 py-3 rounded-xl text-sm font-semibold bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 transition-all"
+                onClick={() => {
+                  setNumpadValue("");
+                  setShowNumpad(true);
+                }}
+              >
+                ⌨
+              </button>
+            )}
           </div>
         </div>
       )}

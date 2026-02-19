@@ -63,10 +63,12 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
   // Place this after all hooks/variables:
   function sendState() {
     try {
+      // Server expects { type: 'state', payload: ... } and forwards to the room
+      const payload = useMatch.getState()
       if (wsGlobal && (wsGlobal as any).connected) {
-        wsGlobal.send({ type: 'sync', match })
+        wsGlobal.send({ type: 'state', payload })
       } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'sync', match }))
+        wsRef.current.send(JSON.stringify({ type: 'state', payload }))
       }
     } catch (err) {
       // Optionally log or toast error

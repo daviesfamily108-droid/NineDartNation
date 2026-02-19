@@ -40,10 +40,12 @@ export default function PauseOverlay({
       setNow(current);
       if (current >= pauseEndsAt) {
         setPaused(false, null);
+        // Also notify parent (online matches send unpause to opponent)
+        if (onResume) onResume();
       }
     }, 250);
     return () => clearInterval(t);
-  }, [paused, pauseEndsAt, setPaused]);
+  }, [paused, pauseEndsAt, setPaused, onResume]);
 
   const remaining = Math.max(0, (pauseEndsAt ?? now) - now);
   const started = pauseStartedAt ?? now;

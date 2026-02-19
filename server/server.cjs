@@ -3470,15 +3470,17 @@ wss.on('connection', (ws, req) => {
         if (ws._roomId) {
           broadcastToRoom(ws._roomId, { type: 'peer-joined', id: ws._id }, ws)
         }
-      } else if (data.type === 'state') {
+      } else if (data.type === 'state' || data.type === 'sync') {
         // Spectators cannot publish state
         if (ws._spectator) return
         // forward game state to others in room
+        // 'sync' is a legacy alias — normalize the payload location
+        const statePayload = data.payload || data.match || data
         if (ws._roomId) {
-          broadcastToRoom(ws._roomId, { type: 'state', payload: data.payload, from: ws._id }, ws);
+          broadcastToRoom(ws._roomId, { type: 'state', payload: statePayload, from: ws._id }, ws);
           // Celebration hook: if payload indicates a last visit score of 180, broadcast a celebration
           try {
-            const p = data?.payload
+            const p = statePayload
             // Expect shape similar to client match store: players -> [ { legs: [ { visits: [{ score }] } ] } ] and currentPlayerIdx
             if (p && Array.isArray(p.players) && typeof p.currentPlayerIdx === 'number') {
               const cur = p.players[p.currentPlayerIdx]

@@ -745,7 +745,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     try {
       if (wsGlobal?.connected) {
         const st = useMatch.getState();
-        wsGlobal.send({ type: "sync", match: st });
+        wsGlobal.send({ type: "state", payload: st });
       }
     } catch {}
   }, [wsGlobal]);
