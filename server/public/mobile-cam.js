@@ -642,4 +642,15 @@
     sendDiagBtn.addEventListener('click', (e) => { e.preventDefault(); try { if (ws && ws.readyState === WebSocket.OPEN) flushPendingDiagnostics(); log('Diagnostics sent'); } catch (e) { console.warn(e); log('Send failed'); } });
     dumpDiagBtn.addEventListener('click', (e) => { e.preventDefault(); try { diagOut.textContent = JSON.stringify(window.__ndn_pending_diag || [], null, 2); } catch (e) { diagOut.textContent = String(e); } });
     if (downloadDiagBtn) downloadDiagBtn.addEventListener('click', (e) => { e.preventDefault(); downloadDiagnostics(); });
+
+    // Auto-join when launched from QR code (code already in URL)
+    if (launchedFromQr) {
+        console.log('[Mobile] Auto-joining: code from QR detected, starting camera and pairing...');
+        pairingCollapsed = false;
+        syncPairingUI(true);
+        // Small delay to let DOM settle, then auto-join
+        setTimeout(() => {
+            join();
+        }, 300);
+    }
 })();

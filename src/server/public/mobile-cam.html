@@ -84,7 +84,7 @@
       await startCam(lastFacing)
       await ensureWS()
       log('Joining session...')
-      ws.send(JSON.stringify({ type: 'cam-join', code }))
+      // Set up message handler BEFORE sending join to avoid race condition
       ws.onmessage = async (ev) => {
         const data = JSON.parse(ev.data)
         if (data.type === 'cam-joined') {
@@ -104,11 +104,17 @@
           log('Error: ' + (data.code || 'UNKNOWN'))
         }
       }
+      ws.send(JSON.stringify({ type: 'cam-join', code }))
     }
 
     joinBtn.addEventListener('click', (e) => { e.preventDefault(); join() })
   stopBtn.addEventListener('click', (e) => { e.preventDefault(); try { if (pc) pc.close(); if (ws) ws.close(); if (stream) stream.getTracks().forEach(t=>t.stop()) } catch (e) {}; log('Stopped.') })
     swapBtn.addEventListener('click', async (e) => { e.preventDefault(); lastFacing = (lastFacing === 'environment' ? 'user' : 'environment'); await startCam(lastFacing) })
+
+    // Auto-join when launched from QR code (code already in URL)
+    if (input.value.trim()) {
+      setTimeout(() => { join() }, 300)
+    }
   </script>
 </body>
 </html>

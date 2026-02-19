@@ -485,6 +485,14 @@ export default function Calibrator() {
         e,
       );
     }
+    // Auto-start phone pairing so QR code appears immediately
+    setTimeout(() => {
+      try {
+        startPhonePairing();
+      } catch (e) {
+        console.warn("[Camera Connection] Auto-start phone pairing failed", e);
+      }
+    }, 100);
   }, [setMode, setPhase, setStreaming, setHasSnapshot]);
   // Track current frame (video/snapshot) size to preserve aspect ratio in the preview container
   const [frameSize, setFrameSize] = useState<{ w: number; h: number } | null>(
@@ -4718,8 +4726,17 @@ export default function Calibrator() {
                               Date.now(),
                             );
                           stopCamera(false);
+                          // Auto-start phone pairing so QR code appears immediately
+                          try {
+                            setTimeout(() => startPhonePairing(), 100);
+                          } catch (e) {
+                            console.debug(
+                              "[Camera Connection] startPhonePairing failed",
+                              e,
+                            );
+                          }
                         }}
-                        title="Enable camera on this device"
+                        title="Pair phone camera via QR code"
                       >
                         Phone
                       </button>
