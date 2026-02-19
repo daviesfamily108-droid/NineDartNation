@@ -5103,8 +5103,87 @@ export default forwardRef(function CameraView(
     const showPhoneReconnect = isPhoneCamera && !phoneFeedActive;
 
     return (
-      <div className="relative h-full rounded-xl overflow-hidden bg-black">
-        <div className="relative w-full h-full bg-black">
+      <div className="relative h-full rounded-xl overflow-hidden bg-black flex flex-col">
+        {/* ── Camera control bar — always visible ── */}
+        <div className="flex items-center gap-2 px-2 py-1.5 bg-slate-900/90 border-b border-white/10 text-xs z-20 flex-shrink-0">
+          <span className="text-white/50 font-semibold uppercase tracking-wider text-[10px] hidden sm:inline">
+            Cam
+          </span>
+          <select
+            onPointerDown={(e) => {
+              (e as any).stopPropagation();
+            }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+            }}
+            onTouchStart={(e) => {
+              (e as any).stopPropagation?.();
+            }}
+            className="flex-1 min-w-0 bg-slate-800 text-white rounded-lg px-2 py-1.5 text-xs border border-white/10 min-h-[2.25rem]"
+            value={preferredCameraId || ""}
+            onChange={async (e) => {
+              if (cameraStarting) return;
+              const id = e.target.value || undefined;
+              const label = availableCameras.find(
+                (d) => d.deviceId === id,
+              )?.label;
+              setPreferredCamera(id, label || "", true);
+              stopCamera();
+              await new Promise((resolve) => setTimeout(resolve, 150));
+              try {
+                await startCamera();
+              } catch (err) {
+                setTimeout(async () => {
+                  try {
+                    await startCamera();
+                  } catch {}
+                }, 500);
+              }
+            }}
+          >
+            <option value="">Auto (back camera)</option>
+            {availableCameras.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label ||
+                  (d.deviceId
+                    ? `Camera (${d.deviceId.slice(0, 6)})`
+                    : "Camera")}
+              </option>
+            ))}
+          </select>
+          <button
+            className={`rounded-lg px-2.5 py-1.5 text-sm border min-h-[2.25rem] ${
+              preferredCameraLocked
+                ? "bg-emerald-600/30 border-emerald-400/40 text-emerald-300"
+                : "bg-slate-800 border-white/10 text-white/60"
+            }`}
+            onClick={() => {
+              const next = !preferredCameraLocked;
+              useUserSettings.getState().setPreferredCameraLocked(next);
+            }}
+            title={
+              preferredCameraLocked
+                ? "Camera locked — tap to unlock"
+                : "Lock camera selection"
+            }
+          >
+            {preferredCameraLocked ? "🔒 Locked" : "🔓 Lock"}
+          </button>
+          <button
+            className="rounded-lg px-2 py-1.5 bg-slate-800 border border-white/10 text-white/60 text-[10px] min-h-[2.25rem]"
+            onClick={async () => {
+              try {
+                await refreshCameraDeviceList();
+              } catch {}
+            }}
+            title="Rescan cameras"
+          >
+            ↻
+          </button>
+        </div>
+
+        {/* ── Camera feed ── */}
+        <div className="relative flex-1 min-h-0 bg-black">
           <video
             ref={handleVideoRef}
             className={videoClass}
@@ -5113,11 +5192,6 @@ export default forwardRef(function CameraView(
             muted
             autoPlay
           />
-          {/* Preview fallback canvas: used to copy video frames when the
-              native <video> element doesn't paint frames (readyState 0) but
-              dimensions are available. This canvas sits above the video and
-              below the overlay so it provides a visual preview without
-              interfering with overlay drawing. */}
           <canvas
             ref={previewCanvasRef}
             className="absolute inset-0 w-full h-full"
@@ -5128,44 +5202,23 @@ export default forwardRef(function CameraView(
             className="absolute inset-0 w-full h-full"
             onClick={onOverlayClick}
           />
-          {/* Camera selector — always available in compact mode so users
-              can pick / lock their camera on any device including mobile */}
-          <CameraSelector />
           {!hasTracks && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-center px-4">
               <div className="space-y-3">
                 <div className="text-sm font-semibold text-white">
-                  {showPhoneReconnect
-                    ? "Phone camera not streaming"
-                    : "Camera not running"}
+                  Camera not running
                 </div>
-                <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
-                  <button
-                    className="btn px-3 py-1 text-sm"
-                    onClick={() => {
-                      try {
-                        setCameraEnabled(true);
-                      } catch {}
-                      void startCamera();
-                    }}
-                  >
-                    Start camera
-                  </button>
-                  <button
-                    className="btn btn--ghost px-3 py-1 text-sm"
-                    onClick={handleUseLocalCamera}
-                  >
-                    Use local device
-                  </button>
-                  {!isMobileDevice() && (
-                    <button
-                      className="btn btn--ghost px-3 py-1 text-sm"
-                      onClick={handlePhoneReconnect}
-                    >
-                      Reconnect phone
-                    </button>
-                  )}
-                </div>
+                <button
+                  className="btn px-4 py-2 text-sm"
+                  onClick={() => {
+                    try {
+                      setCameraEnabled(true);
+                    } catch {}
+                    void startCamera();
+                  }}
+                >
+                  Start Camera
+                </button>
               </div>
             </div>
           )}
