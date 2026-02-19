@@ -20,6 +20,10 @@ import { suggestCheckouts, sayScore } from "../utils/checkout.js";
 import { getPreferredUserName } from "../utils/userName.js";
 import LetterboxScoreboardOverlay from "./ui/LetterboxScoreboardOverlay.js";
 import { broadcastMessage } from "../utils/broadcast.js";
+import AroundTheClockScorer, {
+  type ATCDirection,
+} from "./AroundTheClockScorer.js";
+import { ATC_ORDER } from "../game/aroundTheClock.js";
 
 export default function InGameShell({
   user,
@@ -139,6 +143,16 @@ export default function InGameShell({
   const isX01 = gameMode === "X01";
   const scoreboardPlayers = useOnlineGameStats(gameMode, match as any);
 
+  // Around the Clock state (per-player target tracking) — declared early
+  // so heroValues and other memos can reference them.
+  const isATC = gameMode === "Around the Clock";
+  const [atcDirection, setAtcDirection] = useState<ATCDirection | null>(null);
+  const [atcTargets, setAtcTargets] = useState<Record<number, number>>({});
+  const atcOrder =
+    atcDirection === "bull-to-1" ? [...ATC_ORDER].reverse() : ATC_ORDER;
+  const localAtcIdx = atcTargets[localPlayerIndex] ?? 0;
+  const awayAtcIdx = atcTargets[awayIdx >= 0 ? awayIdx : 1] ?? 0;
+
   // Game-mode-aware hero display values for each player
   const heroValues = useMemo(() => {
     const forPlayer = (p: any, sbIdx: number) => {
@@ -150,6 +164,30 @@ export default function InGameShell({
             leg?.totalScoreRemaining ?? match.startingScore ?? lastOfflineStart,
           ),
           primaryLabel: "Remaining",
+        };
+      }
+      // Around the Clock — show target progress
+      if (gameMode === "Around the Clock") {
+        const pIdx =
+          sbIdx === 0 ? localPlayerIndex : awayIdx >= 0 ? awayIdx : 1;
+        const tIdx = atcTargets[pIdx] ?? 0;
+        const order =
+          atcDirection === "bull-to-1" ? [...ATC_ORDER].reverse() : ATC_ORDER;
+        const tgt = order[tIdx];
+        const label =
+          tIdx >= order.length
+            ? "Done!"
+            : tgt === 25
+              ? "Outer Bull"
+              : tgt === 50
+                ? "Inner Bull"
+                : String(tgt);
+        return {
+          primary: tIdx >= order.length ? "✓" : label,
+          primaryLabel:
+            tIdx >= order.length
+              ? "Complete"
+              : `Target ${tIdx + 1}/${order.length}`,
         };
       }
       if (gameMode === "Cricket" || gameMode === "American Cricket") {
@@ -185,6 +223,8 @@ export default function InGameShell({
     awayIdx,
     match.startingScore,
     lastOfflineStart,
+    atcTargets,
+    atcDirection,
   ]);
 
   const callerEnabled = useUserSettings((s: any) => s.callerEnabled);
@@ -336,6 +376,24 @@ export default function InGameShell({
     }
     onStateChange?.();
   };
+
+  // Around the Clock hit/miss handlers (must be after commitVisit)
+  const handleAtcHit = useCallback(() => {
+    const playerIdx = match.currentPlayerIdx ?? localPlayerIndex;
+    const idx = atcTargets[playerIdx] ?? 0;
+    const nextIdx = idx + 1;
+    setAtcTargets((prev) => ({ ...prev, [playerIdx]: nextIdx }));
+    const hitValue = atcOrder[idx] ?? 0;
+    commitVisit(hitValue, 3, {
+      visitTotal: hitValue,
+      atcHit: true,
+      atcTarget: hitValue,
+    });
+  }, [atcTargets, atcOrder, match.currentPlayerIdx, localPlayerIndex]);
+
+  const handleAtcMiss = useCallback(() => {
+    commitVisit(0, 3, { visitTotal: 0, atcHit: false });
+  }, []);
 
   const deriveWinningLabel = useCallback(() => {
     try {
@@ -491,7 +549,7 @@ export default function InGameShell({
               </div>
               <div className="w-px h-6 sm:h-10 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
             </div>
-            {isOnline && (
+            {isOnline && !isATC && (
               <button
                 type="button"
                 className={`w-full rounded-xl border px-3 py-2 text-center transition-all ${
@@ -653,6 +711,20 @@ export default function InGameShell({
               </div>
               <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
             </div>
+
+            {/* Around the Clock progress during opponent's turn */}
+            {isATC && atcDirection && (
+              <AroundTheClockScorer
+                direction={atcDirection}
+                onPickDirection={() => {}}
+                currentTargetIndex={awayAtcIdx}
+                isUsersTurn={false}
+                onHit={() => {}}
+                onMiss={() => {}}
+                completed={awayAtcIdx}
+                playerName={awayPlayer?.name || "Opponent"}
+              />
+            )}
           </div>
         )}
 
@@ -673,67 +745,86 @@ export default function InGameShell({
               <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
             </div>
 
-            {/* Score Entry Box — tappable card that opens the numpad */}
-            <button
-              type="button"
-              className="relative w-full rounded-2xl border-2 border-dashed border-emerald-400/40 bg-emerald-500/5 hover:bg-emerald-500/10 active:scale-[0.98] transition-all p-6 sm:p-8 text-center group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
-              onClick={() => {
-                setNumpadValue("");
-                setShowNumpad(true);
-              }}
-            >
-              <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/[0.05] to-transparent" />
-              <div className="text-emerald-300/60 text-xs sm:text-sm uppercase tracking-widest font-semibold mb-2">
-                Enter Score
-              </div>
-              <div className="font-mono text-4xl sm:text-5xl font-black text-emerald-200 group-hover:text-emerald-100 transition-colors">
-                {heroValues.local.primary}
-              </div>
-              <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-sm font-semibold">
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
+            {/* Around the Clock: target-based scorer */}
+            {isATC && (
+              <AroundTheClockScorer
+                direction={atcDirection}
+                onPickDirection={(dir) => setAtcDirection(dir)}
+                currentTargetIndex={localAtcIdx}
+                isUsersTurn={isUsersTurn}
+                onHit={handleAtcHit}
+                onMiss={handleAtcMiss}
+                completed={localAtcIdx}
+                playerName={localPlayer?.name || "You"}
+              />
+            )}
+
+            {/* X01 and other modes: numpad score entry */}
+            {!isATC && (
+              <>
+                {/* Score Entry Box — tappable card that opens the numpad */}
+                <button
+                  type="button"
+                  className="relative w-full rounded-2xl border-2 border-dashed border-emerald-400/40 bg-emerald-500/5 hover:bg-emerald-500/10 active:scale-[0.98] transition-all p-6 sm:p-8 text-center group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
+                  onClick={() => {
+                    setNumpadValue("");
+                    setShowNumpad(true);
+                  }}
                 >
-                  <rect x="4" y="4" width="16" height="16" rx="2" />
-                  <path
-                    d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                Tap to enter score
-              </div>
-              {checkoutRoutes && (
-                <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-                  {checkoutRoutes.map((route: string, i: number) => (
-                    <span
-                      key={i}
-                      className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs font-medium"
+                  <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/[0.05] to-transparent" />
+                  <div className="text-emerald-300/60 text-xs sm:text-sm uppercase tracking-widest font-semibold mb-2">
+                    Enter Score
+                  </div>
+                  <div className="font-mono text-4xl sm:text-5xl font-black text-emerald-200 group-hover:text-emerald-100 transition-colors">
+                    {heroValues.local.primary}
+                  </div>
+                  <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-sm font-semibold">
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
                     >
-                      {route}
-                    </span>
+                      <rect x="4" y="4" width="16" height="16" rx="2" />
+                      <path
+                        d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    Tap to enter score
+                  </div>
+                  {checkoutRoutes && (
+                    <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                      {checkoutRoutes.map((route: string, i: number) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs font-medium"
+                        >
+                          {route}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </button>
+
+                {/* Quick score buttons row */}
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {(isX01
+                    ? [180, 140, 100, 85, 60, 45, 26, 0]
+                    : [100, 80, 60, 45, 26, 20, 10, 0]
+                  ).map((v) => (
+                    <button
+                      key={v}
+                      className="px-4 py-2.5 rounded-xl text-sm font-bold bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/90 transition-all active:scale-95"
+                      onClick={() => commitVisit(v, 3, { visitTotal: v })}
+                    >
+                      {v}
+                    </button>
                   ))}
                 </div>
-              )}
-            </button>
-
-            {/* Quick score buttons row */}
-            <div className="flex flex-wrap gap-2 justify-center">
-              {(isX01
-                ? [180, 140, 100, 85, 60, 45, 26, 0]
-                : [100, 80, 60, 45, 26, 20, 10, 0]
-              ).map((v) => (
-                <button
-                  key={v}
-                  className="px-4 py-2.5 rounded-xl text-sm font-bold bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/90 transition-all active:scale-95"
-                  onClick={() => commitVisit(v, 3, { visitTotal: v })}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
+              </>
+            )}
 
             {/* Winning shot banner */}
             {winningShot?.label && (
@@ -750,8 +841,8 @@ export default function InGameShell({
         )}
       </div>
 
-      {/* ── Number Pad Modal ── */}
-      {showNumpad && (
+      {/* ── Number Pad Modal (X01 and other numpad modes only) ── */}
+      {showNumpad && !isATC && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
           onClick={() => setShowNumpad(false)}
@@ -892,8 +983,8 @@ export default function InGameShell({
         </div>
       )}
 
-      {/* ── Fixed bottom score input bar (always visible) ── */}
-      {!showNumpad && !showQuitPause && !paused && (
+      {/* ── Fixed bottom score input bar (X01 and other numpad modes only) ── */}
+      {!isATC && !showNumpad && !showQuitPause && !paused && (
         <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 px-3 py-2 safe-bottom">
           <div className="flex items-center gap-2 max-w-lg mx-auto">
             <input
