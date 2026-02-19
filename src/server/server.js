@@ -1749,11 +1749,12 @@ if (wss) {
         const desktop = clients.get(sess.desktopId)
         if (desktop && desktop.readyState === 1) desktop.send(JSON.stringify({ type: 'cam-peer-joined', code }))
         try { ws.send(JSON.stringify({ type: 'cam-joined', code })) } catch {}
-      } else if (data.type === 'cam-offer' || data.type === 'cam-answer' || data.type === 'cam-ice') {
+      } else if (data.type === 'cam-offer' || data.type === 'cam-answer' || data.type === 'cam-ice' || data.type === 'cam-calibration') {
         const code = String(data.code || '').toUpperCase()
         const sess = camSessions.get(code)
         if (!sess) return
-        const targetId = (data.type === 'cam-offer') ? sess.desktopId : sess.phoneId
+        // Route to the OTHER peer: if sender is desktop, forward to phone and vice versa
+        const targetId = (ws._id === sess.desktopId) ? sess.phoneId : sess.desktopId
         const target = clients.get(targetId)
         if (target && target.readyState === 1) {
           target.send(JSON.stringify({ type: data.type, code, payload: data.payload }))

@@ -3606,12 +3606,12 @@ wss.on('connection', (ws, req) => {
         const code = String(data.code || '').toUpperCase()
         const sess = await camSessions.get(code)
         if (!sess) return
-        // Determine target
-        const targetId = (data.type === 'cam-offer') ? sess.phoneId : (data.type === 'cam-calibration') ? sess.phoneId : sess.desktopId
+        // Route to the OTHER peer: if sender is desktop, forward to phone and vice versa
+        const isDesktop = (ws._id === sess.desktopId)
         let targetWs = null
-        if (targetId === sess.phoneId && sess.phoneWs) {
+        if (isDesktop && sess.phoneWs) {
           targetWs = sess.phoneWs
-        } else if (targetId === sess.desktopId && sess.desktopWs) {
+        } else if (!isDesktop && sess.desktopWs) {
           targetWs = sess.desktopWs
         }
         // Try to send via WebSocket, store as pending if not connected
