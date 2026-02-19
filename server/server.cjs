@@ -900,9 +900,13 @@ const DEFAULT_ORIGINS = [
 let ALLOWED_ORIGINS = (RAW_ORIGINS.length ? RAW_ORIGINS : DEFAULT_ORIGINS)
 
 // Ensure critical production origins are always allowed, even if env vars are restrictive
+// IMPORTANT: Include Render origins so phone camera pairing (same-origin WS) is never blocked
 const CRITICAL_ORIGINS = [
   'https://ninedartnation.netlify.app',
-  'https://*.netlify.app'
+  'https://*.netlify.app',
+  'https://ninedartnation.onrender.com',
+  'https://ninedartnation-1.onrender.com',
+  'https://*.onrender.com',
 ]
 CRITICAL_ORIGINS.forEach(origin => {
   if (!ALLOWED_ORIGINS.includes(origin)) {
@@ -917,6 +921,15 @@ try {
   if (hasNetlifyExplicit && !hasNetlifyWildcard) {
     ALLOWED_ORIGINS = [...ALLOWED_ORIGINS, 'https://*.netlify.app']
     console.warn('[CORS] auto-added wildcard https://*.netlify.app to ALLOWED_ORIGINS based on detected netlify origin')
+  }
+} catch (e) {}
+// Same for Render origins — phone camera connects from same-origin so must be allowed
+try {
+  const hasRenderExplicit = ALLOWED_ORIGINS.some(o => String(o || '').includes('.onrender.com'))
+  const hasRenderWildcard = ALLOWED_ORIGINS.some(o => String(o || '').includes('*.onrender.com'))
+  if (hasRenderExplicit && !hasRenderWildcard) {
+    ALLOWED_ORIGINS = [...ALLOWED_ORIGINS, 'https://*.onrender.com']
+    console.warn('[CORS] auto-added wildcard https://*.onrender.com to ALLOWED_ORIGINS based on detected Render origin')
   }
 } catch (e) {}
 // Show allow-list at startup so admins can confirm what the server sees
