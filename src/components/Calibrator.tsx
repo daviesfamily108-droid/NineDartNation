@@ -668,6 +668,9 @@ export default function Calibrator() {
   const [pairCode, setPairCode] = useState<string | null>(null);
   const pairCodeRef = useRef<string | null>(null);
   const [ws, setWs] = useState<WebSocket | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const modeRef = useRef<CamMode>(mode);
+  const pairingInProgressRef = useRef<boolean>(false);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const pendingIceCandidatesRef = useRef<RTCIceCandidate[]>([]);
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
@@ -939,7 +942,14 @@ export default function Calibrator() {
   // Remove automatic phone pairing on mode change; only pair on explicit user action
   const mobileUrl = useMemo(() => {
     const code = pairCode || "____";
-    // Prefer configured WS host (Render) when available to build the correct server origin
+    const currentHost = window.location.hostname;
+    // CRITICAL: When on Render, always use current origin so phone hits the SAME server
+    // (Render service names can change, e.g. ninedartnation-1.onrender.com)
+    if (currentHost.endsWith("onrender.com")) {
+      const origin = window.location.origin.replace(/\/$/, "");
+      return `${origin}/mobile-cam.html?code=${code}`;
+    }
+    // For Netlify or other frontends, use the WS URL to derive the backend origin
     const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined;
     if (envUrl && envUrl.length > 0) {
       try {
@@ -951,7 +961,7 @@ export default function Calibrator() {
       } catch (e) {}
     }
     // Local dev fallback using detected LAN or current host
-    const host = lanHost || window.location.hostname;
+    const host = lanHost || currentHost;
     const useHttps = !!httpsInfo?.https;
     const port = useHttps ? httpsInfo?.port || 8788 : 8787;
     const proto = useHttps ? "https" : "http";
@@ -1000,6 +1010,7 @@ export default function Calibrator() {
 
   useEffect(() => {
     localStorage.setItem("ndn:cal:mode", mode);
+    modeRef.current = mode;
   }, [mode]);
 
   useEffect(() => {
@@ -1360,40 +1371,48 @@ export default function Calibrator() {
   }, []);
 
   function ensureWS() {
-    // Return existing WebSocket if it's open or connecting
+    // Use ref for synchronous check to prevent duplicate WebSocket creation
+    const existing = wsRef.current;
     if (
-      ws &&
-      (ws.readyState === WebSocket.OPEN ||
-        ws.readyState === WebSocket.CONNECTING)
+      existing &&
+      (existing.readyState === WebSocket.OPEN ||
+        existing.readyState === WebSocket.CONNECTING)
     ) {
       console.log(
         "[Camera Connection] ensureWS: Reusing existing WebSocket (state:",
-        ws.readyState,
+        existing.readyState,
         ")",
       );
-      return ws;
+      return existing;
     }
-    // Prefer configured WS endpoint; normalize to include '/ws'. Fallback to same-origin '/ws'.
-    const envUrl = (import.meta as any).env?.VITE_WS_URL as string | undefined;
-    const normalizedEnv =
-      envUrl && envUrl.length > 0
-        ? envUrl.endsWith("/ws")
-          ? envUrl
-          : envUrl.replace(/\/$/, "") + "/ws"
-        : undefined;
+    // Determine WS URL: prefer same-origin on Render, otherwise use env or known Render URL
     const proto = window.location.protocol === "https:" ? "wss" : "ws";
     const sameOrigin = `${proto}://${window.location.host}/ws`;
     const host = window.location.hostname;
-    // Production safeguard: if we are not on the Render backend host and no env URL is set,
-    // prefer the known Render service as a fallback instead of Netlify same-origin.
-    const renderWS = `wss://ninedartnation.onrender.com/ws`;
-    const url =
-      normalizedEnv || (host.endsWith("onrender.com") ? sameOrigin : renderWS);
+    let url: string;
+    if (host.endsWith("onrender.com")) {
+      // On Render: always use same-origin so desktop and phone hit the same server
+      url = sameOrigin;
+    } else {
+      const envUrl = (import.meta as any).env?.VITE_WS_URL as
+        | string
+        | undefined;
+      const normalizedEnv =
+        envUrl && envUrl.length > 0
+          ? envUrl.endsWith("/ws")
+            ? envUrl
+            : envUrl.replace(/\/$/, "") + "/ws"
+          : undefined;
+      url = normalizedEnv || `wss://ninedartnation.onrender.com/ws`;
+    }
     console.log(
       "[Camera Connection] ensureWS: Creating new WebSocket to:",
       url,
     );
     const socket: WebSocket = new WebSocket(url);
+
+    // Store in ref IMMEDIATELY (synchronous) to prevent race conditions
+    wsRef.current = socket;
 
     // Set up handlers BEFORE storing the socket to avoid race conditions
     socket.onerror = (error) => {
@@ -1408,6 +1427,8 @@ export default function Calibrator() {
         event.code,
         event.reason,
       );
+      // Clear ref so next ensureWS creates a new socket
+      if (wsRef.current === socket) wsRef.current = null;
       if (pcRef.current) {
         try {
           pcRef.current.close();
@@ -1417,20 +1438,29 @@ export default function Calibrator() {
       updatePairCode(null);
       setExpiresAt(null);
       setPaired(false);
+      pairingInProgressRef.current = false;
       // Only show alert if it wasn't a clean close
       if (event.code !== 1000) {
         alert("Camera pairing connection lost. Please try pairing again.");
-        // Also revert to local mode on disconnect so user can restart camera
-        if (mode === "phone") setMode("local");
+        // Use ref to avoid stale closure over mode state
+        if (modeRef.current === "phone") setMode("local");
       }
     };
 
-    // Store socket BEFORE setting message handler to ensure it's available for message sending
+    // Also store in state for UI reactivity
     setWs(socket);
     return socket;
   }
 
   async function startPhonePairing() {
+    // Prevent duplicate pairing calls (race condition from multiple triggers)
+    if (pairingInProgressRef.current) {
+      console.log(
+        "[Camera Connection] startPhonePairing: already in progress, skipping",
+      );
+      return;
+    }
+    pairingInProgressRef.current = true;
     // Do not reset paired/streaming/phase state here to keep UI static
     // Switch UI into phone pairing mode so the calibrator shows phone-specific hints
     setMode("phone");
@@ -1466,9 +1496,15 @@ export default function Calibrator() {
     socket.onmessage = async (ev) => {
       const data = JSON.parse(ev.data);
       if (data.type === "cam-code") {
+        console.log("[Camera Connection] ✅ Received cam-code:", data.code);
         updatePairCode(data.code);
         if (data.expiresAt) setExpiresAt(data.expiresAt);
+        // Pairing setup complete, allow future pairing attempts
+        pairingInProgressRef.current = false;
       } else if (data.type === "cam-peer-joined") {
+        console.log(
+          "[Camera Connection] ✅ Received cam-peer-joined! Phone has joined.",
+        );
         // Ensure we have the latest pairing code even if messages arrive out of order
         if (!pairCodeRef.current && data.code) updatePairCode(data.code);
         setPaired(true);
@@ -1995,6 +2031,7 @@ export default function Calibrator() {
     updatePairCode(null);
     setExpiresAt(null);
     setPaired(false);
+    pairingInProgressRef.current = false;
     setMarkerResult(null);
     // Clear camera session when stopping camera
     cameraSession.setStreaming(false);
@@ -2008,8 +2045,11 @@ export default function Calibrator() {
 
   function regenerateCode() {
     // Only regenerate code, do not reset UI or camera state
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "cam-create" }));
+    // Reset pairing guard so a fresh pairing can proceed
+    pairingInProgressRef.current = false;
+    const currentWs = wsRef.current;
+    if (currentWs && currentWs.readyState === WebSocket.OPEN) {
+      currentWs.send(JSON.stringify({ type: "cam-create" }));
     } else {
       startPhonePairing();
     }
