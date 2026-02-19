@@ -4029,12 +4029,23 @@ wss.on('connection', (ws, req) => {
             try { client.send(declinePayload) } catch {}
           }
         }
-        // Clear joiner info so someone else can join
-        m.joinerId = null
-        m.joinerName = null
-        m.joinerEmail = null
-        matches.set(matchId, m)
-        console.log('[INVITE-DECLINE] creator declined match %s', matchId)
+        // Track decline count — remove match after 3 declines
+        m.declineCount = (m.declineCount || 0) + 1
+        if (m.declineCount >= 3) {
+          matches.delete(matchId)
+          console.log('[INVITE-DECLINE] match %s removed after %d declines', matchId, m.declineCount)
+          try { persistMatchesToDisk() } catch {}
+          // Broadcast updated lobby
+          const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+          for (const c of wss.clients) { if (c.readyState === 1) try { c.send(lobbyPayload) } catch {} }
+        } else {
+          // Clear joiner info so someone else can join
+          m.joinerId = null
+          m.joinerName = null
+          m.joinerEmail = null
+          matches.set(matchId, m)
+          console.log('[INVITE-DECLINE] creator declined match %s (declines: %d/3)', matchId, m.declineCount)
+        }
       }
       else if (data.type === 'match-quit') {
         // A player quit the match — notify everyone else in the room
@@ -4325,6 +4336,27 @@ function persistMatchesToDisk() {
 }
 
 loadMatchesFromDisk()
+
+// Periodic stale match cleanup: remove matches older than 2 hours or with status 'completed'
+const MATCH_MAX_AGE_MS = 2 * 60 * 60 * 1000 // 2 hours
+setInterval(() => {
+  const now = Date.now()
+  let removed = 0
+  for (const [id, m] of matches) {
+    const age = now - (m.createdAt || 0)
+    if (age > MATCH_MAX_AGE_MS || m.status === 'completed' || m.status === 'played') {
+      matches.delete(id)
+      removed++
+    }
+  }
+  if (removed > 0) {
+    try { persistMatchesToDisk() } catch {}
+    const lobbyPayload = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+    for (const c of wss.clients) { if (c.readyState === 1) try { c.send(lobbyPayload) } catch {} }
+    console.log('[Matches] Cleaned up %d stale matches', removed)
+  }
+}, 60 * 1000) // run every minute
+
 // Per-room server-side autocommit permission (roomId -> boolean)
 const roomAutocommitAllowed = new Map();
 // Track room creator id so allow host-only operations

@@ -196,7 +196,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 16;
+  const itemsPerPage = 12;
 
   const currentRoom = rooms[currentRoomIdx];
   // NOTE: This is a *UX* hint for when to show a "room is full" message.
@@ -236,6 +236,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
               m?.isMigration ||
               m?.migration ||
               m?.seeded ||
+              m?.status === "completed" ||
+              m?.status === "played" ||
+              (m?.declineCount && m.declineCount >= 3) ||
               (typeof m?.createdBy === "string" &&
                 m.createdBy.toLowerCase().includes("test")) ||
               (typeof m?.creatorName === "string" &&
