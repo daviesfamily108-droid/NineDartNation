@@ -636,6 +636,22 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
           setShowMatchModal(true)
           setShowCreate(false)
           if (data.match?.game) setCurrentGame(data.match.game)
+          // Initialize the match store so inProgress=true and InGameShell renders
+          if (!match.inProgress) {
+            const serverMatch = data.match || {}
+            const startScore = Number(serverMatch.startingScore) || 501
+            const creatorName = serverMatch.creatorName || serverMatch.createdBy || 'Opponent'
+            const joinerName = serverMatch.joinerName || 'Opponent'
+            const isLocalCreator = creatorName.toLowerCase() === localPlayerName.toLowerCase()
+            const opponentName = isLocalCreator ? (joinerName || 'Opponent') : (creatorName || 'Opponent')
+            const firstId = data.firstPlayerId || data.firstThrowerId || null
+            let localGoesFirst = isLocalCreator
+            if (firstId && serverMatch.creatorId) {
+              localGoesFirst = isLocalCreator ? (firstId === serverMatch.creatorId) : (firstId !== serverMatch.creatorId)
+            }
+            const playerNames = localGoesFirst ? [localPlayerName, opponentName] : [opponentName, localPlayerName]
+            match.newMatch(playerNames, startScore, data.roomId)
+          }
           if (user?.username && !user?.fullAccess) { incOnlineUsage(user.username) }
         } else if (data.type === 'declined') {
           toast('Invite declined', { type: 'info' })
@@ -934,6 +950,22 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
         setShowMatchModal(true)
         setShowCreate(false)
         if (data.match?.game) setCurrentGame(data.match.game)
+        // Initialize the match store so inProgress=true and InGameShell renders
+        if (!match.inProgress) {
+          const serverMatch = data.match || {}
+          const startScore = Number(serverMatch.startingScore) || 501
+          const creatorName = serverMatch.creatorName || serverMatch.createdBy || 'Opponent'
+          const joinerName = serverMatch.joinerName || 'Opponent'
+          const isLocalCreator = creatorName.toLowerCase() === localPlayerName.toLowerCase()
+          const opponentName = isLocalCreator ? (joinerName || 'Opponent') : (creatorName || 'Opponent')
+          const firstId = data.firstPlayerId || data.firstThrowerId || null
+          let localGoesFirst = isLocalCreator
+          if (firstId && serverMatch.creatorId) {
+            localGoesFirst = isLocalCreator ? (firstId === serverMatch.creatorId) : (firstId !== serverMatch.creatorId)
+          }
+          const playerNames = localGoesFirst ? [localPlayerName, opponentName] : [opponentName, localPlayerName]
+          match.newMatch(playerNames, startScore, data.roomId)
+        }
         // Consume a free game for non-premium users
         if (user?.username && !user?.fullAccess) {
           incOnlineUsage(user.username)

@@ -181,6 +181,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [bullTied, setBullTied] = useState(false);
   // Opponent quit notification — shown when the remote player leaves mid-match
   const [opponentQuitName, setOpponentQuitName] = useState<string | null>(null);
+  // Track the active game mode for the current match (e.g. 'X01', 'Cricket', 'Around the Clock')
+  const [currentGame, setCurrentGame] = useState<string>("X01");
 
   // Filter & Sort State
   const [searchQuery, setSearchQuery] = useState("");
@@ -534,6 +536,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         console.error("[OnlinePlay] newMatch failed:", e);
       }
 
+      // Track the game mode for this match
+      const gameMode = serverMatch.game || saved.game || "X01";
+      setCurrentGame(gameMode);
+
       // Join the WS room so we receive real-time score updates
       try {
         if (wsGlobal?.connected) {
@@ -856,6 +862,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           }}
           onStateChange={sendState}
           localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}
+          gameModeOverride={currentGame}
           isOnline={true}
         />
         {/* Opponent quit overlay */}
