@@ -213,106 +213,113 @@ function MobileCameraSetup() {
   }, [preferredCameraLocked]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] bg-black text-white">
-      {/* ── Top bar: Device picker + Lock ── */}
-      <div className="flex items-center gap-2 px-3 py-2 bg-slate-900 border-b border-white/10 flex-shrink-0">
-        <select
-          className="flex-1 min-w-0 bg-slate-800 text-white rounded-lg px-3 py-2 text-sm border border-white/10 min-h-[2.5rem]"
-          value={preferredCameraId || ""}
-          onChange={(e) => onDeviceChange(e.target.value || undefined)}
-          disabled={starting || preferredCameraLocked}
-        >
-          <option value="">Auto (back camera)</option>
-          {cameras.map((d) => (
-            <option key={d.deviceId} value={d.deviceId}>
-              {d.label ||
-                (d.deviceId ? `Camera (${d.deviceId.slice(0, 8)}…)` : "Camera")}
-            </option>
-          ))}
-        </select>
-
-        <button
-          className={`rounded-lg px-3 py-2 text-sm font-semibold border min-h-[2.5rem] transition-colors ${
-            preferredCameraLocked
-              ? "bg-emerald-600/40 border-emerald-400/50 text-emerald-200"
-              : "bg-slate-800 border-white/10 text-white/60"
-          }`}
-          onClick={toggleLock}
-        >
-          {preferredCameraLocked ? "🔒 Locked" : "🔓 Lock"}
-        </button>
-
-        <button
-          className="rounded-lg px-2.5 py-2 bg-slate-800 border border-white/10 text-white/60 text-sm min-h-[2.5rem]"
-          onClick={refreshDevices}
-          title="Rescan cameras"
-        >
-          ↻
-        </button>
-      </div>
-
-      {/* ── Live camera feed ── */}
-      <div className="relative flex-1 min-h-0 bg-black">
-        <video
-          ref={videoRef}
-          className="absolute inset-0 w-full h-full object-contain bg-black"
-          playsInline
-          muted
-          autoPlay
-        />
-
-        {/* Status overlays */}
-        {!streaming && !starting && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-            <button
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-3 rounded-xl text-base shadow-lg"
-              onClick={() => startCamera(preferredCameraId || undefined)}
-            >
-              Start Camera
-            </button>
+    <div className="p-3 text-white">
+      {/* ── Compact camera card (matches in-game camera box) ── */}
+      <div className="rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
+        {/* ── Header bar ── */}
+        <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-2 h-2 rounded-full shadow-lg ${
+                streaming
+                  ? "bg-emerald-400 shadow-emerald-400/50 animate-pulse"
+                  : "bg-slate-500"
+              }`}
+            />
+            <span className="text-xs sm:text-sm font-semibold text-white/80">
+              Board Camera
+            </span>
           </div>
-        )}
+          <span className="text-[10px] sm:text-xs font-medium text-white/50">
+            {streaming ? "Live" : starting ? "Starting…" : "Idle"}
+          </span>
+        </div>
 
-        {starting && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80">
-            <div className="text-white/80 text-sm font-medium animate-pulse">
-              Starting camera…
-            </div>
-          </div>
-        )}
+        {/* ── Camera feed (compact, same as in-game) ── */}
+        <div className="relative min-h-[12rem] max-h-[50vh] bg-black aspect-[4/3]">
+          <video
+            ref={videoRef}
+            className="absolute inset-0 w-full h-full object-contain bg-black"
+            playsInline
+            muted
+            autoPlay
+          />
 
-        {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-6">
-            <div className="text-center space-y-3 max-w-xs">
-              <div className="text-rose-300 text-sm font-medium">{error}</div>
+          {!streaming && !starting && !error && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80">
               <button
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2 rounded-xl text-sm"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-5 py-2.5 rounded-xl text-sm shadow-lg"
                 onClick={() => startCamera(preferredCameraId || undefined)}
               >
-                Retry
+                Start Camera
               </button>
             </div>
-          </div>
-        )}
-      </div>
+          )}
 
-      {/* ── Bottom status bar ── */}
-      <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-t border-white/10 flex-shrink-0">
-        <div className="flex items-center gap-2 text-xs">
-          <span
-            className={`w-2 h-2 rounded-full ${streaming ? "bg-emerald-400" : "bg-slate-500"}`}
-          />
-          <span className="text-white/60">{streaming ? "Live" : "Idle"}</span>
-          {preferredCameraLabel && (
-            <span className="text-white/40 truncate max-w-[180px]">
-              — {preferredCameraLabel}
-            </span>
+          {starting && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80">
+              <div className="text-white/80 text-sm font-medium animate-pulse">
+                Starting camera…
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/80 px-4">
+              <div className="text-center space-y-2 max-w-xs">
+                <div className="text-rose-300 text-xs font-medium">{error}</div>
+                <button
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-4 py-2 rounded-xl text-xs"
+                  onClick={() => startCamera(preferredCameraId || undefined)}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
           )}
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* ── Controls bar (device picker + lock) ── */}
+        <div className="flex items-center gap-2 px-3 py-2 border-t border-white/5 bg-white/[0.03]">
+          <select
+            className="flex-1 min-w-0 bg-slate-800 text-white rounded-lg px-2 py-1.5 text-xs border border-white/10 min-h-[2rem]"
+            value={preferredCameraId || ""}
+            onChange={(e) => onDeviceChange(e.target.value || undefined)}
+            disabled={starting || preferredCameraLocked}
+          >
+            <option value="">Auto (back camera)</option>
+            {cameras.map((d) => (
+              <option key={d.deviceId} value={d.deviceId}>
+                {d.label ||
+                  (d.deviceId
+                    ? `Camera (${d.deviceId.slice(0, 8)}…)`
+                    : "Camera")}
+              </option>
+            ))}
+          </select>
+
+          <button
+            className={`rounded-lg px-2 py-1.5 text-xs font-semibold border min-h-[2rem] transition-colors ${
+              preferredCameraLocked
+                ? "bg-emerald-600/30 border-emerald-400/40 text-emerald-200"
+                : "bg-slate-800 border-white/10 text-white/60"
+            }`}
+            onClick={toggleLock}
+          >
+            {preferredCameraLocked ? "🔒" : "🔓"}
+          </button>
+
+          <button
+            className="rounded-lg px-2 py-1.5 bg-slate-800 border border-white/10 text-white/60 text-xs min-h-[2rem]"
+            onClick={refreshDevices}
+            title="Rescan cameras"
+          >
+            ↻
+          </button>
+
           {streaming && (
             <button
-              className="text-xs text-rose-400 hover:text-rose-300 font-medium"
+              className="rounded-lg px-2 py-1.5 text-xs font-medium text-rose-400 hover:text-rose-300 border border-rose-400/20 min-h-[2rem]"
               onClick={stopCamera}
             >
               Stop
