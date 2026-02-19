@@ -44,6 +44,7 @@ import {
   distanceFromBullMm,
   mmPerBoardUnitFromBullOuter,
 } from "../utils/bullDistance.js";
+import { isMobileDevice } from "../utils/deviceDetect.js";
 
 type VideoDiagnostics = {
   ts: number;
@@ -2827,8 +2828,8 @@ export default forwardRef(function CameraView(
     };
     // Always show a discovery UI so users can rescan / request permission even when no cameras were enumerated
     return (
-      <div className="camera-selector absolute bottom-2 right-2 z-20 flex items-center gap-2 bg-black/40 rounded px-2 py-1 text-xs">
-        <span>Cam:</span>
+      <div className="camera-selector absolute bottom-2 right-2 z-20 flex items-center gap-2 bg-black/60 backdrop-blur-sm rounded-lg px-2 py-1.5 text-xs">
+        <span className="hidden sm:inline">Cam:</span>
         <select
           onPointerDown={(e) => {
             (e as any).stopPropagation();
@@ -2839,7 +2840,7 @@ export default forwardRef(function CameraView(
           onTouchStart={(e) => {
             (e as any).stopPropagation?.();
           }}
-          className="bg-black/20 rounded px-1 py-0.5"
+          className="bg-black/30 rounded px-1.5 py-1 min-h-[2rem] text-xs sm:text-xs"
           value={preferredCameraId || ""}
           onChange={async (e) => {
             if (cameraStarting) return;
@@ -2926,6 +2927,20 @@ export default forwardRef(function CameraView(
           title="Rescan connected cameras"
         >
           Rescan
+        </button>
+        <button
+          className={`btn btn--ghost btn-sm ml-1 px-2 py-0.5 text-[10px] ${preferredCameraLocked ? "text-emerald-300" : "text-white/60"}`}
+          onClick={() => {
+            const next = !preferredCameraLocked;
+            useUserSettings.getState().setPreferredCameraLocked(next);
+          }}
+          title={
+            preferredCameraLocked
+              ? "Camera locked — click to unlock"
+              : "Lock camera selection"
+          }
+        >
+          {preferredCameraLocked ? "🔒" : "🔓"}
         </button>
         {showVideoDiagnostics && (
           <div className="mt-2 ml-1 text-xs rounded-lg border border-white/10 bg-black/30 p-2">
@@ -5113,6 +5128,9 @@ export default forwardRef(function CameraView(
             className="absolute inset-0 w-full h-full"
             onClick={onOverlayClick}
           />
+          {/* Camera selector — always available in compact mode so users
+              can pick / lock their camera on any device including mobile */}
+          <CameraSelector />
           {!hasTracks && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/70 text-center px-4">
               <div className="space-y-3">
@@ -5139,12 +5157,14 @@ export default forwardRef(function CameraView(
                   >
                     Use local device
                   </button>
-                  <button
-                    className="btn btn--ghost px-3 py-1 text-sm"
-                    onClick={handlePhoneReconnect}
-                  >
-                    Reconnect phone
-                  </button>
+                  {!isMobileDevice() && (
+                    <button
+                      className="btn btn--ghost px-3 py-1 text-sm"
+                      onClick={handlePhoneReconnect}
+                    >
+                      Reconnect phone
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
