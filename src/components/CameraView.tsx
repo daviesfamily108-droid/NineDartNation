@@ -5067,9 +5067,7 @@ export default forwardRef(function CameraView(
     const videoClass =
       aspect === "square"
         ? "absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black"
-        : fit
-          ? "absolute inset-0 w-full h-full object-contain object-center bg-black ndn-video-smooth"
-          : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full w-auto h-auto object-cover object-center bg-black ndn-video-smooth";
+        : "absolute inset-0 w-full h-full object-cover object-center bg-black ndn-video-smooth";
     const videoScale = cameraScale ?? 1;
 
     // Optional, low-risk glare reduction for the *preview* video element.
