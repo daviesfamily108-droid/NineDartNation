@@ -378,22 +378,26 @@ export default function InGameShell({
   };
 
   // Around the Clock hit/miss handlers (must be after commitVisit)
-  const handleAtcHit = useCallback(() => {
+  // onDartHit: immediately advance target index for this player (single dart)
+  const handleAtcDartHit = useCallback(() => {
     const playerIdx = match.currentPlayerIdx ?? localPlayerIndex;
-    const idx = atcTargets[playerIdx] ?? 0;
-    const nextIdx = idx + 1;
-    setAtcTargets((prev) => ({ ...prev, [playerIdx]: nextIdx }));
-    const hitValue = atcOrder[idx] ?? 0;
-    commitVisit(hitValue, 3, {
-      visitTotal: hitValue,
-      atcHit: true,
-      atcTarget: hitValue,
-    });
-  }, [atcTargets, atcOrder, match.currentPlayerIdx, localPlayerIndex]);
+    setAtcTargets((prev) => ({
+      ...prev,
+      [playerIdx]: (prev[playerIdx] ?? 0) + 1,
+    }));
+  }, [match.currentPlayerIdx, localPlayerIndex]);
 
-  const handleAtcMiss = useCallback(() => {
-    commitVisit(0, 3, { visitTotal: 0, atcHit: false });
-  }, []);
+  // onTurnComplete: called after all 3 darts — commit the visit with totals
+  const handleAtcTurnComplete = useCallback(
+    (hits: number, totalValue: number) => {
+      commitVisit(totalValue, 3, {
+        visitTotal: totalValue,
+        atcHit: hits > 0,
+        atcHits: hits,
+      });
+    },
+    [],
+  );
 
   const deriveWinningLabel = useCallback(() => {
     try {
@@ -719,8 +723,8 @@ export default function InGameShell({
                 onPickDirection={() => {}}
                 currentTargetIndex={awayAtcIdx}
                 isUsersTurn={false}
-                onHit={() => {}}
-                onMiss={() => {}}
+                onTurnComplete={() => {}}
+                onDartHit={() => {}}
                 completed={awayAtcIdx}
                 playerName={awayPlayer?.name || "Opponent"}
               />
@@ -752,8 +756,8 @@ export default function InGameShell({
                 onPickDirection={(dir) => setAtcDirection(dir)}
                 currentTargetIndex={localAtcIdx}
                 isUsersTurn={isUsersTurn}
-                onHit={handleAtcHit}
-                onMiss={handleAtcMiss}
+                onTurnComplete={handleAtcTurnComplete}
+                onDartHit={handleAtcDartHit}
                 completed={localAtcIdx}
                 playerName={localPlayer?.name || "You"}
               />
