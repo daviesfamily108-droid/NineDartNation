@@ -208,8 +208,28 @@
             console.log('[Mobile] Processing cam-offer from desktop');
             (async ()=>{
                 try {
+                    // Guard: ensure camera stream exists
+                    if (!stream || stream.getTracks().length === 0) {
+                        console.error('[Mobile] No camera stream for WebRTC! Attempting to start...');
+                        try { await startCam(lastFacing); } catch (camErr) {
+                            console.error('[Mobile] Failed to start camera:', camErr);
+                            log('ERROR: Camera not available for pairing.');
+                            return;
+                        }
+                        if (!stream) { log('ERROR: No stream.'); return; }
+                    }
                     console.log('[Mobile] Creating RTCPeerConnection for offer');
-                    pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                    pc = new RTCPeerConnection({ iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:stun.cloudflare.com:3478' }
+                    ] });
+                    pc.oniceconnectionstatechange = () => {
+                        console.log('[Mobile] ICE state:', pc.iceConnectionState);
+                        if (pc.iceConnectionState === 'connected') log('Connected! Streaming.');
+                        else if (pc.iceConnectionState === 'failed') log('ICE failed. Try same WiFi.');
+                    };
                     console.log('[Mobile] Adding', stream.getTracks().length, 'audio/video tracks to connection');
                     stream.getTracks().forEach(t => pc.addTrack(t, stream));
                     pc.onicecandidate = (e) => { 
@@ -567,7 +587,40 @@
                 } else if (data.type === 'cam-offer') {
                     console.log('[Mobile WS] Received offer from desktop, creating answer');
                     try {
-                        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                        // Guard: ensure camera stream exists before proceeding
+                        if (!stream || stream.getTracks().length === 0) {
+                            console.error('[Mobile WS] No camera stream available! Attempting to start camera...');
+                            log('Camera not ready — starting camera...');
+                            try { await startCam(lastFacing); } catch (camErr) {
+                                console.error('[Mobile WS] Failed to start camera for WebRTC:', camErr);
+                                log('ERROR: Camera failed. Grant permission and retry.');
+                                sendDiagnostic('cam-offer-no-stream', { err: String(camErr) });
+                                return;
+                            }
+                            if (!stream || stream.getTracks().length === 0) {
+                                log('ERROR: No camera stream. Cannot pair.');
+                                sendDiagnostic('cam-offer-stream-still-null', {});
+                                return;
+                            }
+                        }
+                        pc = new RTCPeerConnection({ iceServers: [
+                            { urls: 'stun:stun.l.google.com:19302' },
+                            { urls: 'stun:stun1.l.google.com:19302' },
+                            { urls: 'stun:stun2.l.google.com:19302' },
+                            { urls: 'stun:stun.cloudflare.com:3478' }
+                        ] });
+                        // Monitor ICE connection state for diagnostics
+                        pc.oniceconnectionstatechange = () => {
+                            console.log('[Mobile WS] ICE state:', pc.iceConnectionState);
+                            if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                                log('Connected! Streaming to desktop.');
+                            } else if (pc.iceConnectionState === 'failed') {
+                                log('ICE connection failed. Try same WiFi network.');
+                                sendDiagnostic('ice-failed', {});
+                            } else if (pc.iceConnectionState === 'disconnected') {
+                                log('Connection interrupted...');
+                            }
+                        };
                         console.log('[Mobile WS] Adding', stream.getTracks().length, 'tracks to peer connection');
                         stream.getTracks().forEach(t => pc.addTrack(t, stream));
                         pc.onicecandidate = (e) => { 

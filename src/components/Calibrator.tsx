@@ -470,11 +470,8 @@ export default function Calibrator() {
   const [hasSnapshot, setHasSnapshot] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const handleSelectPhoneCamera = useCallback(() => {
-    setMode("phone");
-    setPhase("camera");
-    setStreaming(false);
-    setHasSnapshot(false);
-    // Persist phone camera selection globally so it is used in game modes
+    // startPhonePairing already handles setMode, setPhase, stopCamera
+    // Just persist the preference and kick off pairing
     try {
       useUserSettings
         .getState()
@@ -485,15 +482,8 @@ export default function Calibrator() {
         e,
       );
     }
-    // Auto-start phone pairing so QR code appears immediately
-    setTimeout(() => {
-      try {
-        startPhonePairing();
-      } catch (e) {
-        console.warn("[Camera Connection] Auto-start phone pairing failed", e);
-      }
-    }, 100);
-  }, [setMode, setPhase, setStreaming, setHasSnapshot]);
+    startPhonePairing();
+  }, []);
   // Track current frame (video/snapshot) size to preserve aspect ratio in the preview container
   const [frameSize, setFrameSize] = useState<{ w: number; h: number } | null>(
     null,
@@ -1515,23 +1505,49 @@ export default function Calibrator() {
           );
         }
         const peer = new RTCPeerConnection({
-          iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:stun.cloudflare.com:3478" },
+          ],
           iceCandidatePoolSize: 10,
         });
         pcRef.current = peer;
 
         // Add connection state monitoring
         peer.onconnectionstatechange = () => {
-          console.log("WebRTC connection state:", peer.connectionState);
-          if (
-            peer.connectionState === "failed" ||
-            peer.connectionState === "disconnected"
-          ) {
-            console.error("WebRTC connection failed");
-            alert("Camera connection lost. Please try pairing again.");
+          console.log(
+            "[Camera Connection] WebRTC connection state:",
+            peer.connectionState,
+          );
+          if (peer.connectionState === "failed") {
+            console.error("[Camera Connection] WebRTC connection FAILED");
+            alert(
+              "Camera connection failed. Make sure both devices are on the same WiFi network, then try again.",
+            );
             stopCamera(false);
+          } else if (peer.connectionState === "disconnected") {
+            console.warn(
+              "[Camera Connection] WebRTC disconnected — may recover",
+            );
           } else if (peer.connectionState === "connected") {
-            console.log("WebRTC connection established");
+            console.log(
+              "[Camera Connection] ✅ WebRTC connection established!",
+            );
+          }
+        };
+
+        // ICE connection state for network-level diagnostics
+        peer.oniceconnectionstatechange = () => {
+          console.log(
+            "[Camera Connection] ICE connection state:",
+            peer.iceConnectionState,
+          );
+          if (peer.iceConnectionState === "failed") {
+            console.error(
+              "[Camera Connection] ICE negotiation failed — STUN may be blocked",
+            );
           }
         };
 
@@ -4716,7 +4732,6 @@ export default function Calibrator() {
                         className={`btn px-3 py-1 ${mode === "phone" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-slate-700 hover:bg-slate-600"}`}
                         data-testid="mode-phone"
                         onClick={() => {
-                          setMode("phone");
                           if (
                             typeof DROPDOWN_DEBUG !== "undefined" &&
                             DROPDOWN_DEBUG
@@ -4725,16 +4740,8 @@ export default function Calibrator() {
                               "[Camera Connection] setMode(phone)",
                               Date.now(),
                             );
-                          stopCamera(false);
-                          // Auto-start phone pairing so QR code appears immediately
-                          try {
-                            setTimeout(() => startPhonePairing(), 100);
-                          } catch (e) {
-                            console.debug(
-                              "[Camera Connection] startPhonePairing failed",
-                              e,
-                            );
-                          }
+                          // startPhonePairing already calls setMode("phone") and stopCamera
+                          startPhonePairing();
                         }}
                         title="Pair phone camera via QR code"
                       >

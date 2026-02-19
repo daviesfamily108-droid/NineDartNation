@@ -81,7 +81,7 @@
       const code = (input.value || '').trim().toUpperCase()
       if (!code) { log('Enter a code'); return }
       log('Connecting...')
-      await startCam(lastFacing)
+      try { await startCam(lastFacing) } catch (e) { log('Camera error: ' + e) }
       await ensureWS()
       log('Joining session...')
       // Set up message handler BEFORE sending join to avoid race condition
@@ -90,7 +90,22 @@
         if (data.type === 'cam-joined') {
           log('Paired. Negotiating...')
         } else if (data.type === 'cam-offer') {
-          pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+          // Guard: ensure camera stream exists
+          if (!stream || stream.getTracks().length === 0) {
+            log('Camera not ready — starting...')
+            try { await startCam(lastFacing) } catch (e) { log('Camera failed: ' + e); return }
+            if (!stream) { log('ERROR: No camera stream'); return }
+          }
+          pc = new RTCPeerConnection({ iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun.cloudflare.com:3478' }
+          ] })
+          pc.oniceconnectionstatechange = () => {
+            console.log('[Mobile] ICE state:', pc.iceConnectionState)
+            if (pc.iceConnectionState === 'connected') log('Connected! Streaming.')
+            else if (pc.iceConnectionState === 'failed') log('ICE failed. Try same WiFi.')
+          }
           stream.getTracks().forEach(t => pc.addTrack(t, stream))
           pc.onicecandidate = (e) => { if (e.candidate) ws.send(JSON.stringify({ type: 'cam-ice', code, payload: e.candidate })) }
           await pc.setRemoteDescription(new RTCSessionDescription(data.payload))
