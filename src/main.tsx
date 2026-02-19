@@ -1,4 +1,4 @@
-﻿import { StrictMode } from "react";
+import { StrictMode } from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
 // Mobile-only overrides loaded after the main stylesheet to strongly
@@ -21,6 +21,12 @@ try {
 installApiInterceptor();
 setupInstallPromptHooks();
 installQuietConsole();
+
+// Clear stale-chunk reload flag on successful startup so future deploys
+// can trigger a fresh reload if needed.
+try {
+  sessionStorage.removeItem("ndn_chunk_reload");
+} catch {}
 
 // Temporary global error collector (diagnostic only).
 // Purpose: capture initialization/runtime errors (like the reported "Cannot access 'Ns' before initialization")

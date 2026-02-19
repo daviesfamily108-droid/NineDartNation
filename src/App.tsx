@@ -7,15 +7,16 @@ import React, {
   Suspense,
 } from "react";
 import { Sidebar, TabKey, buildTabList } from "./components/Sidebar.js";
-const Home = React.lazy(() => import("./components/Home.js"));
+import lazyWithRetry from "./utils/lazyWithRetry.js";
+const Home = lazyWithRetry(() => import("./components/Home.js"));
 import ScrollFade from "./components/ScrollFade.js";
 // Lazy-load CameraView to avoid importing a large camera module at app
 // bootstrap time. This prevents the component module from executing during
 // initial module evaluation which can avoid TDZ issues when other modules
 // import shared stores during startup.
-const CameraView = React.lazy(() => import("./components/CameraView.js"));
-const OfflinePlay = React.lazy(() => import("./components/OfflinePlay.js"));
-const Friends = React.lazy(() => import("./components/Friends.js"));
+const CameraView = lazyWithRetry(() => import("./components/CameraView.js"));
+const OfflinePlay = lazyWithRetry(() => import("./components/OfflinePlay.js"));
+const Friends = lazyWithRetry(() => import("./components/Friends.js"));
 import Toaster from "./components/Toaster.js";
 import AdminDashboard from "./components/AdminDashboard.js";
 import SettingsPanel from "./components/SettingsPanel.js";
@@ -45,13 +46,15 @@ import { useIsAdmin } from "./utils/admin.js";
 import { apiFetch, getApiBaseUrl } from "./utils/api.js";
 import "./styles/premium.css";
 import "./styles/themes.css";
-const OnlinePlay = React.lazy(() => import("./components/OnlinePlay.clean"));
-const StatsPanel = React.lazy(() => import("./components/StatsPanel.js"));
-const Tournaments = React.lazy(() => import("./components/Tournaments.js"));
-const AdminAccess = React.lazy(() => import("./components/AdminAccess.js"));
-const CameraSetup = React.lazy(() => import("./components/CameraSetup.js"));
+const OnlinePlay = lazyWithRetry(() => import("./components/OnlinePlay.clean"));
+const StatsPanel = lazyWithRetry(() => import("./components/StatsPanel.js"));
+const Tournaments = lazyWithRetry(() => import("./components/Tournaments.js"));
+const AdminAccess = lazyWithRetry(() => import("./components/AdminAccess.js"));
+const CameraSetup = lazyWithRetry(() => import("./components/CameraSetup.js"));
 // AdminAccess already imported above
-const OpsDashboard = React.lazy(() => import("./components/OpsDashboard.js"));
+const OpsDashboard = lazyWithRetry(
+  () => import("./components/OpsDashboard.js"),
+);
 import HelpAssistant from "./components/HelpAssistant.js";
 import GlobalCameraLogger from "./components/GlobalCameraLogger.js";
 import GlobalPhoneVideoSink from "./components/GlobalPhoneVideoSink.js";

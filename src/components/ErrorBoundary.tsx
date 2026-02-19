@@ -1,4 +1,13 @@
-﻿import { Component, type ReactNode } from "react";
+import { Component, type ReactNode } from "react";
+
+/** Detect chunk-load / dynamic-import failures caused by stale deploys. */
+function isChunkLoadError(msg: string): boolean {
+  return (
+    /failed to fetch dynamically imported module/i.test(msg) ||
+    /loading chunk .* failed/i.test(msg) ||
+    /importing a module script failed/i.test(msg)
+  );
+}
 
 export default class ErrorBoundary extends Component<
   {
@@ -15,6 +24,17 @@ export default class ErrorBoundary extends Component<
   }
   componentDidCatch(error: any, info: any) {
     console.error("[ErrorBoundary]", error, info);
+
+    // Auto-reload once on stale-chunk errors (new deploy invalidated old hashes)
+    const msg = String(error?.message || error || "");
+    if (isChunkLoadError(msg)) {
+      const key = "ndn_chunk_reload";
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        window.location.reload();
+        return;
+      }
+    }
   }
   render() {
     if (this.state.hasError) {
