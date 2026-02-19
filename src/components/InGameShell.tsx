@@ -256,6 +256,14 @@ export default function InGameShell({
 
   const [showNumpad, setShowNumpad] = useState(false);
   const [numpadValue, setNumpadValue] = useState("");
+  const numpadInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus the input when numpad opens
+  useEffect(() => {
+    if (showNumpad && numpadInputRef.current) {
+      numpadInputRef.current.focus();
+    }
+  }, [showNumpad]);
 
   // Turn timer: tracks how long the opponent has been throwing
   const [opponentTurnStart, setOpponentTurnStart] = useState<number | null>(
@@ -365,7 +373,7 @@ export default function InGameShell({
   }, [match.inProgress, deriveWinningLabel, winningShot?.label]);
 
   return (
-    <div className="card ndn-game-shell ndn-page ndn-ingame-active relative overflow-hidden md:overflow-hidden overflow-y-auto">
+    <div className="card ndn-game-shell ndn-page ndn-ingame-active relative overflow-hidden md:overflow-hidden overflow-y-auto pb-20">
       {/* ── Ambient background glow ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/10 blur-[120px]" />
@@ -746,6 +754,11 @@ export default function InGameShell({
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
           onClick={() => setShowNumpad(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setShowNumpad(false);
+            }
+          }}
         >
           {/* Backdrop */}
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
@@ -754,14 +767,39 @@ export default function InGameShell({
             className="relative w-full max-w-sm mx-auto mb-0 sm:mb-0 rounded-t-3xl sm:rounded-3xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-2xl p-4 sm:p-6 animate-[slideUp_0.2s_ease-out]"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Display */}
+            {/* Score input field — typeable on both mobile and PC */}
             <div className="mb-4 rounded-2xl bg-black/40 border border-white/10 p-4 text-center">
               <div className="text-[10px] uppercase tracking-widest text-slate-400 mb-1">
                 Score
               </div>
-              <div className="font-mono text-5xl sm:text-6xl font-black text-white tabular-nums min-h-[3.5rem] leading-none">
-                {numpadValue || <span className="text-white/20">0</span>}
-              </div>
+              {/* Score input — auto-focused via useEffect */}
+              <input
+                ref={numpadInputRef}
+                type="number"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                className="w-full bg-transparent font-mono text-5xl sm:text-6xl font-black text-white tabular-nums min-h-[3.5rem] leading-none text-center outline-none border-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:text-white/20"
+                placeholder="0"
+                value={numpadValue}
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/[^0-9]/g, "");
+                  if (raw === "" || Number(raw) <= numpadMax) {
+                    setNumpadValue(raw);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const score = Math.max(
+                      0,
+                      Math.min(numpadMax, Number(numpadValue) || 0),
+                    );
+                    commitVisit(score, 3, { visitTotal: score });
+                    setNumpadValue("");
+                    setShowNumpad(false);
+                  }
+                }}
+              />
               {numpadValue &&
                 checkoutRoutes &&
                 Number(numpadValue) === localRemaining && (
@@ -780,6 +818,7 @@ export default function InGameShell({
                   onClick={() => {
                     const next = numpadValue + String(n);
                     if (Number(next) <= numpadMax) setNumpadValue(next);
+                    numpadInputRef.current?.focus();
                   }}
                 >
                   {n}
@@ -788,7 +827,10 @@ export default function InGameShell({
               {/* Bottom row: backspace, 0, submit */}
               <button
                 className="py-3.5 rounded-xl text-lg font-bold bg-white/5 hover:bg-white/10 active:bg-white/20 border border-white/10 text-white/60 transition-all active:scale-95"
-                onClick={() => setNumpadValue((v) => v.slice(0, -1))}
+                onClick={() => {
+                  setNumpadValue((v) => v.slice(0, -1));
+                  numpadInputRef.current?.focus();
+                }}
               >
                 ⌫
               </button>
@@ -797,6 +839,7 @@ export default function InGameShell({
                 onClick={() => {
                   const next = numpadValue + "0";
                   if (Number(next) <= numpadMax) setNumpadValue(next);
+                  numpadInputRef.current?.focus();
                 }}
               >
                 0
@@ -843,6 +886,64 @@ export default function InGameShell({
               onClick={() => setShowNumpad(false)}
             >
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Fixed bottom score input bar (always visible on your turn) ── */}
+      {isUsersTurn && !showNumpad && !showQuitPause && !paused && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 px-3 py-2 safe-bottom">
+          <div className="flex items-center gap-2 max-w-lg mx-auto">
+            <input
+              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              className="flex-1 bg-white/5 border border-white/15 rounded-xl px-4 py-3 font-mono text-xl font-bold text-white text-center outline-none focus:border-emerald-400/50 focus:ring-1 focus:ring-emerald-400/30 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none placeholder:text-white/30"
+              placeholder="Type score..."
+              value={numpadValue}
+              onChange={(e) => {
+                const raw = e.target.value.replace(/[^0-9]/g, "");
+                if (raw === "" || Number(raw) <= numpadMax) {
+                  setNumpadValue(raw);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const score = Math.max(
+                    0,
+                    Math.min(numpadMax, Number(numpadValue) || 0),
+                  );
+                  if (numpadValue !== "") {
+                    commitVisit(score, 3, { visitTotal: score });
+                    setNumpadValue("");
+                  }
+                }
+              }}
+            />
+            <button
+              className="px-5 py-3 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-400 text-white border border-emerald-400/30 shadow-lg shadow-emerald-600/20 transition-all active:scale-95 whitespace-nowrap"
+              disabled={numpadValue === ""}
+              onClick={() => {
+                const score = Math.max(
+                  0,
+                  Math.min(numpadMax, Number(numpadValue) || 0),
+                );
+                commitVisit(score, 3, { visitTotal: score });
+                setNumpadValue("");
+              }}
+            >
+              Submit
+            </button>
+            <button
+              className="px-3 py-3 rounded-xl text-sm font-semibold bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 transition-all"
+              onClick={() => {
+                setNumpadValue("");
+                setShowNumpad(true);
+              }}
+            >
+              ⌨
             </button>
           </div>
         </div>
