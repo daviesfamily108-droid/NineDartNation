@@ -11,7 +11,7 @@ import { useUserSettings } from '../store/userSettings.js'
 import { useCalibration } from '../store/calibration.js'
 import { useMatch } from '../store/match.js'
 import MatchSummaryModal from './MatchSummaryModal.js'
-import { freeGames, premiumGames, allGames, type GameKey } from '../utils/games.js'
+import { freeGames, premiumGames, allGames, getGameDisplay, type GameKey } from '../utils/games.js'
 import { getUserCurrency, formatPriceInCurrency } from '../utils/config.js'
 import ResizableModal from './ui/ResizableModal.js'
 import GameHeaderBar from './ui/GameHeaderBar.js'
@@ -1831,8 +1831,11 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
               </div>
               <ul className="space-y-2">
                 {filteredLobby.map((m:any)=> (
-                  <li key={m.id} className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between">
-                    <div className="text-sm">{m.game} · {m.mode} · {m.startingScore}</div>
+                  <li key={m.id} className="p-2 rounded-lg border flex items-center justify-between" style={{ backgroundColor: `${getGameDisplay(m.game).color}10`, borderColor: `${getGameDisplay(m.game).color}30` }}>
+                    <div className="text-sm flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] border" style={{ backgroundColor: `${getGameDisplay(m.game).color}20`, color: getGameDisplay(m.game).color, borderColor: `${getGameDisplay(m.game).color}50` }}>{getGameDisplay(m.game).emoji} {m.game}</span>
+                      {m.mode} · {m.startingScore}
+                    </div>
                     <div className="text-xs opacity-70">{m.creator || 'host'}</div>
                   </li>
                 ))}
@@ -1847,7 +1850,7 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
               <GameHeaderBar
                 left={(
                   <>
-                    <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">Game Mode</span>
+                    <span className="hidden xs:inline px-2 py-0.5 rounded-full text-[10px] sm:text-xs border" style={{ backgroundColor: `${getGameDisplay(currentGame).color}20`, color: getGameDisplay(currentGame).color, borderColor: `${getGameDisplay(currentGame).color}50` }}>{getGameDisplay(currentGame).emoji} {currentGame}</span>
                     <span className="font-medium whitespace-nowrap">{currentGame}{currentGame === 'X01' ? ` / ${match.startingScore}` : ''}</span>
                     <span className="opacity-80 whitespace-nowrap">Players: {match.players?.length || 0}</span>
                   </>

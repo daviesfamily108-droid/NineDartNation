@@ -8,6 +8,7 @@ import {
   Clock,
   ChevronDown,
 } from "lucide-react";
+import { getGameDisplay } from "../utils/games.js";
 import CreateMatchModal from "./ui/CreateMatchModal.js";
 import MatchStartShowcase from "./ui/MatchStartShowcase.js";
 import MatchPrestart from "./ui/MatchPrestart.js";
@@ -989,10 +990,18 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       onChange={(e) => setFilterGame(e.target.value as any)}
                     >
                       <option value="all">All Games</option>
-                      <option value="x01">X01</option>
-                      <option value="cricket">Cricket</option>
-                      <option value="bermuda">Bermuda</option>
-                      <option value="gotcha">Gotcha</option>
+                      <option value="x01">
+                        {getGameDisplay("X01").emoji} X01
+                      </option>
+                      <option value="cricket">
+                        {getGameDisplay("Cricket").emoji} Cricket
+                      </option>
+                      <option value="bermuda">
+                        {getGameDisplay("Bermuda").emoji} Bermuda
+                      </option>
+                      <option value="gotcha">
+                        {getGameDisplay("Gotcha").emoji} Gotcha
+                      </option>
                     </select>
                     <select
                       className="input input-compact cursor-pointer font-semibold bg-slate-950/80 border border-slate-700/50 rounded-lg"
@@ -1087,19 +1096,24 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                               <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-3">
                                   {!focusMode && (
-                                    <div className="w-9 h-9 rounded-full bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 group-hover:border-indigo-500/40 transition-colors text-xs font-bold">
-                                      {m.createdBy
-                                        ? (m.createdBy || "U")
-                                            .substring(0, 2)
-                                            .toUpperCase()
-                                        : (m.creatorName || "U")
-                                            .substring(0, 2)
-                                            .toUpperCase()}
+                                    <div
+                                      className="w-9 h-9 rounded-full flex items-center justify-center border group-hover:border-opacity-60 transition-colors text-sm"
+                                      style={{
+                                        backgroundColor: `${getGameDisplay(m.game).color}15`,
+                                        borderColor: `${getGameDisplay(m.game).color}30`,
+                                      }}
+                                    >
+                                      {getGameDisplay(m.game).emoji}
                                     </div>
                                   )}
                                   <div className="min-w-0">
-                                    <div className="font-bold text-white group-hover:text-indigo-300 transition-colors truncate">
-                                      {m.game}
+                                    <div
+                                      className="font-bold group-hover:text-indigo-300 transition-colors truncate"
+                                      style={{
+                                        color: getGameDisplay(m.game).color,
+                                      }}
+                                    >
+                                      {getGameDisplay(m.game).emoji} {m.game}
                                     </div>
                                     <div className="text-xs text-white/50 flex items-center gap-1">
                                       <Clock className="w-3 h-3" />

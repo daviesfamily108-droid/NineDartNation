@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
   getModeOptionsForGame,
   labelForMode,
+  getGameDisplay,
   type ModeKey,
 } from "../utils/games.js";
 import { useMatch } from "../store/match.js";
@@ -929,10 +930,24 @@ export default function Tournaments({ user }: { user: any }) {
               {official.map((t) => (
                 <li
                   key={t.id}
-                  className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between relative"
+                  className="p-3 rounded-lg border flex items-center justify-between relative"
+                  style={{
+                    backgroundColor: `${getGameDisplay(t.game).color}10`,
+                    borderColor: `${getGameDisplay(t.game).color}30`,
+                  }}
                 >
                   <div className="space-y-0.5">
-                    <div className="font-semibold">
+                    <div className="font-semibold flex items-center gap-2">
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs border"
+                        style={{
+                          backgroundColor: `${getGameDisplay(t.game).color}20`,
+                          color: getGameDisplay(t.game).color,
+                          borderColor: `${getGameDisplay(t.game).color}50`,
+                        }}
+                      >
+                        {getGameDisplay(t.game).emoji} {t.game}
+                      </span>
                       {t.title}{" "}
                       {t.prize && (
                         <span className="inline-flex items-center gap-1 ml-2 align-middle">
@@ -956,6 +971,9 @@ export default function Tournaments({ user }: { user: any }) {
                         : ""}{" "}
                       · {labelForMode(t.mode)} {t.value} · {fmt(t.startAt)} ·
                       Cap {t.capacity} · Joined {t.participants.length}
+                    </div>
+                    <div className="text-xs opacity-60">
+                      {getGameDisplay(t.game).tagline}
                     </div>
                     {t.prize && (
                       <div className="text-xs">Prize: 3 months PREMIUM</div>
@@ -1044,10 +1062,26 @@ export default function Tournaments({ user }: { user: any }) {
               {paginatedCommunity.map((t) => (
                 <li
                   key={t.id}
-                  className="p-3 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between relative"
+                  className="p-3 rounded-lg border flex items-center justify-between relative"
+                  style={{
+                    backgroundColor: `${getGameDisplay(t.game).color}10`,
+                    borderColor: `${getGameDisplay(t.game).color}30`,
+                  }}
                 >
                   <div className="space-y-0.5">
-                    <div className="font-semibold">{t.title}</div>
+                    <div className="font-semibold flex items-center gap-2">
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[10px] sm:text-xs border"
+                        style={{
+                          backgroundColor: `${getGameDisplay(t.game).color}20`,
+                          color: getGameDisplay(t.game).color,
+                          borderColor: `${getGameDisplay(t.game).color}50`,
+                        }}
+                      >
+                        {getGameDisplay(t.game).emoji} {t.game}
+                      </span>
+                      {t.title}
+                    </div>
                     <div className="text-sm opacity-80">
                       {t.game}
                       {t.game === "X01" && t.startingScore
@@ -1055,6 +1089,9 @@ export default function Tournaments({ user }: { user: any }) {
                         : ""}{" "}
                       · {labelForMode(t.mode)} {t.value} · {fmt(t.startAt)} ·
                       Cap {t.capacity} · Joined {t.participants.length}
+                    </div>
+                    <div className="text-xs opacity-60">
+                      {getGameDisplay(t.game).tagline}
                     </div>
                     {t.description && (
                       <div className="text-xs opacity-80">{t.description}</div>
@@ -1283,7 +1320,7 @@ export default function Tournaments({ user }: { user: any }) {
                       >
                         {["X01", "Cricket", "Killer"].map((g) => (
                           <option key={g} value={g}>
-                            {g}
+                            {getGameDisplay(g).emoji} {g}
                           </option>
                         ))}
                       </select>
