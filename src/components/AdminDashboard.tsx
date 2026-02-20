@@ -13,12 +13,7 @@ import {
 import { useWS } from "./WSProvider.js";
 import CameraStatusBadge from "./CameraStatusBadge.js";
 import HelpdeskChat from "./HelpdeskChat.js";
-import { useCalibration } from "../store/calibration.js";
 import { useToast } from "../store/toast.js";
-import {
-  getCalibrationConfidenceForGame,
-  getCalibrationQualityText,
-} from "../utils/gameCalibrationRequirements.js";
 
 const OWNER_EMAIL = "daviesfamily108@gmail.com";
 
@@ -259,8 +254,6 @@ export default function AdminDashboard({ user }: { user: any }) {
     [gmVersion],
   );
 
-  // Calibration data and preview effect
-  const cal = useCalibration();
   const toast = useToast();
 
   useEffect(() => {
@@ -276,18 +269,6 @@ export default function AdminDashboard({ user }: { user: any }) {
   useEffect(() => {
     refresh();
   }, []);
-
-  // Calibration quality display
-  const calibQuality = useMemo(() => {
-    const errorPx = cal.errorPx ?? null;
-    const items: any[] = [];
-    for (const game of allGames) {
-      const confidence = getCalibrationConfidenceForGame(game, errorPx);
-      const qualityInfo = getCalibrationQualityText(game, errorPx);
-      items.push({ game, confidence, qualityInfo });
-    }
-    return items;
-  }, [cal.errorPx]);
 
   // Lightweight derived bars for the Game Usage chart
   const gmBars: any[] = useMemo(() => {
@@ -1009,46 +990,6 @@ export default function AdminDashboard({ user }: { user: any }) {
                       </span>
                     </div>
                   ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {isOwner && (
-            <div className="card">
-              <h3 className="text-xl font-semibold mb-2">
-                Calibration Quality Status
-              </h3>
-              <div className="text-sm opacity-80 mb-3">
-                Camera calibration confidence by game mode. Shows current system
-                calibration readiness for each game.
-              </div>
-              <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 text-[11px]">
-                  {calibQuality.map((item) => {
-                    const colorClass =
-                      item.confidence >= 85
-                        ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-200"
-                        : item.confidence >= 70
-                          ? "bg-amber-500/20 border-amber-500/40 text-amber-200"
-                          : "bg-rose-500/20 border-rose-500/40 text-rose-200";
-                    return (
-                      <div
-                        key={item.game}
-                        className={`px-2 py-2 rounded-md border ${colorClass}`}
-                      >
-                        <div className="font-semibold text-xs truncate">
-                          {item.game}
-                        </div>
-                        <div className="text-[10px] opacity-80 truncate">
-                          {item.qualityInfo.quality}
-                        </div>
-                        <div className="text-[10px] font-mono mt-0.5">
-                          {Math.round(item.confidence)}%
-                        </div>
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             </div>
