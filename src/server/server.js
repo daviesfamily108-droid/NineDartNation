@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const dotenv = require('dotenv'); dotenv.config();
+const dotenv = require('dotenv'); dotenv.config({ path: require('path').join(__dirname, '.env') });
 const { WebSocketServer } = require('ws');
 const { nanoid } = require('nanoid');
 const express = require('express');
@@ -956,16 +956,27 @@ try {
       port: Number(SMTP_PORT),
       secure: Number(SMTP_PORT) === 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
     })
+    startLogger.info('[Email] SMTP transporter created for %s', SMTP_HOST)
+  } else {
+    startLogger.warn('[Email] SMTP not configured — missing SMTP_HOST/PORT/USER/PASS env vars')
   }
 } catch (e) {
   startLogger.warn('[Email] transporter init failed: %s', e?.message || e)
 }
 
+const SEND_MAIL_TIMEOUT_MS = 20000
 async function sendMail(to, subject, html) {
   if (!mailer) throw new Error('EMAIL_NOT_CONFIGURED')
   const from = process.env.SMTP_FROM || `Nine Dart Nation <no-reply@${(process.env.MAIL_DOMAIN||'example.com')}>`
-  await mailer.sendMail({ from, to, subject, html })
+  const result = await Promise.race([
+    mailer.sendMail({ from, to, subject, html }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('EMAIL_SEND_TIMEOUT')), SEND_MAIL_TIMEOUT_MS)),
+  ])
+  return result
 }
 
 // Very simple in-memory token store for demo

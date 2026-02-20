@@ -148,16 +148,33 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       return;
     }
     try {
-      const r = await fetchWithTimeout(`${API_URL}/api/auth/send-reset`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
+      const r = await fetchWithTimeout(
+        `${API_URL}/api/auth/send-reset`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        },
+        30000,
+      );
       const j = await r.json().catch(() => ({}));
-      if (!j?.ok) throw new Error(j?.error || "Failed to send reset email");
-      setError("Password reset link sent to your email.");
+      if (!j?.ok) {
+        const code = j?.error || "";
+        if (code === "EMAIL_SEND_TIMEOUT")
+          throw new Error("Email server timed out. Please try again.");
+        if (code === "EMAIL_NOT_CONFIGURED")
+          throw new Error("Email service is not configured on the server.");
+        throw new Error(j?.error || "Failed to send reset email");
+      }
+      setError("✅ Password reset link sent to your email.");
     } catch (err: any) {
-      setError(err?.message || "Failed to send reset email");
+      if (err?.name === "AbortError") {
+        setError(
+          "Request timed out. The server may be starting up — please try again.",
+        );
+      } else {
+        setError(err?.message || "Failed to send reset email");
+      }
     } finally {
       setLoading(false);
     }
@@ -173,16 +190,33 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       return;
     }
     try {
-      const r = await fetchWithTimeout(`${API_URL}/api/auth/send-username`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
+      const r = await fetchWithTimeout(
+        `${API_URL}/api/auth/send-username`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        },
+        30000,
+      );
       const j = await r.json().catch(() => ({}));
-      if (!j?.ok) throw new Error(j?.error || "Failed to send username email");
-      setError("Your username has been emailed to you.");
+      if (!j?.ok) {
+        const code = j?.error || "";
+        if (code === "EMAIL_SEND_TIMEOUT")
+          throw new Error("Email server timed out. Please try again.");
+        if (code === "EMAIL_NOT_CONFIGURED")
+          throw new Error("Email service is not configured on the server.");
+        throw new Error(j?.error || "Failed to send username email");
+      }
+      setError("✅ Your username has been emailed to you.");
     } catch (err: any) {
-      setError(err?.message || "Failed to send username email");
+      if (err?.name === "AbortError") {
+        setError(
+          "Request timed out. The server may be starting up — please try again.",
+        );
+      } else {
+        setError(err?.message || "Failed to send username email");
+      }
     } finally {
       setLoading(false);
     }
