@@ -706,24 +706,33 @@ export default function AdminDashboard({ user }: { user: any }) {
         },
         body: JSON.stringify({
           enabled: enable,
-          maxWorkers: 4,
           capacity: clusterCapacity,
         }),
       });
-      const data = await res.json();
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const msg = errData?.error || `Server returned ${res.status}`;
+        console.error("Clustering toggle server error:", res.status, errData);
+        alert(`Clustering toggle failed: ${msg}`);
+        return;
+      }
+      const data = await res.json().catch(() => null);
       console.log("Clustering response:", data);
       if (data?.ok) {
+        setClusteringEnabled(!!data.enabled);
         alert(
-          `Clustering ${enable ? "enabled" : "disabled"} successfully. Max capacity: ${clusterCapacity.toLocaleString()} concurrent users. NODE_WORKERS environment variable is set to max capacity.`,
+          `Clustering ${data.enabled ? "enabled" : "disabled"} successfully. Max capacity: ${(data.capacity || clusterCapacity).toLocaleString()} concurrent users.`,
         );
-        await fetchSystemHealth();
+        fetchSystemHealth().catch(() => {});
       } else {
-        alert(`Failed: ${data?.error || data?.message || "Unknown error"}`);
+        alert(
+          `Failed: ${data?.error || data?.message || "Unknown error — server may be restarting"}`,
+        );
       }
     } catch (error) {
       console.error("Clustering toggle failed:", error);
       alert(
-        "Clustering toggle failed: " +
+        "Clustering toggle failed — server may be waking up. Try again in a few seconds.\n" +
           (error instanceof Error ? error.message : String(error)),
       );
     } finally {

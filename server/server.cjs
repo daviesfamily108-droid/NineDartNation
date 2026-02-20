@@ -2136,12 +2136,17 @@ app.get('/api/admin/system-health', (req, res) => {
 })
 
 app.post('/api/admin/clustering', (req, res) => {
+  console.log('[Admin] Clustering toggle request received')
   const owner = getOwnerFromReq(req)
-  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  if (!owner) {
+    console.warn('[Admin] Clustering toggle rejected — not owner')
+    return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  }
   const { enabled, capacity } = req.body || {}
-  
+
   if (typeof enabled === 'boolean') {
     clusteringEnabled = enabled
+    console.log('[Admin] Clustering', enabled ? 'ENABLED' : 'DISABLED', 'by', owner.email)
   }
 
   if (typeof capacity === 'number') {
