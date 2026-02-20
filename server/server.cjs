@@ -1793,6 +1793,13 @@ const emailCopy = {
   confirmEmail: { title: '', intro: '', buttonLabel: '' },
   changed: { title: '', intro: '', buttonLabel: '' },
 }
+// Filter out empty-string overrides so template defaults are preserved
+function nonEmpty(obj) {
+  if (!obj) return {}
+  const out = {}
+  for (const [k, v] of Object.entries(obj)) { if (v) out[k] = v }
+  return out
+}
 
 app.get('/api/subscription', async (req, res) => {
   const email = String(req.query.email || '').toLowerCase()
@@ -2482,11 +2489,11 @@ app.get('/api/email/preview', (req, res) => {
   const owner = getOwnerFromReq(req)
   if (!owner) return res.status(403).send('FORBIDDEN')
   let out
-  if (kind === 'reset') out = EmailTemplates.passwordReset({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...emailCopy.reset })
-  else if (kind === 'reminder') out = EmailTemplates.passwordReminder({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...emailCopy.reminder })
-  else if (kind === 'username') out = EmailTemplates.usernameReminder({ username: 'Alex', actionUrl: 'https://example.com/app', ...emailCopy.username })
-  else if (kind === 'confirm-email') out = EmailTemplates.emailChangeConfirm({ username: 'Alex', newEmail: 'alex+new@example.com', actionUrl: 'https://example.com/confirm?token=demo', ...emailCopy.confirmEmail })
-  else if (kind === 'changed') out = EmailTemplates.passwordChangedNotice({ username: 'Alex', supportUrl: 'https://example.com/support', ...emailCopy.changed })
+  if (kind === 'reset') out = EmailTemplates.passwordReset({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...nonEmpty(emailCopy.reset) })
+  else if (kind === 'reminder') out = EmailTemplates.passwordReminder({ username: 'Alex', actionUrl: 'https://example.com/reset?token=demo', ...nonEmpty(emailCopy.reminder) })
+  else if (kind === 'username') out = EmailTemplates.usernameReminder({ username: 'Alex', actionUrl: 'https://example.com/app', ...nonEmpty(emailCopy.username) })
+  else if (kind === 'confirm-email') out = EmailTemplates.emailChangeConfirm({ username: 'Alex', newEmail: 'alex+new@example.com', actionUrl: 'https://example.com/confirm?token=demo', ...nonEmpty(emailCopy.confirmEmail) })
+  else if (kind === 'changed') out = EmailTemplates.passwordChangedNotice({ username: 'Alex', supportUrl: 'https://example.com/support', ...nonEmpty(emailCopy.changed) })
   else return res.status(400).send('Unknown kind')
   res.setHeader('Content-Type', 'text/html; charset=utf-8')
   res.send(out.html)
@@ -2848,7 +2855,7 @@ app.post('/api/auth/send-reset', async (req, res) => {
     const frontendUrl = (process.env.FRONTEND_URL || req.headers.origin || 'https://ninedartnation.netlify.app').replace(/\/+$/, '')
     const actionUrl = `${frontendUrl}/reset?token=${encodeURIComponent(token)}`
     const displayName = foundUser.username || email.split('@')[0]
-    const tpl = EmailTemplates.passwordReset({ username: displayName, actionUrl, ...emailCopy.reset })
+    const tpl = EmailTemplates.passwordReset({ username: displayName, actionUrl, ...nonEmpty(emailCopy.reset) })
     await sendMail(email, 'Reset your Nine Dart Nation password', tpl.html)
     res.json({ ok: true })
   } catch (e) {
@@ -2877,7 +2884,7 @@ app.post('/api/auth/send-username', async (req, res) => {
     if (!foundUser) return res.status(400).json({ ok: false, error: 'No account found with that email.' })
     const frontendUrl = (process.env.FRONTEND_URL || req.headers.origin || 'https://ninedartnation.netlify.app').replace(/\/+$/, '')
     const actionUrl = `${frontendUrl}/`
-    const tpl = EmailTemplates.usernameReminder({ username: foundUser.username || email.split('@')[0], actionUrl, ...emailCopy.username })
+    const tpl = EmailTemplates.usernameReminder({ username: foundUser.username || email.split('@')[0], actionUrl, ...nonEmpty(emailCopy.username) })
     await sendMail(email, 'Your Nine Dart Nation username', tpl.html)
     res.json({ ok: true })
   } catch (e) {

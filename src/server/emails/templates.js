@@ -11,7 +11,7 @@ function renderBase({
   iconEmoji = '&#127919;',
   accentColor = '#4f46e5',
 }) {
-  const brand = { primary: '#4f46e5', accent: '#a855f7', bg: '#0b1120', card: '#111827', cardBorder: '#1e293b', text: '#f1f5f9', sub: '#94a3b8', muted: '#64748b' }
+  const brand = { primary: '#4f46e5', accent: '#a855f7', bg: '#0b1120', card: '#111827', cardBorder: '#1e293b', text: '#f1f5f9', sub: '#cbd5e1', muted: '#94a3b8' }
   const safeAction = String(actionUrl || '#')
   const year = new Date().getFullYear()
   const btnColor = accentColor || brand.primary
@@ -37,6 +37,7 @@ function renderBase({
         .fluid{width:100%!important;max-width:100%!important;height:auto!important}
         .stack-col{display:block!important;width:100%!important;max-width:100%!important}
         .center-on-narrow{text-align:center!important;display:block!important;margin-left:auto!important;margin-right:auto!important}
+        .card-pad{padding-left:20px!important;padding-right:20px!important}
       }
       @media (prefers-color-scheme: light){
         .wrap{background:#f8fafc!important}
@@ -53,19 +54,19 @@ function renderBase({
     <div class="wrap" role="article" aria-roledescription="email" aria-label="${heading}" lang="en" style="background:${brand.bg};padding:0">
       <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="margin:auto" class="email-container">
         <!-- Top spacer -->
-        <tr><td style="padding:24px 0 0 0">&nbsp;</td></tr>
+        <tr><td style="padding:32px 0 0 0">&nbsp;</td></tr>
 
         <!-- Logo / Brand header -->
         <tr>
           <td style="padding:0 24px">
-            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width:580px;margin:0 auto">
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width:560px;margin:0 auto">
               <tr>
-                <td style="text-align:center;padding:0 0 24px 0">
+                <td style="text-align:center;padding:0 0 28px 0">
                   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto">
                     <tr>
-                      <td style="background:linear-gradient(135deg,${brand.primary},${brand.accent});background-color:${brand.primary};border-radius:16px;padding:14px 28px;text-align:center">
-                        <span style="font-size:28px;line-height:1;vertical-align:middle">&#127919;</span>
-                        <span style="font-size:18px;font-weight:800;color:#ffffff;letter-spacing:-0.3px;vertical-align:middle;padding-left:8px">${heading}</span>
+                      <td style="background:linear-gradient(135deg,${brand.primary},${brand.accent});background-color:${brand.primary};border-radius:14px;padding:12px 32px;text-align:center">
+                        <span style="font-size:24px;line-height:1;vertical-align:middle">&#127919;</span>
+                        <span style="font-size:17px;font-weight:800;color:#ffffff;letter-spacing:0.2px;vertical-align:middle;padding-left:10px">${heading}</span>
                       </td>
                     </tr>
                   </table>
@@ -78,63 +79,66 @@ function renderBase({
         <!-- Main card -->
         <tr>
           <td style="padding:0 24px">
-            <table class="card" role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width:580px;margin:0 auto;background:${brand.card};border:1px solid ${brand.cardBorder};border-radius:16px;overflow:hidden">
+            <table class="card" role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width:560px;margin:0 auto;background:${brand.card};border:1px solid ${brand.cardBorder};border-radius:20px;overflow:hidden">
               <!-- Accent gradient bar at top of card -->
               <tr>
                 <td style="background:linear-gradient(90deg,${btnColor},${brand.accent});background-color:${btnColor};height:4px;font-size:1px;line-height:1px">&nbsp;</td>
               </tr>
               <!-- Icon circle -->
               <tr>
-                <td style="padding:32px 32px 0 32px;text-align:center">
+                <td class="card-pad" style="padding:36px 40px 0 40px;text-align:center">
                   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto">
                     <tr>
-                      <td style="width:64px;height:64px;border-radius:50%;background:${btnColor}15;border:2px solid ${btnColor}30;text-align:center;vertical-align:middle;font-size:28px;line-height:64px">${iconEmoji}</td>
+                      <td style="width:72px;height:72px;border-radius:50%;background:${btnColor}18;border:2px solid ${btnColor}35;text-align:center;vertical-align:middle;font-size:32px;line-height:72px">${iconEmoji}</td>
                     </tr>
                   </table>
                 </td>
               </tr>
               <!-- Title -->
-              <tr>
-                <td class="card-text" style="padding:20px 32px 0 32px;text-align:center">
-                  <h1 style="margin:0;font-size:22px;font-weight:800;line-height:1.3;color:${brand.text};letter-spacing:-0.3px">${title}</h1>
+              ${title ? `<tr>
+                <td class="card-text card-pad" style="padding:24px 40px 0 40px;text-align:center">
+                  <h1 style="margin:0;font-size:24px;font-weight:800;line-height:1.3;color:${brand.text};letter-spacing:-0.3px">${title}</h1>
                 </td>
-              </tr>
-              <!-- Greeting -->
-              <tr>
-                <td class="card-sub" style="padding:12px 32px 0 32px;text-align:center;color:${brand.sub};font-size:15px;line-height:1.5">
-                  Hi <strong style="color:${brand.text}">${username}</strong>,
-                </td>
-              </tr>
-              <!-- Intro paragraph -->
-              ${intro ? `<tr>
-                <td class="card-text" style="padding:8px 32px 0 32px;text-align:center;color:${brand.text};font-size:15px;line-height:1.7">${intro}</td>
               </tr>` : ''}
+              <!-- Greeting + intro combined -->
+              <tr>
+                <td class="card-sub card-pad" style="padding:16px 40px 0 40px;text-align:center;color:${brand.sub};font-size:15px;line-height:1.7">
+                  Hi <strong style="color:${brand.text}">${username}</strong>,${intro ? `<br/><span style="color:${brand.sub}">${intro}</span>` : ''}
+                </td>
+              </tr>
               <!-- Extra content (username box, new email, etc.) -->
-              ${extraHtml ? `<tr><td style="padding:16px 32px 0 32px">${extraHtml}</td></tr>` : ''}
+              ${extraHtml ? `<tr><td class="card-pad" style="padding:20px 40px 0 40px">${extraHtml}</td></tr>` : ''}
               <!-- CTA button -->
               <tr>
-                <td style="padding:28px 32px 0 32px;text-align:center">
+                <td class="card-pad" style="padding:28px 40px 0 40px;text-align:center">
+                  <!--[if mso]>
+                  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="${safeAction}" style="height:50px;v-text-anchor:middle;width:240px" arcsize="24%" fillcolor="${btnColor}" stroke="f">
+                    <w:anchorlock/><center style="color:#ffffff;font-family:sans-serif;font-size:16px;font-weight:bold">${buttonLabel}</center>
+                  </v:roundrect>
+                  <![endif]-->
+                  <!--[if !mso]><!-->
                   <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto">
                     <tr>
-                      <td style="border-radius:12px;background:linear-gradient(135deg,${btnColor},${brand.accent});background-color:${btnColor}">
-                        <a href="${safeAction}" target="_blank" style="display:inline-block;padding:14px 36px;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;letter-spacing:0.3px">${buttonLabel}</a>
+                      <td style="border-radius:12px;background:linear-gradient(135deg,${btnColor},${brand.accent});background-color:${btnColor};box-shadow:0 4px 14px ${btnColor}40">
+                        <a href="${safeAction}" target="_blank" style="display:inline-block;padding:16px 48px;font-size:16px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:12px;letter-spacing:0.3px;mso-padding-alt:0">${buttonLabel}</a>
                       </td>
                     </tr>
                   </table>
+                  <!--<![endif]-->
                 </td>
               </tr>
               <!-- Fallback URL -->
               <tr>
-                <td class="card-muted" style="padding:16px 32px 0 32px;text-align:center">
+                <td class="card-muted card-pad" style="padding:20px 40px 0 40px;text-align:center">
                   <p style="margin:0;font-size:12px;color:${brand.muted};line-height:1.5">If the button doesn&rsquo;t work, copy and paste this link into your browser:</p>
-                  <p style="margin:6px 0 0 0;word-break:break-all;font-size:12px;line-height:1.4"><a href="${safeAction}" style="color:${brand.accent};text-decoration:none">${safeAction}</a></p>
+                  <p style="margin:8px 0 0 0;word-break:break-all;font-size:12px;line-height:1.5"><a href="${safeAction}" style="color:${brand.accent};text-decoration:underline">${safeAction}</a></p>
                 </td>
               </tr>
               <!-- Extra footer content (expiry notices, support links) -->
-              ${footerHtml ? `<tr><td style="padding:16px 32px 0 32px;text-align:center">${footerHtml}</td></tr>` : ''}
+              ${footerHtml ? `<tr><td class="card-pad" style="padding:20px 40px 0 40px;text-align:center">${footerHtml}</td></tr>` : ''}
               <!-- Divider -->
               <tr>
-                <td style="padding:24px 32px 0 32px">
+                <td class="card-pad" style="padding:28px 40px 0 40px">
                   <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                     <tr><td style="border-top:1px solid ${brand.cardBorder};font-size:1px;line-height:1px">&nbsp;</td></tr>
                   </table>
@@ -142,7 +146,7 @@ function renderBase({
               </tr>
               <!-- Ignore notice -->
               <tr>
-                <td class="card-muted" style="padding:16px 32px 24px 32px;text-align:center;font-size:12px;line-height:1.5;color:${brand.muted}">
+                <td class="card-muted card-pad" style="padding:20px 40px 32px 40px;text-align:center;font-size:12px;line-height:1.6;color:${brand.muted}">
                   If you didn&rsquo;t request this, you can safely ignore this email. No changes have been made to your account.
                 </td>
               </tr>
@@ -152,12 +156,12 @@ function renderBase({
 
         <!-- Footer -->
         <tr>
-          <td style="padding:24px 24px 12px 24px">
-            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width:580px;margin:0 auto">
+          <td style="padding:28px 24px 12px 24px">
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width:560px;margin:0 auto">
               <tr>
-                <td class="footer-text" style="text-align:center;color:${brand.muted};font-size:12px;line-height:1.6">
+                <td class="footer-text" style="text-align:center;color:${brand.muted};font-size:11px;line-height:1.7">
                   <p style="margin:0">&copy; ${year} Nine Dart Nation. All rights reserved.</p>
-                  <p style="margin:6px 0 0 0;color:${brand.muted}">
+                  <p style="margin:8px 0 0 0;color:${brand.muted}">
                     This email was sent because of activity on your Nine Dart Nation account.
                   </p>
                 </td>
@@ -167,7 +171,7 @@ function renderBase({
         </tr>
 
         <!-- Bottom spacer -->
-        <tr><td style="padding:0 0 24px 0">&nbsp;</td></tr>
+        <tr><td style="padding:0 0 32px 0">&nbsp;</td></tr>
       </table>
     </div>
   </body>
