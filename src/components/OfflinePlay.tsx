@@ -90,7 +90,7 @@ import {
 } from "../logic/matchActions";
 import { useMatch } from "../store/match";
 import { useOfflineGameStats } from "./scoreboards/useGameStats";
-import { freeGames, premiumGames } from "../utils/games";
+import { freeGames, premiumGames, getGameDisplay } from "../utils/games";
 
 const aiLevels = ["Easy", "Medium", "Hardened"];
 
@@ -3000,12 +3000,21 @@ export default function OfflinePlay({ user }: { user: any }) {
                           className="w-full"
                           left={
                             <>
-                              <span className="hidden xs:inline px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 text-[10px] sm:text-xs">
-                                Game Mode
+                              <span
+                                className="hidden xs:inline px-2 py-0.5 rounded-full text-[10px] sm:text-xs border"
+                                style={{
+                                  backgroundColor: `${getGameDisplay(selectedMode).color}20`,
+                                  color: getGameDisplay(selectedMode).color,
+                                  borderColor: `${getGameDisplay(selectedMode).color}50`,
+                                }}
+                              >
+                                {getGameDisplay(selectedMode).emoji}{" "}
+                                {selectedMode}
                               </span>
                               <span className="font-medium whitespace-nowrap">
-                                {selectedMode}
-                                {selectedMode === "X01" ? ` / ${x01Score}` : ""}
+                                {selectedMode === "X01"
+                                  ? `X01 / ${x01Score}`
+                                  : selectedMode}
                               </span>
                               <span className="opacity-80 whitespace-nowrap">
                                 First to {firstTo} · Legs {playerLegs}-{aiLegs}
@@ -3247,17 +3256,31 @@ export default function OfflinePlay({ user }: { user: any }) {
                     {effectiveLayout !== "modern" && (
                       <>
                         <h3 className="text-xl font-bold mb-2 mt-1 leading-tight">
+                          {getGameDisplay(selectedMode).emoji}{" "}
                           {selectedMode === "X01"
-                            ? "X01 Match ⚔️"
-                            : `${selectedMode} ⚔️`}
+                            ? `X01 — ${x01Score}`
+                            : selectedMode}
                         </h3>
+                        <p className="text-xs text-slate-300/70 mb-1">
+                          {getGameDisplay(selectedMode).tagline} · 3 darts per
+                          visit
+                        </p>
                         <div className="flex items-center gap-2 mb-2 text-xs flex-wrap">
-                          <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">
-                            Mode: {selectedMode}
+                          <span
+                            className="px-2 py-0.5 rounded-full border"
+                            style={{
+                              backgroundColor: `${getGameDisplay(selectedMode).color}20`,
+                              color: getGameDisplay(selectedMode).color,
+                              borderColor: `${getGameDisplay(selectedMode).color}50`,
+                            }}
+                          >
+                            {getGameDisplay(selectedMode).emoji} {selectedMode}
                           </span>
-                          <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">
-                            Start: {x01Score}
-                          </span>
+                          {selectedMode === "X01" && (
+                            <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">
+                              Start: {x01Score}
+                            </span>
+                          )}
                           <div
                             ref={formatRef}
                             className="inline-flex items-center gap-2 px-2 py-0.5 rounded-full bg-white/10 border border-white/10"
@@ -3824,6 +3847,36 @@ export default function OfflinePlay({ user }: { user: any }) {
                       </div>
                     ) : effectiveLayout === "modern" ? (
                       <div className="space-y-3 mb-2">
+                        {/* Modern game mode title banner */}
+                        <div
+                          className="flex items-center justify-between gap-3 rounded-xl border px-4 py-2"
+                          style={{
+                            borderColor: `${getGameDisplay(selectedMode).color}50`,
+                            backgroundColor: `${getGameDisplay(selectedMode).color}18`,
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">
+                              {getGameDisplay(selectedMode).emoji}
+                            </span>
+                            <div>
+                              <h3 className="text-base sm:text-lg font-bold leading-tight text-white">
+                                {selectedMode === "X01"
+                                  ? `X01 — ${x01Score}`
+                                  : selectedMode}
+                              </h3>
+                              <p className="text-[11px] text-slate-300/80">
+                                {getGameDisplay(selectedMode).tagline} · 3 darts
+                                per visit
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="px-2 py-0.5 rounded-full bg-white/10 border border-white/10">
+                              Legs {playerLegs}–{aiLegs}
+                            </span>
+                          </div>
+                        </div>
                         {/* Modern in-game header pills */}
                         <div className="flex items-center justify-center gap-2 flex-wrap py-1">
                           <button

@@ -1,4 +1,4 @@
-﻿export const freeGames = ["X01", "Double Practice"] as const;
+export const freeGames = ["X01", "Double Practice"] as const;
 export type ModeKey =
   | "bestof"
   | "firstto"
@@ -177,6 +177,113 @@ export function getModeValueOptionsForGame(
   if (g === "all" || mode === "all") return [];
   const cfg = gameConfig[g];
   return cfg?.modeValueOptions?.[mode] ?? [];
+}
+
+/** Display metadata for each game mode: emoji, short tagline, and accent color */
+export interface GameDisplayInfo {
+  emoji: string;
+  tagline: string;
+  /** CSS color value for accent (border, background tints) */
+  color: string;
+}
+
+export const gameDisplayInfo: Record<GameKey, GameDisplayInfo> = {
+  X01: { emoji: "🎯", tagline: "Count down to zero", color: "#818cf8" },
+  "Double Practice": {
+    emoji: "🔴",
+    tagline: "Hit every double",
+    color: "#fb7185",
+  },
+  "Around the Clock": {
+    emoji: "🕐",
+    tagline: "1 through 20 and Bull",
+    color: "#38bdf8",
+  },
+  Cricket: { emoji: "🏏", tagline: "Close 20–15 and Bull", color: "#34d399" },
+  "Halve It": {
+    emoji: "✂️",
+    tagline: "Hit targets or lose half",
+    color: "#fbbf24",
+  },
+  Shanghai: {
+    emoji: "🀄",
+    tagline: "Single, Double, Triple in round",
+    color: "#f87171",
+  },
+  "High-Low": {
+    emoji: "📊",
+    tagline: "Alternate high and low",
+    color: "#a78bfa",
+  },
+  Killer: {
+    emoji: "💀",
+    tagline: "Eliminate your opponents",
+    color: "#c084fc",
+  },
+  "Bob's 27": {
+    emoji: "🎲",
+    tagline: "Hit doubles or lose points",
+    color: "#fb923c",
+  },
+  "Count-Up": {
+    emoji: "📈",
+    tagline: "Score as high as you can",
+    color: "#2dd4bf",
+  },
+  "High Score": {
+    emoji: "🏆",
+    tagline: "Highest total wins",
+    color: "#facc15",
+  },
+  "Low Score": { emoji: "⬇️", tagline: "Lowest total wins", color: "#22d3ee" },
+  "Checkout 170": {
+    emoji: "🔥",
+    tagline: "Check out from 170",
+    color: "#f87171",
+  },
+  "Checkout 121": {
+    emoji: "⚡",
+    tagline: "Check out from 121",
+    color: "#fbbf24",
+  },
+  "Treble Practice": {
+    emoji: "🟢",
+    tagline: "Hit trebles consistently",
+    color: "#a3e635",
+  },
+  Baseball: {
+    emoji: "⚾",
+    tagline: "Score runs each inning",
+    color: "#60a5fa",
+  },
+  Golf: { emoji: "⛳", tagline: "Lowest strokes per hole", color: "#4ade80" },
+  "Tic Tac Toe": {
+    emoji: "❌",
+    tagline: "Three in a row wins",
+    color: "#e879f9",
+  },
+  "American Cricket": {
+    emoji: "🦅",
+    tagline: "Close 20–12 and Bull",
+    color: "#94a3b8",
+  },
+  Scam: { emoji: "🃏", tagline: "Hit each target in order", color: "#f472b6" },
+  Fives: { emoji: "5️⃣", tagline: "Score multiples of five", color: "#818cf8" },
+  Sevens: {
+    emoji: "7️⃣",
+    tagline: "Score multiples of seven",
+    color: "#a78bfa",
+  },
+};
+
+export function getGameDisplay(mode: string): GameDisplayInfo {
+  return (
+    gameDisplayInfo[mode as GameKey] ?? {
+      emoji: "🎯",
+      tagline: "",
+      color: "#818cf8",
+    }
+  );
 }
 
 export function labelForMode(opt: string | undefined | null) {
