@@ -1,5 +1,6 @@
 import ResizableModal from "./ui/ResizableModal.js";
 import type { Player } from "../store/match.js";
+import { getHeadToHeadLegDiff } from "../store/profileStats.js";
 
 function computeTotals(p: Player) {
   let points = 0;
@@ -97,7 +98,7 @@ export default function MatchSummaryModal({
 }) {
   if (!open) return null;
 
-  const cards = players.map((p) => {
+  const cards = players.map((p, idx) => {
     const t = computeTotals(p);
     const dbl = doublesStats?.[p.id] || {};
     const att = Math.max(
@@ -106,6 +107,11 @@ export default function MatchSummaryModal({
     );
     const hit = Math.max(0, Number(dbl.doublesHit || t.checkoutsHit || 0));
     const pct = att > 0 ? Math.round((hit / att) * 100) : null;
+    // Head-to-head leg difference vs the other player
+    const opponent = players[1 - idx];
+    const h2h = opponent ? getHeadToHeadLegDiff(p.name, opponent.name) : null;
+    const legDiff = h2h && h2h.played ? h2h.diffA : 0;
+    const legDiffStr = `${legDiff > 0 ? "+" : ""}${legDiff}`;
     return {
       id: p.id,
       name: p.name,
@@ -114,6 +120,7 @@ export default function MatchSummaryModal({
       dartsAtDouble: att,
       doublesHit: hit,
       doublePct: pct,
+      legDiffStr,
     };
   });
 
@@ -237,7 +244,7 @@ export default function MatchSummaryModal({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-2 text-xs mt-2">
+                <div className="grid grid-cols-5 gap-2 text-xs mt-2">
                   <div className="p-1.5 rounded bg-white/5 text-center">
                     <div className="font-bold">{card.bestLeg || "—"}</div>
                     <div className="opacity-60">Best Leg</div>
@@ -253,6 +260,14 @@ export default function MatchSummaryModal({
                   <div className="p-1.5 rounded bg-white/5 text-center">
                     <div className="font-bold">{card.dartsAtDouble}</div>
                     <div className="opacity-60">At Double</div>
+                  </div>
+                  <div className="p-1.5 rounded bg-white/5 text-center">
+                    <div
+                      className={`font-bold ${card.legDiffStr.startsWith("+") ? "text-emerald-300" : card.legDiffStr.startsWith("-") ? "text-rose-300" : ""}`}
+                    >
+                      {card.legDiffStr}
+                    </div>
+                    <div className="opacity-60">Leg Diff</div>
                   </div>
                 </div>
               </div>

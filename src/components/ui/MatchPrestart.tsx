@@ -532,10 +532,7 @@ function PlayerCard({
         <StatPill label="Avg" value={stats.avg3} highlight />
         <StatPill label="F9" value={stats.best9} />
         <StatPill label="CO" value={String(stats.bestCheckout)} />
-        <StatPill
-          label={legDiffValue !== null ? "Leg Δ" : "Leg"}
-          value={legDiffValue ?? String(stats.bestLeg)}
-        />
+        <StatPill label="Leg Diff" value={legDiffValue ?? "0"} />
       </div>
 
       <div className="grid grid-cols-3 gap-1 text-[9px]">

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import FocusLock from "react-focus-lock";
 import { createPortal } from "react-dom";
 import CameraTile from "../CameraTile.js";
@@ -11,6 +11,7 @@ import {
   getAllTimeBestCheckout,
   getAllTimeBestLeg,
   getAllTimeFirstNineAvg,
+  getHeadToHeadLegDiff,
 } from "../../store/profileStats.js";
 import { useUserSettings } from "../../store/userSettings.js";
 
@@ -153,7 +154,7 @@ export default function MatchStartShowcase({
 
   const stats = useMemo(
     () =>
-      players.map((p) => {
+      players.map((p, idx) => {
         try {
           const avg3 = getAllTimeAvg(p.name).toFixed(1);
           const best9 = getAllTimeFirstNineAvg(p.name).toFixed(1);
@@ -169,6 +170,13 @@ export default function MatchStartShowcase({
             ).length;
             return sum + legCount;
           }, 0);
+          // Head-to-head leg difference vs the other player
+          const opponent = players[1 - idx];
+          const h2h = opponent
+            ? getHeadToHeadLegDiff(p.name, opponent.name)
+            : null;
+          const legDiff = h2h && h2h.played ? h2h.diffA : 0;
+          const legDiffStr = `${legDiff > 0 ? "+" : ""}${legDiff}`;
           return {
             id: p.id,
             name: p.name,
@@ -180,6 +188,7 @@ export default function MatchStartShowcase({
             lifetimeDarts,
             career180s,
             match180s,
+            legDiffStr,
           };
         } catch {
           return {
@@ -193,6 +202,7 @@ export default function MatchStartShowcase({
             lifetimeDarts: 0,
             career180s: 0,
             match180s: 0,
+            legDiffStr: "0",
           };
         }
       }),
@@ -281,7 +291,7 @@ export default function MatchStartShowcase({
                         <StatBlock label="Avg" value={String(st.avg3)} />
                         <StatBlock label="F9" value={String(st.best9)} />
                         <StatBlock label="CO" value={String(st.bestCheckout)} />
-                        <StatBlock label="Leg" value={String(st.bestLeg)} />
+                        <StatBlock label="Leg Diff" value={st.legDiffStr} />
                       </div>
                       <div className="grid grid-cols-2 gap-2 mt-2 text-[10px] text-white/70">
                         <div className="flex items-center justify-between px-2 py-1 rounded-lg bg-white/5 border border-white/5">
