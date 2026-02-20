@@ -184,8 +184,12 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
     e.preventDefault();
     setError("");
     setLoading(true);
-    if (!email || !email.includes("@")) {
-      setError("Enter your email address.");
+    // On signin tab the email field is hidden — fall back to username if it looks like an email
+    const targetEmail = email || (username.includes("@") ? username : "");
+    if (!targetEmail || !targetEmail.includes("@")) {
+      setError(
+        "Enter your email in the username field to retrieve your username.",
+      );
       setLoading(false);
       return;
     }
@@ -195,7 +199,7 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({ email: targetEmail }),
         },
         30000,
       );

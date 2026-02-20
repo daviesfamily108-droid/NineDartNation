@@ -2561,15 +2561,28 @@ app.post('/api/auth/send-reset', async (req, res) => {
   try {
     const email = String(req.body?.email || '').toLowerCase()
     if (!email || !email.includes('@')) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
+    // Look up user to verify email exists before sending
+    let foundUser = null
+    for (const u of users.values()) {
+      if (String(u.email || '').toLowerCase() === email) { foundUser = u; break }
+    }
+    if (!foundUser && supabase) {
+      try {
+        const { data } = await supabase.from('users').select('*').eq('email', email).single()
+        if (data) { foundUser = data; users.set(email, data) }
+      } catch {}
+    }
+    if (!foundUser) return res.status(400).json({ ok: false, error: 'No account found with that email.' })
     const token = issueToken(email)
-    const host = req.headers['x-forwarded-host'] || req.headers.host
-    const proto = (req.headers['x-forwarded-proto'] || 'https')
-    const base = `${proto}://${host}`
-    const actionUrl = `${base}/reset?token=${encodeURIComponent(token)}`
-    const tpl = EmailTemplates.passwordReset({ username: email.split('@')[0], actionUrl, ...emailCopy.reset })
+    // Use Origin header (frontend URL) or FRONTEND_URL env var — NOT the backend host
+    const frontendUrl = (process.env.FRONTEND_URL || req.headers.origin || 'https://ninedartnation.netlify.app').replace(/\/+$/, '')
+    const actionUrl = `${frontendUrl}/reset?token=${encodeURIComponent(token)}`
+    const displayName = foundUser.username || email.split('@')[0]
+    const tpl = EmailTemplates.passwordReset({ username: displayName, actionUrl, ...emailCopy.reset })
     await sendMail(email, 'Reset your Nine Dart Nation password', tpl.html)
     res.json({ ok: true })
   } catch (e) {
+    console.error('[send-reset] Error:', e?.message || e)
     const msg = e?.message || 'SEND_FAILED'
     res.status(500).json({ ok: false, error: msg })
   }
@@ -2579,21 +2592,31 @@ app.post('/api/auth/send-reset', async (req, res) => {
 app.post('/api/auth/send-username', async (req, res) => {
   try {
     const email = String(req.body?.email || '').toLowerCase()
-    const username = String(req.body?.username || '').trim()
     if (!email || !email.includes('@')) return res.status(400).json({ ok: false, error: 'EMAIL_REQUIRED' })
-    const host = req.headers['x-forwarded-host'] || req.headers.host
-    const proto = (req.headers['x-forwarded-proto'] || 'https')
-    const base = `${proto}://${host}`
-    const actionUrl = `${base}/`
-    const tpl = EmailTemplates.usernameReminder({ username: username || email.split('@')[0], actionUrl, ...emailCopy.username })
+    // Look up user by email to get their actual username
+    let foundUser = null
+    for (const u of users.values()) {
+      if (String(u.email || '').toLowerCase() === email) { foundUser = u; break }
+    }
+    if (!foundUser && supabase) {
+      try {
+        const { data } = await supabase.from('users').select('*').eq('email', email).single()
+        if (data) { foundUser = data; users.set(email, data) }
+      } catch {}
+    }
+    if (!foundUser) return res.status(400).json({ ok: false, error: 'No account found with that email.' })
+    const frontendUrl = (process.env.FRONTEND_URL || req.headers.origin || 'https://ninedartnation.netlify.app').replace(/\/+$/, '')
+    const actionUrl = `${frontendUrl}/`
+    const tpl = EmailTemplates.usernameReminder({ username: foundUser.username || email.split('@')[0], actionUrl, ...emailCopy.username })
     await sendMail(email, 'Your Nine Dart Nation username', tpl.html)
     res.json({ ok: true })
   } catch (e) {
+    console.error('[send-username] Error:', e?.message || e)
     res.status(500).json({ ok: false, error: e?.message||'SEND_FAILED' })
   }
 })
 
-// Confirm password reset with token (demo: verifies token only; replace with real user persistence)
+// Confirm password reset with token — updates password in memory + Supabase
 app.post('/api/auth/confirm-reset', async (req, res) => {
   try {
     const { token, newPassword } = req.body || {}
@@ -2604,15 +2627,37 @@ app.post('/api/auth/confirm-reset', async (req, res) => {
     if (typeof newPassword !== 'string' || newPassword.length < 10) {
       return res.status(400).json({ ok: false, error: 'WEAK_PASSWORD' })
     }
-    // In a real app, hash and store password for the user identified by `email`
-    // For demo, consume token so it can't be reused
+    // Hash the new password
+    const hashed = await bcrypt.hash(String(newPassword), 12)
+    // Update in-memory user
+    const memUser = users.get(email)
+    if (memUser) {
+      memUser.password = hashed
+      users.set(email, memUser)
+    }
+    // Update in Supabase
+    if (supabase) {
+      try {
+        const { error: updateErr } = await supabase
+          .from('users')
+          .update({ password: hashed })
+          .eq('email', email)
+        if (updateErr) console.error('[confirm-reset] Supabase update error:', updateErr)
+        else console.log('[confirm-reset] Password updated in Supabase for', email)
+      } catch (dbErr) {
+        console.error('[confirm-reset] Supabase exception:', dbErr)
+      }
+    }
+    // Consume token so it can't be reused
     resetTokens.delete(email)
     try {
-      const tpl = EmailTemplates.passwordChangedNotice({ username: email.split('@')[0], supportUrl: 'https://example.com/support', ...emailCopy.changed })
+      const frontendUrl = (process.env.FRONTEND_URL || 'https://ninedartnation.netlify.app').replace(/\/+$/, '')
+      const tpl = EmailTemplates.passwordChangedNotice({ username: (memUser?.username || email.split('@')[0]), supportUrl: `${frontendUrl}/`, ...emailCopy.changed })
       await sendMail(email, 'Your Nine Dart Nation password was changed', tpl.html)
     } catch {}
     res.json({ ok: true })
   } catch (e) {
+    console.error('[confirm-reset] Error:', e?.message || e)
     res.status(500).json({ ok: false, error: e?.message || 'RESET_FAILED' })
   }
 })
