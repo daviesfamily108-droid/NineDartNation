@@ -68,6 +68,7 @@ import MatchPage from "./components/MatchPage.js";
 import { useToast } from "./store/toast.js";
 import { NDN_OPEN_NOTIFICATIONS_EVENT } from "./utils/events.js";
 import WSConnectionDot from "./components/WSConnectionDot.js";
+import AnnouncementPopup from "./components/AnnouncementPopup.js";
 import { useBreakpoint } from "./hooks/useBreakpoint.js";
 
 export default function App() {
@@ -1671,8 +1672,9 @@ export default function App() {
           </Suspense>
         </div>
       )}
+      <AnnouncementPopup />
     </ThemeProvider>
   );
 }
 
-// MobileBottomNav and MobileNav removed — sidebar is now used on all screen sizes.
+// MobileBottomNav and MobileNav removed

@@ -2167,6 +2167,42 @@ app.post('/api/admin/announce', (req, res) => {
   res.json({ ok: true, announcement: lastAnnouncement })
 })
 
+app.get('/api/admin/members', async (req, res) => {
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200)
+  if (!supabase) {
+    // Fallback: return in-memory users with whatever data we have
+    const users = global.users || new Map()
+    const list = []
+    for (const [email, u] of users.entries()) {
+      list.push({ email, username: u.username || email, createdAt: u.created_at || u.createdAt || null })
+    }
+    list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+    return res.json({ ok: true, members: list.slice(0, limit) })
+  }
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('email, username, created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit)
+    if (error) {
+      console.error('[Admin] members query error:', error)
+      return res.status(500).json({ ok: false, error: 'DB_ERROR' })
+    }
+    const members = (data || []).map(r => ({
+      email: r.email,
+      username: r.username || r.email,
+      createdAt: r.created_at || null,
+    }))
+    res.json({ ok: true, members })
+  } catch (err) {
+    console.error('[Admin] members endpoint error:', err)
+    res.status(500).json({ ok: false, error: 'INTERNAL' })
+  }
+})
+
 app.post('/api/admin/subscription', (req, res) => {
   const owner = getOwnerFromReq(req)
   if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })

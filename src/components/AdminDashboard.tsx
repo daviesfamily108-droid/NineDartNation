@@ -211,6 +211,10 @@ export default function AdminDashboard({ user }: { user: any }) {
   const [clusteringEnabled, setClusteringEnabled] = useState(false);
   const [clusterCapacity, setClusterCapacity] = useState(1500);
   const [, setShowCreate] = useState(false);
+  const [newMembers, setNewMembers] = useState<
+    Array<{ email: string; username: string; createdAt: string | null }>
+  >([]);
+  const [membersLoading, setMembersLoading] = useState(false);
 
   const broadcastTournaments = async () => {
     setLoading(true);
@@ -261,6 +265,7 @@ export default function AdminDashboard({ user }: { user: any }) {
   // Fetch admin data on mount
   useEffect(() => {
     refresh();
+    fetchNewMembers();
   }, []);
 
   // Lightweight derived bars for the Game Usage chart
@@ -304,6 +309,24 @@ export default function AdminDashboard({ user }: { user: any }) {
       }
     } catch (e) {
       console.error("refresh failed", e);
+    }
+  }
+
+  async function fetchNewMembers() {
+    setMembersLoading(true);
+    try {
+      const headers = {
+        Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+      };
+      const res = await apiFetch("/api/admin/members?limit=50", { headers });
+      if (res.ok) {
+        const d = await res.json();
+        setNewMembers(Array.isArray(d.members) ? d.members : []);
+      }
+    } catch (e) {
+      console.error("fetchNewMembers failed", e);
+    } finally {
+      setMembersLoading(false);
     }
   }
 
@@ -1125,6 +1148,45 @@ export default function AdminDashboard({ user }: { user: any }) {
                       <div className="opacity-60 text-xs">
                         Joined {new Date(u.createdAt).toLocaleDateString()}
                       </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xl font-semibold">New Members</h3>
+              <button
+                className="btn btn--ghost px-2 py-1 text-xs"
+                disabled={membersLoading}
+                onClick={fetchNewMembers}
+              >
+                {membersLoading ? "Loading…" : "Refresh"}
+              </button>
+            </div>
+            <div className="text-sm opacity-80 mb-3">
+              Most recent sign-ups (newest first).
+            </div>
+            {newMembers.length === 0 && !membersLoading && (
+              <div className="text-sm opacity-60">No members found.</div>
+            )}
+            {newMembers.length > 0 && (
+              <div className="max-h-80 overflow-y-auto space-y-2">
+                {newMembers.map((m) => (
+                  <div
+                    key={m.email}
+                    className="p-2 rounded bg-black/20 text-sm flex items-center justify-between"
+                  >
+                    <div>
+                      <div className="font-semibold">{m.username}</div>
+                      <div className="opacity-70 text-xs">{m.email}</div>
+                    </div>
+                    <div className="text-xs opacity-60 text-right whitespace-nowrap">
+                      {m.createdAt
+                        ? new Date(m.createdAt).toLocaleString()
+                        : "Unknown"}
                     </div>
                   </div>
                 ))}
