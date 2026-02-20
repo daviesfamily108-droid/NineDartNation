@@ -2507,54 +2507,96 @@ app.post('/api/admin/email-copy', (req, res) => {
   res.json({ ok: true, copy: emailCopy })
 })
 
-// --- Email sending (SMTP via environment) ---
-// Configure env vars in your host: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+// --- Email sending ---
+// Priority: 1) Resend HTTP API (RESEND_API_KEY)  2) SMTP (SMTP_HOST etc.)
+// Resend is recommended for cloud hosts like Render where SMTP ports are blocked.
+const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+const EMAIL_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM || `Nine Dart Nation <onboarding@resend.dev>`
+
+// --- Resend (HTTP API) ---
+if (RESEND_API_KEY) {
+  console.log('[Email] ✅ Resend API key configured — using HTTP email delivery')
+}
+
+// --- SMTP fallback ---
 let mailer = null
-try {
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env
-  if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS) {
-    mailer = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: Number(SMTP_PORT),
-      secure: Number(SMTP_PORT) === 465,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-      connectionTimeout: 15000,
-      greetingTimeout: 15000,
-      socketTimeout: 20000,
-      tls: { rejectUnauthorized: false },
-      logger: DEBUG,
-      debug: DEBUG,
-    })
-    console.log('[Email] SMTP transporter created for', SMTP_HOST, 'port', SMTP_PORT)
-    // Verify SMTP connection on startup (non-blocking)
-    mailer.verify().then(() => {
-      console.log('[Email] ✅ SMTP connection verified successfully')
-    }).catch((err) => {
-      console.error('[Email] ❌ SMTP connection verification failed:', err?.message || err)
-    })
-  } else {
-    const missing = ['SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASS'].filter(k => !process.env[k])
-    console.warn('[Email] SMTP not configured — missing:', missing.join(', '))
+if (!RESEND_API_KEY) {
+  try {
+    const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env
+    if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS) {
+      mailer = nodemailer.createTransport({
+        host: SMTP_HOST,
+        port: Number(SMTP_PORT),
+        secure: Number(SMTP_PORT) === 465,
+        auth: { user: SMTP_USER, pass: SMTP_PASS },
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 20000,
+        tls: { rejectUnauthorized: false },
+        logger: DEBUG,
+        debug: DEBUG,
+      })
+      console.log('[Email] SMTP transporter created for', SMTP_HOST, 'port', SMTP_PORT)
+      mailer.verify().then(() => {
+        console.log('[Email] ✅ SMTP connection verified successfully')
+      }).catch((err) => {
+        console.error('[Email] ❌ SMTP connection verification failed:', err?.message || err)
+        console.error('[Email] 💡 Tip: Set RESEND_API_KEY to use Resend HTTP API instead of SMTP')
+      })
+    } else {
+      const missing = ['SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASS'].filter(k => !process.env[k])
+      console.warn('[Email] No email provider configured.')
+      console.warn('[Email] Option 1: Set RESEND_API_KEY (recommended for Render)')
+      console.warn('[Email] Option 2: Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS')
+    }
+  } catch (e) {
+    console.warn('[Email] transporter init failed', e?.message||e)
   }
-} catch (e) {
-  console.warn('[Email] transporter init failed', e?.message||e)
 }
 
 const SEND_MAIL_TIMEOUT_MS = 30000
 async function sendMail(to, subject, html) {
-  if (!mailer) throw new Error('EMAIL_NOT_CONFIGURED')
-  const from = process.env.SMTP_FROM || `Nine Dart Nation <no-reply@${(process.env.MAIL_DOMAIN||'example.com')}>`
-  console.log('[Email] Sending to', to, 'subject:', subject.slice(0, 40))
   const startMs = Date.now()
+  console.log('[Email] Sending to', to, 'via', RESEND_API_KEY ? 'Resend' : 'SMTP', '— subject:', subject.slice(0, 50))
+
+  // --- Resend HTTP path ---
+  if (RESEND_API_KEY) {
+    try {
+      const res = await Promise.race([
+        fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${RESEND_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ from: EMAIL_FROM, to: [to], subject, html }),
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('EMAIL_SEND_TIMEOUT')), SEND_MAIL_TIMEOUT_MS)),
+      ])
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        console.error('[Email] ❌ Resend error:', res.status, JSON.stringify(data))
+        throw new Error(data?.message || `Resend API error ${res.status}`)
+      }
+      console.log('[Email] ✅ Sent via Resend in', Date.now() - startMs, 'ms — id:', data?.id)
+      return data
+    } catch (err) {
+      console.error('[Email] ❌ Resend failed after', Date.now() - startMs, 'ms:', err?.message || err)
+      throw err
+    }
+  }
+
+  // --- SMTP fallback path ---
+  if (!mailer) throw new Error('EMAIL_NOT_CONFIGURED')
   try {
     const result = await Promise.race([
-      mailer.sendMail({ from, to, subject, html }),
+      mailer.sendMail({ from: EMAIL_FROM, to, subject, html }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('EMAIL_SEND_TIMEOUT')), SEND_MAIL_TIMEOUT_MS)),
     ])
-    console.log('[Email] ✅ Sent in', Date.now() - startMs, 'ms — messageId:', result?.messageId)
+    console.log('[Email] ✅ Sent via SMTP in', Date.now() - startMs, 'ms — messageId:', result?.messageId)
     return result
   } catch (err) {
-    console.error('[Email] ❌ Failed after', Date.now() - startMs, 'ms:', err?.message || err)
+    console.error('[Email] ❌ SMTP failed after', Date.now() - startMs, 'ms:', err?.message || err)
     throw err
   }
 }
