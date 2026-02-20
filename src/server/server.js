@@ -946,37 +946,86 @@ app.post('/api/admin/email-copy', (req, res) => {
 })
 
 // --- Email sending ---
-// Priority: 1) Resend HTTP API (RESEND_API_KEY)  2) SMTP (SMTP_HOST etc.)
+// Priority: 1) Resend HTTP API (RESEND_API_KEY)  2) SMTP (SMTP_* vars)
+//           3) SUPPORT_EMAIL + SUPPORT_EMAIL_PASSWORD as SMTP fallback
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
-const EMAIL_FROM = process.env.SMTP_FROM || process.env.EMAIL_FROM || `Nine Dart Nation <onboarding@resend.dev>`
 
-if (RESEND_API_KEY) {
-  startLogger.info('[Email] ✅ Resend API key configured — using HTTP email delivery')
+// Resolve SMTP credentials — try SMTP_* first, then SUPPORT_EMAIL as fallback
+let SMTP_HOST_RESOLVED = process.env.SMTP_HOST || ''
+let SMTP_PORT_RESOLVED = process.env.SMTP_PORT || ''
+let SMTP_USER_RESOLVED = process.env.SMTP_USER || ''
+let SMTP_PASS_RESOLVED = process.env.SMTP_PASS || ''
+let smtpSource = 'SMTP_*'
+
+// Fallback: if primary SMTP vars are missing, try SUPPORT_EMAIL + SUPPORT_EMAIL_PASSWORD
+if (!RESEND_API_KEY && (!SMTP_HOST_RESOLVED || !SMTP_USER_RESOLVED || !SMTP_PASS_RESOLVED)) {
+  const supportEmail = process.env.SUPPORT_EMAIL || ''
+  const supportPass  = process.env.SUPPORT_EMAIL_PASSWORD || ''
+  if (supportEmail && supportPass) {
+    const domain = supportEmail.split('@')[1]?.toLowerCase() || ''
+    let guessHost = ''
+    let guessPort = '587'
+    if (domain === 'gmail.com' || domain === 'googlemail.com') { guessHost = 'smtp.gmail.com'; guessPort = '587' }
+    else if (domain.includes('outlook') || domain.includes('hotmail') || domain.includes('live.com')) { guessHost = 'smtp-mail.outlook.com'; guessPort = '587' }
+    else if (domain.includes('yahoo')) { guessHost = 'smtp.mail.yahoo.com'; guessPort = '587' }
+    else { guessHost = `smtp.${domain}`; guessPort = '587' }
+    SMTP_HOST_RESOLVED = SMTP_HOST_RESOLVED || guessHost
+    SMTP_PORT_RESOLVED = SMTP_PORT_RESOLVED || guessPort
+    SMTP_USER_RESOLVED = SMTP_USER_RESOLVED || supportEmail
+    SMTP_PASS_RESOLVED = SMTP_PASS_RESOLVED || supportPass
+    smtpSource = 'SUPPORT_EMAIL'
+    console.log('[Email] Using SUPPORT_EMAIL credentials as SMTP fallback → host:', guessHost)
+  }
 }
 
+// Resolve FROM address: SMTP_FROM → SMTP_FORM (common typo) → SMTP_USER → SUPPORT_EMAIL
+const EMAIL_FROM = process.env.SMTP_FROM
+  || process.env.SMTP_FORM
+  || process.env.EMAIL_FROM
+  || (RESEND_API_KEY ? `Nine Dart Nation <onboarding@resend.dev>` : null)
+  || SMTP_USER_RESOLVED
+  || process.env.SUPPORT_EMAIL
+  || 'noreply@ninedartnation.com'
+
+// --- Resend (HTTP API) ---
+if (RESEND_API_KEY) {
+  startLogger.info('[Email] ✅ Resend API key configured — using HTTP email delivery')
+  startLogger.info('[Email] FROM address: %s', EMAIL_FROM)
+}
+
+// --- SMTP ---
 let mailer = null
 if (!RESEND_API_KEY) {
   try {
-    const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env
-    if (SMTP_HOST && SMTP_PORT && SMTP_USER && SMTP_PASS) {
+    if (SMTP_HOST_RESOLVED && SMTP_PORT_RESOLVED && SMTP_USER_RESOLVED && SMTP_PASS_RESOLVED) {
       mailer = nodemailer.createTransport({
-        host: SMTP_HOST,
-        port: Number(SMTP_PORT),
-        secure: Number(SMTP_PORT) === 465,
-        auth: { user: SMTP_USER, pass: SMTP_PASS },
+        host: SMTP_HOST_RESOLVED,
+        port: Number(SMTP_PORT_RESOLVED),
+        secure: Number(SMTP_PORT_RESOLVED) === 465,
+        auth: { user: SMTP_USER_RESOLVED, pass: SMTP_PASS_RESOLVED },
         connectionTimeout: 15000,
         greetingTimeout: 15000,
         socketTimeout: 20000,
         tls: { rejectUnauthorized: false },
       })
-      startLogger.info('[Email] SMTP transporter created for %s port %s', SMTP_HOST, SMTP_PORT)
+      startLogger.info('[Email] SMTP transporter created (source: %s) → host: %s  port: %s  user: %s  from: %s',
+        smtpSource, SMTP_HOST_RESOLVED, SMTP_PORT_RESOLVED, SMTP_USER_RESOLVED, EMAIL_FROM)
       mailer.verify().then(() => {
         startLogger.info('[Email] ✅ SMTP connection verified successfully')
       }).catch((err) => {
         startLogger.error('[Email] ❌ SMTP connection verification failed: %s', err?.message || err)
+        startLogger.error('[Email] 💡 If SMTP is blocked on this host, set RESEND_API_KEY (free at resend.com)')
       })
     } else {
-      startLogger.warn('[Email] No email provider configured. Set RESEND_API_KEY or SMTP_* env vars.')
+      const missing = []
+      if (!SMTP_HOST_RESOLVED) missing.push('SMTP_HOST')
+      if (!SMTP_PORT_RESOLVED) missing.push('SMTP_PORT')
+      if (!SMTP_USER_RESOLVED) missing.push('SMTP_USER')
+      if (!SMTP_PASS_RESOLVED) missing.push('SMTP_PASS')
+      startLogger.warn('[Email] ⚠️  No email provider configured. Missing: %s', missing.join(', '))
+      startLogger.warn('[Email] Option 1: Set RESEND_API_KEY (recommended for Render)')
+      startLogger.warn('[Email] Option 2: Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS')
+      startLogger.warn('[Email] Option 3: Set SUPPORT_EMAIL + SUPPORT_EMAIL_PASSWORD')
     }
   } catch (e) {
     startLogger.warn('[Email] transporter init failed: %s', e?.message || e)
@@ -986,7 +1035,8 @@ if (!RESEND_API_KEY) {
 const SEND_MAIL_TIMEOUT_MS = 30000
 async function sendMail(to, subject, html) {
   const startMs = Date.now()
-  console.log('[Email] Sending to', to, 'via', RESEND_API_KEY ? 'Resend' : 'SMTP', '— subject:', subject.slice(0, 50))
+  const provider = RESEND_API_KEY ? 'Resend' : (mailer ? 'SMTP' : 'NONE')
+  console.log('[Email] Sending to', to, 'via', provider, '— from:', EMAIL_FROM, '— subject:', subject.slice(0, 50))
 
   if (RESEND_API_KEY) {
     try {
@@ -1014,7 +1064,10 @@ async function sendMail(to, subject, html) {
     }
   }
 
-  if (!mailer) throw new Error('EMAIL_NOT_CONFIGURED')
+  if (!mailer) {
+    console.error('[Email] ❌ No email provider configured — cannot send')
+    throw new Error('EMAIL_NOT_CONFIGURED')
+  }
   try {
     const result = await Promise.race([
       mailer.sendMail({ from: EMAIL_FROM, to, subject, html }),
