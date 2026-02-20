@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
+  allGames,
   getModeOptionsForGame,
   labelForMode,
   getGameDisplay,
+  getExtraFieldsForGame,
+  getValueLabelForGame,
+  getDefaultExtraValues,
+  gameConfig,
+  type GameKey,
   type ModeKey,
 } from "../utils/games.js";
 import { useMatch } from "../store/match.js";
@@ -104,15 +110,16 @@ export default function Tournaments({ user }: { user: any }) {
 
   const [form, setForm] = useState({
     title: "",
-    game: "X01",
-    mode: "501",
-    value: 0,
+    game: "X01" as string,
+    mode: "bestof",
+    value: 3,
     description: "",
     startAt: new Date().toISOString().slice(0, 16),
     checkinMinutes: 15,
     capacity: 16,
     startingScore: 501,
     requireCalibration: false,
+    extras: {} as Record<string, number>,
   });
 
   // Prestart / Bull Up Logic for Tournaments
@@ -1314,18 +1321,35 @@ export default function Tournaments({ user }: { user: any }) {
                       <select
                         className="input w-full text-xs"
                         value={form.game}
-                        onChange={(e) =>
-                          setForm((f) => ({ ...f, game: e.target.value }))
-                        }
+                        onChange={(e) => {
+                          const g = e.target.value as GameKey;
+                          const cfg = gameConfig[g];
+                          const validMode = cfg?.modeOptions?.includes(
+                            form.mode as ModeKey,
+                          )
+                            ? form.mode
+                            : (cfg?.modeOptions?.[0] ?? "bestof");
+                          setForm((f) => ({
+                            ...f,
+                            game: g,
+                            mode: validMode,
+                            extras: getDefaultExtraValues(g),
+                            startingScore:
+                              cfg?.startOptions?.[0] ?? f.startingScore,
+                          }));
+                        }}
                       >
-                        {["X01", "Cricket", "Killer"].map((g) => (
+                        {allGames.map((g) => (
                           <option key={g} value={g}>
                             {getGameDisplay(g).emoji} {g}
                           </option>
                         ))}
                       </select>
-                      <div className="text-[9px] text-slate-500 mt-0.5 px-0.5">
-                        Game
+                      <div
+                        className="text-[9px] mt-0.5 px-0.5"
+                        style={{ color: getGameDisplay(form.game).color }}
+                      >
+                        {getGameDisplay(form.game).tagline || "Game"}
                       </div>
                     </div>
                     <div>
@@ -1366,7 +1390,10 @@ export default function Tournaments({ user }: { user: any }) {
                         placeholder="0"
                       />
                       <div className="text-[9px] text-slate-500 mt-0.5 px-0.5">
-                        Legs
+                        {getValueLabelForGame(
+                          form.game as GameKey,
+                          form.mode as ModeKey,
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1424,13 +1451,70 @@ export default function Tournaments({ user }: { user: any }) {
                     </div>
                   </div>
                 </div>
+                {/* Per-game extra config fields */}
+                {getExtraFieldsForGame(form.game as GameKey).length > 0 && (
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-widest text-indigo-300/70 mb-1">
+                      {form.game} Settings
+                    </label>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {getExtraFieldsForGame(form.game as GameKey).map((f) => (
+                        <div key={f.key}>
+                          {f.type === "select" && f.options ? (
+                            <select
+                              className="input w-full text-xs"
+                              value={form.extras[f.key] ?? f.defaultValue}
+                              onChange={(e) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  extras: {
+                                    ...prev.extras,
+                                    [f.key]: Number(e.target.value),
+                                  },
+                                }))
+                              }
+                            >
+                              {f.options.map((o) => (
+                                <option key={o} value={o}>
+                                  {o}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              className="input w-full text-xs"
+                              type="number"
+                              min={f.min ?? 1}
+                              max={f.max}
+                              step={f.step ?? 1}
+                              value={form.extras[f.key] ?? f.defaultValue}
+                              onChange={(e) =>
+                                setForm((prev) => ({
+                                  ...prev,
+                                  extras: {
+                                    ...prev.extras,
+                                    [f.key]: Number(e.target.value),
+                                  },
+                                }))
+                              }
+                            />
+                          )}
+                          <div className="text-[9px] text-slate-500 mt-0.5 px-0.5">
+                            {f.label}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {/* Score & Capacity row */}
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-widest text-indigo-300/70 mb-1">
                     Players
                   </label>
                   <div className="grid grid-cols-2 gap-1.5">
-                    {form.game === "X01" ? (
+                    {(gameConfig[form.game as GameKey]?.startOptions ?? [])
+                      .length > 0 ? (
                       <div>
                         <select
                           className="input w-full text-xs"
@@ -1442,7 +1526,11 @@ export default function Tournaments({ user }: { user: any }) {
                             }))
                           }
                         >
-                          {[301, 501, 701].map((s) => (
+                          {(
+                            gameConfig[form.game as GameKey]?.startOptions ?? [
+                              301, 501, 701,
+                            ]
+                          ).map((s) => (
                             <option key={s} value={s}>
                               {s}
                             </option>

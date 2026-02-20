@@ -7,10 +7,26 @@ export type ModeKey =
   | "none"
   | "innings"
   | "holes";
+export interface GameExtraField {
+  key: string;
+  label: string;
+  type: "select" | "number";
+  options?: number[];
+  defaultValue: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  hint?: string;
+}
+
 export interface GameConfig {
   startOptions: number[];
   modeOptions: ModeKey[];
   modeValueOptions?: Partial<Record<ModeKey, number[]>>;
+  /** Per-game specific configuration fields shown in setup UIs */
+  extraFields?: GameExtraField[];
+  /** Label override for the "Legs" / value input (e.g. "Innings", "Holes") */
+  valueLabel?: string;
 }
 export const premiumGames = [
   "Around the Clock",
@@ -50,6 +66,16 @@ export const gameConfig: Record<GameKey, GameConfig> = {
     startOptions: [],
     modeOptions: ["practice"],
     modeValueOptions: { practice: [30, 60, 120] },
+    extraFields: [
+      {
+        key: "dartLimit",
+        label: "Max darts",
+        type: "select",
+        options: [30, 60, 120],
+        defaultValue: 60,
+        hint: "Stop after this many throws",
+      },
+    ],
   },
   "Around the Clock": {
     startOptions: [],
@@ -64,6 +90,7 @@ export const gameConfig: Record<GameKey, GameConfig> = {
       firstto: [1, 2, 3, 4],
       rounds: [1, 3, 5],
     },
+    valueLabel: "Legs",
   },
   "Halve It": {
     startOptions: [],
@@ -74,6 +101,16 @@ export const gameConfig: Record<GameKey, GameConfig> = {
     startOptions: [],
     modeOptions: ["bestof", "firstto"],
     modeValueOptions: { bestof: [1, 3, 5], firstto: [1, 2, 3, 4] },
+    extraFields: [
+      {
+        key: "rounds",
+        label: "Rounds",
+        type: "select",
+        options: [7, 10, 20],
+        defaultValue: 20,
+        hint: "Rounds 1–N",
+      },
+    ],
   },
   "High-Low": {
     startOptions: [],
@@ -84,6 +121,16 @@ export const gameConfig: Record<GameKey, GameConfig> = {
     startOptions: [],
     modeOptions: ["bestof", "firstto"],
     modeValueOptions: { bestof: [1, 3, 5], firstto: [1, 2, 3, 4] },
+    extraFields: [
+      {
+        key: "lives",
+        label: "Lives",
+        type: "select",
+        options: [3, 5, 7],
+        defaultValue: 3,
+        hint: "Lives per player",
+      },
+    ],
   },
   "Bob's 27": {
     startOptions: [],
@@ -92,43 +139,140 @@ export const gameConfig: Record<GameKey, GameConfig> = {
   },
   "Count-Up": {
     startOptions: [],
-    modeOptions: ["bestof", "firstto"],
-    modeValueOptions: { bestof: [1, 3, 5], firstto: [1, 2, 3, 4] },
+    modeOptions: ["rounds", "bestof", "firstto"],
+    modeValueOptions: {
+      rounds: [5, 8, 10],
+      bestof: [1, 3, 5],
+      firstto: [1, 2, 3, 4],
+    },
+    extraFields: [
+      {
+        key: "rounds",
+        label: "Rounds",
+        type: "select",
+        options: [5, 8, 10, 15],
+        defaultValue: 8,
+        hint: "Number of rounds per game",
+      },
+    ],
+    valueLabel: "Rounds",
   },
   "High Score": {
     startOptions: [],
-    modeOptions: ["bestof", "firstto"],
-    modeValueOptions: { bestof: [1, 3, 5], firstto: [1, 2, 3, 4] },
+    modeOptions: ["rounds", "bestof", "firstto"],
+    modeValueOptions: {
+      rounds: [5, 8, 10],
+      bestof: [1, 3, 5],
+      firstto: [1, 2, 3, 4],
+    },
+    extraFields: [
+      {
+        key: "rounds",
+        label: "Rounds",
+        type: "select",
+        options: [5, 8, 10, 15],
+        defaultValue: 8,
+        hint: "Number of rounds",
+      },
+    ],
+    valueLabel: "Rounds",
   },
   "Low Score": {
     startOptions: [],
-    modeOptions: ["bestof", "firstto"],
-    modeValueOptions: { bestof: [1, 3, 5], firstto: [1, 2, 3, 4] },
+    modeOptions: ["rounds", "bestof", "firstto"],
+    modeValueOptions: {
+      rounds: [5, 8, 10],
+      bestof: [1, 3, 5],
+      firstto: [1, 2, 3, 4],
+    },
+    extraFields: [
+      {
+        key: "rounds",
+        label: "Rounds",
+        type: "select",
+        options: [5, 8, 10, 15],
+        defaultValue: 8,
+        hint: "Number of rounds",
+      },
+    ],
+    valueLabel: "Rounds",
   },
   "Checkout 170": {
-    startOptions: [],
+    startOptions: [170],
     modeOptions: ["bestof", "firstto"],
     modeValueOptions: { bestof: [1, 3, 5], firstto: [1, 2, 3, 4] },
+    extraFields: [
+      {
+        key: "dartCount",
+        label: "Darts per attempt",
+        type: "select",
+        options: [3, 6, 9],
+        defaultValue: 3,
+        hint: "Darts to check out",
+      },
+    ],
   },
   "Checkout 121": {
-    startOptions: [],
+    startOptions: [121],
     modeOptions: ["bestof", "firstto"],
     modeValueOptions: { bestof: [1, 3, 5], firstto: [1, 2, 3, 4] },
+    extraFields: [
+      {
+        key: "dartCount",
+        label: "Darts per attempt",
+        type: "select",
+        options: [3, 6, 9],
+        defaultValue: 3,
+        hint: "Darts to check out",
+      },
+    ],
   },
   "Treble Practice": {
     startOptions: [],
     modeOptions: ["practice"],
     modeValueOptions: { practice: [30, 60, 120] },
+    extraFields: [
+      {
+        key: "maxDarts",
+        label: "Throws per game",
+        type: "select",
+        options: [15, 30, 45, 60, 90],
+        defaultValue: 30,
+        hint: "Target cycles T20→T19→T18 every 3 darts",
+      },
+    ],
   },
   Baseball: {
     startOptions: [],
     modeOptions: ["bestof", "innings"],
     modeValueOptions: { bestof: [1, 3, 5], innings: [1, 3, 5, 9] },
+    extraFields: [
+      {
+        key: "innings",
+        label: "Innings",
+        type: "select",
+        options: [3, 5, 7, 9],
+        defaultValue: 9,
+        hint: "Number of innings",
+      },
+    ],
+    valueLabel: "Innings",
   },
   Golf: {
     startOptions: [],
     modeOptions: ["holes", "bestof"],
     modeValueOptions: { holes: [9, 18], bestof: [1, 3, 5] },
+    extraFields: [
+      {
+        key: "holes",
+        label: "Holes",
+        type: "select",
+        options: [9, 18],
+        defaultValue: 18,
+        hint: "Number of holes per round",
+      },
+    ],
+    valueLabel: "Holes",
   },
   "Tic Tac Toe": {
     startOptions: [],
@@ -177,6 +321,40 @@ export function getModeValueOptionsForGame(
   if (g === "all" || mode === "all") return [];
   const cfg = gameConfig[g];
   return cfg?.modeValueOptions?.[mode] ?? [];
+}
+
+export function getExtraFieldsForGame(g: "all" | GameKey): GameExtraField[] {
+  if (g === "all") return [];
+  const cfg = gameConfig[g as GameKey];
+  return cfg?.extraFields ?? [];
+}
+
+export function getValueLabelForGame(
+  g: "all" | GameKey,
+  mode: ModeKey | "all",
+): string {
+  if (g === "all") return "Legs";
+  const cfg = gameConfig[g as GameKey];
+  if (cfg?.valueLabel) return cfg.valueLabel;
+  switch (mode) {
+    case "innings":
+      return "Innings";
+    case "holes":
+      return "Holes";
+    case "rounds":
+      return "Rounds";
+    case "practice":
+      return "Throws";
+    default:
+      return "Legs";
+  }
+}
+
+export function getDefaultExtraValues(g: GameKey): Record<string, number> {
+  const fields = getExtraFieldsForGame(g);
+  const out: Record<string, number> = {};
+  for (const f of fields) out[f.key] = f.defaultValue;
+  return out;
 }
 
 /** Display metadata for each game mode: emoji, short tagline, and accent color */

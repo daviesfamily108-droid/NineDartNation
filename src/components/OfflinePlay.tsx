@@ -90,7 +90,18 @@ import {
 } from "../logic/matchActions";
 import { useMatch } from "../store/match";
 import { useOfflineGameStats } from "./scoreboards/useGameStats";
-import { freeGames, premiumGames, getGameDisplay } from "../utils/games";
+import {
+  freeGames,
+  premiumGames,
+  getGameDisplay,
+  getExtraFieldsForGame,
+  getValueLabelForGame,
+  getDefaultExtraValues,
+  getStartOptionsForGame,
+  gameConfig,
+  type GameKey,
+  type ModeKey,
+} from "../utils/games";
 
 const aiLevels = ["Easy", "Medium", "Hardened"];
 
@@ -202,6 +213,9 @@ export default function OfflinePlay({ user }: { user: any }) {
   const waitForBoardClear =
     cameraEnabled && !manualScoring && autoCommitMode !== "immediate";
   const [selectedMode, setSelectedMode] = useState<string>("X01");
+  const [gameExtras, setGameExtras] = useState<Record<string, number>>(() =>
+    getDefaultExtraValues("X01"),
+  );
   const [x01Score, setX01Score] = useState(501);
   const [ai, setAI] = useState("None");
   const [showRules, setShowRules] = useState(false);
@@ -2794,11 +2808,15 @@ export default function OfflinePlay({ user }: { user: any }) {
               }}
               className="input w-full"
               value={selectedMode}
-              onChange={(e) => setSelectedMode(e.target.value)}
+              onChange={(e) => {
+                const g = e.target.value;
+                setSelectedMode(g);
+                setGameExtras(getDefaultExtraValues(g as GameKey));
+              }}
             >
               {freeGames.map((mode) => (
                 <option key={mode} value={mode}>
-                  {mode}
+                  {getGameDisplay(mode).emoji} {mode}
                 </option>
               ))}
               {premiumGames.map((mode) => (
@@ -2807,10 +2825,93 @@ export default function OfflinePlay({ user }: { user: any }) {
                   value={mode}
                   disabled={!(user?.fullAccess || user?.admin)}
                 >
-                  {mode} {user?.fullAccess || user?.admin ? "" : "(Premium)"}
+                  {getGameDisplay(mode).emoji} {mode}{" "}
+                  {user?.fullAccess || user?.admin ? "" : "(Premium)"}
                 </option>
               ))}
             </select>
+
+            {/* Game tagline */}
+            {getGameDisplay(selectedMode).tagline && (
+              <div
+                className="text-xs mt-0.5 px-0.5"
+                style={{ color: getGameDisplay(selectedMode).color }}
+              >
+                {getGameDisplay(selectedMode).emoji}{" "}
+                {getGameDisplay(selectedMode).tagline}
+              </div>
+            )}
+
+            {/* Per-game extra config fields (generic — excludes Treble Practice which has its own block) */}
+            {selectedMode !== "Treble Practice" &&
+              getExtraFieldsForGame(selectedMode as GameKey).length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end">
+                  {getExtraFieldsForGame(selectedMode as GameKey).map((f) => (
+                    <div key={f.key}>
+                      <label className="font-semibold">{f.label}</label>
+                      {f.type === "select" && f.options ? (
+                        <select
+                          className="input w-full"
+                          value={gameExtras[f.key] ?? f.defaultValue}
+                          onChange={(e) =>
+                            setGameExtras((prev) => ({
+                              ...prev,
+                              [f.key]: Number(e.target.value),
+                            }))
+                          }
+                        >
+                          {f.options.map((o) => (
+                            <option key={o} value={o}>
+                              {o}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          className="input w-full"
+                          type="number"
+                          min={f.min ?? 1}
+                          max={f.max}
+                          step={f.step ?? 1}
+                          value={gameExtras[f.key] ?? f.defaultValue}
+                          onChange={(e) =>
+                            setGameExtras((prev) => ({
+                              ...prev,
+                              [f.key]: Number(e.target.value),
+                            }))
+                          }
+                        />
+                      )}
+                      {f.hint && (
+                        <div className="text-xs text-slate-300 mt-0.5">
+                          {f.hint}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            {/* Starting score selector for games with startOptions (dynamic, not just X01) */}
+            {selectedMode !== "X01" &&
+              getStartOptionsForGame(selectedMode as GameKey).length > 0 && (
+                <div>
+                  <label className="font-semibold">Starting Score</label>
+                  <select
+                    className="input w-full"
+                    value={x01Score}
+                    onChange={(e) => setX01Score(Number(e.target.value))}
+                  >
+                    {getStartOptionsForGame(selectedMode as GameKey).map(
+                      (s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </div>
+              )}
 
             {selectedMode === "Treble Practice" && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
