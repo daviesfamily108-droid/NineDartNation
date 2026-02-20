@@ -138,6 +138,25 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
     }
   }
 
+  // Wake up the Render server (free tier cold-starts take 30-60s) before
+  // sending an email request that itself needs 20-30s for SMTP.
+  const wakeAndFetch = async (
+    url: string,
+    init: RequestInit,
+    setStatus: (msg: string) => void,
+  ) => {
+    // 1. Quick health probe — if it responds fast the server is warm
+    setStatus("⏳ Waking up server...");
+    try {
+      await fetchWithTimeout(`${API_URL}/api/health`, { method: "GET" }, 60000);
+    } catch {
+      // If health check fails the main request will fail too — let it
+    }
+    // 2. Now send the real request with plenty of time for SMTP
+    setStatus("⏳ Sending email...");
+    return fetchWithTimeout(url, init, 60000);
+  };
+
   async function handleReset(e: any) {
     e.preventDefault();
     setError("");
@@ -148,14 +167,14 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       return;
     }
     try {
-      const r = await fetchWithTimeout(
+      const r = await wakeAndFetch(
         `${API_URL}/api/auth/send-reset`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email }),
         },
-        30000,
+        setError,
       );
       const j = await r.json().catch(() => ({}));
       if (!j?.ok) {
@@ -194,14 +213,14 @@ export default function Auth({ onAuth }: { onAuth: (user: any) => void }) {
       return;
     }
     try {
-      const r = await fetchWithTimeout(
+      const r = await wakeAndFetch(
         `${API_URL}/api/auth/send-username`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email: targetEmail }),
         },
-        30000,
+        setError,
       );
       const j = await r.json().catch(() => ({}));
       if (!j?.ok) {

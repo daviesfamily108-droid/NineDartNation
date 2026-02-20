@@ -956,27 +956,42 @@ try {
       port: Number(SMTP_PORT),
       secure: Number(SMTP_PORT) === 465,
       auth: { user: SMTP_USER, pass: SMTP_PASS },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000,
+      tls: { rejectUnauthorized: false },
     })
-    startLogger.info('[Email] SMTP transporter created for %s', SMTP_HOST)
+    startLogger.info('[Email] SMTP transporter created for %s port %s', SMTP_HOST, SMTP_PORT)
+    mailer.verify().then(() => {
+      startLogger.info('[Email] ✅ SMTP connection verified successfully')
+    }).catch((err) => {
+      startLogger.error('[Email] ❌ SMTP connection verification failed: %s', err?.message || err)
+    })
   } else {
-    startLogger.warn('[Email] SMTP not configured — missing SMTP_HOST/PORT/USER/PASS env vars')
+    const missing = ['SMTP_HOST','SMTP_PORT','SMTP_USER','SMTP_PASS'].filter(k => !process.env[k])
+    startLogger.warn('[Email] SMTP not configured — missing: %s', missing.join(', '))
   }
 } catch (e) {
   startLogger.warn('[Email] transporter init failed: %s', e?.message || e)
 }
 
-const SEND_MAIL_TIMEOUT_MS = 20000
+const SEND_MAIL_TIMEOUT_MS = 30000
 async function sendMail(to, subject, html) {
   if (!mailer) throw new Error('EMAIL_NOT_CONFIGURED')
   const from = process.env.SMTP_FROM || `Nine Dart Nation <no-reply@${(process.env.MAIL_DOMAIN||'example.com')}>`
-  const result = await Promise.race([
-    mailer.sendMail({ from, to, subject, html }),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('EMAIL_SEND_TIMEOUT')), SEND_MAIL_TIMEOUT_MS)),
-  ])
-  return result
+  console.log('[Email] Sending to', to, 'subject:', subject.slice(0, 40))
+  const startMs = Date.now()
+  try {
+    const result = await Promise.race([
+      mailer.sendMail({ from, to, subject, html }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('EMAIL_SEND_TIMEOUT')), SEND_MAIL_TIMEOUT_MS)),
+    ])
+    console.log('[Email] ✅ Sent in', Date.now() - startMs, 'ms — messageId:', result?.messageId)
+    return result
+  } catch (err) {
+    console.error('[Email] ❌ Failed after', Date.now() - startMs, 'ms:', err?.message || err)
+    throw err
+  }
 }
 
 // Very simple in-memory token store for demo
