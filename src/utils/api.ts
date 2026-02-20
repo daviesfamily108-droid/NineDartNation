@@ -64,6 +64,13 @@ export function getApiBaseUrl(): string {
 export function apiFetch(path: ApiPath, init?: RequestInit) {
   const url = resolveApiUrl(path);
 
+  // Admin and auth endpoints should ALWAYS reach the real server — never
+  // short-circuit them with the API-disabled flag. These are explicit user
+  // actions (login, clustering toggle, etc.) that must attempt the network.
+  const isCriticalPath =
+    typeof path === "string" &&
+    (/^\/api\/admin\b/i.test(path) || /^\/api\/auth\b/i.test(path));
+
   // If a previous probe determined the remote API is unreachable, short-circuit
   // and return a fake Response-like object so callers don't trigger repeated
   // network requests or unhandled promise rejections. The disable flag now
@@ -71,7 +78,7 @@ export function apiFetch(path: ApiPath, init?: RequestInit) {
   // back online (e.g., after a Render cold-start).
   try {
     const anyWin = window as any;
-    if (anyWin.__ndnApiDisabled) {
+    if (anyWin.__ndnApiDisabled && !isCriticalPath) {
       const disabledAt = Number(anyWin.__ndnApiDisabledAt) || 0;
       if (disabledAt && Date.now() - disabledAt > 60_000) {
         // Expired – allow requests again
@@ -90,28 +97,42 @@ export function apiFetch(path: ApiPath, init?: RequestInit) {
   // Perform the fetch, but on network error or remote-host 404 mark the API
   // disabled so subsequent calls are short-circuited and we avoid spamming the
   // network / devtools with repeated failing requests.
+  // Critical paths (admin, auth) never set the disabled flag — a failed admin
+  // request shouldn't kill the entire API for the rest of the app.
   return fetch(url, init)
     .catch((err) => {
-      try {
-        (window as any).__ndnApiDisabled = true;
-        (window as any).__ndnApiDisabledAt = Date.now();
-      } catch (_) {}
+      if (!isCriticalPath) {
+        try {
+          (window as any).__ndnApiDisabled = true;
+          (window as any).__ndnApiDisabledAt = Date.now();
+        } catch (_) {}
+      }
       return { ok: false, status: 503, json: async () => ({}) } as any;
     })
     .then((res) => {
-      try {
-        // If the request target is a remote host (not same origin) and returned
-        // a 404, consider the remote API unavailable and disable further calls.
-        const host = new URL(String(url)).hostname;
-        if (
-          res &&
-          (res as any).status === 404 &&
-          host !== window.location.hostname
-        ) {
-          (window as any).__ndnApiDisabled = true;
-          (window as any).__ndnApiDisabledAt = Date.now();
-        }
-      } catch (_) {}
+      if (!isCriticalPath) {
+        try {
+          // If the request target is a remote host (not same origin) and returned
+          // a 404, consider the remote API unavailable and disable further calls.
+          const host = new URL(String(url)).hostname;
+          if (
+            res &&
+            (res as any).status === 404 &&
+            host !== window.location.hostname
+          ) {
+            (window as any).__ndnApiDisabled = true;
+            (window as any).__ndnApiDisabledAt = Date.now();
+          }
+        } catch (_) {}
+      }
+      // If a critical-path request succeeded, the server is alive — clear
+      // the disabled flag so background requests resume immediately.
+      if (isCriticalPath && res && (res as any).ok) {
+        try {
+          (window as any).__ndnApiDisabled = false;
+          (window as any).__ndnApiDisabledAt = 0;
+        } catch (_) {}
+      }
       return res;
     });
 }
