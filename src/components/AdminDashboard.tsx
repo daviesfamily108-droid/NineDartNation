@@ -91,14 +91,7 @@ function EmailEditor({
 }
 
 export default function AdminDashboard({ user }: { user: any }) {
-  const {
-    statsCardMinHeight,
-    setStatsCardMinHeight,
-    cardPaddingBottom,
-    setCardPaddingBottom,
-    hiddenSections,
-    setHiddenSections,
-  } = useUserSettings();
+  const { hiddenSections, setHiddenSections } = useUserSettings();
   const hiddenSectionList = hiddenSections || [];
   const sectionCatalog = useMemo(
     () => [
@@ -990,67 +983,6 @@ export default function AdminDashboard({ user }: { user: any }) {
                       </span>
                     </div>
                   ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {isOwner && (
-            <div className="card">
-              <h3 className="text-xl font-semibold mb-2">UI Layout</h3>
-              <div className="text-sm opacity-80 mb-3">
-                Adjust card dimensions to avoid text overlap or clipping.
-                <span className="ml-2 text-emerald-400">
-                  ✓ Changes auto-save
-                </span>
-              </div>
-              <div className="space-y-4">
-                <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3">
-                  <label
-                    className="block text-sm mb-2"
-                    htmlFor="statsCardMinHeight"
-                  >
-                    Stats card height: {statsCardMinHeight ?? 220}px
-                  </label>
-                  <input
-                    id="statsCardMinHeight"
-                    type="range"
-                    min="160"
-                    max="520"
-                    step="10"
-                    value={statsCardMinHeight ?? 220}
-                    onChange={(e) =>
-                      setStatsCardMinHeight(Number(e.target.value))
-                    }
-                    className="w-full accent-indigo-500 cursor-pointer"
-                  />
-                  <div className="text-xs opacity-70 mt-2">
-                    Changes apply to the score distribution card in Match Stats.
-                  </div>
-                </div>
-                <div className="rounded-xl border border-purple-500/30 bg-purple-500/10 p-3">
-                  <label
-                    className="block text-sm mb-2"
-                    htmlFor="cardPaddingBottom"
-                  >
-                    Card depth (padding-bottom): {cardPaddingBottom ?? 200}px
-                  </label>
-                  <input
-                    id="cardPaddingBottom"
-                    type="range"
-                    min="0"
-                    max="600"
-                    step="10"
-                    value={cardPaddingBottom ?? 200}
-                    onChange={(e) =>
-                      setCardPaddingBottom(Number(e.target.value))
-                    }
-                    className="w-full accent-purple-500 cursor-pointer"
-                  />
-                  <div className="text-xs opacity-70 mt-2">
-                    Controls the bottom padding of page cards (e.g. Stats, Score
-                    Distribution). Increase if content is clipped at the bottom.
-                  </div>
                 </div>
               </div>
             </div>

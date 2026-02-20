@@ -94,7 +94,7 @@ export default function App() {
     const root = document.documentElement;
     root.style.setProperty(
       "--ndn-card-padding-bottom",
-      `${cardPaddingBottom ?? 200}px`,
+      `${cardPaddingBottom ?? 80}px`,
     );
     root.style.setProperty(
       "--ndn-stats-card-height",

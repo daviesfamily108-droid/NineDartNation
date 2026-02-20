@@ -439,7 +439,7 @@ function load(): Pick<
       cardPaddingBottom:
         typeof j.cardPaddingBottom === "number" && isFinite(j.cardPaddingBottom)
           ? Math.max(0, Math.min(1000, Math.round(j.cardPaddingBottom)))
-          : 200,
+          : 80,
       matchType: j.matchType === "doubles" ? "doubles" : "singles",
       teamAName: typeof j.teamAName === "string" ? j.teamAName : "Team A",
       teamBName: typeof j.teamBName === "string" ? j.teamBName : "Team B",
