@@ -2118,7 +2118,7 @@ app.get('/api/admin/system-health', (req, res) => {
       },
       email: {
         provider: GRAPH_ENABLED ? 'Microsoft Graph (Outlook)' : RESEND_API_KEY ? 'Resend' : (mailer ? 'SMTP' : 'NONE'),
-        from: GRAPH_ENABLED ? '(Outlook account)' : EMAIL_FROM,
+        from: GRAPH_ENABLED ? '(Outlook account)' : RESEND_API_KEY ? RESEND_FROM : EMAIL_FROM,
         smtpHost: !RESEND_API_KEY && !GRAPH_ENABLED ? (SMTP_HOST_RESOLVED || 'not set') : 'n/a',
         smtpSource: !RESEND_API_KEY && !GRAPH_ENABLED ? smtpSource : 'n/a',
         ready: !!(GRAPH_ENABLED || RESEND_API_KEY || mailer),
@@ -2686,19 +2686,21 @@ if (!RESEND_API_KEY && !GRAPH_ENABLED && (!SMTP_HOST_RESOLVED || !SMTP_USER_RESO
 }
 
 // Resolve FROM address: SMTP_FROM → SMTP_FORM (common typo) → SMTP_USER → SUPPORT_EMAIL
-// Only use the Resend default when Resend is actually configured
 const EMAIL_FROM = process.env.SMTP_FROM
   || process.env.SMTP_FORM
   || process.env.EMAIL_FROM
-  || (RESEND_API_KEY ? `Nine Dart Nation <onboarding@resend.dev>` : null)
   || SMTP_USER_RESOLVED
   || process.env.SUPPORT_EMAIL
   || 'noreply@ninedartnation.com'
 
+// Resend-specific FROM: Resend can only send from verified domains.
+// Free tier uses onboarding@resend.dev — outlook.com / gmail.com CANNOT be verified.
+const RESEND_FROM = process.env.RESEND_FROM || 'Nine Dart Nation <onboarding@resend.dev>'
+
 // --- Resend (HTTP API) ---
 if (RESEND_API_KEY) {
   console.log('[Email] ✅ Resend API key configured — using HTTP email delivery')
-  console.log('[Email] FROM address:', EMAIL_FROM)
+  console.log('[Email] Resend FROM:', RESEND_FROM)
 }
 
 // --- SMTP ---
@@ -2774,7 +2776,7 @@ async function sendMail(to, subject, html) {
             'Authorization': `Bearer ${RESEND_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ from: EMAIL_FROM, to: [to], subject, html }),
+          body: JSON.stringify({ from: RESEND_FROM, to: [to], subject, html }),
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('EMAIL_SEND_TIMEOUT')), SEND_MAIL_TIMEOUT_MS)),
       ])

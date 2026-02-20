@@ -1102,14 +1102,17 @@ if (!RESEND_API_KEY && !GRAPH_ENABLED && (!SMTP_HOST_RESOLVED || !SMTP_USER_RESO
 const EMAIL_FROM = process.env.SMTP_FROM
   || process.env.SMTP_FORM
   || process.env.EMAIL_FROM
-  || (RESEND_API_KEY ? `Nine Dart Nation <onboarding@resend.dev>` : null)
   || SMTP_USER_RESOLVED
   || process.env.SUPPORT_EMAIL
   || 'noreply@ninedartnation.com'
 
+// Resend-specific FROM: Resend can only send from verified domains.
+// Free tier uses onboarding@resend.dev — outlook.com / gmail.com CANNOT be verified.
+const RESEND_FROM = process.env.RESEND_FROM || 'Nine Dart Nation <onboarding@resend.dev>'
+
 if (RESEND_API_KEY) {
   startLogger.info('[Email] ✅ Resend API key configured — using HTTP email delivery')
-  startLogger.info('[Email] FROM address: %s', EMAIL_FROM)
+  startLogger.info('[Email] Resend FROM: %s', RESEND_FROM)
 }
 
 let mailer = null
@@ -1175,7 +1178,7 @@ async function sendMail(to, subject, html) {
             'Authorization': `Bearer ${RESEND_API_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ from: EMAIL_FROM, to: [to], subject, html }),
+          body: JSON.stringify({ from: RESEND_FROM, to: [to], subject, html }),
         }),
         new Promise((_, reject) => setTimeout(() => reject(new Error('EMAIL_SEND_TIMEOUT')), SEND_MAIL_TIMEOUT_MS)),
       ])
