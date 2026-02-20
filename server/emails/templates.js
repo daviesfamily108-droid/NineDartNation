@@ -175,28 +175,30 @@ function renderBase({
   return { html }
 }
 
-export function passwordReset({ username = 'Player', actionUrl = '#', title = 'Reset Your Password', intro = 'We received a request to reset the password for your account. Click the button below to create a new password. For your security, this link will expire in 30&nbsp;minutes.', buttonLabel = 'Reset Password', expiresMinutes = 30 } = {}) {
+function passwordReset({ username = 'Player', actionUrl = '#', title = 'Reset Your Password', intro = 'We received a request to reset the password for your account. Click the button below to create a new password. For your security, this link will expire in 30&nbsp;minutes.', buttonLabel = 'Reset Password', expiresMinutes = 30 } = {}) {
   const footerHtml = `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 auto"><tr><td style="background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center"><span style="font-size:13px;color:#94a3b8">&#128337; This link is valid for <strong style="color:#f1f5f9">${expiresMinutes} minutes</strong>. After that, you&rsquo;ll need to request a new one.</span></td></tr></table>`
   return renderBase({ preheader: 'Reset your Nine Dart Nation password', heading: 'Nine Dart Nation', title, intro, username, actionUrl, buttonLabel, footerHtml, iconEmoji: '&#128272;', accentColor: '#4f46e5' })
 }
 
-export function passwordReminder({ username = 'Player', actionUrl = '#', title = 'Password Reset Reminder', intro = 'You recently requested a password reset link but haven&rsquo;t used it yet. If you still need to reset your password, click the button below. This link will expire in 30&nbsp;minutes.', buttonLabel = 'Reset Password', expiresMinutes = 30 } = {}) {
+function passwordReminder({ username = 'Player', actionUrl = '#', title = 'Password Reset Reminder', intro = 'You recently requested a password reset link but haven&rsquo;t used it yet. If you still need to reset your password, click the button below. This link will expire in 30&nbsp;minutes.', buttonLabel = 'Reset Password', expiresMinutes = 30 } = {}) {
   const footerHtml = `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 auto"><tr><td style="background:#1e293b;border-radius:10px;padding:12px 16px;text-align:center"><span style="font-size:13px;color:#94a3b8">&#9200; This link expires in <strong style="color:#f1f5f9">${expiresMinutes} minutes</strong>.</span></td></tr></table>`
   return renderBase({ preheader: 'Password reset reminder - Nine Dart Nation', heading: 'Nine Dart Nation', title, intro, username, actionUrl, buttonLabel, footerHtml, iconEmoji: '&#128273;', accentColor: '#6366f1' })
 }
 
-export function usernameReminder({ username = 'Player', title = 'Your Username', intro = 'You requested a reminder of your Nine Dart Nation username. Your account details are shown below.', buttonLabel = 'Open Nine Dart Nation', actionUrl = '#' } = {}) {
+function usernameReminder({ username = 'Player', title = 'Your Username', intro = 'You requested a reminder of your Nine Dart Nation username. Your account details are shown below.', buttonLabel = 'Open Nine Dart Nation', actionUrl = '#' } = {}) {
   const extraHtml = `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 auto"><tr><td style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:16px 20px;text-align:center"><p style="margin:0 0 4px 0;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;font-weight:700">Your Username</p><p style="margin:0;font-size:20px;font-weight:800;color:#f1f5f9;font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,'Courier New',monospace;letter-spacing:0.5px">${username}</p></td></tr></table>`
   return renderBase({ preheader: 'Your username reminder - Nine Dart Nation', heading: 'Nine Dart Nation', title, intro, username, actionUrl, buttonLabel, extraHtml, iconEmoji: '&#128100;', accentColor: '#8b5cf6' })
 }
 
-export function emailChangeConfirm({ username = 'Player', newEmail = 'player@example.com', actionUrl = '#', title = 'Confirm Your New Email', intro = 'You&rsquo;ve requested to change the email address associated with your Nine Dart Nation account. Please confirm your new email address by clicking the button below.', buttonLabel = 'Confirm Email Address' } = {}) {
+function emailChangeConfirm({ username = 'Player', newEmail = 'player@example.com', actionUrl = '#', title = 'Confirm Your New Email', intro = 'You&rsquo;ve requested to change the email address associated with your Nine Dart Nation account. Please confirm your new email address by clicking the button below.', buttonLabel = 'Confirm Email Address' } = {}) {
   const extraHtml = `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 auto"><tr><td style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:16px 20px;text-align:center"><p style="margin:0 0 4px 0;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#64748b;font-weight:700">New Email Address</p><p style="margin:0;font-size:16px;font-weight:700;color:#f1f5f9">${newEmail}</p></td></tr></table>`
   return renderBase({ preheader: 'Confirm your new email - Nine Dart Nation', heading: 'Nine Dart Nation', title, intro, username, actionUrl, buttonLabel, extraHtml, iconEmoji: '&#128231;', accentColor: '#0ea5e9' })
 }
 
-export function passwordChangedNotice({ username = 'Player', supportUrl = '#', title = 'Password Changed Successfully', intro = 'Your Nine Dart Nation account password was changed successfully. If you made this change, no further action is required.' } = {}) {
+function passwordChangedNotice({ username = 'Player', supportUrl = '#', title = 'Password Changed Successfully', intro = 'Your Nine Dart Nation account password was changed successfully. If you made this change, no further action is required.' } = {}) {
   const safeSupportUrl = String(supportUrl || '#')
   const footerHtml = `<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin:0 auto"><tr><td style="background:#450a0a;border:1px solid #7f1d1d;border-radius:10px;padding:14px 16px;text-align:center"><span style="font-size:13px;color:#fca5a5">&#9888;&#65039; <strong>Didn&rsquo;t make this change?</strong> Secure your account immediately and </span><a href="${safeSupportUrl}" style="color:#f87171;font-weight:700;text-decoration:underline;font-size:13px">contact support</a><span style="font-size:13px;color:#fca5a5">.</span></td></tr></table>`
   return renderBase({ preheader: 'Your password was changed - Nine Dart Nation', heading: 'Nine Dart Nation', title, intro, username, actionUrl: safeSupportUrl, buttonLabel: 'Contact Support', footerHtml, iconEmoji: '&#9989;', accentColor: '#10b981' })
 }
+
+module.exports = { passwordReset, passwordReminder, usernameReminder, emailChangeConfirm, passwordChangedNotice }
