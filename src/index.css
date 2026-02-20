@@ -341,7 +341,7 @@ body {
   box-shadow: 0 10px 32px -8px rgba(49,46,129,0.25), 0 1.5px 8px rgba(160,132,232,0.10);
   border-radius: 1.5rem;
   padding: 1.25rem;
-  padding-bottom: var(--ndn-card-padding-bottom, 1.25rem);
+  padding-bottom: 80px;
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   color: #F5F5F5;
@@ -366,6 +366,7 @@ body {
   flex-direction: column;
   /* reduce inner card padding when used as a game shell to give more vertical space */
   padding: 0.5rem;
+  padding-bottom: 80px;
 }
 
 .camera-fullwidth-card {
@@ -679,6 +680,7 @@ select.input option {
   }
   .card {
     padding: 1rem;
+    padding-bottom: 80px;
     border-radius: 1rem;
   }
   .sidebar {
