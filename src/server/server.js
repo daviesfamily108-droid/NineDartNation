@@ -946,9 +946,131 @@ app.post('/api/admin/email-copy', (req, res) => {
 })
 
 // --- Email sending ---
-// Priority: 1) Resend HTTP API (RESEND_API_KEY)  2) SMTP (SMTP_* vars)
-//           3) SUPPORT_EMAIL + SUPPORT_EMAIL_PASSWORD as SMTP fallback
+// Priority: 1) Microsoft Graph API (OUTLOOK_CLIENT_ID etc.)
+//           2) Resend HTTP API (RESEND_API_KEY)
+//           3) SMTP (SMTP_* vars)
+//           4) SUPPORT_EMAIL + SUPPORT_EMAIL_PASSWORD as SMTP fallback
 const RESEND_API_KEY = process.env.RESEND_API_KEY || ''
+
+// --- Microsoft Graph API (send from Outlook.com via HTTP, no SMTP needed) ---
+const OUTLOOK_CLIENT_ID     = process.env.OUTLOOK_CLIENT_ID || ''
+const OUTLOOK_CLIENT_SECRET = process.env.OUTLOOK_CLIENT_SECRET || ''
+let   outlookRefreshToken    = process.env.OUTLOOK_REFRESH_TOKEN || ''
+let   outlookAccessToken     = ''
+let   outlookTokenExpiry     = 0
+const GRAPH_ENABLED = !!(OUTLOOK_CLIENT_ID && OUTLOOK_CLIENT_SECRET && outlookRefreshToken)
+
+if (GRAPH_ENABLED) {
+  startLogger.info('[Email] ✅ Microsoft Graph API configured — emails sent from Outlook account')
+}
+
+async function refreshOutlookToken() {
+  const res = await fetch('https://login.microsoftonline.com/consumers/oauth2/v2.0/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: OUTLOOK_CLIENT_ID,
+      client_secret: OUTLOOK_CLIENT_SECRET,
+      refresh_token: outlookRefreshToken,
+      grant_type: 'refresh_token',
+      scope: 'https://graph.microsoft.com/Mail.Send offline_access',
+    }).toString(),
+  })
+  const data = await res.json()
+  if (!data.access_token) {
+    console.error('[Email] ❌ Outlook token refresh failed:', JSON.stringify(data))
+    throw new Error('OUTLOOK_TOKEN_REFRESH_FAILED')
+  }
+  outlookAccessToken = data.access_token
+  outlookTokenExpiry = Date.now() + (data.expires_in - 60) * 1000
+  if (data.refresh_token) outlookRefreshToken = data.refresh_token
+  console.log('[Email] ✅ Outlook access token refreshed, expires in', data.expires_in, 's')
+}
+
+async function sendViaGraph(to, subject, html) {
+  if (Date.now() >= outlookTokenExpiry) await refreshOutlookToken()
+  const res = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${outlookAccessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      message: {
+        subject,
+        body: { contentType: 'HTML', content: html },
+        toRecipients: [{ emailAddress: { address: to } }],
+      },
+      saveToSentItems: false,
+    }),
+  })
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '')
+    throw new Error(`Graph API ${res.status}: ${errBody.slice(0, 200)}`)
+  }
+  return { ok: true, provider: 'Microsoft Graph' }
+}
+
+// --- OAuth2 helper endpoints ---
+app.get('/api/admin/outlook-auth', (req, res) => {
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  if (!OUTLOOK_CLIENT_ID) return res.status(400).json({ ok: false, error: 'Set OUTLOOK_CLIENT_ID env var first' })
+  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim()
+  const redirectUri = `${proto}://${req.get('host')}/api/admin/outlook-callback`
+  const authUrl = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?'
+    + `client_id=${OUTLOOK_CLIENT_ID}&response_type=code`
+    + `&redirect_uri=${encodeURIComponent(redirectUri)}`
+    + `&scope=${encodeURIComponent('https://graph.microsoft.com/Mail.Send offline_access')}`
+    + `&response_mode=query`
+  res.redirect(authUrl)
+})
+
+app.get('/api/admin/outlook-callback', async (req, res) => {
+  const code = req.query.code
+  if (!code) return res.status(400).send('No authorization code received.')
+  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim()
+  const redirectUri = `${proto}://${req.get('host')}/api/admin/outlook-callback`
+  try {
+    const tokenRes = await fetch('https://login.microsoftonline.com/consumers/oauth2/v2.0/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: OUTLOOK_CLIENT_ID,
+        client_secret: OUTLOOK_CLIENT_SECRET,
+        code: String(code),
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+        scope: 'https://graph.microsoft.com/Mail.Send offline_access',
+      }).toString(),
+    })
+    const data = await tokenRes.json()
+    if (data.refresh_token) {
+      outlookRefreshToken = data.refresh_token
+      outlookAccessToken  = data.access_token || ''
+      outlookTokenExpiry  = Date.now() + ((data.expires_in || 3600) - 60) * 1000
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.send(`<h2>✅ Outlook Connected!</h2><p>Add to Render env vars:</p><textarea readonly rows="4" cols="80" onclick="this.select()">OUTLOOK_REFRESH_TOKEN=${data.refresh_token}</textarea>`)
+    } else {
+      res.status(400).send(`<h2>❌ Failed</h2><pre>${JSON.stringify(data, null, 2)}</pre>`)
+    }
+  } catch (err) {
+    res.status(500).send(`<h2>❌ Error</h2><pre>${err.message}</pre>`)
+  }
+})
+
+app.post('/api/admin/test-email', async (req, res) => {
+  const owner = getOwnerFromReq(req)
+  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+  const target = String(req.body?.to || owner.email || '').toLowerCase()
+  if (!target || !target.includes('@')) return res.status(400).json({ ok: false, error: 'No email address' })
+  try {
+    await sendMail(target, '🎯 NDN Test Email', '<div style="font-family:sans-serif;padding:24px;"><h2>✅ Email is working!</h2><p>This test email was sent from Nine Dart Nation.</p></div>')
+    res.json({ ok: true, message: `Test email sent to ${target}` })
+  } catch (err) {
+    res.json({ ok: false, error: err?.message || 'Failed to send test email' })
+  }
+})
 
 // Resolve SMTP credentials — try SMTP_* first, then SUPPORT_EMAIL as fallback
 let SMTP_HOST_RESOLVED = process.env.SMTP_HOST || ''
@@ -957,8 +1079,7 @@ let SMTP_USER_RESOLVED = process.env.SMTP_USER || ''
 let SMTP_PASS_RESOLVED = process.env.SMTP_PASS || ''
 let smtpSource = 'SMTP_*'
 
-// Fallback: if primary SMTP vars are missing, try SUPPORT_EMAIL + SUPPORT_EMAIL_PASSWORD
-if (!RESEND_API_KEY && (!SMTP_HOST_RESOLVED || !SMTP_USER_RESOLVED || !SMTP_PASS_RESOLVED)) {
+if (!RESEND_API_KEY && !GRAPH_ENABLED && (!SMTP_HOST_RESOLVED || !SMTP_USER_RESOLVED || !SMTP_PASS_RESOLVED)) {
   const supportEmail = process.env.SUPPORT_EMAIL || ''
   const supportPass  = process.env.SUPPORT_EMAIL_PASSWORD || ''
   if (supportEmail && supportPass) {
@@ -978,7 +1099,6 @@ if (!RESEND_API_KEY && (!SMTP_HOST_RESOLVED || !SMTP_USER_RESOLVED || !SMTP_PASS
   }
 }
 
-// Resolve FROM address: SMTP_FROM → SMTP_FORM (common typo) → SMTP_USER → SUPPORT_EMAIL
 const EMAIL_FROM = process.env.SMTP_FROM
   || process.env.SMTP_FORM
   || process.env.EMAIL_FROM
@@ -987,15 +1107,13 @@ const EMAIL_FROM = process.env.SMTP_FROM
   || process.env.SUPPORT_EMAIL
   || 'noreply@ninedartnation.com'
 
-// --- Resend (HTTP API) ---
 if (RESEND_API_KEY) {
   startLogger.info('[Email] ✅ Resend API key configured — using HTTP email delivery')
   startLogger.info('[Email] FROM address: %s', EMAIL_FROM)
 }
 
-// --- SMTP ---
 let mailer = null
-if (!RESEND_API_KEY) {
+if (!RESEND_API_KEY && !GRAPH_ENABLED) {
   try {
     if (SMTP_HOST_RESOLVED && SMTP_PORT_RESOLVED && SMTP_USER_RESOLVED && SMTP_PASS_RESOLVED) {
       mailer = nodemailer.createTransport({
@@ -1014,18 +1132,13 @@ if (!RESEND_API_KEY) {
         startLogger.info('[Email] ✅ SMTP connection verified successfully')
       }).catch((err) => {
         startLogger.error('[Email] ❌ SMTP connection verification failed: %s', err?.message || err)
-        startLogger.error('[Email] 💡 If SMTP is blocked on this host, set RESEND_API_KEY (free at resend.com)')
+        startLogger.error('[Email] 💡 Outlook SMTP is blocked from cloud hosts. Use Graph API: set OUTLOOK_CLIENT_ID + OUTLOOK_CLIENT_SECRET')
       })
     } else {
-      const missing = []
-      if (!SMTP_HOST_RESOLVED) missing.push('SMTP_HOST')
-      if (!SMTP_PORT_RESOLVED) missing.push('SMTP_PORT')
-      if (!SMTP_USER_RESOLVED) missing.push('SMTP_USER')
-      if (!SMTP_PASS_RESOLVED) missing.push('SMTP_PASS')
-      startLogger.warn('[Email] ⚠️  No email provider configured. Missing: %s', missing.join(', '))
-      startLogger.warn('[Email] Option 1: Set RESEND_API_KEY (recommended for Render)')
-      startLogger.warn('[Email] Option 2: Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS')
-      startLogger.warn('[Email] Option 3: Set SUPPORT_EMAIL + SUPPORT_EMAIL_PASSWORD')
+      startLogger.warn('[Email] ⚠️  No email provider configured.')
+      startLogger.warn('[Email] Option 1 (Outlook): Set OUTLOOK_CLIENT_ID + OUTLOOK_CLIENT_SECRET + OUTLOOK_REFRESH_TOKEN')
+      startLogger.warn('[Email] Option 2: Set RESEND_API_KEY')
+      startLogger.warn('[Email] Option 3: Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS')
     }
   } catch (e) {
     startLogger.warn('[Email] transporter init failed: %s', e?.message || e)
@@ -1035,8 +1148,23 @@ if (!RESEND_API_KEY) {
 const SEND_MAIL_TIMEOUT_MS = 30000
 async function sendMail(to, subject, html) {
   const startMs = Date.now()
-  const provider = RESEND_API_KEY ? 'Resend' : (mailer ? 'SMTP' : 'NONE')
-  console.log('[Email] Sending to', to, 'via', provider, '— from:', EMAIL_FROM, '— subject:', subject.slice(0, 50))
+  const provider = GRAPH_ENABLED ? 'Graph' : RESEND_API_KEY ? 'Resend' : (mailer ? 'SMTP' : 'NONE')
+  console.log('[Email] Sending to', to, 'via', provider, '— subject:', subject.slice(0, 50))
+
+  // --- Microsoft Graph API (Outlook.com) ---
+  if (GRAPH_ENABLED) {
+    try {
+      const result = await Promise.race([
+        sendViaGraph(to, subject, html),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('EMAIL_SEND_TIMEOUT')), SEND_MAIL_TIMEOUT_MS)),
+      ])
+      console.log('[Email] ✅ Sent via Graph API in', Date.now() - startMs, 'ms')
+      return result
+    } catch (err) {
+      console.error('[Email] ❌ Graph API failed after', Date.now() - startMs, 'ms:', err?.message || err)
+      throw err
+    }
+  }
 
   if (RESEND_API_KEY) {
     try {
