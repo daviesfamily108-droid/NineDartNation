@@ -262,6 +262,23 @@ async function resolveHelpRequest(id, adminUser) {
   return store[idx]
 }
 
+async function deleteHelpRequest(id) {
+  const store = loadHelpFromDisk()
+  const idx = store.findIndex(r => String(r.id) === String(id))
+  if (idx === -1) return false
+  store.splice(idx, 1)
+  helpCache = store
+  persistHelpToDisk()
+  console.log('[Help] Deleted request:', id)
+  return true
+}
+
+function clearAllHelpRequests() {
+  helpCache = []
+  persistHelpToDisk()
+  console.log('[Help] All requests cleared')
+}
+
 function persistHighlightsToDisk() {
   try {
     const dir = path.dirname(HIGHLIGHTS_FILE);
@@ -1635,6 +1652,29 @@ app.post('/api/admin/help-requests/:id/resolve', express.json(), async (req, res
 
     return res.json({ ok: true, request: rec })
   } catch (err) { console.error('[Help] Resolve error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
+})
+
+// Admin: delete a help request
+app.post('/api/admin/help-requests/:id/delete', express.json(), async (req, res) => {
+  try {
+    const admin = getAdminFromReq(req)
+    if (!admin) return res.status(403).json({ error: 'Forbidden' })
+    const id = String(req.params.id || '')
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const ok = await deleteHelpRequest(id)
+    if (!ok) return res.status(404).json({ error: 'Not found' })
+    return res.json({ ok: true })
+  } catch (err) { console.error('[Help] Delete error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
+})
+
+// Admin: clear all help requests
+app.post('/api/admin/help-requests/clear', express.json(), async (req, res) => {
+  try {
+    const admin = getAdminFromReq(req)
+    if (!admin) return res.status(403).json({ error: 'Forbidden' })
+    clearAllHelpRequests()
+    return res.json({ ok: true })
+  } catch (err) { console.error('[Help] Clear error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
 })
 
 // Camera pairing session calibration storage (temporary, code-based)

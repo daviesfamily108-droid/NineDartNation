@@ -487,6 +487,39 @@ export default function AdminDashboard({ user }: { user: any }) {
     } catch {}
   }
 
+  async function deleteHelp(id: string) {
+    try {
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+      };
+      const res = await apiFetch(
+        `/api/admin/help-requests/${encodeURIComponent(id)}/delete`,
+        { method: "POST", headers, body: JSON.stringify({}) },
+      );
+      if (res.ok) {
+        await refresh();
+      }
+    } catch {}
+  }
+
+  async function clearAllHelp() {
+    try {
+      const headers = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+      };
+      const res = await apiFetch(`/api/admin/help-requests/clear`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({}),
+      });
+      if (res.ok) {
+        await refresh();
+      }
+    } catch {}
+  }
+
   async function grant() {
     if (!email) return;
     await apiFetch("/api/admins/grant", {
@@ -902,6 +935,12 @@ export default function AdminDashboard({ user }: { user: any }) {
               <button className="btn btn-ghost" onClick={() => refresh()}>
                 Refresh
               </button>
+              <button
+                className="btn bg-red-600 hover:bg-red-700 text-white"
+                onClick={() => clearAllHelp()}
+              >
+                Clear All
+              </button>
             </div>
           </div>
           <div className="mt-2 flex gap-2 overflow-x-auto">
@@ -930,6 +969,12 @@ export default function AdminDashboard({ user }: { user: any }) {
                     onClick={() => setSelectedRequest(hr)}
                   >
                     Chat
+                  </button>
+                  <button
+                    className="btn bg-red-600/80 hover:bg-red-700 text-white text-xs"
+                    onClick={() => deleteHelp(hr.id)}
+                  >
+                    ✕
                   </button>
                 </div>
               </div>
@@ -2112,6 +2157,12 @@ export default function AdminDashboard({ user }: { user: any }) {
                         onClick={() => setSelectedRequest(hr)}
                       >
                         Chat
+                      </button>
+                      <button
+                        className="btn bg-red-600/80 hover:bg-red-700 text-white text-xs"
+                        onClick={() => deleteHelp(hr.id)}
+                      >
+                        Delete
                       </button>
                     </div>
                   </div>
