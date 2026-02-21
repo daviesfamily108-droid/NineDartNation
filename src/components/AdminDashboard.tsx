@@ -498,9 +498,14 @@ export default function AdminDashboard({ user }: { user: any }) {
         { method: "POST", headers, body: JSON.stringify({}) },
       );
       if (res.ok) {
+        toast("Help request deleted", { type: "success" });
         await refresh();
+      } else {
+        toast(`Delete failed: ${res.status}`, { type: "error" });
       }
-    } catch {}
+    } catch (err) {
+      toast("Delete request failed", { type: "error" });
+    }
   }
 
   async function clearAllHelp() {
@@ -515,9 +520,14 @@ export default function AdminDashboard({ user }: { user: any }) {
         body: JSON.stringify({}),
       });
       if (res.ok) {
+        toast("All help requests cleared", { type: "success" });
         await refresh();
+      } else {
+        toast(`Clear failed: ${res.status}`, { type: "error" });
       }
-    } catch {}
+    } catch (err) {
+      toast("Clear request failed", { type: "error" });
+    }
   }
 
   async function grant() {
