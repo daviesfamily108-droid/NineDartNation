@@ -1944,7 +1944,11 @@ export default function OfflinePlay({ user }: { user: any }) {
       } catch {}
       // Update global match state for finish
       try {
-        match.addVisit(total, visitDarts);
+        match.addVisit(total, visitDarts, {
+          visitTotal: total,
+          doubleWindowDarts: doubleDartsUsed,
+          finishedByDouble: true,
+        });
         match.endLeg(preRemaining);
       } catch {}
       setPendingLegWinner("player");
@@ -1968,7 +1972,17 @@ export default function OfflinePlay({ user }: { user: any }) {
     } catch {}
     // Update global match state so live averages update after every 3 darts
     try {
-      match.addVisit(total, visitDarts);
+      const dwd =
+        preRemaining <= 50
+          ? visitDarts
+          : preRemaining <= 170 && remaining <= 50
+            ? 1
+            : 0;
+      match.addVisit(total, visitDarts, {
+        visitTotal: total,
+        doubleWindowDarts: dwd,
+        finishedByDouble: false,
+      });
     } catch {}
     endTurn(remaining);
     setPlayerVisitSum(0);

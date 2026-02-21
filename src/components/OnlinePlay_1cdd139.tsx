@@ -63,12 +63,15 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
   // Place this after all hooks/variables:
   function sendState() {
     try {
-      // Server expects { type: 'state', payload: ... } and forwards to the room
+      // Server expects { type: 'state', payload: ... } and forwards to the room.
+      // IMPORTANT: prefer wsRef.current because it has joined the match room;
+      // wsGlobal (WSProvider) has NOT joined the room, so the server would
+      // ignore room-scoped messages sent through it.
       const payload = useMatch.getState()
-      if (wsGlobal && (wsGlobal as any).connected) {
-        wsGlobal.send({ type: 'state', payload })
-      } else if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'state', payload }))
+      } else if (wsGlobal && (wsGlobal as any).connected) {
+        wsGlobal.send({ type: 'state', payload })
       }
     } catch (err) {
       // Optionally log or toast error
@@ -1602,34 +1605,68 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
   function closeManual() { try { window.dispatchEvent(new Event('ndn:close-manual' as any)) } catch {} }
 
   // Helper to submit a manual visit with shared logic
-  function submitVisitManual(v: number) {
+  function submitVisitManual(v: number, dartsOverride?: number, metaOverride?: any) {
     const score = Math.max(0, v | 0)
-    // Estimate double-out attempts and finish for manual numeric entry
+    const darts = dartsOverride || 3
+
+    // Read remaining BEFORE addVisit — state is still current at this point
+    const p = match.players[match.currentPlayerIdx]
+    const leg = p?.legs?.[p.legs.length - 1]
+    const preRem = leg ? leg.totalScoreRemaining : match.startingScore
+    const postRem = Math.max(0, preRem - score)
+    const isCheckout = postRem === 0 && score > 0
+
+    // Professional darts double tracking:
+    // - doubleWindowDarts: darts thrown while player could check out on a double
+    // - finishedByDouble: true when leg is won (X01 always finishes on a double/bull)
+    let doubleWindowDarts = 0
+    if (preRem <= 50) {
+      // Already on a single-dart checkout — every dart is "at the double"
+      doubleWindowDarts = darts
+    } else if (preRem <= 170) {
+      // In 2/3-dart checkout range
+      if (isCheckout) {
+        // Successfully checked out — at least the last dart was at a double
+        doubleWindowDarts = 1
+      } else if (postRem <= 50) {
+        // Left a finish — may have had a dart at double that missed
+        doubleWindowDarts = 1
+      }
+    } else if (postRem <= 50 && postRem > 0) {
+      // Brought it into checkout range but didn't finish
+      doubleWindowDarts = 0
+    }
+    const finishedByDouble = isCheckout
+
+    const meta = metaOverride || {
+      preOpenDarts: 0,
+      doubleWindowDarts,
+      finishedByDouble,
+      visitTotal: score,
+    }
+    // Ensure visitTotal is always set in meta
+    if (meta && meta.visitTotal == null) meta.visitTotal = score
+    // Ensure double tracking is present in meta
+    if (meta && meta.doubleWindowDarts == null) meta.doubleWindowDarts = doubleWindowDarts
+    if (meta && meta.finishedByDouble == null) meta.finishedByDouble = finishedByDouble
+
     try {
-      const p = match.players[match.currentPlayerIdx]
-      const leg = p?.legs?.[p.legs.length - 1]
-      const preRem = leg ? leg.totalScoreRemaining : match.startingScore
-      const postRem = Math.max(0, preRem - score)
-      const attempts = preRem <= 50 ? 3 : (postRem <= 50 ? 1 : 0)
-      const finished = postRem === 0
-      match.addVisit(score, 3, { preOpenDarts: 0, doubleWindowDarts: attempts, finishedByDouble: finished, visitTotal: score })
+      match.addVisit(score, darts, meta)
     } catch {
-      match.addVisit(score, 3)
+      match.addVisit(score, darts)
     }
     setVisitScore(0)
-    const p = match.players[match.currentPlayerIdx]
-    const leg = p.legs[p.legs.length - 1]
-    // Instant celebration locally
+
+    // Use locally calculated remaining — do NOT read stale React state after addVisit
     try {
       if (score === 180) triggerCelebration('180', p?.name || 'Player')
-      if (leg && leg.totalScoreRemaining === 0) triggerCelebration('leg', p?.name || 'Player')
+      if (isCheckout) triggerCelebration('leg', p?.name || 'Player')
     } catch {}
-    if (leg && leg.totalScoreRemaining === 0) { match.endLeg(score) } else { match.nextPlayer() }
+    if (isCheckout) { match.endLeg(score) } else { match.nextPlayer() }
     if (callerEnabled) {
-      const rem = leg ? leg.totalScoreRemaining : match.startingScore
-    sayScore(callerName, score, Math.max(0, rem), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly })
+      sayScore(callerName, score, Math.max(0, postRem), callerVoice, { volume: callerVolume, checkoutOnly: speakCheckoutOnly })
     }
-    if (user?.username && p?.name === user.username) { addSample(user.username, 3, score) }
+    if (user?.username && p?.name === user.username) { addSample(user.username, darts, score) }
     sendState()
   }
 
@@ -1731,8 +1768,8 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
         user={user}
         showStartShowcase={showStartShowcase}
         onShowStartShowcaseChange={setShowStartShowcase}
-        onCommitVisit={(score, _darts, _meta) => {
-          submitVisitManual(score);
+        onCommitVisit={(score, darts, meta) => {
+          submitVisitManual(score, darts, meta);
         }}
         onQuit={() => {
           // Send quit message to opponent first

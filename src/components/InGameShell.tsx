@@ -347,16 +347,33 @@ export default function InGameShell({
   };
 
   const commitVisit = (score: number, darts: number, meta?: any) => {
-    if (onCommitVisit) {
-      onCommitVisit(score, darts, meta);
-      return;
-    }
     const p = match.players?.[match.currentPlayerIdx];
     const leg = p?.legs?.[p.legs.length - 1];
     const prevRemaining = leg ? leg.totalScoreRemaining : match.startingScore;
     const numericScore = typeof score === "number" ? score : 0;
     let newRemaining = prevRemaining - numericScore;
     if (!Number.isFinite(newRemaining) || newRemaining < 0) newRemaining = 0;
+    const isCheckout = newRemaining === 0 && numericScore > 0;
+
+    // Professional darts double tracking — enrich meta if not already set
+    const visitMeta = { visitTotal: numericScore, ...(meta || {}) };
+    if (visitMeta.doubleWindowDarts == null) {
+      let dwd = 0;
+      if (prevRemaining <= 50) {
+        dwd = darts;
+      } else if (prevRemaining <= 170) {
+        dwd = isCheckout ? 1 : newRemaining <= 50 ? 1 : 0;
+      }
+      visitMeta.doubleWindowDarts = dwd;
+    }
+    if (visitMeta.finishedByDouble == null) {
+      visitMeta.finishedByDouble = isCheckout;
+    }
+
+    if (onCommitVisit) {
+      onCommitVisit(numericScore, darts, visitMeta);
+      return;
+    }
 
     if (callerEnabled) {
       const playerName = p?.name || getPreferredUserName(user, "Player");
@@ -368,8 +385,8 @@ export default function InGameShell({
       } catch {}
     }
 
-    match.addVisit(numericScore, darts, meta ?? { visitTotal: numericScore });
-    if (newRemaining === 0) {
+    match.addVisit(numericScore, darts, visitMeta);
+    if (isCheckout) {
       match.endLeg(numericScore);
     } else {
       match.nextPlayer();

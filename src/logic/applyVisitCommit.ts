@@ -37,6 +37,26 @@ export function applyVisitCommit(
       }
     }
 
+    // Calculate double tracking defaults if not provided by the sender
+    const curPlayer = state.players[state.currentPlayerIdx];
+    const curLeg = curPlayer?.legs?.[curPlayer.legs.length - 1];
+    const preRem = curLeg ? curLeg.totalScoreRemaining : state.startingScore;
+    const postRem = Math.max(0, preRem - visitTotal);
+    const isCheckout = postRem === 0 && visitTotal > 0;
+
+    if (meta.doubleWindowDarts == null) {
+      let dwd = 0;
+      if (preRem <= 50) {
+        dwd = darts;
+      } else if (preRem <= 170) {
+        dwd = isCheckout ? 1 : postRem <= 50 ? 1 : 0;
+      }
+      meta.doubleWindowDarts = dwd;
+    }
+    if (meta.finishedByDouble == null) {
+      meta.finishedByDouble = isCheckout;
+    }
+
     // Apply visit to match store using visitTotal and darts so X01 math is correct
     try {
       state.addVisit(visitTotal, darts, meta);
