@@ -300,6 +300,54 @@ export default function GameScoreboard({
               </>
             )}
 
+            {/* Scam */}
+            {gameMode === "Scam" && (
+              <>
+                <ScoreRow
+                  label="Target"
+                  value={player.target || "—"}
+                  mono
+                  bold
+                />
+                <ScoreRow label="Darts" value={player.darts || 0} mono />
+                {player.finished && (
+                  <ScoreRow label="Status" value="FINISHED!" highlight />
+                )}
+              </>
+            )}
+
+            {/* Fives */}
+            {gameMode === "Fives" && (
+              <>
+                <ScoreRow
+                  label="Score"
+                  value={`${player.score || 0}/${player.targetScore || 0}`}
+                  mono
+                  bold
+                />
+                <ScoreRow label="Darts" value={player.darts || 0} mono />
+                {player.finished && (
+                  <ScoreRow label="Status" value="FINISHED!" highlight />
+                )}
+              </>
+            )}
+
+            {/* Sevens */}
+            {gameMode === "Sevens" && (
+              <>
+                <ScoreRow
+                  label="Score"
+                  value={`${player.score || 0}/${player.targetScore || 0}`}
+                  mono
+                  bold
+                />
+                <ScoreRow label="Darts" value={player.darts || 0} mono />
+                {player.finished && (
+                  <ScoreRow label="Status" value="FINISHED!" highlight />
+                )}
+              </>
+            )}
+
             {/* Match score display for competitive games */}
             {matchScore &&
               (gameMode === "X01" ||

@@ -2059,8 +2059,22 @@ export default function OfflinePlay({ user }: { user: any }) {
       case "Sevens":
         setSevens(addSevensAuto(sevens, value));
         return;
+      case "Killer":
+        // Killer uses its own player-based UI; numeric input is not applicable
+        toast("Use the Killer player board to record hits.", {
+          type: "info",
+          timeout: 2000,
+        });
+        return;
+      case "Tic Tac Toe":
+        // Tic Tac Toe uses the grid UI; numeric input is not applicable
+        toast("Tap a cell on the Tic Tac Toe board to claim it.", {
+          type: "info",
+          timeout: 2000,
+        });
+        return;
       default:
-        toast("Use manual controls for this mode.", {
+        toast("Use the in-game controls for this mode.", {
           type: "info",
           timeout: 2000,
         });

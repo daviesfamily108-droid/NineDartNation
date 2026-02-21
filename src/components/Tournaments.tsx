@@ -1365,11 +1365,13 @@ export default function Tournaments({ user }: { user: any }) {
                       >
                         {getModeOptionsForGame(
                           form.game as import("../utils/games.js").GameKey,
-                        ).map((o) => (
-                          <option key={String(o)} value={String(o)}>
-                            {labelForMode(String(o))}
-                          </option>
-                        ))}
+                        )
+                          .filter((o) => o !== "all")
+                          .map((o) => (
+                            <option key={String(o)} value={String(o)}>
+                              {labelForMode(String(o))}
+                            </option>
+                          ))}
                       </select>
                       <div className="text-[9px] text-slate-500 mt-0.5 px-0.5">
                         Mode
