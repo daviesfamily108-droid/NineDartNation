@@ -1194,7 +1194,7 @@ export default function Tournaments({ user }: { user: any }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="tournament-prestart-heading"
-            className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+            className="fixed inset-0 z-[80] flex items-start justify-center pt-8 bg-black/70 p-4"
             onClick={(e) => {
               if (e.target === e.currentTarget) {
                 setDismissedPrestart((prev) => ({
@@ -1264,7 +1264,7 @@ export default function Tournaments({ user }: { user: any }) {
             aria-modal="true"
             aria-labelledby="create-tournament-heading"
             tabIndex={-1}
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-2 sm:p-6"
+            className="fixed inset-0 z-[70] flex items-start justify-center pt-8 bg-black/80 p-2 sm:p-6"
             onClick={(e) => {
               if (e.target === e.currentTarget) setShowCreate(false);
             }}
@@ -1623,7 +1623,7 @@ export default function Tournaments({ user }: { user: any }) {
             aria-modal="true"
             aria-labelledby="join-heading"
             tabIndex={-1}
-            className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4"
+            className="fixed inset-0 z-60 flex items-start justify-center pt-8 bg-black/60 p-4"
           >
             <div className="bg-slate-800 rounded-2xl p-6 max-w-md w-full">
               <div id="join-heading" className="text-lg font-bold mb-2">
@@ -1700,7 +1700,7 @@ export default function Tournaments({ user }: { user: any }) {
         )}
 
         {leaveAsk.open && leaveAsk.t && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="fixed inset-0 z-50 flex items-start justify-center pt-8">
             <div
               className="absolute inset-0 bg-black/40"
               onClick={() => setLeaveAsk({ open: false, t: null })}
@@ -1737,7 +1737,7 @@ export default function Tournaments({ user }: { user: any }) {
 
         {/* Delete Tournament Confirmation Modal */}
         {deleteConfirm.open && deleteConfirm.t && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/50 flex items-start justify-center pt-8 z-50">
             <div className="bg-slate-800 border border-slate-600 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
               <div className="text-center">
                 <div className="text-xl font-semibold mb-4 text-white">

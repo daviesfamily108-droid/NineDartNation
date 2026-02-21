@@ -848,7 +848,7 @@ export default function InGameShell({
       {/* ── Number Pad Modal (X01 and other numpad modes only) ── */}
       {showNumpad && !isATC && (
         <div
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+          className="fixed inset-0 z-50 flex items-start justify-center pt-8"
           onClick={() => setShowNumpad(false)}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
@@ -860,7 +860,7 @@ export default function InGameShell({
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
           {/* Panel */}
           <div
-            className="relative w-full max-w-sm mx-auto mb-0 sm:mb-0 rounded-t-3xl sm:rounded-3xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-2xl p-4 sm:p-6 animate-[slideUp_0.2s_ease-out]"
+            className="relative w-full max-w-sm mx-auto rounded-3xl border border-white/10 bg-slate-900/95 backdrop-blur-xl shadow-2xl p-4 sm:p-6 animate-[slideUp_0.2s_ease-out]"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Score input field — typeable on both mobile and PC */}

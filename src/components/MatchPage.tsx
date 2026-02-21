@@ -641,14 +641,14 @@ export default function MatchPage() {
         {/* ── Number Pad Modal ── */}
         {showNumpad && (
           <div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+            className="fixed inset-0 z-50 flex items-start justify-center pt-8"
             onClick={() => setShowNumpad(false)}
           >
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
             {/* Panel */}
             <div
-              className="relative z-10 w-full max-w-sm mx-auto bg-slate-900 border border-white/10 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5"
+              className="relative z-10 w-full max-w-sm mx-auto bg-slate-900 border border-white/10 rounded-3xl shadow-2xl p-5"
               style={{ animation: "slideUp .2s ease-out" }}
               onClick={(e) => e.stopPropagation()}
             >

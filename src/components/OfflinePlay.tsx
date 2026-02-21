@@ -145,7 +145,7 @@ function aiVisitScore(remaining: number, level: string): number {
 
 function X01RulesPopup({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center pt-8 z-50">
       <div className="card max-w-lg w-full relative">
         <button
           className="absolute top-2 right-2 btn px-2 py-1"
@@ -3201,7 +3201,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                     </>
                   )}
                   {showQuitConfirm && (
-                    <div className="fixed inset-0 z-[170] flex items-center justify-center bg-black/70 p-4">
+                    <div className="fixed inset-0 z-[170] flex items-start justify-center pt-8 bg-black/70 p-4">
                       <ResizableModal
                         storageKey="ndn:modal:offline-quit-confirm"
                         className="w-full relative"
@@ -3260,7 +3260,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                     checkoutPopupOpen &&
                     checkoutPrompt && (
                       <div
-                        className="fixed inset-0 z-[160] flex items-center justify-center bg-black/70 p-4"
+                        className="fixed inset-0 z-[160] flex items-start justify-center pt-8 bg-black/70 p-4"
                         onClick={() => setCheckoutPopupOpen(false)}
                       >
                         <div
@@ -6225,7 +6225,7 @@ export default function OfflinePlay({ user }: { user: any }) {
         {showCameraManager && typeof document !== "undefined"
           ? createPortal(
               <div
-                className="fixed inset-0 bg-black/75 z-[200] flex items-center justify-center p-4"
+                className="fixed inset-0 bg-black/75 z-[200] flex items-start justify-center pt-8 p-4"
                 onClick={() => setShowCameraManager(false)}
               >
                 <ResizableModal
@@ -6302,7 +6302,7 @@ export default function OfflinePlay({ user }: { user: any }) {
                 const currentLegs = target === "player" ? playerLegs : aiLegs;
                 return (
                   <div
-                    className="fixed inset-0 bg-black/75 z-[240] flex items-center justify-center p-4"
+                    className="fixed inset-0 bg-black/75 z-[240] flex items-start justify-center pt-8 p-4"
                     onClick={handleLegOverrideNo}
                   >
                     <ResizableModal
@@ -6384,7 +6384,7 @@ export default function OfflinePlay({ user }: { user: any }) {
             )
           : null}
         {showWinPopup && (
-          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-[99999]">
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-start justify-center pt-8 z-[99999]">
             <ResizableModal
               storageKey="ndn:modal:offline-win"
               className="w-full relative"
@@ -6468,7 +6468,7 @@ export default function OfflinePlay({ user }: { user: any }) {
           </div>
         )}
         {showMatchSummary && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60]">
+          <div className="fixed inset-0 bg-black/60 flex items-start justify-center pt-8 z-[60]">
             <ResizableModal
               storageKey="ndn:modal:offline-summary"
               className="w-full relative"
