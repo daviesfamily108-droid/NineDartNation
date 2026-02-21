@@ -14,6 +14,8 @@ import {
   getDailyAdjustedAvg,
   getRollingAvg,
   getStatSeries,
+  getScoreDistribution,
+  SCORE_BUCKETS,
 } from "../store/profileStats.js";
 import { allGames } from "../utils/games.js";
 import TabPills from "./ui/TabPills.js";
@@ -138,25 +140,16 @@ export default function StatsPanel({ user }: { user?: any }) {
   }, []);
 
   // Build a score-frequency distribution for the selected family using bucketed ranges.
-  const scoreBuckets = [
-    { min: 0, max: 25, label: "0-25" },
-    { min: 26, max: 40, label: "26-40" },
-    { min: 41, max: 45, label: "41-45" },
-    { min: 46, max: 55, label: "46-55" },
-    { min: 56, max: 60, label: "56-60" },
-    { min: 61, max: 80, label: "61-80" },
-    { min: 81, max: 99, label: "81-99" },
-    { min: 100, max: 119, label: "100-119" },
-    { min: 120, max: 139, label: "120-139" },
-    { min: 140, max: 159, label: "140-159" },
-    { min: 160, max: 179, label: "160-179" },
-    { min: 180, max: 180, label: "180" },
-  ];
+  const scoreBuckets = SCORE_BUCKETS;
   const dist = useMemo(() => {
-    const counts = scoreBuckets.map(() => 0);
+    // Start with persisted historical distribution
+    const persisted = me ? getScoreDistribution(me) : scoreBuckets.map(() => 0);
+    const counts = [...persisted];
+    // Merge in visits from the current live match (in-progress legs not yet persisted)
     if (family === "x01") {
       for (const p of players) {
         for (const leg of p.legs) {
+          if (leg.finished) continue; // finished legs are already in persisted data
           for (const v of leg.visits) {
             const s = Math.max(0, Math.min(180, v.score));
             for (let i = 0; i < scoreBuckets.length; i++) {
@@ -170,7 +163,7 @@ export default function StatsPanel({ user }: { user?: any }) {
       }
     }
     return scoreBuckets.map((b, i) => ({ label: b.label, value: counts[i] }));
-  }, [players, family]);
+  }, [players, family, me]);
 
   // Build Other Modes dataset: one bar per mode with value = played, label = mode name, and show played/won in label
   const otherData = useMemo(() => {
@@ -282,7 +275,7 @@ export default function StatsPanel({ user }: { user?: any }) {
       className="card ndn-game-shell ndn-page ndn-stats-page overflow-visible"
       style={{
         background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
-        paddingBottom: `${cardPaddingBottom ?? 680}px`,
+        paddingBottom: `${cardPaddingBottom ?? 880}px`,
       }}
     >
       <div className="mb-4">
@@ -797,7 +790,7 @@ export default function StatsPanel({ user }: { user?: any }) {
               WebkitOverflowScrolling: "touch",
             }}
           >
-            <BarChart data={dist} showValues={false} />
+            <BarChart data={dist} showValues={true} />
           </div>
         </div>
       ) : !hiddenSet.has("stats:other-modes") &&

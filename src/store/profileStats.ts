@@ -31,6 +31,7 @@ const keyFor = (name: string) => `ndn_stats_${name}`;
 const keySeriesFor = (name: string) => `ndn_stats_ts_${name}`;
 const keyDailyFor = (name: string) => `ndn_stats_daily_${name}`;
 const keyMetaFor = (name: string) => `ndn_stats_meta_${name}`;
+const keyDistFor = (name: string) => `ndn_stats_dist_${name}`;
 
 type StatsMeta = { updatedAt: number };
 type UserStatsPayload = {
@@ -741,4 +742,104 @@ function sumFirstNine(leg: Leg): { d: number; s: number } {
   }
   const d = Math.min(9, leg.dartsThrown);
   return { d, s };
+}
+
+// --- Score distribution persistence (bucketed visit scores) ---
+export const SCORE_BUCKETS = [
+  { min: 0, max: 25, label: "0-25" },
+  { min: 26, max: 40, label: "26-40" },
+  { min: 41, max: 45, label: "41-45" },
+  { min: 46, max: 55, label: "46-55" },
+  { min: 56, max: 60, label: "56-60" },
+  { min: 61, max: 80, label: "61-80" },
+  { min: 81, max: 99, label: "81-99" },
+  { min: 100, max: 119, label: "100-119" },
+  { min: 120, max: 139, label: "120-139" },
+  { min: 140, max: 159, label: "140-159" },
+  { min: 160, max: 179, label: "160-179" },
+  { min: 180, max: 180, label: "180" },
+] as const;
+
+export type ScoreDistribution = number[];
+
+export function getScoreDistribution(name: string): ScoreDistribution {
+  try {
+    const raw = localStorage.getItem(keyDistFor(resolveCanonicalName(name)));
+    if (!raw) return SCORE_BUCKETS.map(() => 0);
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return SCORE_BUCKETS.map(() => 0);
+    // Ensure length matches bucket count
+    const out = SCORE_BUCKETS.map((_, i) => Math.max(0, Number(arr[i]) || 0));
+    return out;
+  } catch {
+    return SCORE_BUCKETS.map(() => 0);
+  }
+}
+
+export function setScoreDistribution(
+  name: string,
+  dist: ScoreDistribution,
+  opts?: { skipSync?: boolean },
+) {
+  try {
+    localStorage.setItem(
+      keyDistFor(resolveCanonicalName(name)),
+      JSON.stringify(dist),
+    );
+    window.dispatchEvent(
+      new CustomEvent("ndn:stats-updated", { detail: { name, dist: true } }),
+    );
+  } catch {}
+  if (!opts?.skipSync) {
+    const resolved = resolveCanonicalName(name);
+    setStatsMeta(resolved, { updatedAt: Date.now() });
+    scheduleStatsSync(resolved);
+  }
+}
+
+function bucketIndexForScore(score: number): number {
+  const s = Math.max(0, Math.min(180, score));
+  for (let i = 0; i < SCORE_BUCKETS.length; i++) {
+    if (s >= SCORE_BUCKETS[i].min && s <= SCORE_BUCKETS[i].max) return i;
+  }
+  return 0;
+}
+
+export function addVisitsToDistribution(
+  name: string,
+  visits: { score: number }[],
+) {
+  const dist = getScoreDistribution(name);
+  for (const v of visits) {
+    dist[bucketIndexForScore(v.score)]++;
+  }
+  setScoreDistribution(name, dist);
+}
+
+export function addMatchToDistribution(players: Player[]) {
+  let canonicalUser: string | null = null;
+  try {
+    const stored = localStorage.getItem("ndn:currentUser");
+    if (stored) canonicalUser = stored;
+    else if (typeof (window as any)?.ndnCurrentUser === "string")
+      canonicalUser = (window as any).ndnCurrentUser;
+  } catch {}
+
+  for (const raw of players) {
+    const p: Player = { ...raw };
+    if (canonicalUser) {
+      const n = (p.name || "").trim();
+      if (!n || n.toLowerCase() === "you") p.name = canonicalUser;
+    }
+    const visits: { score: number }[] = [];
+    for (const leg of p.legs) {
+      if (!leg.finished) continue;
+      for (const v of leg.visits) {
+        visits.push({ score: Math.max(0, Math.min(180, v.score)) });
+      }
+    }
+    if (visits.length > 0) {
+      addVisitsToDistribution(p.name, visits);
+    }
+  }
 }

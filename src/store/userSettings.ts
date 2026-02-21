@@ -770,7 +770,7 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
     set({ statsCardMinHeight: next });
   },
   setCardPaddingBottom: (n) => {
-    const next = Math.max(0, Math.min(600, Math.round(n)));
+    const next = Math.max(0, Math.min(1200, Math.round(n)));
     save({ cardPaddingBottom: next });
     set({ cardPaddingBottom: next });
   },

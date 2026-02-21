@@ -359,6 +359,9 @@ export const useMatch = create<MatchState & Actions>((set) => ({
           try {
             m.updateHeadToHeadLegs(newPlayers);
           } catch {}
+          try {
+            m.addMatchToDistribution(newPlayers);
+          } catch {}
         });
       } catch {}
       try {

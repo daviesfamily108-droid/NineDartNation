@@ -19,7 +19,10 @@ export default function BarChart({
   const minBarSlot = barWidth + gap + 8;
   const minChartWidth = data.length * minBarSlot;
   return (
-    <div className="w-full overflow-x-auto" style={{ height: height + 20 }}>
+    <div
+      className="w-full overflow-x-auto"
+      style={{ height: height + 20, WebkitOverflowScrolling: "touch" }}
+    >
       <div
         className="h-full flex items-end justify-evenly"
         style={{ minWidth: minChartWidth }}
@@ -30,23 +33,22 @@ export default function BarChart({
             <div
               key={i}
               className="flex flex-col items-center justify-end"
-              style={{ flex: "1 1 0%", minWidth: minBarSlot }}
+              style={{ flex: "1 1 0%", minWidth: 0 }}
             >
-              <div
-                className="rounded-t-md bg-gradient-to-b from-indigo-400 to-fuchsia-500 shadow-sm"
-                style={{ height: h, width: barWidth }}
-                title={`${d.label}: ${d.value}`}
-              />
-              {showValues && (
-                <div className="text-xs mt-1 text-indigo-200 font-semibold">
+              {showValues && d.value > 0 && (
+                <div className="text-[9px] sm:text-xs mb-0.5 text-indigo-200 font-semibold">
                   {d.value}
                 </div>
               )}
               <div
-                className="text-[9px] sm:text-[10px] leading-tight mt-1 text-slate-200 font-medium select-none text-center origin-top"
+                className="rounded-t-md bg-gradient-to-b from-indigo-400 to-fuchsia-500 shadow-sm w-full max-w-[28px] sm:max-w-[32px]"
+                style={{ height: h, minWidth: 8 }}
+                title={`${d.label}: ${d.value}`}
+              />
+              <div
+                className="text-[7px] sm:text-[10px] leading-tight mt-1 text-slate-200 font-medium select-none text-center"
                 style={{
-                  writingMode: "initial",
-                  maxWidth: minBarSlot,
+                  maxWidth: "100%",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
