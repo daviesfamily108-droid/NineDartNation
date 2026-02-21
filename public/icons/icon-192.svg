@@ -1,14 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Simple NDN square PWA icon (192×192). Designed to be legible at small sizes.
-     Uses a dark slate background, a centered dart/bullseye emoji and the app initials.
-     This is a lightweight placeholder. For best results replace with a hand-crafted
-     PNG or platform-specific exported assets from a design tool. -->
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">Nine Dart Nation app icon</title>
-  <desc id="desc">A purple-dark square with a dart emoji and the letters NDN</desc>
-  <rect width="100%" height="100%" rx="48" fill="#0f172a" />
-  <!-- subtle ring for depth -->
-  <circle cx="256" cy="160" r="96" fill="#0f172a" stroke="#8F43EE" stroke-opacity="0.12" stroke-width="8" />
-  <text x="50%" y="48%" text-anchor="middle" alignment-baseline="central" font-size="160">🎯</text>
-  <text x="50%" y="82%" text-anchor="middle" alignment-baseline="central" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial" font-weight="800" font-size="56" fill="#ffffff">NDN</text>
+  <desc id="desc">A bold app icon with a stylized dartboard, dart, and NDN branding</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e1045"/>
+    </linearGradient>
+    <linearGradient id="ring1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8F43EE"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="ring2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="bull" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f43f5e"/>
+      <stop offset="100%" stop-color="#e11d48"/>
+    </linearGradient>
+    <linearGradient id="dart" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fbbf24"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <!-- Outer glow ring -->
+  <circle cx="256" cy="210" r="150" fill="none" stroke="url(#ring1)" stroke-width="3" opacity="0.25"/>
+  <!-- Dartboard rings -->
+  <circle cx="256" cy="210" r="130" fill="none" stroke="url(#ring1)" stroke-width="18" opacity="0.15"/>
+  <circle cx="256" cy="210" r="100" fill="none" stroke="url(#ring2)" stroke-width="14" opacity="0.2"/>
+  <circle cx="256" cy="210" r="70" fill="none" stroke="url(#ring1)" stroke-width="10" opacity="0.25"/>
+  <!-- Wire lines (cross pattern) -->
+  <line x1="256" y1="80" x2="256" y2="340" stroke="#8F43EE" stroke-width="1.5" opacity="0.15"/>
+  <line x1="126" y1="210" x2="386" y2="210" stroke="#8F43EE" stroke-width="1.5" opacity="0.15"/>
+  <line x1="163" y1="117" x2="349" y2="303" stroke="#8F43EE" stroke-width="1" opacity="0.1"/>
+  <line x1="349" y1="117" x2="163" y2="303" stroke="#8F43EE" stroke-width="1" opacity="0.1"/>
+  <!-- Outer bull -->
+  <circle cx="256" cy="210" r="32" fill="none" stroke="#22c55e" stroke-width="8" opacity="0.35"/>
+  <!-- Inner bull (bullseye) -->
+  <circle cx="256" cy="210" r="14" fill="url(#bull)" filter="url(#glow)"/>
+  <circle cx="256" cy="210" r="8" fill="#fbbf24" opacity="0.9"/>
+  <!-- Dart -->
+  <g filter="url(#shadow)" transform="translate(256,210) rotate(-45)">
+    <!-- Dart shaft -->
+    <rect x="-3" y="-110" width="6" height="80" rx="3" fill="url(#dart)"/>
+    <!-- Dart point -->
+    <polygon points="0,-130 -4,-110 4,-110" fill="#fbbf24"/>
+    <!-- Dart flights -->
+    <polygon points="-3,-30 -18,-55 -3,-50" fill="#8F43EE" opacity="0.8"/>
+    <polygon points="3,-30 18,-55 3,-50" fill="#a855f7" opacity="0.8"/>
+  </g>
+  <!-- NDN text -->
+  <text x="256" y="420" text-anchor="middle" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="80" fill="white" letter-spacing="8" filter="url(#shadow)">NDN</text>
+  <!-- Subtle tagline -->
+  <text x="256" y="460" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="600" font-size="20" fill="#a78bfa" letter-spacing="6" opacity="0.7">NINE DART NATION</text>
 </svg>
