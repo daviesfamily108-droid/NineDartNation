@@ -377,8 +377,6 @@ export default function App() {
       setAllTimeAvg(nextAvg);
       const key = `ndn:allTimeAvgSnapshot:${user.username}`;
       const now = Date.now();
-      const currentMonth = new Date().getMonth();
-      const currentYear = new Date().getFullYear();
 
       try {
         const raw = localStorage.getItem(key);
@@ -388,8 +386,6 @@ export default function App() {
             JSON.stringify({
               value: nextAvg,
               ts: now,
-              month: currentMonth,
-              year: currentYear,
             }),
           );
           setAvgDelta(0);
@@ -397,27 +393,10 @@ export default function App() {
         }
         const parsed = JSON.parse(raw);
         const baseline = Number(parsed?.value) || 0;
-        const snapshotMonth = Number(parsed?.month);
-        const snapshotYear = Number(parsed?.year);
 
-        // Check if we're in a new month - if so, reset the baseline
-        if (snapshotYear !== currentYear || snapshotMonth !== currentMonth) {
-          // New month - set baseline to current average and delta to 0
-          localStorage.setItem(
-            key,
-            JSON.stringify({
-              value: nextAvg,
-              ts: now,
-              month: currentMonth,
-              year: currentYear,
-            }),
-          );
-          setAvgDelta(0);
-        } else {
-          // Same month - calculate delta from baseline
-          const delta = nextAvg - baseline;
-          setAvgDelta(Number.isFinite(delta) ? delta : 0);
-        }
+        // Always calculate delta from the original baseline (no monthly reset)
+        const delta = nextAvg - baseline;
+        setAvgDelta(Number.isFinite(delta) ? delta : 0);
       } catch {
         setAvgDelta(0);
       }

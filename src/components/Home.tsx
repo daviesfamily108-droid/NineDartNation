@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useToast } from "../store/toast.js";
 import { formatAvg } from "../utils/stats.js";
-import { getAllTime } from "../store/profileStats.js";
+import { getAllTime, getAllTimeAvg } from "../store/profileStats.js";
 import { useUserSettings } from "../store/userSettings.js";
 import ProfilePanel from "./ProfilePanel.js";
 import { sym } from "../ui/icons.js";
 import { getApiBaseUrl } from "../utils/api.js";
 import { dispatchOpenNotifications } from "../utils/events.js";
+import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 function goTab(tab: string) {
   try {
@@ -95,6 +96,57 @@ export default function Home({ user }: { user?: any }) {
             "Where every dart counts and every player matters."
           </p>
         </div>
+
+        {/* Average Card */}
+        {(() => {
+          const name = user?.username || "Player 1";
+          const avg = getAllTimeAvg(name);
+          const key = `ndn:allTimeAvgSnapshot:${name}`;
+          let delta = 0;
+          try {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              const baseline = Number(parsed?.value) || 0;
+              delta = avg - baseline;
+              if (!Number.isFinite(delta)) delta = 0;
+            }
+          } catch {}
+          const normalizedDelta = Math.abs(delta) >= 0.05 ? delta : 0;
+          return avg > 0 ? (
+            <div className="w-full my-4 sm:my-6 px-2 sm:px-0">
+              <div className="mx-auto max-w-full sm:max-w-sm rounded-2xl px-5 py-4 bg-white/10 border border-white/15 shadow-lg">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.25em] text-white/50 font-semibold mb-1">
+                      All-Time 3-Dart Avg
+                    </div>
+                    <div className="text-3xl font-black text-white tracking-tight">
+                      {avg.toFixed(1)}
+                    </div>
+                  </div>
+                  {normalizedDelta !== 0 && (
+                    <div
+                      className={`flex items-center gap-1 text-sm font-semibold ${
+                        normalizedDelta > 0
+                          ? "text-emerald-300"
+                          : "text-rose-300"
+                      }`}
+                    >
+                      {normalizedDelta > 0 ? (
+                        <ArrowUpRight className="w-5 h-5" />
+                      ) : (
+                        <ArrowDownRight className="w-5 h-5" />
+                      )}
+                      {normalizedDelta > 0 ? "+" : ""}
+                      {normalizedDelta.toFixed(1)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : null;
+        })()}
 
         {/* Did You Know */}
         {fact && (
