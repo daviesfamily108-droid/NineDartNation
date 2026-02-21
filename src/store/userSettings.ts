@@ -268,7 +268,7 @@ function load(): Pick<
         textSize: "medium",
         boxSize: "medium",
         statsCardMinHeight: 220,
-        cardPaddingBottom: 1130,
+        cardPaddingBottom: 900,
         matchType: "singles",
         teamAName: "Team A",
         teamBName: "Team B",
@@ -296,8 +296,19 @@ function load(): Pick<
     if (version < 3) {
       const migrated = {
         ...j,
-        cardPaddingBottom: 1130,
+        cardPaddingBottom: 900,
         __version: 3,
+      };
+      try {
+        localStorage.setItem(KEY, JSON.stringify(migrated));
+      } catch {}
+    }
+    // Version 4: Ensure stats card padding-bottom is at least 900px
+    if (version < 4) {
+      const migrated = {
+        ...j,
+        cardPaddingBottom: 900,
+        __version: 4,
       };
       try {
         localStorage.setItem(KEY, JSON.stringify(migrated));
@@ -438,8 +449,8 @@ function load(): Pick<
           : 220,
       cardPaddingBottom:
         typeof j.cardPaddingBottom === "number" && isFinite(j.cardPaddingBottom)
-          ? Math.max(0, Math.min(1000, Math.round(j.cardPaddingBottom)))
-          : 80,
+          ? Math.max(0, Math.min(1200, Math.round(j.cardPaddingBottom)))
+          : 900,
       matchType: j.matchType === "doubles" ? "doubles" : "singles",
       teamAName: typeof j.teamAName === "string" ? j.teamAName : "Team A",
       teamBName: typeof j.teamBName === "string" ? j.teamBName : "Team B",
@@ -494,7 +505,7 @@ function load(): Pick<
       textSize: "medium",
       boxSize: "medium",
       statsCardMinHeight: 220,
-      cardPaddingBottom: 1130,
+      cardPaddingBottom: 900,
       matchType: "singles",
       teamAName: "Team A",
       teamBName: "Team B",
