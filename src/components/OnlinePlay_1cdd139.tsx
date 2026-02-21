@@ -195,6 +195,10 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
     }
   }
   const [pairCountdown, setPairCountdown] = useState<number>(0)
+  // Match camera WebRTC — share camera feeds between opponents
+  const [matchRemoteStream, setMatchRemoteStream] = useState<MediaStream | null>(null)
+  const matchPcRef = useRef<RTCPeerConnection | null>(null)
+  const matchCamInitRef = useRef(false)
   useEffect(() => {
     return () => {
       try { if (pairingTimerRef.current) window.clearInterval(pairingTimerRef.current) } catch {}
@@ -1051,6 +1055,58 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
         if (pc) pc.addIceCandidate(data.payload)
       } else if (data.type === 'match-autocommit-updated') {
         try { setRoomAutocommit(!!data.allow) } catch {}
+      } else if (data.type === 'match-cam-offer') {
+        // Opponent sent WebRTC offer for camera sharing
+        console.log('[MatchCam] Received offer from opponent')
+        ;(async () => {
+          try {
+            if (matchPcRef.current) { try { matchPcRef.current.close() } catch {} }
+            const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+            matchPcRef.current = pc
+            pc.ontrack = (event) => {
+              console.log('[MatchCam] Received remote track')
+              if (event.streams?.[0]) setMatchRemoteStream(event.streams[0])
+            }
+            pc.onicecandidate = (event) => {
+              if (event.candidate) {
+                const msg = JSON.stringify({ type: 'match-cam-ice', payload: event.candidate })
+                if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                  wsRef.current.send(msg)
+                } else if (wsGlobal) {
+                  (wsGlobal as any).send({ type: 'match-cam-ice', payload: event.candidate })
+                }
+              }
+            }
+            // Add local camera tracks
+            try {
+              const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+              for (const track of localStream.getTracks()) pc.addTrack(track, localStream)
+            } catch (e) { console.warn('[MatchCam] No local camera to share:', e) }
+            await pc.setRemoteDescription(new RTCSessionDescription(data.payload))
+            const answer = await pc.createAnswer()
+            await pc.setLocalDescription(answer)
+            const answerMsg = JSON.stringify({ type: 'match-cam-answer', payload: answer })
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(answerMsg)
+            } else if (wsGlobal) {
+              (wsGlobal as any).send({ type: 'match-cam-answer', payload: answer })
+            }
+          } catch (e) { console.warn('[MatchCam] Failed to handle offer:', e) }
+        })()
+      } else if (data.type === 'match-cam-answer') {
+        console.log('[MatchCam] Received answer from opponent')
+        ;(async () => {
+          try {
+            if (matchPcRef.current) await matchPcRef.current.setRemoteDescription(new RTCSessionDescription(data.payload))
+          } catch (e) { console.warn('[MatchCam] Failed to set answer:', e) }
+        })()
+      } else if (data.type === 'match-cam-ice') {
+        console.log('[MatchCam] Received ICE candidate')
+        ;(async () => {
+          try {
+            if (matchPcRef.current) await matchPcRef.current.addIceCandidate(data.payload)
+          } catch (e) { console.warn('[MatchCam] Failed to add ICE:', e) }
+        })()
       } else if (data.type === 'opponent-paused') {
         // Opponent requested a pause - sync pause state locally
         console.log('[OnlinePlay] Opponent paused:', data.pauserName)
@@ -1757,6 +1813,63 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
     }
   }
 
+  // ── Match camera sharing: initiate WebRTC when match starts ──
+  // Player at index 0 (creator) sends the offer; player at index 1 handles it via the WS handler above.
+  useEffect(() => {
+    if (!match.inProgress) {
+      // Clean up peer connection when match ends
+      if (matchPcRef.current) {
+        try { matchPcRef.current.close() } catch {}
+        matchPcRef.current = null
+      }
+      matchCamInitRef.current = false
+      setMatchRemoteStream(null)
+      return
+    }
+    // Only initiate once, and only if we're player 0 (the offerer)
+    if (matchCamInitRef.current) return
+    const localIdx = (match.players || []).findIndex(
+      (p: any) => p?.name && p.name === localPlayerName
+    )
+    if (localIdx !== 0) return // Player 1 waits for the offer
+    matchCamInitRef.current = true
+    ;(async () => {
+      try {
+        console.log('[MatchCam] Initiating camera share as offerer (player 0)')
+        if (matchPcRef.current) { try { matchPcRef.current.close() } catch {} }
+        const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] })
+        matchPcRef.current = pc
+        pc.ontrack = (event) => {
+          console.log('[MatchCam] Received remote track from opponent')
+          if (event.streams?.[0]) setMatchRemoteStream(event.streams[0])
+        }
+        pc.onicecandidate = (event) => {
+          if (event.candidate) {
+            const msg = JSON.stringify({ type: 'match-cam-ice', payload: event.candidate })
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+              wsRef.current.send(msg)
+            } else if (wsGlobal) {
+              (wsGlobal as any).send({ type: 'match-cam-ice', payload: event.candidate })
+            }
+          }
+        }
+        // Add local camera tracks
+        try {
+          const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          for (const track of localStream.getTracks()) pc.addTrack(track, localStream)
+        } catch (e) { console.warn('[MatchCam] No local camera to share:', e) }
+        const offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+        const msg = JSON.stringify({ type: 'match-cam-offer', payload: offer })
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(msg)
+        } else if (wsGlobal) {
+          (wsGlobal as any).send({ type: 'match-cam-offer', payload: offer })
+        }
+      } catch (e) { console.warn('[MatchCam] Failed to initiate camera share:', e) }
+    })()
+  }, [match.inProgress, localPlayerName])
+
   // ── When a match is in progress, render the full in-game shell (same as offline) ──
   if (match.inProgress) {
     // Resolve local player index so both sides see the correct perspective
@@ -1827,6 +1940,7 @@ export default function OnlinePlay({ user, initialCameraTab }: { user?: any; ini
         localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}
         gameModeOverride={currentGame}
         isOnline={true}
+        remoteStream={matchRemoteStream}
       />
     );
   }

@@ -4050,6 +4050,11 @@ wss.on('connection', (ws, req) => {
           sess.pendingMessages.push({ type: data.type, payload: data.payload })
           await camSessions.set(code, sess)
         }
+  } else if (data.type === 'match-cam-offer' || data.type === 'match-cam-answer' || data.type === 'match-cam-ice') {
+        // Relay WebRTC signaling for match camera sharing between opponents
+        if (ws._roomId) {
+          broadcastToRoom(ws._roomId, { type: data.type, payload: data.payload, from: ws._id }, ws)
+        }
   } else if (data.type === 'help-message') {
           // Route helpdesk chat messages between user and admin in real-time
           try {

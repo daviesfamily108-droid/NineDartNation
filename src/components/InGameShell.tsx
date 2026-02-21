@@ -37,6 +37,7 @@ export default function InGameShell({
   localPlayerIndexOverride,
   gameModeOverride,
   isOnline,
+  remoteStream,
 }: {
   user: any;
   showStartShowcase?: boolean;
@@ -59,6 +60,8 @@ export default function InGameShell({
   gameModeOverride?: string;
   /** True when this is an online match — adds visual indicators. */
   isOnline?: boolean;
+  /** Remote opponent camera stream for turn-by-turn camera alternation. */
+  remoteStream?: MediaStream | null;
 }) {
   const match = useMatch();
   useUserSettings((s: any) => s.hideInGameSidebar ?? true);
@@ -73,6 +76,18 @@ export default function InGameShell({
     ts?: number;
   } | null>(null);
   const [remoteFrame] = useState<string | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Attach remote opponent camera stream to the video element
+  useEffect(() => {
+    const v = remoteVideoRef.current;
+    if (!v || !remoteStream) return;
+    v.srcObject = remoteStream;
+    v.play().catch(() => {});
+    return () => {
+      v.srcObject = null;
+    };
+  }, [remoteStream]);
 
   const lastOfflineStart = useUserSettings(
     (s: any) => s.lastOffline?.x01Start || 501,
@@ -682,10 +697,10 @@ export default function InGameShell({
         )}
       </div>
 
-      {/* ── Main content — turn-based camera alternation + controls ── */}
+      {/* ── Main content — camera always visible + turn-sensitive controls ── */}
       <div className="ndn-shell-body">
         <div className="flex flex-col gap-3">
-          {/* Camera section — alternates per turn */}
+          {/* Camera — always visible, alternates between local and remote feeds */}
           <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
               <div className="flex items-center gap-2">
@@ -694,56 +709,47 @@ export default function InGameShell({
                 />
                 <span className="text-xs sm:text-sm font-semibold text-white/80">
                   {isUsersTurn
-                    ? "Your Board Camera"
-                    : `${awayPlayer?.name || "Opponent"}\u2019s Camera`}
+                    ? "Your Board"
+                    : `${awayPlayer?.name || "Opponent"}\u2019s Board`}
                 </span>
               </div>
               <span
                 className={`text-[10px] sm:text-xs font-medium ${isUsersTurn ? "text-emerald-300" : "text-amber-300"}`}
               >
                 {isUsersTurn
-                  ? "● Your throw"
-                  : `Waiting\u2026 ${opponentTurnElapsed > 0 ? formatTurnTime(opponentTurnElapsed) : ""}`}
+                  ? "● Your turn"
+                  : `Waiting for ${awayPlayer?.name || "opponent"}\u2026`}
               </span>
             </div>
-            {isUsersTurn ? (
-              /* Your turn — show your local camera feed */
-              <div className="relative min-h-[12rem] max-h-[50vh] bg-black">
+            <div className="relative min-h-[12rem] max-h-[50vh] bg-black">
+              {/* Your turn: show your local camera (with auto-scoring) */}
+              <div className={isUsersTurn || !remoteStream ? "" : "hidden"}>
                 <CameraView hideInlinePanels={true} forceAutoStart={true} />
               </div>
-            ) : (
-              /* Opponent's turn — waiting view (no remote camera available) */
-              <div className="relative min-h-[12rem] max-h-[50vh] bg-black flex flex-col items-center justify-center gap-3 px-4">
-                <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-400/20 flex items-center justify-center">
-                  <svg
-                    className="w-8 h-8 text-amber-400/60"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"
-                    />
-                  </svg>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm font-semibold text-amber-300">
-                    {awayPlayer?.name || "Opponent"} is throwing
-                  </div>
-                  <div className="text-xs text-slate-400 mt-1">
-                    Camera feed not available remotely
-                  </div>
-                  {opponentTurnElapsed > 0 && (
-                    <div className="mt-2 text-lg font-mono font-bold text-white/70 tabular-nums">
-                      {formatTurnTime(opponentTurnElapsed)}
+              {/* Opponent's turn: show their camera feed if available */}
+              {!isUsersTurn && remoteStream && (
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-contain"
+                />
+              )}
+              {/* No remote stream during opponent's turn — show waiting indicator */}
+              {!isUsersTurn && !remoteStream && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="text-center">
+                    <div className="text-white/30 text-xs uppercase tracking-wider mb-1">
+                      Opponent&apos;s camera not available
                     </div>
-                  )}
+                    <div className="text-white/20 text-[10px]">
+                      Showing your board instead
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* Scoreboard — always visible */}
