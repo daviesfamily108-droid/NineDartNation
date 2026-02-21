@@ -20,6 +20,7 @@ type SettingsState = {
   callerEnabled: boolean;
   callerVoice: string; // voice name
   callerVolume: number; // 0..1
+  callerStyle: "professional" | "energetic" | "classic";
   speakCheckoutOnly: boolean;
   avgMode: "all-time" | "24h";
   autoStartOffline: boolean;
@@ -98,6 +99,7 @@ type SettingsState = {
   setFavoriteDouble: (d: string) => void;
   setCallerEnabled: (v: boolean) => void;
   setCallerVoice: (name: string) => void;
+  setCallerStyle: (s: "professional" | "energetic" | "classic") => void;
   setAvgMode: (mode: "all-time" | "24h") => void;
   setCallerVolume: (v: number) => void;
   setSpeakCheckoutOnly: (v: boolean) => void;
@@ -166,6 +168,7 @@ function load(): Pick<
   | "favoriteDouble"
   | "callerEnabled"
   | "callerVoice"
+  | "callerStyle"
   | "avgMode"
   | "callerVolume"
   | "speakCheckoutOnly"
@@ -224,6 +227,7 @@ function load(): Pick<
         callerEnabled: true,
         callerVoice: "",
         callerVolume: 1,
+        callerStyle: "professional",
         speakCheckoutOnly: false,
         avgMode: "all-time",
         autoStartOffline: false,
@@ -323,6 +327,10 @@ function load(): Pick<
         typeof j.callerVolume === "number"
           ? Math.max(0, Math.min(1, j.callerVolume))
           : 1,
+      callerStyle:
+        j.callerStyle === "energetic" || j.callerStyle === "classic"
+          ? j.callerStyle
+          : "professional",
       speakCheckoutOnly: !!j.speakCheckoutOnly,
       avgMode: j.avgMode === "24h" ? "24h" : "all-time",
       autoStartOffline: !!j.autoStartOffline,
@@ -472,6 +480,7 @@ function load(): Pick<
       callerEnabled: true,
       callerVoice: "",
       callerVolume: 1,
+      callerStyle: "professional",
       speakCheckoutOnly: false,
       avgMode: "all-time",
       autoStartOffline: false,
@@ -536,6 +545,11 @@ export const useUserSettings = create<SettingsState>((set, get) => ({
   setCallerVoice: (name) => {
     save({ callerVoice: name });
     set({ callerVoice: name });
+  },
+  setCallerStyle: (s) => {
+    const v = s === "energetic" || s === "classic" ? s : "professional";
+    save({ callerStyle: v } as any);
+    set({ callerStyle: v });
   },
   setAvgMode: (mode) => {
     save({ avgMode: mode });

@@ -17,6 +17,10 @@ import {
 import { useUserSettings } from "../store/userSettings.js";
 import ThemeToggle from "./ThemeToggle.js";
 import { apiFetch } from "../utils/api.js";
+import {
+  getVoiceQualityLabel,
+  getRecommendedVoices,
+} from "../utils/checkout.js";
 
 export default function SettingsPanel({ user }: { user?: any }) {
   const __TEST_MODE__ =
@@ -26,6 +30,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
     callerEnabled,
     callerVoice,
     callerVolume,
+    callerStyle,
     speakCheckoutOnly,
     avgMode,
     autoStartOffline,
@@ -58,6 +63,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
     setFavoriteDouble,
     setCallerEnabled,
     setCallerVoice,
+    setCallerStyle,
     setCallerVolume,
     setSpeakCheckoutOnly,
     setAvgMode,
@@ -413,8 +419,7 @@ export default function SettingsPanel({ user }: { user?: any }) {
 
   useEffect(() => {
     const loadVoices = () => {
-      const voices = speechSynthesis.getVoices();
-      setAvailableVoices(voices.filter((v) => v.lang.startsWith("en")));
+      setAvailableVoices(getRecommendedVoices());
     };
     loadVoices();
     speechSynthesis.onvoiceschanged = loadVoices;
@@ -1384,6 +1389,46 @@ export default function SettingsPanel({ user }: { user?: any }) {
                     <>
                       <div>
                         <label
+                          htmlFor="callerStyle"
+                          className="block text-sm mb-2"
+                        >
+                          Caller Style
+                        </label>
+                        <select
+                          onPointerDown={(e) => {
+                            (e as any).stopPropagation();
+                          }}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                          }}
+                          onTouchStart={(e) => {
+                            (e as any).stopPropagation?.();
+                          }}
+                          id="callerStyle"
+                          value={callerStyle || "professional"}
+                          onChange={(e) =>
+                            setCallerStyle(
+                              e.target.value as
+                                | "professional"
+                                | "energetic"
+                                | "classic",
+                            )
+                          }
+                          className="input w-full text-xs"
+                        >
+                          <option value="professional">
+                            🎯 Professional — Measured, tension-building
+                          </option>
+                          <option value="energetic">
+                            🔥 Energetic — Exciting, crowd-style
+                          </option>
+                          <option value="classic">
+                            🎩 Classic — Understated, traditional
+                          </option>
+                        </select>
+                      </div>
+                      <div>
+                        <label
                           htmlFor="callerVoice"
                           className="block text-sm mb-2"
                         >
@@ -1404,12 +1449,16 @@ export default function SettingsPanel({ user }: { user?: any }) {
                           onChange={(e) => setCallerVoice(e.target.value)}
                           className="input w-full text-xs"
                         >
-                          <option value="">Default</option>
-                          {availableVoices.map((v, i) => (
-                            <option key={i} value={v.voiceURI}>
-                              {v.name}
-                            </option>
-                          ))}
+                          <option value="">Best Available (Auto)</option>
+                          {availableVoices.map((v, i) => {
+                            const quality = getVoiceQualityLabel(v);
+                            return (
+                              <option key={i} value={v.voiceURI}>
+                                {quality ? `${quality} ` : ""}
+                                {v.name}
+                              </option>
+                            );
+                          })}
                         </select>
                       </div>
                       <div>
@@ -1448,16 +1497,48 @@ export default function SettingsPanel({ user }: { user?: any }) {
                       </div>
                       <button
                         onClick={() => {
-                          const msg = new SpeechSynthesisUtterance(
-                            "One hundred and eighty!",
-                          );
+                          const testPhrases: Record<string, string[]> = {
+                            professional: [
+                              "Player... One hundred... and eighty!",
+                              "Player, you require 40.",
+                              "Game shot! And the match, Player!",
+                            ],
+                            energetic: [
+                              "ONE HUNDRED AND EIGHTY! Player!",
+                              "Player is RIGHT there! 40 needed!",
+                              "GAME SHOT! Player takes the match!",
+                            ],
+                            classic: [
+                              "Player. One hundred and eighty.",
+                              "Player requires 40.",
+                              "Game shot, Player.",
+                            ],
+                          };
+                          const style = callerStyle || "professional";
+                          const phrases =
+                            testPhrases[style] || testPhrases.professional;
+                          const phrase =
+                            phrases[Math.floor(Math.random() * phrases.length)];
+                          const msg = new SpeechSynthesisUtterance(phrase);
+                          msg.rate =
+                            style === "energetic"
+                              ? 1.0
+                              : style === "classic"
+                                ? 0.85
+                                : 0.88;
+                          msg.pitch = style === "energetic" ? 1.1 : 1.0;
                           if (callerVoice) {
                             const v = window.speechSynthesis
                               .getVoices()
                               .find((x) => x.voiceURI === callerVoice);
                             if (v) msg.voice = v;
+                          } else {
+                            // Auto-select best voice
+                            const best = getRecommendedVoices();
+                            if (best.length > 0) msg.voice = best[0];
                           }
                           msg.volume = callerVolume || 1;
+                          window.speechSynthesis.cancel();
                           window.speechSynthesis.speak(msg);
                         }}
                         className="btn bg-purple-600 hover:bg-purple-700 w-full text-sm"

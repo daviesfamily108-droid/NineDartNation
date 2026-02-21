@@ -1,57 +1,84 @@
 // Very lightweight checkout suggestions. For proper coverage consider a full table.
 // Returns up to a few route strings like "T20 T20 D20" for a given remaining.
 
+export type CallerStyle = "professional" | "energetic" | "classic";
+
 /**
- * Get recommended voices for natural-sounding darts calling
- * Prioritizes British English voices which suit darts calling best
+ * Score a voice for quality ranking.
+ * Higher score = better quality. Neural/Online (Natural) voices in Edge/Chrome
+ * sound dramatically better than legacy offline voices.
+ */
+function voiceQualityScore(v: SpeechSynthesisVoice): number {
+  const n = v.name.toLowerCase();
+  let score = 0;
+  // Neural / Online (Natural) voices are top tier (Edge provides these)
+  if (n.includes("online (natural)") || n.includes("neural")) score += 100;
+  // "Natural" keyword (non-online variants are still good)
+  else if (n.includes("natural")) score += 80;
+  // Google voices are decent quality
+  if (n.includes("google")) score += 40;
+  // Microsoft voices (non-legacy) are good
+  if (
+    n.includes("microsoft") &&
+    !n.includes("david") &&
+    !n.includes("zira") &&
+    !n.includes("mark")
+  )
+    score += 30;
+  // Premium / Enhanced keywords
+  if (n.includes("premium") || n.includes("enhanced")) score += 60;
+  // Male voices suit darts calling better (traditional)
+  if (
+    n.includes("ryan") ||
+    n.includes("guy") ||
+    n.includes("thomas") ||
+    n.includes("ralf") ||
+    n.includes("george") ||
+    n.includes("male")
+  )
+    score += 15;
+  // British English is ideal for darts
+  if (v.lang === "en-GB" || v.lang.startsWith("en-GB")) score += 25;
+  // Other English locales are fine
+  else if (v.lang.startsWith("en")) score += 10;
+  // Remote/cloud voices tend to be higher quality
+  if (!v.localService) score += 20;
+  return score;
+}
+
+/**
+ * Get recommended voices for natural-sounding darts calling.
+ * Strongly prefers neural/natural voices (Edge "Online (Natural)", Google, etc.)
+ * and British English voices which suit darts calling best.
  */
 export function getRecommendedVoices(): SpeechSynthesisVoice[] {
   try {
     const synth = window.speechSynthesis;
     if (!synth) return [];
     const voices = synth.getVoices();
-
-    // Prioritize British English voices (they sound best for darts)
-    const britishVoices = voices.filter(
-      (v) =>
-        v.lang.startsWith("en-GB") ||
-        v.name.toLowerCase().includes("british") ||
-        v.name.toLowerCase().includes("uk"),
-    );
-
-    // Then other English voices
-    const otherEnglish = voices.filter(
-      (v) => v.lang.startsWith("en") && !britishVoices.includes(v),
-    );
-
-    // Premium/natural voices tend to have these keywords
-    const isPremiumVoice = (v: SpeechSynthesisVoice) =>
-      v.name.toLowerCase().includes("natural") ||
-      v.name.toLowerCase().includes("premium") ||
-      v.name.toLowerCase().includes("neural") ||
-      v.name.toLowerCase().includes("enhanced") ||
-      v.name.includes("Google") ||
-      (v.name.includes("Microsoft") &&
-        !v.name.includes("David") &&
-        !v.name.includes("Zira"));
-
-    // Sort each group by premium/natural voices first
-    const sortByQuality = (
-      a: SpeechSynthesisVoice,
-      b: SpeechSynthesisVoice,
-    ) => {
-      const aScore = isPremiumVoice(a) ? 1 : 0;
-      const bScore = isPremiumVoice(b) ? 1 : 0;
-      return bScore - aScore;
-    };
-
-    return [
-      ...britishVoices.sort(sortByQuality),
-      ...otherEnglish.sort(sortByQuality),
-    ];
+    // Only include English voices
+    const english = voices.filter((v) => v.lang.startsWith("en"));
+    // Sort by quality score descending
+    return english.sort((a, b) => voiceQualityScore(b) - voiceQualityScore(a));
   } catch {
     return [];
   }
+}
+
+/**
+ * Get a human-readable quality label for a voice (shown in settings dropdown)
+ */
+export function getVoiceQualityLabel(v: SpeechSynthesisVoice): string {
+  const n = v.name.toLowerCase();
+  if (n.includes("online (natural)") || n.includes("neural"))
+    return "★★★ Neural";
+  if (n.includes("natural") || n.includes("premium") || n.includes("enhanced"))
+    return "★★ Natural";
+  if (n.includes("google")) return "★★ Google";
+  if (n.includes("microsoft") && !n.includes("david") && !n.includes("zira"))
+    return "★ Microsoft";
+  if (!v.localService) return "★ Cloud";
+  return "";
 }
 
 /**
@@ -220,7 +247,7 @@ export function sayScore(
   scored: number,
   remaining: number,
   voiceName?: string,
-  opts?: { volume?: number; checkoutOnly?: boolean },
+  opts?: { volume?: number; checkoutOnly?: boolean; style?: CallerStyle },
 ) {
   try {
     const synth = window.speechSynthesis;
@@ -238,64 +265,241 @@ export function sayScore(
     const shouldAnnounce = !opts?.checkoutOnly || isCheckout || isOneEighty;
     if (!shouldAnnounce) return;
 
-    // Natural caller phrases with variation
+    const style: CallerStyle = opts?.style || "professional";
+    const pick = <T>(arr: T[]): T =>
+      arr[Math.floor(Math.random() * arr.length)];
+
+    // Natural caller phrases with rich variation per style
     if (isOneEighty) {
-      const phrases = [
-        `${spokenName}... One hundred and eighty!`,
-        `One hundred and EIGHTY! ${spokenName}!`,
-        `${spokenName} with a maximum! One eighty!`,
-      ];
-      msg.text = phrases[Math.floor(Math.random() * phrases.length)];
-      msg.rate = 0.95;
-      msg.pitch = 1.1;
+      const phrases: Record<CallerStyle, string[]> = {
+        professional: [
+          `${spokenName}... One hundred... and eighty!`,
+          `One hundred and eighty! ${spokenName}!`,
+          `${spokenName}, with a maximum! One hundred and eighty!`,
+          `It's a maximum! ${spokenName}, one hundred and eighty!`,
+          `The maximum! One hundred and eighty for ${spokenName}!`,
+        ],
+        energetic: [
+          `ONE HUNDRED AND EIGHTY! ${spokenName}!`,
+          `${spokenName}! MAXIMUM! One hundred and eighty!`,
+          `What a visit! ${spokenName} with a maximum! ONE EIGHTY!`,
+          `BOOM! One hundred and eighty for ${spokenName}!`,
+          `${spokenName} smashes in the maximum! One hundred and eighty!`,
+        ],
+        classic: [
+          `${spokenName}. One hundred and eighty.`,
+          `One hundred and eighty, ${spokenName}.`,
+          `Maximum, ${spokenName}. One eighty.`,
+          `${spokenName} throws the maximum.`,
+        ],
+      };
+      msg.text = pick(phrases[style]);
+      msg.rate = style === "energetic" ? 1.0 : 0.88;
+      msg.pitch =
+        style === "energetic" ? 1.15 : style === "classic" ? 1.0 : 1.08;
     } else if (remaining === 0) {
-      const winPhrases = [
-        `Game shot! And the match, ${spokenName}!`,
-        `${spokenName} takes it! Game shot!`,
-        `And that's the checkout! ${spokenName} wins!`,
-      ];
-      msg.text = winPhrases[Math.floor(Math.random() * winPhrases.length)];
-      msg.rate = 0.9;
-      msg.pitch = 1.05;
+      const phrases: Record<CallerStyle, string[]> = {
+        professional: [
+          `Game shot! And the match, ${spokenName}!`,
+          `${spokenName} takes it! Game shot!`,
+          `And that's the checkout! ${spokenName} wins!`,
+          `${spokenName} checks out! Game shot and the match!`,
+          `Checkout! ${spokenName} finishes in style!`,
+        ],
+        energetic: [
+          `GAME SHOT! ${spokenName} takes the match!`,
+          `YES! ${spokenName} checks out! Game shot!`,
+          `What a finish! ${spokenName} wins it!`,
+          `Checkout! ${spokenName} takes the glory!`,
+          `GAME SHOT AND THE MATCH! ${spokenName}!`,
+        ],
+        classic: [
+          `Game shot, ${spokenName}.`,
+          `${spokenName} checks out. Game shot.`,
+          `And the match goes to ${spokenName}.`,
+          `That's the game. Well played, ${spokenName}.`,
+        ],
+      };
+      msg.text = pick(phrases[style]);
+      msg.rate = style === "energetic" ? 0.95 : 0.85;
+      msg.pitch = style === "energetic" ? 1.12 : 1.02;
     } else if (isCheckout) {
       // Checkout range - build tension
       if (remaining <= 40) {
-        msg.text = `${spokenName}... requires ${remaining}.`;
+        const phrases: Record<CallerStyle, string[]> = {
+          professional: [
+            `${spokenName}... requires ${remaining}.`,
+            `${spokenName} needs ${remaining} to finish.`,
+            `You require ${remaining}, ${spokenName}.`,
+            `${spokenName}... ${remaining} for the match.`,
+          ],
+          energetic: [
+            `${spokenName}! Just ${remaining} needed!`,
+            `${remaining} to go for ${spokenName}!`,
+            `${spokenName} is RIGHT there! ${remaining} remaining!`,
+            `Can ${spokenName} finish on ${remaining}?`,
+          ],
+          classic: [
+            `${spokenName}, ${remaining}.`,
+            `${spokenName} requires ${remaining}.`,
+            `${remaining}, ${spokenName}.`,
+          ],
+        };
+        msg.text = pick(phrases[style]);
       } else if (remaining <= 100) {
-        msg.text = `${spokenName}, you require ${remaining}.`;
+        const phrases: Record<CallerStyle, string[]> = {
+          professional: [
+            `${spokenName}, you require ${remaining}.`,
+            `${spokenName} needs ${remaining}.`,
+            `${remaining} remaining for ${spokenName}.`,
+            `${spokenName} has ${remaining} to go.`,
+          ],
+          energetic: [
+            `${spokenName} is on a finish! ${remaining}!`,
+            `${remaining} left for ${spokenName}!`,
+            `In the zone! ${spokenName} needs ${remaining}!`,
+          ],
+          classic: [
+            `${spokenName}, you require ${remaining}.`,
+            `${remaining}, ${spokenName}.`,
+          ],
+        };
+        msg.text = pick(phrases[style]);
       } else {
-        msg.text = `${spokenName} leaves ${remaining}.`;
+        const phrases: Record<CallerStyle, string[]> = {
+          professional: [
+            `${spokenName} leaves ${remaining}.`,
+            `${spokenName} is on ${remaining}.`,
+            `${remaining} for ${spokenName}.`,
+          ],
+          energetic: [
+            `${spokenName} leaves ${remaining}! On a finish!`,
+            `${remaining} for ${spokenName}! Game on!`,
+          ],
+          classic: [
+            `${spokenName} leaves ${remaining}.`,
+            `${remaining}, ${spokenName}.`,
+          ],
+        };
+        msg.text = pick(phrases[style]);
       }
-      msg.rate = 0.92;
+      msg.rate = style === "energetic" ? 0.95 : 0.88;
       msg.pitch = 1.0;
     } else if (scored === 0) {
-      const noScorePhrases = [
-        `${spokenName}... no score.`,
-        `No score there for ${spokenName}.`,
-        `${spokenName}, unfortunately, no score.`,
-      ];
-      msg.text =
-        noScorePhrases[Math.floor(Math.random() * noScorePhrases.length)];
-      msg.rate = 0.95;
-      msg.pitch = 0.95;
+      const phrases: Record<CallerStyle, string[]> = {
+        professional: [
+          `${spokenName}... no score.`,
+          `No score there for ${spokenName}.`,
+          `${spokenName}, unfortunately, no score.`,
+          `${spokenName} blanks.`,
+          `Nothing doing for ${spokenName}. No score.`,
+        ],
+        energetic: [
+          `${spokenName}... no score!`,
+          `Nothing there for ${spokenName}!`,
+          `${spokenName} goes scoreless!`,
+          `Oh no! No score for ${spokenName}!`,
+        ],
+        classic: [
+          `${spokenName}, no score.`,
+          `No score, ${spokenName}.`,
+          `${spokenName}. No score.`,
+        ],
+      };
+      msg.text = pick(phrases[style]);
+      msg.rate = 0.88;
+      msg.pitch = style === "energetic" ? 0.95 : 0.9;
     } else if (scored >= 140) {
-      // Big scores get excitement
-      const bigPhrases = [
-        `${spokenName}! ${scored}!`,
-        `Lovely darts! ${spokenName} with ${scored}!`,
-        `${scored}! Great scoring from ${spokenName}!`,
-      ];
-      msg.text = bigPhrases[Math.floor(Math.random() * bigPhrases.length)];
-      msg.rate = 0.95;
-      msg.pitch = 1.05;
+      // Ton-plus scores get excitement
+      const phrases: Record<CallerStyle, string[]> = {
+        professional: [
+          `${spokenName}! ${scored}!`,
+          `Lovely darts! ${spokenName} with ${scored}!`,
+          `${scored}! Great scoring from ${spokenName}!`,
+          `Superb! ${spokenName} fires in ${scored}!`,
+          `Big score! ${spokenName}, ${scored}!`,
+        ],
+        energetic: [
+          `${spokenName} FIRES in ${scored}!`,
+          `What a visit! ${scored} for ${spokenName}!`,
+          `${scored}! Brilliant darts from ${spokenName}!`,
+          `HUGE score! ${spokenName} with ${scored}!`,
+          `${spokenName} smashes in ${scored}!`,
+        ],
+        classic: [
+          `${spokenName}, ${scored}.`,
+          `${scored}, ${spokenName}. Lovely darts.`,
+          `${spokenName} scores ${scored}.`,
+        ],
+      };
+      msg.text = pick(phrases[style]);
+      msg.rate = style === "energetic" ? 1.0 : 0.9;
+      msg.pitch = style === "energetic" ? 1.1 : 1.04;
     } else if (scored >= 100) {
-      msg.text = `${name}, ${scored}.`;
-      msg.rate = 0.95;
+      const phrases: Record<CallerStyle, string[]> = {
+        professional: [
+          `${spokenName}, ${scored}.`,
+          `${scored} for ${spokenName}.`,
+          `A ton${scored > 100 ? ` ${scored - 100}` : ""} for ${spokenName}.`,
+          `${spokenName} scores ${scored}.`,
+        ],
+        energetic: [
+          `Ton${scored > 100 ? ` ${scored - 100}` : ""}! ${spokenName}!`,
+          `${scored} for ${spokenName}! Nice darts!`,
+          `${spokenName} with a ton${scored > 100 ? ` ${scored - 100}` : ""}!`,
+        ],
+        classic: [`${spokenName}, ${scored}.`, `${scored}, ${spokenName}.`],
+      };
+      msg.text = pick(phrases[style]);
+      msg.rate = 0.92;
       msg.pitch = 1.0;
-    } else {
-      msg.text = `${name}... ${scored}.`;
-      msg.rate = 0.95;
+    } else if (scored >= 60) {
+      const phrases: Record<CallerStyle, string[]> = {
+        professional: [
+          `${spokenName}, ${scored}.`,
+          `${scored} for ${spokenName}.`,
+          `${spokenName} scores ${scored}.`,
+        ],
+        energetic: [
+          `${spokenName}, ${scored}!`,
+          `${scored} for ${spokenName}!`,
+        ],
+        classic: [`${spokenName}, ${scored}.`, `${scored}, ${spokenName}.`],
+      };
+      msg.text = pick(phrases[style]);
+      msg.rate = 0.92;
       msg.pitch = 0.98;
+    } else if (scored >= 26) {
+      const phrases: Record<CallerStyle, string[]> = {
+        professional: [
+          `${spokenName}... ${scored}.`,
+          `${scored}, ${spokenName}.`,
+        ],
+        energetic: [
+          `${spokenName}, ${scored}.`,
+          `${scored} for ${spokenName}.`,
+        ],
+        classic: [`${spokenName}, ${scored}.`],
+      };
+      msg.text = pick(phrases[style]);
+      msg.rate = 0.92;
+      msg.pitch = 0.96;
+    } else {
+      // Low scores
+      const phrases: Record<CallerStyle, string[]> = {
+        professional: [
+          `${spokenName}... ${scored}.`,
+          `${scored} for ${spokenName}.`,
+        ],
+        energetic: [
+          `${spokenName}, just ${scored}.`,
+          `Only ${scored} there for ${spokenName}.`,
+        ],
+        classic: [`${spokenName}, ${scored}.`],
+      };
+      msg.text = pick(phrases[style]);
+      msg.rate = 0.9;
+      msg.pitch = 0.94;
     }
 
     // Ensure consistent voice by waiting for voices to load
@@ -347,11 +551,15 @@ export function sayScore(
 export function sayDart(
   label: string,
   voiceName?: string,
-  opts?: { volume?: number },
+  opts?: { volume?: number; style?: CallerStyle },
 ) {
   try {
     const synth = window.speechSynthesis;
     if (!synth) return;
+
+    const style: CallerStyle = opts?.style || "professional";
+    const pick = <T>(arr: T[]): T =>
+      arr[Math.floor(Math.random() * arr.length)];
 
     // Convert label to natural spoken form
     // Labels come in various formats:
@@ -364,15 +572,21 @@ export function sayDart(
     // Handle long format (from camera detection): "TRIPLE 20", "DOUBLE 16", etc.
     if (label.startsWith("TRIPLE ")) {
       const num = label.slice(7);
-      spoken = num === "20" ? "Treble twenty" : `Treble ${num}`;
-      isExciting = num === "20" || num === "19" || num === "18";
+      const isBigTreble = num === "20" || num === "19" || num === "18";
+      isExciting = isBigTreble;
+      if (isBigTreble && style === "energetic") {
+        spoken = pick([`Treble ${num}!`, `Big treble ${num}!`]);
+      } else {
+        spoken = num === "20" ? "Treble twenty" : `Treble ${num}`;
+      }
     } else if (label.startsWith("DOUBLE ")) {
       const num = label.slice(7);
       spoken = `Double ${num}`;
     } else if (label.startsWith("SINGLE ")) {
       spoken = label.slice(7); // Just say the number for singles
     } else if (label.startsWith("INNER_BULL") || label === "DBULL") {
-      spoken = "Bullseye!";
+      spoken =
+        style === "energetic" ? pick(["Bullseye!", "Inner bull!"]) : "Bullseye";
       isExciting = true;
     } else if (
       label.startsWith("BULL ") ||
@@ -384,30 +598,39 @@ export function sayDart(
     // Handle short format: "T20", "D16", "S5"
     else if (label.startsWith("T") && /^T\d+$/.test(label)) {
       const num = label.slice(1);
-      spoken = num === "20" ? "Treble twenty" : `Treble ${num}`;
-      isExciting = num === "20" || num === "19" || num === "18";
+      const isBigTreble = num === "20" || num === "19" || num === "18";
+      isExciting = isBigTreble;
+      if (isBigTreble && style === "energetic") {
+        spoken = pick([`Treble ${num}!`, `Big treble ${num}!`]);
+      } else {
+        spoken = num === "20" ? "Treble twenty" : `Treble ${num}`;
+      }
     } else if (label.startsWith("D") && /^D\d+$/.test(label)) {
       spoken = `Double ${label.slice(1)}`;
     } else if (label.startsWith("S") && /^S\d+$/.test(label)) {
       spoken = label.slice(1); // Just say the number for singles
     } else if (label.includes("MISS") || label === "0") {
-      const missPhrases = ["Outside", "No score", "Just outside"];
-      spoken = missPhrases[Math.floor(Math.random() * missPhrases.length)];
+      const missPhrases: Record<CallerStyle, string[]> = {
+        professional: ["Outside", "No score", "Just outside"],
+        energetic: ["Outside!", "Miss!", "Just outside!", "Off the board!"],
+        classic: ["Outside", "No score"],
+      };
+      spoken = pick(missPhrases[style]);
       isMiss = true;
     }
 
     const msg = new SpeechSynthesisUtterance();
     msg.text = spoken;
 
-    // Natural speech patterns - slower than a robot, with expression
+    // Natural speech patterns - style-aware rate and pitch
     if (isExciting) {
-      msg.rate = 0.9;
-      msg.pitch = 1.08;
+      msg.rate = style === "energetic" ? 0.95 : 0.88;
+      msg.pitch = style === "energetic" ? 1.12 : 1.04;
     } else if (isMiss) {
-      msg.rate = 0.88;
-      msg.pitch = 0.92;
+      msg.rate = 0.85;
+      msg.pitch = style === "energetic" ? 0.9 : 0.88;
     } else {
-      msg.rate = 0.92;
+      msg.rate = style === "classic" ? 0.88 : 0.9;
       msg.pitch = 1.0;
     }
 
