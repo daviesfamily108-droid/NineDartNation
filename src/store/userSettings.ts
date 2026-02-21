@@ -268,7 +268,7 @@ function load(): Pick<
         textSize: "medium",
         boxSize: "medium",
         statsCardMinHeight: 220,
-        cardPaddingBottom: 680,
+        cardPaddingBottom: 1130,
         matchType: "singles",
         teamAName: "Team A",
         teamBName: "Team B",
@@ -296,7 +296,7 @@ function load(): Pick<
     if (version < 3) {
       const migrated = {
         ...j,
-        cardPaddingBottom: 680,
+        cardPaddingBottom: 1130,
         __version: 3,
       };
       try {
@@ -494,7 +494,7 @@ function load(): Pick<
       textSize: "medium",
       boxSize: "medium",
       statsCardMinHeight: 220,
-      cardPaddingBottom: 200,
+      cardPaddingBottom: 1130,
       matchType: "singles",
       teamAName: "Team A",
       teamBName: "Team B",
