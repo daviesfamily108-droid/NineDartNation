@@ -94,20 +94,18 @@ export default function GameScoreboard({
             {gameMode === "X01" && (
               <>
                 <ScoreRow
-                  label="Legs Won"
-                  value={`● ${player.legsWon || 0}`}
-                  highlight
-                />
-                <ScoreRow
-                  label="Remaining"
-                  value={player.score || 0}
+                  label="Highest Checkout"
+                  value={player.highestCheckout || "—"}
                   mono
                   bold
+                  highlight={player.highestCheckout > 0}
                 />
                 <ScoreRow
-                  label="Last Score"
-                  value={player.lastScore || "0"}
+                  label="Best Score"
+                  value={player.bestVisitScore || "—"}
                   mono
+                  bold
+                  highlight={player.bestVisitScore > 0}
                 />
                 {player.avg !== undefined && (
                   <ScoreRow

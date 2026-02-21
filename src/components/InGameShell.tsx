@@ -18,7 +18,6 @@ import { useUserSettings } from "../store/userSettings.js";
 import MatchStartShowcase from "./ui/MatchStartShowcase.js";
 import { suggestCheckouts, sayScore } from "../utils/checkout.js";
 import { getPreferredUserName } from "../utils/userName.js";
-import LetterboxScoreboardOverlay from "./ui/LetterboxScoreboardOverlay.js";
 import { broadcastMessage } from "../utils/broadcast.js";
 import AroundTheClockScorer, {
   type ATCDirection,
@@ -514,40 +513,42 @@ export default function InGameShell({
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-amber-950/80" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.03),transparent_70%)]" />
 
-        <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(120px,auto)_minmax(0,1fr)] items-center py-4 sm:py-6 px-3 sm:px-8">
+        <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(80px,auto)_minmax(0,1fr)] items-center py-3 sm:py-4 px-3 sm:px-6">
           {/* Player 1 (local) */}
-          <div className="flex flex-col items-center gap-1">
-            <div
-              className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${isUsersTurn ? "text-emerald-400" : "text-slate-400"}`}
-            >
-              {localPlayer?.name || "You"}
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="flex items-center gap-2">
+              <div
+                className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${isUsersTurn ? "text-emerald-400" : "text-slate-400"}`}
+              >
+                {localPlayer?.name || "You"}
+              </div>
+              {isX01 && (
+                <span className="text-[10px] sm:text-xs font-semibold text-slate-400 tabular-nums">
+                  ({localPlayer?.legsWon || 0})
+                </span>
+              )}
             </div>
             <div className="text-[10px] sm:text-xs uppercase tracking-wider text-slate-500 font-medium">
               {heroValues.local.primaryLabel}
             </div>
             <div
-              className={`font-mono text-5xl sm:text-7xl md:text-8xl font-black tabular-nums leading-none ${isUsersTurn ? "text-white" : "text-white/60"}`}
+              className={`font-mono text-4xl sm:text-6xl md:text-7xl font-black tabular-nums leading-none ${isUsersTurn ? "text-white" : "text-white/60"}`}
             >
               {heroValues.local.primary}
             </div>
             {isUsersTurn ? (
-              <div className="mt-1 px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
+              <div className="mt-0.5 px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
                 ● Throwing
               </div>
             ) : (
               <div
-                className="mt-1 px-3 py-0.5 text-[10px] sm:text-xs invisible"
+                className="mt-0.5 px-3 py-0.5 text-[10px] sm:text-xs invisible"
                 aria-hidden
               >
                 ● &nbsp;
               </div>
             )}
-            <div className="flex items-center gap-3 mt-1">
-              {isX01 && (
-                <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
-                  Legs: {localPlayer?.legsWon || 0}
-                </div>
-              )}
+            <div className="flex items-center gap-3 mt-0.5">
               {playerStats.local.avg3 > 0 && (
                 <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
                   Avg: {playerStats.local.avg3.toFixed(1)}
@@ -562,13 +563,13 @@ export default function InGameShell({
           </div>
 
           {/* Centre divider — VS + Online score box */}
-          <div className="flex flex-col items-center gap-2 px-2 sm:px-4 min-w-[120px]">
-            <div className="flex flex-col items-center gap-1">
-              <div className="w-px h-6 sm:h-10 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-              <div className="text-xs sm:text-lg font-black text-white/30 tracking-widest">
+          <div className="flex flex-col items-center gap-1 px-1 sm:px-3 min-w-[80px]">
+            <div className="flex flex-col items-center gap-0.5">
+              <div className="w-px h-4 sm:h-6 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+              <div className="text-xs sm:text-base font-black text-white/30 tracking-widest">
                 VS
               </div>
-              <div className="w-px h-6 sm:h-10 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+              <div className="w-px h-4 sm:h-6 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
             </div>
             {isOnline && !isATC && (
               <button
@@ -599,38 +600,40 @@ export default function InGameShell({
           </div>
 
           {/* Player 2 (away) */}
-          <div className="flex flex-col items-center gap-1">
-            <div
-              className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${!isUsersTurn ? "text-amber-400" : "text-slate-400"}`}
-            >
-              {awayPlayer?.name || "Opponent"}
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="flex items-center gap-2">
+              <div
+                className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${!isUsersTurn ? "text-amber-400" : "text-slate-400"}`}
+              >
+                {awayPlayer?.name || "Opponent"}
+              </div>
+              {isX01 && (
+                <span className="text-[10px] sm:text-xs font-semibold text-slate-400 tabular-nums">
+                  ({awayPlayer?.legsWon || 0})
+                </span>
+              )}
             </div>
             <div className="text-[10px] sm:text-xs uppercase tracking-wider text-slate-500 font-medium">
               {heroValues.away.primaryLabel}
             </div>
             <div
-              className={`font-mono text-5xl sm:text-7xl md:text-8xl font-black tabular-nums leading-none ${!isUsersTurn ? "text-white" : "text-white/60"}`}
+              className={`font-mono text-4xl sm:text-6xl md:text-7xl font-black tabular-nums leading-none ${!isUsersTurn ? "text-white" : "text-white/60"}`}
             >
               {heroValues.away.primary}
             </div>
             {!isUsersTurn ? (
-              <div className="mt-1 px-3 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
+              <div className="mt-0.5 px-3 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
                 ● Throwing
               </div>
             ) : (
               <div
-                className="mt-1 px-3 py-0.5 text-[10px] sm:text-xs invisible"
+                className="mt-0.5 px-3 py-0.5 text-[10px] sm:text-xs invisible"
                 aria-hidden
               >
                 ● &nbsp;
               </div>
             )}
-            <div className="flex items-center gap-3 mt-1">
-              {isX01 && (
-                <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
-                  Legs: {awayPlayer?.legsWon || 0}
-                </div>
-              )}
+            <div className="flex items-center gap-3 mt-0.5">
               {playerStats.away.avg3 > 0 && (
                 <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
                   Avg: {playerStats.away.avg3.toFixed(1)}
@@ -679,187 +682,164 @@ export default function InGameShell({
         )}
       </div>
 
-      {/* ── Main content — context-sensitive layout ── */}
+      {/* ── Main content — camera always visible + turn-sensitive controls ── */}
       <div className="ndn-shell-body">
-        {/* ───── OPPONENT'S TURN: Camera + Scoreboard (spectator view) ───── */}
-        {!isUsersTurn && (
-          <div className="flex flex-col gap-3">
-            {/* Camera — full width, prominent */}
-            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-amber-400 shadow-lg shadow-amber-400/50 animate-pulse" />
-                  <span className="text-xs sm:text-sm font-semibold text-white/80">
-                    Board Camera
-                  </span>
-                </div>
-                <span className="text-[10px] sm:text-xs font-medium text-amber-300">
-                  Waiting for {awayPlayer?.name || "opponent"}&hellip;
+        <div className="flex flex-col gap-3">
+          {/* Camera — always visible */}
+          <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
+              <div className="flex items-center gap-2">
+                <div
+                  className={`w-2 h-2 rounded-full shadow-lg animate-pulse ${isUsersTurn ? "bg-emerald-400 shadow-emerald-400/50" : "bg-amber-400 shadow-amber-400/50"}`}
+                />
+                <span className="text-xs sm:text-sm font-semibold text-white/80">
+                  Board Camera
                 </span>
               </div>
-              <div className="relative min-h-[12rem] max-h-[50vh] bg-black">
-                <CameraView hideInlinePanels={true} forceAutoStart={true} />
-                {isX01 && (
-                  <LetterboxScoreboardOverlay
-                    checkoutRemaining={localRemaining}
-                    away={{
-                      side: "Away",
-                      name: awayPlayer?.name || "Away",
-                      legsWon: awayPlayer?.legsWon || 0,
-                      remaining: awayRemaining,
-                    }}
-                    home={{
-                      side: "Home",
-                      name: localPlayer?.name || "Home",
-                      legsWon: localPlayer?.legsWon || 0,
-                      remaining: localRemaining,
-                    }}
-                  />
+              <span
+                className={`text-[10px] sm:text-xs font-medium ${isUsersTurn ? "text-emerald-300" : "text-amber-300"}`}
+              >
+                {isUsersTurn
+                  ? "● Your turn"
+                  : `Waiting for ${awayPlayer?.name || "opponent"}\u2026`}
+              </span>
+            </div>
+            <div className="relative min-h-[12rem] max-h-[50vh] bg-black">
+              <CameraView hideInlinePanels={true} forceAutoStart={true} />
+            </div>
+          </div>
+
+          {/* Scoreboard — always visible */}
+          <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
+            <div
+              className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${isUsersTurn ? "from-emerald-500/[0.03]" : "from-white/[0.02]"} to-transparent`}
+            />
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">
+                Scoreboard
+              </h3>
+              <div
+                className={`px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
+                  isUsersTurn
+                    ? "bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 animate-pulse"
+                    : "bg-amber-500/20 border border-amber-400/30 text-amber-300"
+                }`}
+              >
+                {isUsersTurn
+                  ? "● Your turn"
+                  : `${awayPlayer?.name || "Opponent"}\u2019s turn`}
+              </div>
+            </div>
+            <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
+          </div>
+
+          {/* Around the Clock — opponent's turn */}
+          {!isUsersTurn && isATC && atcDirection && (
+            <AroundTheClockScorer
+              direction={atcDirection}
+              onPickDirection={() => {}}
+              currentTargetIndex={awayAtcIdx}
+              isUsersTurn={false}
+              onTurnComplete={() => {}}
+              onDartHit={() => {}}
+              completed={awayAtcIdx}
+              playerName={awayPlayer?.name || "Opponent"}
+            />
+          )}
+
+          {/* Around the Clock — user's turn */}
+          {isUsersTurn && isATC && (
+            <AroundTheClockScorer
+              direction={atcDirection}
+              onPickDirection={(dir) => setAtcDirection(dir)}
+              currentTargetIndex={localAtcIdx}
+              isUsersTurn={isUsersTurn}
+              onTurnComplete={handleAtcTurnComplete}
+              onDartHit={handleAtcDartHit}
+              completed={localAtcIdx}
+              playerName={localPlayer?.name || "You"}
+            />
+          )}
+
+          {/* X01 and other modes: numpad score entry — only when user's turn */}
+          {isUsersTurn && !isATC && (
+            <>
+              {/* Score Entry Box — tappable card that opens the numpad */}
+              <button
+                type="button"
+                className="relative w-full rounded-2xl border-2 border-dashed border-emerald-400/40 bg-emerald-500/5 hover:bg-emerald-500/10 active:scale-[0.98] transition-all p-6 sm:p-8 text-center group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
+                onClick={() => {
+                  setNumpadValue("");
+                  setShowNumpad(true);
+                }}
+              >
+                <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/[0.05] to-transparent" />
+                <div className="text-emerald-300/60 text-xs sm:text-sm uppercase tracking-widest font-semibold mb-2">
+                  Enter Score
+                </div>
+                <div className="font-mono text-4xl sm:text-5xl font-black text-emerald-200 group-hover:text-emerald-100 transition-colors">
+                  {heroValues.local.primary}
+                </div>
+                <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-sm font-semibold">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <rect x="4" y="4" width="16" height="16" rx="2" />
+                    <path
+                      d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  Tap to enter score
+                </div>
+                {checkoutRoutes && (
+                  <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                    {checkoutRoutes.map((route: string, i: number) => (
+                      <span
+                        key={i}
+                        className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs font-medium"
+                      >
+                        {route}
+                      </span>
+                    ))}
+                  </div>
                 )}
+              </button>
+
+              {/* Quick score buttons row */}
+              <div className="flex flex-wrap gap-2 justify-center">
+                {(isX01
+                  ? [180, 140, 100, 85, 60, 45, 26, 0]
+                  : [100, 80, 60, 45, 26, 20, 10, 0]
+                ).map((v) => (
+                  <button
+                    key={v}
+                    className="px-4 py-2.5 rounded-xl text-sm font-bold bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/90 transition-all active:scale-95"
+                    onClick={() => commitVisit(v, 3, { visitTotal: v })}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Winning shot banner */}
+          {winningShot?.label && (
+            <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-center">
+              <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">
+                {isX01 ? "Winning Double" : "Winning Shot"}
+              </span>
+              <div className="text-lg font-bold text-emerald-200 mt-0.5">
+                {winningShot.label}
               </div>
             </div>
-
-            {/* Scoreboard — full width */}
-            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent" />
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">
-                  Scoreboard
-                </h3>
-                <div className="px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-amber-500/20 border border-amber-400/30 text-amber-300">
-                  {awayPlayer?.name || "Opponent"}&apos;s turn
-                </div>
-              </div>
-              <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
-            </div>
-
-            {/* Around the Clock progress during opponent's turn */}
-            {isATC && atcDirection && (
-              <AroundTheClockScorer
-                direction={atcDirection}
-                onPickDirection={() => {}}
-                currentTargetIndex={awayAtcIdx}
-                isUsersTurn={false}
-                onTurnComplete={() => {}}
-                onDartHit={() => {}}
-                completed={awayAtcIdx}
-                playerName={awayPlayer?.name || "Opponent"}
-              />
-            )}
-          </div>
-        )}
-
-        {/* ───── YOUR TURN: Scoreboard + Score Entry Box ───── */}
-        {isUsersTurn && (
-          <div className="flex flex-col gap-3">
-            {/* Scoreboard — full width */}
-            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-500/[0.03] to-transparent" />
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">
-                  Scoreboard
-                </h3>
-                <div className="px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 animate-pulse">
-                  ● Your turn
-                </div>
-              </div>
-              <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
-            </div>
-
-            {/* Around the Clock: target-based scorer */}
-            {isATC && (
-              <AroundTheClockScorer
-                direction={atcDirection}
-                onPickDirection={(dir) => setAtcDirection(dir)}
-                currentTargetIndex={localAtcIdx}
-                isUsersTurn={isUsersTurn}
-                onTurnComplete={handleAtcTurnComplete}
-                onDartHit={handleAtcDartHit}
-                completed={localAtcIdx}
-                playerName={localPlayer?.name || "You"}
-              />
-            )}
-
-            {/* X01 and other modes: numpad score entry */}
-            {!isATC && (
-              <>
-                {/* Score Entry Box — tappable card that opens the numpad */}
-                <button
-                  type="button"
-                  className="relative w-full rounded-2xl border-2 border-dashed border-emerald-400/40 bg-emerald-500/5 hover:bg-emerald-500/10 active:scale-[0.98] transition-all p-6 sm:p-8 text-center group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
-                  onClick={() => {
-                    setNumpadValue("");
-                    setShowNumpad(true);
-                  }}
-                >
-                  <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/[0.05] to-transparent" />
-                  <div className="text-emerald-300/60 text-xs sm:text-sm uppercase tracking-widest font-semibold mb-2">
-                    Enter Score
-                  </div>
-                  <div className="font-mono text-4xl sm:text-5xl font-black text-emerald-200 group-hover:text-emerald-100 transition-colors">
-                    {heroValues.local.primary}
-                  </div>
-                  <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-sm font-semibold">
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <rect x="4" y="4" width="16" height="16" rx="2" />
-                      <path
-                        d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    Tap to enter score
-                  </div>
-                  {checkoutRoutes && (
-                    <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-                      {checkoutRoutes.map((route: string, i: number) => (
-                        <span
-                          key={i}
-                          className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs font-medium"
-                        >
-                          {route}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </button>
-
-                {/* Quick score buttons row */}
-                <div className="flex flex-wrap gap-2 justify-center">
-                  {(isX01
-                    ? [180, 140, 100, 85, 60, 45, 26, 0]
-                    : [100, 80, 60, 45, 26, 20, 10, 0]
-                  ).map((v) => (
-                    <button
-                      key={v}
-                      className="px-4 py-2.5 rounded-xl text-sm font-bold bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/90 transition-all active:scale-95"
-                      onClick={() => commitVisit(v, 3, { visitTotal: v })}
-                    >
-                      {v}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {/* Winning shot banner */}
-            {winningShot?.label && (
-              <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-center">
-                <span className="text-xs text-emerald-400/70 uppercase tracking-wider font-semibold">
-                  {isX01 ? "Winning Double" : "Winning Shot"}
-                </span>
-                <div className="text-lg font-bold text-emerald-200 mt-0.5">
-                  {winningShot.label}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ── Number Pad Modal (X01 and other numpad modes only) ── */}

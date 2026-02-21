@@ -228,6 +228,8 @@ export function useOnlineGameStats(
         let matchAvg = 0;
         let totalDarts = 0;
         let totalScored = 0;
+        let highestCheckout = 0;
+        let bestVisitScore = 0;
 
         if (player.legs && player.legs.length > 0) {
           for (const leg of player.legs) {
@@ -237,6 +239,13 @@ export function useOnlineGameStats(
                 Math.max(0, leg.totalScoreStart - leg.totalScoreRemaining) || 0;
               totalDarts += legDarts;
               totalScored += legScored;
+              if (leg.checkoutScore && leg.checkoutScore > highestCheckout) {
+                highestCheckout = leg.checkoutScore;
+              }
+            }
+            for (const visit of leg.visits || []) {
+              const vs = Number(visit.visitTotal ?? visit.score ?? 0) || 0;
+              if (vs > bestVisitScore) bestVisitScore = vs;
             }
           }
         }
@@ -251,6 +260,8 @@ export function useOnlineGameStats(
           legsWon: player.legsWon || 0,
           score: player.score || 0,
           lastScore: player.lastVisitScore || 0,
+          highestCheckout: highestCheckout || 0,
+          bestVisitScore: bestVisitScore || 0,
           checkoutRate:
             player.doublesAttempted > 0
               ? Math.round((player.doublesHit / player.doublesAttempted) * 100)
