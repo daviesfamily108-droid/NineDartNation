@@ -926,19 +926,27 @@ export default function AdminDashboard({ user }: { user: any }) {
         </div>
       </div>
       {/* Top help-requests strip for quick admin actions */}
-      {helpRequests.length > 0 && (
+      {helpRequests.filter((r: any) => r.status !== "resolved").length > 0 && (
         <div className="p-2 rounded-xl bg-amber-900/10 border border-amber-500/20 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="font-semibold">Open Help Requests 🆘</span>
               <span className="text-sm opacity-80">
-                {helpRequests.length} open
+                {
+                  helpRequests.filter((r: any) => r.status !== "resolved")
+                    .length
+                }{" "}
+                open
               </span>
             </div>
             <div className="flex items-center gap-2">
               <button
                 className="btn"
-                onClick={() => setSelectedRequest(helpRequests[0])}
+                onClick={() =>
+                  setSelectedRequest(
+                    helpRequests.filter((r: any) => r.status !== "resolved")[0],
+                  )
+                }
               >
                 Open Latest
               </button>
@@ -954,41 +962,46 @@ export default function AdminDashboard({ user }: { user: any }) {
             </div>
           </div>
           <div className="mt-2 flex gap-2 overflow-x-auto">
-            {helpRequests.slice(0, 6).map((hr: any) => (
-              <div
-                key={hr.id}
-                className="p-2 rounded bg-black/10 border border-white/10 min-w-[220px]"
-              >
-                <div className="font-medium">{hr.username || "Anonymous"}</div>
-                <div className="text-xs opacity-70">
-                  {new Date(hr.ts || 0).toLocaleTimeString()}
-                </div>
-                <div className="text-sm truncate mt-1">{hr.message}</div>
-                <div className="mt-2 flex gap-2">
-                  {hr.status === "open" ? (
-                    <button className="btn" onClick={() => claimHelp(hr.id)}>
-                      Claim
+            {helpRequests
+              .filter((r: any) => r.status !== "resolved")
+              .slice(0, 6)
+              .map((hr: any) => (
+                <div
+                  key={hr.id}
+                  className="p-2 rounded bg-black/10 border border-white/10 min-w-[220px]"
+                >
+                  <div className="font-medium">
+                    {hr.username || "Anonymous"}
+                  </div>
+                  <div className="text-xs opacity-70">
+                    {new Date(hr.ts || 0).toLocaleTimeString()}
+                  </div>
+                  <div className="text-sm truncate mt-1">{hr.message}</div>
+                  <div className="mt-2 flex gap-2">
+                    {hr.status === "open" ? (
+                      <button className="btn" onClick={() => claimHelp(hr.id)}>
+                        Claim
+                      </button>
+                    ) : (
+                      <span className="text-xs opacity-70">
+                        {hr.status} by {hr.claimedBy || "—"}
+                      </span>
+                    )}
+                    <button
+                      className="btn"
+                      onClick={() => setSelectedRequest(hr)}
+                    >
+                      Chat
                     </button>
-                  ) : (
-                    <span className="text-xs opacity-70">
-                      {hr.status} by {hr.claimedBy || "—"}
-                    </span>
-                  )}
-                  <button
-                    className="btn"
-                    onClick={() => setSelectedRequest(hr)}
-                  >
-                    Chat
-                  </button>
-                  <button
-                    className="btn bg-red-600/80 hover:bg-red-700 text-white text-xs"
-                    onClick={() => deleteHelp(hr.id)}
-                  >
-                    ✕
-                  </button>
+                    <button
+                      className="btn bg-red-600/80 hover:bg-red-700 text-white text-xs"
+                      onClick={() => deleteHelp(hr.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       )}
