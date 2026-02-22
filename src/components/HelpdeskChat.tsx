@@ -5,6 +5,7 @@ import {
   analyzeUserQuestion,
   getEstimatedWaitTime,
 } from "../utils/helpDeskAI.js";
+import { apiFetch } from "../utils/api.js";
 
 export default function HelpdeskChat({
   request,
@@ -73,7 +74,17 @@ export default function HelpdeskChat({
           data?.type === "help-message" &&
           String(data.requestId) === String(request.id)
         ) {
-          setMessages((m) => [...m, data.message]);
+          const incoming = data.message;
+          // Deduplicate: skip if we already have a message with same text within 10s window
+          setMessages((m) => {
+            const isDup = m.some(
+              (existing: any) =>
+                existing.message === incoming.message &&
+                Math.abs((existing.ts || 0) - (incoming.ts || 0)) < 10000,
+            );
+            if (isDup) return m;
+            return [...m, incoming];
+          });
         }
         if (
           data?.type === "help-request-updated" &&
@@ -100,26 +111,50 @@ export default function HelpdeskChat({
   const sendMsg = () => {
     if (!input.trim()) return;
 
-    // Send user message
+    // Send user message via REST (reliable, persists immediately, server broadcasts via WS)
     const userMessage = input;
-    const payload = {
-      type: "help-message",
-      requestId: request.id,
-      message: userMessage,
-    };
-    try {
-      ws?.send(payload);
-    } catch {}
 
     const msgObj = {
       fromEmail: user?.email || null,
       fromName: user?.username || null,
       message: userMessage,
       ts: Date.now(),
-      admin: false,
+      admin: !!user?.isAdmin,
     };
     setMessages((m) => [...m, msgObj]);
     setInput("");
+
+    // Send via REST — server persists and broadcasts via WS to the other party
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      const authToken = localStorage.getItem("authToken");
+      if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+      apiFetch(`/api/help/requests/${request.id}/messages`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ message: userMessage }),
+      }).catch(() => {
+        // If REST fails, try WS as fallback
+        try {
+          ws?.send({
+            type: "help-message",
+            requestId: request.id,
+            message: userMessage,
+          });
+        } catch {}
+      });
+    } catch {
+      // If REST setup fails, try WS
+      try {
+        ws?.send({
+          type: "help-message",
+          requestId: request.id,
+          message: userMessage,
+        });
+      } catch {}
+    }
 
     // If admin not connected, try AI response
     if (!adminConnected) {
@@ -192,6 +227,44 @@ export default function HelpdeskChat({
     }, 500);
     timersRef.current.push(t);
   };
+
+  // REST polling fallback: periodically fetch messages in case WS routing fails
+  useEffect(() => {
+    if (!request?.id) return;
+    let active = true;
+    const poll = async () => {
+      try {
+        const headers: Record<string, string> = {};
+        const authToken = localStorage.getItem("authToken");
+        if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+        const res = await apiFetch(`/api/help/requests/${request.id}`, {
+          headers,
+        });
+        if (!active) return;
+        const j = await res.json().catch(() => null);
+        if (j?.ok && j.request?.messages && j.request.messages.length > 0) {
+          setMessages((prev) => {
+            const serverMsgs = j.request.messages;
+            // If server has more messages than local, replace with server state
+            // (server is the source of truth)
+            if (serverMsgs.length > prev.length) {
+              return serverMsgs;
+            }
+            return prev;
+          });
+          if (j.request.claimedBy) setAdminConnected(true);
+        }
+      } catch {}
+    };
+    // Poll every 4 seconds
+    const interval = setInterval(poll, 4000);
+    // Also do an immediate poll
+    poll();
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [request?.id]);
 
   // auto-scroll to bottom when messages update
   useEffect(() => {

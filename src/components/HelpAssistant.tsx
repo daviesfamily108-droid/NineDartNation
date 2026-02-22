@@ -248,13 +248,7 @@ export default function HelpAssistant() {
             // If server returns the request record, open the live chat
             if (j && j.request) {
               setMyRequest(j.request);
-              setMessages((prev) => [
-                ...prev,
-                {
-                  text: "Okay — I will notify an admin. Please wait for them to join the chat.",
-                  isUser: false,
-                },
-              ]);
+              setIsOpen(false); // Close chatbot modal so HelpdeskChat is visible
             } else {
               setMessages((prev) => [
                 ...prev,
@@ -420,7 +414,14 @@ export default function HelpAssistant() {
         <HelpdeskChat
           request={myRequest}
           user={{
-            email: null,
+            email: (() => {
+              try {
+                const id = localStorage.getItem("ndn:ws-identity");
+                return id ? JSON.parse(id).email || null : null;
+              } catch {
+                return null;
+              }
+            })(),
             username: localStorage.getItem("ndn:currentUser") || null,
             isAdmin: false,
           }}

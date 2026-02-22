@@ -1582,6 +1582,110 @@ app.post('/api/help/requests', express.json(), async (req, res) => {
   } catch (err) { console.error('[Help] Create error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
 })
 
+// Fetch a single help request by ID (for the ticket creator or admin to poll messages)
+app.get('/api/help/requests/:id', async (req, res) => {
+  try {
+    const id = String(req.params.id || '')
+    if (!id) return res.status(400).json({ error: 'id required' })
+    // Authenticate: allow ticket creator (by JWT email) or admin
+    const token = (req.headers.authorization || '').split(' ')[1]
+    let callerEmail = null
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET)
+        callerEmail = decoded.email ? String(decoded.email).toLowerCase() : null
+      } catch {}
+    }
+    const store = loadHelpFromDisk()
+    const rec = store.find(r => String(r.id) === id)
+    if (!rec) return res.status(404).json({ error: 'Not found' })
+    // Only allow the ticket creator or an admin to view
+    const isCreator = callerEmail && rec.email && callerEmail === String(rec.email).toLowerCase()
+    const isAdmin = callerEmail && adminEmails.has(callerEmail)
+    if (!isCreator && !isAdmin) return res.status(403).json({ error: 'Forbidden' })
+    return res.json({ ok: true, request: rec })
+  } catch (err) { console.error('[Help] Fetch request error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
+})
+
+// Post a message to a help request via REST (fallback when WS routing fails)
+app.post('/api/help/requests/:id/messages', express.json(), async (req, res) => {
+  try {
+    const id = String(req.params.id || '')
+    const text = String((req.body && req.body.message) || '')
+    if (!id || !text) return res.status(400).json({ error: 'id and message required' })
+    const token = (req.headers.authorization || '').split(' ')[1]
+    let callerEmail = null
+    let callerUsername = null
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET)
+        callerEmail = decoded.email ? String(decoded.email).toLowerCase() : null
+        callerUsername = decoded.username || null
+      } catch {}
+    }
+    const store = loadHelpFromDisk()
+    const idx = store.findIndex(r => String(r.id) === id)
+    if (idx === -1) return res.status(404).json({ error: 'Not found' })
+    const reqRec = store[idx]
+    const isCreator = callerEmail && reqRec.email && callerEmail === String(reqRec.email).toLowerCase()
+    const isAdmin = callerEmail && adminEmails.has(callerEmail)
+    if (!isCreator && !isAdmin) return res.status(403).json({ error: 'Forbidden' })
+    const msgObj = {
+      fromEmail: callerEmail,
+      fromName: callerUsername || callerEmail,
+      message: text,
+      ts: Date.now(),
+      admin: !!isAdmin
+    }
+    reqRec.messages = reqRec.messages || []
+    reqRec.messages.push(msgObj)
+    helpCache = store
+    persistHelpToDisk()
+    // Broadcast via WS to relevant parties
+    const payload = JSON.stringify({ type: 'help-message', requestId: reqRec.id, message: msgObj })
+    if (isAdmin) {
+      // Route to ticket creator
+      let targetUser = null
+      if (reqRec.email) targetUser = users.get(String(reqRec.email).toLowerCase())
+      if (!targetUser && reqRec.username) targetUser = findUserByUsername(reqRec.username)
+      if (targetUser && targetUser.wsId) {
+        const target = clients.get(targetUser.wsId)
+        if (target && target.readyState === 1) {
+          try { target.send(payload) } catch {}
+        }
+      }
+      // Echo to admins
+      for (const client of wss.clients) {
+        try {
+          if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+            client.send(payload)
+          }
+        } catch {}
+      }
+    } else {
+      // Route to admin
+      if (reqRec.claimedBy) {
+        const a = users.get(String(reqRec.claimedBy).toLowerCase())
+        if (a && a.wsId) {
+          const target = clients.get(a.wsId)
+          if (target && target.readyState === 1) {
+            try { target.send(payload) } catch {}
+          }
+        }
+      } else {
+        for (const client of wss.clients) {
+          try {
+            if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+              client.send(payload)
+            }
+          } catch {}
+        }
+      }
+    }
+    return res.json({ ok: true, message: msgObj })
+  } catch (err) { console.error('[Help] Post message error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
+})
+
 // Admin: list help requests
 app.get('/api/admin/help-requests', async (req, res) => {
   try {
@@ -4113,17 +4217,19 @@ wss.on('connection', (ws, req) => {
           try {
             const requestId = String(data.requestId || '')
             const text = String(data.message || '')
-            if (!requestId || !text) return
+            if (!requestId || !text) { console.warn('[Help-WS] Empty requestId or text, dropping'); return }
             const store = loadHelpFromDisk()
             const idx = store.findIndex(r => String(r.id) === String(requestId))
-            if (idx === -1) return
+            if (idx === -1) { console.warn('[Help-WS] Request not found:', requestId); return }
             const reqRec = store[idx]
+            const senderIsAdmin = !!(ws._email && adminEmails.has(String(ws._email).toLowerCase()))
+            console.log('[Help-WS] message from=%s email=%s admin=%s reqId=%s reqEmail=%s reqUser=%s', ws._id, ws._email, senderIsAdmin, requestId, reqRec.email, reqRec.username)
             const msgObj = {
               fromEmail: ws._email || null,
               fromName: ws._username || null,
               message: text,
               ts: Date.now(),
-              admin: !!(ws._email && adminEmails.has(String(ws._email).toLowerCase()))
+              admin: senderIsAdmin
             }
             reqRec.messages = reqRec.messages || []
             reqRec.messages.push(msgObj)
@@ -4134,7 +4240,7 @@ wss.on('connection', (ws, req) => {
             const payload = JSON.stringify({ type: 'help-message', requestId: reqRec.id, message: msgObj })
 
             // If sender is admin, target the requesting user
-            if (ws._email && adminEmails.has(String(ws._email).toLowerCase())) {
+            if (senderIsAdmin) {
               let targetUser = null
               // Prefer email-based lookup (direct Map key) for reliability
               if (reqRec.email) {
@@ -4147,10 +4253,14 @@ wss.on('connection', (ws, req) => {
               if (targetUser && targetUser.wsId) {
                 const target = clients.get(targetUser.wsId)
                 if (target && target.readyState === 1) {
-                  try { target.send(payload) } catch {}
+                  try { target.send(payload); console.log('[Help-WS] SENT to user wsId=%s email=%s', targetUser.wsId, reqRec.email) } catch (e) { console.warn('[Help-WS] send to user failed:', e && e.message) }
+                } else {
+                  console.warn('[Help-WS] user WS not open. wsId=%s readyState=%s inClients=%s', targetUser.wsId, target && target.readyState, !!target)
                 }
+              } else {
+                console.warn('[Help-WS] user NOT FOUND in users Map. email=%s username=%s targetUser=%s', reqRec.email, reqRec.username, !!targetUser)
               }
-              // Also echo to other admin clients (so admin UI chat updates)
+              // Also echo to admin clients (so admin UI chat updates)
               for (const client of wss.clients) {
                 try {
                   if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
@@ -4167,19 +4277,24 @@ wss.on('connection', (ws, req) => {
                 if (a && a.wsId) {
                   const target = clients.get(a.wsId)
                   if (target && target.readyState === 1) {
-                    try { target.send(payload); sentToAdmin = true } catch {}
+                    try { target.send(payload); sentToAdmin = true; console.log('[Help-WS] SENT to claimed admin wsId=%s', a.wsId) } catch {}
                   }
                 }
               }
               if (!sentToAdmin) {
+                let adminCount = 0
                 for (const client of wss.clients) {
                   try {
                     if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
                       client.send(payload)
+                      adminCount++
                     }
                   } catch (e) {}
                 }
+                console.log('[Help-WS] broadcast to %d admin clients', adminCount)
               }
+              // Also echo back to the sender so their HelpdeskChat updates
+              try { ws.send(payload) } catch {}
             }
           } catch (e) { console.warn('[Help] help-message handling failed', e && e.message) }
         } else if (data.type === 'help-typing') {
