@@ -234,9 +234,14 @@ export default function HelpAssistant() {
         (async () => {
           try {
             const payload = { message: lastUserQuestion || userMessageRaw };
+            const authHeaders: Record<string, string> = {
+              "Content-Type": "application/json",
+            };
+            const authToken = localStorage.getItem("authToken");
+            if (authToken) authHeaders["Authorization"] = `Bearer ${authToken}`;
             const res = await apiFetch("/api/help/requests", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: authHeaders,
               body: JSON.stringify(payload),
             });
             const j = await res.json().catch(() => null);
@@ -414,7 +419,11 @@ export default function HelpAssistant() {
       {myRequest && (
         <HelpdeskChat
           request={myRequest}
-          user={{ email: null, username: null, isAdmin: false }}
+          user={{
+            email: null,
+            username: localStorage.getItem("ndn:currentUser") || null,
+            isAdmin: false,
+          }}
           onClose={() => setMyRequest(null)}
         />
       )}

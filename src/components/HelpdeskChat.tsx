@@ -22,7 +22,21 @@ export default function HelpdeskChat({
       return null;
     }
   })();
-  const [messages, setMessages] = useState<any[]>(request?.messages || []);
+  const [messages, setMessages] = useState<any[]>(() => {
+    const msgs = request?.messages || [];
+    // If messages array is empty but the request has an initial message, seed it
+    if (msgs.length === 0 && request?.message) {
+      return [
+        {
+          fromName: request.username || "User",
+          message: request.message,
+          ts: request.ts || Date.now(),
+          admin: false,
+        },
+      ];
+    }
+    return msgs;
+  });
   const [input, setInput] = useState("");
   const [typingUsers, setTypingUsers] = useState<Record<string, number>>({});
   const [adminConnected, setAdminConnected] = useState(false);
@@ -33,8 +47,18 @@ export default function HelpdeskChat({
 
   // Sync messages when the request prop changes (e.g. after admin claims the request)
   useEffect(() => {
-    if (request?.messages) {
+    if (request?.messages && request.messages.length > 0) {
       setMessages(request.messages);
+    } else if (request?.message) {
+      // Seed with the initial help request message
+      setMessages([
+        {
+          fromName: request.username || "User",
+          message: request.message,
+          ts: request.ts || Date.now(),
+          admin: false,
+        },
+      ]);
     }
     if (request?.claimedBy) {
       setAdminConnected(true);
