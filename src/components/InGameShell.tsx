@@ -469,7 +469,7 @@ export default function InGameShell({
   }, [match.inProgress, deriveWinningLabel, winningShot?.label]);
 
   return (
-    <div className="card ndn-game-shell ndn-page ndn-ingame-active relative overflow-hidden md:overflow-hidden overflow-y-auto pb-20">
+    <div className="ndn-game-shell ndn-page ndn-ingame-active relative overflow-y-auto pb-20">
       {/* ── Ambient background glow ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/10 blur-[120px]" />
@@ -491,7 +491,7 @@ export default function InGameShell({
       )}
 
       {/* ── Premium sticky header ── */}
-      <div className="sticky top-0 z-20 mb-3">
+      <div className="sticky top-0 z-20 mb-2">
         <div className="relative flex items-center justify-between gap-2 px-3 sm:px-5 py-2.5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg">
           <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-transparent to-amber-500/10" />
           <div className="flex items-center gap-3 text-sm leading-none z-10">
@@ -523,12 +523,12 @@ export default function InGameShell({
       </div>
 
       {/* ── Hero scoreboard banner — big remaining scores ── */}
-      <div className="relative mb-4 rounded-2xl border border-white/10 overflow-hidden">
+      <div className="relative mb-3 rounded-2xl border border-white/10">
         {/* Gradient backdrop */}
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-amber-950/80" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.03),transparent_70%)]" />
 
-        <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(80px,auto)_minmax(0,1fr)] items-center py-5 sm:py-6 px-3 sm:px-6">
+        <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(80px,auto)_minmax(0,1fr)] items-center py-3 sm:py-4 px-3 sm:px-6">
           {/* Player 1 (local) */}
           <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-2">
@@ -547,23 +547,23 @@ export default function InGameShell({
               {heroValues.local.primaryLabel}
             </div>
             <div
-              className={`font-mono text-4xl sm:text-6xl md:text-7xl font-black tabular-nums leading-none ${isUsersTurn ? "text-white" : "text-white/60"}`}
+              className={`font-mono text-3xl sm:text-5xl md:text-6xl font-black tabular-nums leading-none ${isUsersTurn ? "text-white" : "text-white/60"}`}
             >
               {heroValues.local.primary}
             </div>
             {isUsersTurn ? (
-              <div className="mt-0.5 px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
+              <div className="mt-0.5 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-semibold uppercase tracking-wider animate-pulse">
                 ● Throwing
               </div>
             ) : (
               <div
-                className="mt-0.5 px-3 py-0.5 text-[10px] sm:text-xs invisible"
+                className="mt-0.5 px-2 py-0.5 text-[10px] invisible"
                 aria-hidden
               >
                 ● &nbsp;
               </div>
             )}
-            <div className="flex items-center gap-3 mt-0.5">
+            <div className="flex items-center gap-2 mt-0.5">
               {playerStats.local.avg3 > 0 && (
                 <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
                   Avg: {playerStats.local.avg3.toFixed(1)}
@@ -632,23 +632,23 @@ export default function InGameShell({
               {heroValues.away.primaryLabel}
             </div>
             <div
-              className={`font-mono text-4xl sm:text-6xl md:text-7xl font-black tabular-nums leading-none ${!isUsersTurn ? "text-white" : "text-white/60"}`}
+              className={`font-mono text-3xl sm:text-5xl md:text-6xl font-black tabular-nums leading-none ${!isUsersTurn ? "text-white" : "text-white/60"}`}
             >
               {heroValues.away.primary}
             </div>
             {!isUsersTurn ? (
-              <div className="mt-0.5 px-3 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] sm:text-xs font-semibold uppercase tracking-wider animate-pulse">
+              <div className="mt-0.5 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-semibold uppercase tracking-wider animate-pulse">
                 ● Throwing
               </div>
             ) : (
               <div
-                className="mt-0.5 px-3 py-0.5 text-[10px] sm:text-xs invisible"
+                className="mt-0.5 px-2 py-0.5 text-[10px] invisible"
                 aria-hidden
               >
                 ● &nbsp;
               </div>
             )}
-            <div className="flex items-center gap-3 mt-0.5">
+            <div className="flex items-center gap-2 mt-0.5">
               {playerStats.away.avg3 > 0 && (
                 <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
                   Avg: {playerStats.away.avg3.toFixed(1)}
@@ -699,7 +699,7 @@ export default function InGameShell({
 
       {/* ── Main content — camera always visible + turn-sensitive controls ── */}
       <div className="ndn-shell-body">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           {/* Camera — always visible, alternates between local and remote feeds */}
           <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
@@ -721,7 +721,7 @@ export default function InGameShell({
                   : `Waiting for ${awayPlayer?.name || "opponent"}\u2026`}
               </span>
             </div>
-            <div className="relative min-h-[14rem] max-h-[50vh] pb-3 bg-black">
+            <div className="relative min-h-[10rem] max-h-[40vh] pb-2 bg-black">
               {/* Your turn: show your local camera (with auto-scoring) */}
               <div className={isUsersTurn || !remoteStream ? "" : "hidden"}>
                 <CameraView hideInlinePanels={true} forceAutoStart={true} />
