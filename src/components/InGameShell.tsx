@@ -469,7 +469,7 @@ export default function InGameShell({
   }, [match.inProgress, deriveWinningLabel, winningShot?.label]);
 
   return (
-    <div className="ndn-game-shell ndn-page ndn-ingame-active relative overflow-y-auto pb-20">
+    <div className="ndn-game-shell ndn-page ndn-ingame-active relative overflow-hidden">
       {/* ── Ambient background glow ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/10 blur-[120px]" />
@@ -491,8 +491,8 @@ export default function InGameShell({
       )}
 
       {/* ── Premium sticky header ── */}
-      <div className="sticky top-0 z-20 mb-2">
-        <div className="relative flex items-center justify-between gap-2 px-3 sm:px-5 py-2.5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg">
+      <div className="z-20 mb-1 shrink-0">
+        <div className="relative flex items-center justify-between gap-2 px-3 sm:px-5 py-1.5 rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-lg">
           <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-r from-indigo-500/10 via-transparent to-amber-500/10" />
           <div className="flex items-center gap-3 text-sm leading-none z-10">
             {isOnline && (
@@ -523,141 +523,85 @@ export default function InGameShell({
       </div>
 
       {/* ── Hero scoreboard banner — big remaining scores ── */}
-      <div className="relative mb-3 rounded-2xl border border-white/10">
+      <div className="relative mb-1 rounded-2xl border border-white/10 overflow-hidden shrink-0">
         {/* Gradient backdrop */}
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-amber-950/80" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.03),transparent_70%)]" />
 
-        <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(80px,auto)_minmax(0,1fr)] items-center py-3 sm:py-4 px-3 sm:px-6">
+        <div className="relative grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center py-1.5 px-3 sm:px-4">
           {/* Player 1 (local) */}
-          <div className="flex flex-col items-center gap-1">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col items-center">
+            <div className="flex items-center gap-1.5 mb-0.5">
               <div
-                className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${isUsersTurn ? "text-emerald-400" : "text-slate-400"}`}
+                className={`text-xs font-bold uppercase tracking-widest ${isUsersTurn ? "text-emerald-400" : "text-slate-400"}`}
               >
                 {localPlayer?.name || "You"}
               </div>
               {isX01 && (
-                <span className="text-[10px] sm:text-xs font-semibold text-slate-400 tabular-nums">
+                <span className="text-[10px] font-semibold text-slate-400 tabular-nums">
                   ({localPlayer?.legsWon || 0})
                 </span>
               )}
-            </div>
-            <div className="text-[10px] sm:text-xs uppercase tracking-wider text-slate-500 font-medium">
-              {heroValues.local.primaryLabel}
+              {isUsersTurn && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              )}
             </div>
             <div
-              className={`font-mono text-3xl sm:text-5xl md:text-6xl font-black tabular-nums leading-none ${isUsersTurn ? "text-white" : "text-white/60"}`}
+              className={`font-mono text-3xl sm:text-4xl font-black tabular-nums leading-none ${isUsersTurn ? "text-white" : "text-white/60"}`}
             >
               {heroValues.local.primary}
             </div>
-            {isUsersTurn ? (
-              <div className="mt-0.5 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-semibold uppercase tracking-wider animate-pulse">
-                ● Throwing
-              </div>
-            ) : (
-              <div
-                className="mt-0.5 px-2 py-0.5 text-[10px] invisible"
-                aria-hidden
-              >
-                ● &nbsp;
-              </div>
-            )}
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-0.5 text-[10px]">
+              <span className="uppercase tracking-wider text-slate-500 font-medium">
+                {heroValues.local.primaryLabel}
+              </span>
               {playerStats.local.avg3 > 0 && (
-                <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
+                <span className="text-slate-400 tabular-nums">
                   Avg: {playerStats.local.avg3.toFixed(1)}
-                </div>
-              )}
-              {playerStats.local.lastVisit > 0 && (
-                <div className="text-[10px] sm:text-xs text-slate-500 tabular-nums">
-                  Last: {playerStats.local.lastVisit}
-                </div>
+                </span>
               )}
             </div>
           </div>
 
-          {/* Centre divider — VS + Online score box */}
-          <div className="flex flex-col items-center gap-1 px-1 sm:px-3 min-w-[80px]">
-            <div className="flex flex-col items-center gap-0.5">
-              <div className="w-px h-4 sm:h-6 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-              <div className="text-xs sm:text-base font-black text-white/30 tracking-widest">
-                VS
-              </div>
-              <div className="w-px h-4 sm:h-6 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+          {/* Centre divider — VS */}
+          <div className="flex flex-col items-center justify-center px-3">
+            <div className="w-px h-3 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
+            <div className="text-xs font-black text-white/30 tracking-widest my-0.5">
+              VS
             </div>
-            {isOnline && !isATC && (
-              <button
-                type="button"
-                className={`w-full rounded-xl border px-3 py-2 text-center transition-all ${
-                  isUsersTurn
-                    ? "bg-emerald-500/15 border-emerald-400/30 text-emerald-100 hover:bg-emerald-500/25"
-                    : "bg-white/5 border-white/10 text-white/40 cursor-not-allowed"
-                }`}
-                onClick={() => {
-                  if (!isUsersTurn) return;
-                  setNumpadValue("");
-                  setShowNumpad(true);
-                }}
-                disabled={!isUsersTurn}
-              >
-                <div className="text-[9px] sm:text-[10px] uppercase tracking-widest font-semibold opacity-80">
-                  {isUsersTurn ? "Enter Score" : "Waiting"}
-                </div>
-                <div className="font-mono text-2xl sm:text-3xl font-black tabular-nums">
-                  {isUsersTurn ? "Tap" : "—"}
-                </div>
-                <div className="text-[9px] sm:text-[10px] uppercase tracking-wider opacity-70">
-                  {isUsersTurn ? "Open Numpad" : "Opponent Turn"}
-                </div>
-              </button>
-            )}
+            <div className="w-px h-3 bg-gradient-to-b from-transparent via-white/20 to-transparent" />
           </div>
 
           {/* Player 2 (away) */}
-          <div className="flex flex-col items-center gap-1">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col items-center">
+            <div className="flex items-center gap-1.5 mb-0.5">
               <div
-                className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${!isUsersTurn ? "text-amber-400" : "text-slate-400"}`}
+                className={`text-xs font-bold uppercase tracking-widest ${!isUsersTurn ? "text-amber-400" : "text-slate-400"}`}
               >
                 {awayPlayer?.name || "Opponent"}
               </div>
               {isX01 && (
-                <span className="text-[10px] sm:text-xs font-semibold text-slate-400 tabular-nums">
+                <span className="text-[10px] font-semibold text-slate-400 tabular-nums">
                   ({awayPlayer?.legsWon || 0})
                 </span>
               )}
-            </div>
-            <div className="text-[10px] sm:text-xs uppercase tracking-wider text-slate-500 font-medium">
-              {heroValues.away.primaryLabel}
+              {!isUsersTurn && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+              )}
             </div>
             <div
-              className={`font-mono text-3xl sm:text-5xl md:text-6xl font-black tabular-nums leading-none ${!isUsersTurn ? "text-white" : "text-white/60"}`}
+              className={`font-mono text-3xl sm:text-4xl font-black tabular-nums leading-none ${!isUsersTurn ? "text-white" : "text-white/60"}`}
             >
               {heroValues.away.primary}
             </div>
-            {!isUsersTurn ? (
-              <div className="mt-0.5 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[10px] font-semibold uppercase tracking-wider animate-pulse">
-                ● Throwing
-              </div>
-            ) : (
-              <div
-                className="mt-0.5 px-2 py-0.5 text-[10px] invisible"
-                aria-hidden
-              >
-                ● &nbsp;
-              </div>
-            )}
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-0.5 text-[10px]">
+              <span className="uppercase tracking-wider text-slate-500 font-medium">
+                {heroValues.away.primaryLabel}
+              </span>
               {playerStats.away.avg3 > 0 && (
-                <div className="text-[10px] sm:text-xs text-slate-400 tabular-nums">
+                <span className="text-slate-400 tabular-nums">
                   Avg: {playerStats.away.avg3.toFixed(1)}
-                </div>
-              )}
-              {playerStats.away.lastVisit > 0 && (
-                <div className="text-[10px] sm:text-xs text-slate-500 tabular-nums">
-                  Last: {playerStats.away.lastVisit}
-                </div>
+                </span>
               )}
             </div>
           </div>
@@ -666,7 +610,7 @@ export default function InGameShell({
         {/* Checkout suggestion strip — shows for whoever is currently throwing */}
         {throwerCheckout && (
           <div
-            className={`relative border-t px-4 py-2 flex items-center gap-3 ${
+            className={`relative border-t px-3 py-1 flex items-center gap-2 ${
               isUsersTurn
                 ? "border-emerald-400/20 bg-emerald-500/10"
                 : "border-amber-400/20 bg-amber-500/10"
@@ -698,11 +642,11 @@ export default function InGameShell({
       </div>
 
       {/* ── Main content — camera always visible + turn-sensitive controls ── */}
-      <div className="ndn-shell-body">
-        <div className="flex flex-col gap-3">
+      <div className="flex-1 min-h-0 overflow-y-auto pb-16">
+        <div className="flex flex-col gap-2">
           {/* Camera — always visible, alternates between local and remote feeds */}
           <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
+            <div className="flex items-center justify-between px-3 py-1 border-b border-white/5 bg-white/5">
               <div className="flex items-center gap-2">
                 <div
                   className={`w-2 h-2 rounded-full shadow-lg animate-pulse ${isUsersTurn ? "bg-emerald-400 shadow-emerald-400/50" : "bg-amber-400 shadow-amber-400/50"}`}
@@ -721,7 +665,7 @@ export default function InGameShell({
                   : `Waiting for ${awayPlayer?.name || "opponent"}\u2026`}
               </span>
             </div>
-            <div className="relative min-h-[10rem] max-h-[40vh] pb-2 bg-black">
+            <div className="relative max-h-[28vh] bg-black">
               {/* Your turn: show your local camera (with auto-scoring) */}
               <div className={isUsersTurn || !remoteStream ? "" : "hidden"}>
                 <CameraView hideInlinePanels={true} forceAutoStart={true} />
@@ -753,12 +697,12 @@ export default function InGameShell({
           </div>
 
           {/* Scoreboard — always visible */}
-          <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-3 sm:p-4 overflow-hidden">
+          <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-2 sm:p-3 overflow-hidden">
             <div
               className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${isUsersTurn ? "from-emerald-500/[0.03]" : "from-white/[0.02]"} to-transparent`}
             />
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm sm:text-base font-bold text-white/90 tracking-wide">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold text-white/90 tracking-wide">
                 Scoreboard
               </h3>
               <div
@@ -804,71 +748,22 @@ export default function InGameShell({
             />
           )}
 
-          {/* X01 and other modes: numpad score entry — only when user's turn */}
+          {/* X01 and other modes: quick score buttons — only when user's turn */}
           {isUsersTurn && !isATC && (
-            <>
-              {/* Score Entry Box — tappable card that opens the numpad */}
-              <button
-                type="button"
-                className="relative w-full rounded-2xl border-2 border-dashed border-emerald-400/40 bg-emerald-500/5 hover:bg-emerald-500/10 active:scale-[0.98] transition-all p-6 sm:p-8 text-center group cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
-                onClick={() => {
-                  setNumpadValue("");
-                  setShowNumpad(true);
-                }}
-              >
-                <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/[0.05] to-transparent" />
-                <div className="text-emerald-300/60 text-xs sm:text-sm uppercase tracking-widest font-semibold mb-2">
-                  Enter Score
-                </div>
-                <div className="font-mono text-4xl sm:text-5xl font-black text-emerald-200 group-hover:text-emerald-100 transition-colors">
-                  {heroValues.local.primary}
-                </div>
-                <div className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-400/30 text-emerald-200 text-sm font-semibold">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <rect x="4" y="4" width="16" height="16" rx="2" />
-                    <path
-                      d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  Tap to enter score
-                </div>
-                {checkoutRoutes && (
-                  <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-                    {checkoutRoutes.map((route: string, i: number) => (
-                      <span
-                        key={i}
-                        className="px-2 py-0.5 rounded-lg bg-emerald-500/20 border border-emerald-400/20 text-emerald-100 text-xs font-medium"
-                      >
-                        {route}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </button>
-
-              {/* Quick score buttons row */}
-              <div className="flex flex-wrap gap-2 justify-center">
-                {(isX01
-                  ? [180, 140, 100, 85, 60, 45, 26, 0]
-                  : [100, 80, 60, 45, 26, 20, 10, 0]
-                ).map((v) => (
-                  <button
-                    key={v}
-                    className="px-4 py-2.5 rounded-xl text-sm font-bold bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/90 transition-all active:scale-95"
-                    onClick={() => commitVisit(v, 3, { visitTotal: v })}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-            </>
+            <div className="flex flex-wrap gap-1.5 justify-center">
+              {(isX01
+                ? [180, 140, 100, 85, 60, 45, 26, 0]
+                : [100, 80, 60, 45, 26, 20, 10, 0]
+              ).map((v) => (
+                <button
+                  key={v}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/90 transition-all active:scale-95"
+                  onClick={() => commitVisit(v, 3, { visitTotal: v })}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
           )}
 
           {/* Winning shot banner */}
