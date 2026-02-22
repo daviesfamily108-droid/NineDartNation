@@ -132,14 +132,50 @@ html, body {
   color: #F5F5F5 !important;
 }
 
+/* Force white text inside game shells in ALL modes (dark purple background) */
+.ndn-game-shell.card .ndn-shell-body,
+.ndn-game-shell.card h2,
+.ndn-game-shell.card h3,
+.ndn-game-shell.card label,
+.ndn-game-shell.card span,
+.ndn-game-shell.card p,
+.ndn-game-shell.card div,
+.ndn-game-shell.card li,
+.ndn-game-shell.card td,
+.ndn-game-shell.card th,
+.ndn-game-shell.card input,
+.ndn-game-shell.card textarea,
+.ndn-game-shell.card select {
+  color: inherit;
+}
+[data-color-mode="light"] .ndn-game-shell.card .ndn-shell-body,
+[data-color-mode="light"] .ndn-game-shell.card h2,
+[data-color-mode="light"] .ndn-game-shell.card h3,
+[data-color-mode="light"] .ndn-game-shell.card label,
+[data-color-mode="light"] .ndn-game-shell.card span,
+[data-color-mode="light"] .ndn-game-shell.card p,
+[data-color-mode="light"] .ndn-game-shell.card div,
+[data-color-mode="light"] .ndn-game-shell.card li,
+[data-color-mode="light"] .ndn-game-shell.card td,
+[data-color-mode="light"] .ndn-game-shell.card th {
+  color: #F5F5F5 !important;
+}
+[data-color-mode="light"] .ndn-game-shell.card input,
+[data-color-mode="light"] .ndn-game-shell.card textarea,
+[data-color-mode="light"] .ndn-game-shell.card select {
+  color: #F5F5F5 !important;
+  background-color: rgba(255,255,255,0.08) !important;
+  border-color: rgba(255,255,255,0.15) !important;
+}
+
 /* Inner panels inside game shells need readable colours in light mode */
 [data-color-mode="light"] .ndn-game-shell .ndn-shell-body {
-  color: var(--text);
+  color: #F5F5F5;
 }
 [data-color-mode="light"] .ndn-game-shell .input {
-  background-color: var(--surface);
-  color: var(--text);
-  border-color: rgba(0,0,0,0.15);
+  background-color: rgba(255,255,255,0.08);
+  color: #F5F5F5;
+  border-color: rgba(255,255,255,0.15);
 }
 
 .glass {
