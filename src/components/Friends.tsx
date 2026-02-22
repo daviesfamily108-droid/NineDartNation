@@ -539,9 +539,10 @@ export default function Friends({ user }: { user?: any }) {
 
   return (
     <div
-      className="card ndn-game-shell ndn-page ndn-friends-page"
+      className="card ndn-game-shell ndn-page ndn-friends-page overflow-y-auto"
       style={{
         minHeight: "calc(100% + 100px)",
+        paddingBottom: 80,
         background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
       }}
     >

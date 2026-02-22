@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import { labelForMode, type ModeKey } from "../utils/games.js";
 
 type Tournament = {
@@ -29,7 +29,10 @@ export default function MatchCard({
   disabled?: boolean;
 }) {
   return (
-    <li className="p-3 rounded bg-black/10 flex items-center justify-between relative">
+    <li
+      className="p-3 rounded-xl border flex items-center justify-between relative"
+      style={{ background: "rgba(49,46,129,0.18)", borderColor: "#8F43EE44" }}
+    >
       <div className="space-y-0.5">
         <div className="font-semibold">
           {t.title}

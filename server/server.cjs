@@ -262,6 +262,14 @@ async function resolveHelpRequest(id, adminUser) {
   return store[idx]
 }
 
+// Helper: find a user entry by username (users Map is keyed by email)
+function findUserByUsername(username) {
+  for (const u of users.values()) {
+    if (u.username === username) return u
+  }
+  return null
+}
+
 async function deleteHelpRequest(id) {
   const store = loadHelpFromDisk()
   const idx = store.findIndex(r => String(r.id) === String(id))
@@ -1602,7 +1610,7 @@ app.post('/api/admin/help-requests/:id/claim', express.json(), async (req, res) 
         }
         // Also notify the requesting user if online
         if (rec.username) {
-          const u = users.get(rec.username)
+          const u = findUserByUsername(rec.username)
           if (u && u.wsId) {
             const target = clients.get(u.wsId)
             if (target && target.readyState === 1) {
@@ -1639,7 +1647,7 @@ app.post('/api/admin/help-requests/:id/resolve', express.json(), async (req, res
           } catch (e) {}
         }
         if (rec.username) {
-          const u = users.get(rec.username)
+          const u = findUserByUsername(rec.username)
           if (u && u.wsId) {
             const target = clients.get(u.wsId)
             if (target && target.readyState === 1) {
@@ -2196,15 +2204,42 @@ app.post('/api/admin/clustering', (req, res) => {
   res.json({ ok: true, capacity: MAX_CLIENTS, enabled: clusteringEnabled })
 })
 
-app.post('/api/admin/announce', (req, res) => {
+app.post('/api/admin/announce', async (req, res) => {
   const owner = getOwnerFromReq(req)
   if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
   const { message } = req.body || {}
   const msg = String(message || '').trim()
   if (!msg) return res.status(400).json({ ok: false, error: 'MESSAGE_REQUIRED' })
   lastAnnouncement = { message: msg, ts: Date.now() }
+  // Broadcast to all online users via WebSocket
   broadcastAll({ type: 'announcement', message: msg })
-  res.json({ ok: true, announcement: lastAnnouncement })
+  // Persist a notification for every known user so offline users see it on next login
+  const notifiedEmails = new Set()
+  // In-memory users
+  for (const [email] of users.entries()) {
+    const e = String(email).toLowerCase()
+    if (!notifiedEmails.has(e)) {
+      notifiedEmails.add(e)
+      createNotification(e, msg, 'announcement', { ts: lastAnnouncement.ts })
+    }
+  }
+  // If Supabase is available, also cover users not in memory
+  if (supabase) {
+    try {
+      const { data } = await supabase.from('users').select('email')
+      if (Array.isArray(data)) {
+        for (const row of data) {
+          const e = String(row.email || '').toLowerCase()
+          if (e && !notifiedEmails.has(e)) {
+            notifiedEmails.add(e)
+            createNotification(e, msg, 'announcement', { ts: lastAnnouncement.ts })
+          }
+        }
+      }
+    } catch (err) { console.warn('[Announce] Supabase user query failed:', err && err.message) }
+  }
+  console.log('[Announce] Broadcast + notified %d users', notifiedEmails.size)
+  res.json({ ok: true, announcement: lastAnnouncement, notified: notifiedEmails.size })
 })
 
 app.get('/api/admin/members', async (req, res) => {
@@ -4088,7 +4123,7 @@ wss.on('connection', (ws, req) => {
             // If sender is admin, target the requesting user
             if (ws._email && adminEmails.has(String(ws._email).toLowerCase())) {
               if (reqRec.username) {
-                const u = users.get(reqRec.username)
+                const u = findUserByUsername(reqRec.username)
                 if (u && u.wsId) {
                   const target = clients.get(u.wsId)
                   if (target && target.readyState === 1) {
@@ -4161,7 +4196,7 @@ wss.on('connection', (ws, req) => {
             }
             // Also notify requesting user if online
             if (reqRec.username) {
-              const u = users.get(reqRec.username)
+              const u = findUserByUsername(reqRec.username)
               if (u && u.wsId) {
                 const target = clients.get(u.wsId)
                 if (target && target.readyState === 1) {

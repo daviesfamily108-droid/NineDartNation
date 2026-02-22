@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState, useRef, useCallback } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useWS } from "./WSProvider.js";
 import { X, Send, Zap, User } from "lucide-react";
 import {
@@ -30,6 +30,16 @@ export default function HelpdeskChat({
   const msgsRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
   const timersRef = useRef<number[]>([]);
+
+  // Sync messages when the request prop changes (e.g. after admin claims the request)
+  useEffect(() => {
+    if (request?.messages) {
+      setMessages(request.messages);
+    }
+    if (request?.claimedBy) {
+      setAdminConnected(true);
+    }
+  }, [request?.id, request?.messages?.length, request?.claimedBy]);
 
   useEffect(() => {
     if (!ws) return;

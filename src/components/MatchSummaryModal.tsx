@@ -139,7 +139,7 @@ export default function MatchSummaryModal({
         storageKey="ndn:modal:match-summary"
         className="ndn-modal w-full relative overflow-hidden"
         defaultWidth={960}
-        defaultHeight={680}
+        defaultHeight={730}
         minWidth={640}
         minHeight={520}
         maxWidth={1400}
