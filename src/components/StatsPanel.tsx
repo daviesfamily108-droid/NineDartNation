@@ -21,8 +21,7 @@ import { allGames } from "../utils/games.js";
 import TabPills from "./ui/TabPills.js";
 
 export default function StatsPanel({ user }: { user?: any }) {
-  const { statsCardMinHeight, cardPaddingBottom, hiddenSections } =
-    useUserSettings();
+  const { statsCardMinHeight, hiddenSections } = useUserSettings();
   const hiddenSet = useMemo(
     () => new Set(hiddenSections || []),
     [hiddenSections],
@@ -275,7 +274,7 @@ export default function StatsPanel({ user }: { user?: any }) {
       className="card ndn-game-shell ndn-page ndn-stats-page overflow-visible"
       style={{
         background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
-        paddingBottom: `${cardPaddingBottom ?? 900}px`,
+        paddingBottom: "800px",
       }}
     >
       <div className="mb-4">
