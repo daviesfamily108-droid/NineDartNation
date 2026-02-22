@@ -143,8 +143,8 @@ function persistHelpToDisk() {
   } catch (err) { console.warn('[Help] Failed to persist to disk:', err && err.message) }
 }
 
-async function createHelpRequest(username, message, meta) {
-  const rec = { id: nanoid(8), ts: Date.now(), username: username || null, message: message || '', meta: meta || {}, status: 'open', claimedBy: null, messages: [] }
+async function createHelpRequest(username, message, meta, email) {
+  const rec = { id: nanoid(8), ts: Date.now(), username: username || null, email: email || null, message: message || '', meta: meta || {}, status: 'open', claimedBy: null, messages: [] }
   // Supabase not used for help requests currently
   const store = loadHelpFromDisk()
   store.unshift(rec)
@@ -1552,13 +1552,18 @@ app.post('/api/help/requests', express.json(), async (req, res) => {
   try {
     const token = (req.headers.authorization || '').split(' ')[1]
     let username = null
+    let userEmail = null
     if (token) {
-      try { const decoded = jwt.verify(token, JWT_SECRET); username = decoded.username } catch {}
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET)
+        username = decoded.username || null
+        userEmail = decoded.email ? String(decoded.email).toLowerCase() : null
+      } catch {}
     }
     const body = req.body || {}
     const message = body.message || ''
     if (!message) return res.status(400).json({ error: 'Message required.' })
-    const rec = await createHelpRequest(username, message, body.meta || {})
+    const rec = await createHelpRequest(username, message, body.meta || {}, userEmail)
     // Broadcast to connected admin WS clients so admins see new requests immediately
     try {
       if (typeof wss !== 'undefined' && wss && wss.clients) {
@@ -1609,13 +1614,17 @@ app.post('/api/admin/help-requests/:id/claim', express.json(), async (req, res) 
           } catch (e) {}
         }
         // Also notify the requesting user if online
-        if (rec.username) {
-          const u = findUserByUsername(rec.username)
-          if (u && u.wsId) {
-            const target = clients.get(u.wsId)
-            if (target && target.readyState === 1) {
-              try { target.send(payload) } catch {}
-            }
+        let targetUser = null
+        if (rec.email) {
+          targetUser = users.get(String(rec.email).toLowerCase())
+        }
+        if (!targetUser && rec.username) {
+          targetUser = findUserByUsername(rec.username)
+        }
+        if (targetUser && targetUser.wsId) {
+          const target = clients.get(targetUser.wsId)
+          if (target && target.readyState === 1) {
+            try { target.send(payload) } catch {}
           }
         }
       }
@@ -1646,13 +1655,17 @@ app.post('/api/admin/help-requests/:id/resolve', express.json(), async (req, res
             }
           } catch (e) {}
         }
-        if (rec.username) {
-          const u = findUserByUsername(rec.username)
-          if (u && u.wsId) {
-            const target = clients.get(u.wsId)
-            if (target && target.readyState === 1) {
-              try { target.send(payload) } catch {}
-            }
+        let resolveTarget = null
+        if (rec.email) {
+          resolveTarget = users.get(String(rec.email).toLowerCase())
+        }
+        if (!resolveTarget && rec.username) {
+          resolveTarget = findUserByUsername(rec.username)
+        }
+        if (resolveTarget && resolveTarget.wsId) {
+          const target = clients.get(resolveTarget.wsId)
+          if (target && target.readyState === 1) {
+            try { target.send(payload) } catch {}
           }
         }
       }
@@ -4122,13 +4135,19 @@ wss.on('connection', (ws, req) => {
 
             // If sender is admin, target the requesting user
             if (ws._email && adminEmails.has(String(ws._email).toLowerCase())) {
-              if (reqRec.username) {
-                const u = findUserByUsername(reqRec.username)
-                if (u && u.wsId) {
-                  const target = clients.get(u.wsId)
-                  if (target && target.readyState === 1) {
-                    try { target.send(payload) } catch {}
-                  }
+              let targetUser = null
+              // Prefer email-based lookup (direct Map key) for reliability
+              if (reqRec.email) {
+                targetUser = users.get(String(reqRec.email).toLowerCase())
+              }
+              // Fall back to username lookup
+              if (!targetUser && reqRec.username) {
+                targetUser = findUserByUsername(reqRec.username)
+              }
+              if (targetUser && targetUser.wsId) {
+                const target = clients.get(targetUser.wsId)
+                if (target && target.readyState === 1) {
+                  try { target.send(payload) } catch {}
                 }
               }
               // Also echo to other admin clients (so admin UI chat updates)
