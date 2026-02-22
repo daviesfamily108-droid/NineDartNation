@@ -644,80 +644,80 @@ export default function InGameShell({
       {/* ── Main content — camera always visible + turn-sensitive controls ── */}
       <div className="flex-1 min-h-0 overflow-y-auto pb-16">
         <div className="flex flex-col gap-2">
-          {/* Camera — always visible, alternates between local and remote feeds */}
-          <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-1 border-b border-white/5 bg-white/5">
-              <div className="flex items-center gap-2">
+          {/* Scoreboard + Camera side by side */}
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-2 min-h-0">
+            {/* Scoreboard — left side */}
+            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-2 sm:p-3 overflow-hidden">
+              <div
+                className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${isUsersTurn ? "from-emerald-500/[0.03]" : "from-white/[0.02]"} to-transparent`}
+              />
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-bold text-white/90 tracking-wide">
+                  Scoreboard
+                </h3>
                 <div
-                  className={`w-2 h-2 rounded-full shadow-lg animate-pulse ${isUsersTurn ? "bg-emerald-400 shadow-emerald-400/50" : "bg-amber-400 shadow-amber-400/50"}`}
-                />
-                <span className="text-xs sm:text-sm font-semibold text-white/80">
+                  className={`px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
+                    isUsersTurn
+                      ? "bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 animate-pulse"
+                      : "bg-amber-500/20 border border-amber-400/30 text-amber-300"
+                  }`}
+                >
                   {isUsersTurn
-                    ? "Your Board"
-                    : `${awayPlayer?.name || "Opponent"}\u2019s Board`}
+                    ? "● Your turn"
+                    : `${awayPlayer?.name || "Opponent"}\u2019s turn`}
+                </div>
+              </div>
+              <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
+            </div>
+
+            {/* Camera — right side, matches scoreboard height */}
+            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between px-3 py-1 border-b border-white/5 bg-white/5 shrink-0">
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-2 h-2 rounded-full shadow-lg animate-pulse ${isUsersTurn ? "bg-emerald-400 shadow-emerald-400/50" : "bg-amber-400 shadow-amber-400/50"}`}
+                  />
+                  <span className="text-xs font-semibold text-white/80">
+                    {isUsersTurn
+                      ? "Your Board"
+                      : `${awayPlayer?.name || "Opponent"}\u2019s Board`}
+                  </span>
+                </div>
+                <span
+                  className={`text-[10px] font-medium ${isUsersTurn ? "text-emerald-300" : "text-amber-300"}`}
+                >
+                  {isUsersTurn ? "● Live" : "● Waiting"}
                 </span>
               </div>
-              <span
-                className={`text-[10px] sm:text-xs font-medium ${isUsersTurn ? "text-emerald-300" : "text-amber-300"}`}
-              >
-                {isUsersTurn
-                  ? "● Your turn"
-                  : `Waiting for ${awayPlayer?.name || "opponent"}\u2026`}
-              </span>
-            </div>
-            <div className="relative max-h-[28vh] bg-black">
-              {/* Your turn: show your local camera (with auto-scoring) */}
-              <div className={isUsersTurn || !remoteStream ? "" : "hidden"}>
-                <CameraView hideInlinePanels={true} forceAutoStart={true} />
-              </div>
-              {/* Opponent's turn: show their camera feed if available */}
-              {!isUsersTurn && remoteStream && (
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-contain"
-                />
-              )}
-              {/* No remote stream during opponent's turn — show waiting indicator */}
-              {!isUsersTurn && !remoteStream && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="text-center">
-                    <div className="text-white/30 text-xs uppercase tracking-wider mb-1">
-                      Opponent&apos;s camera not available
-                    </div>
-                    <div className="text-white/20 text-[10px]">
-                      Showing your board instead
+              <div className="relative flex-1 min-h-0 bg-black">
+                <div
+                  className={`h-full ${isUsersTurn || !remoteStream ? "" : "hidden"}`}
+                >
+                  <CameraView hideInlinePanels={true} forceAutoStart={true} />
+                </div>
+                {!isUsersTurn && remoteStream && (
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-contain"
+                  />
+                )}
+                {!isUsersTurn && !remoteStream && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="text-center">
+                      <div className="text-white/30 text-xs uppercase tracking-wider mb-1">
+                        Opponent&apos;s camera not available
+                      </div>
+                      <div className="text-white/20 text-[10px]">
+                        Showing your board instead
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Scoreboard — always visible */}
-          <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 p-2 sm:p-3 overflow-hidden">
-            <div
-              className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${isUsersTurn ? "from-emerald-500/[0.03]" : "from-white/[0.02]"} to-transparent`}
-            />
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-bold text-white/90 tracking-wide">
-                Scoreboard
-              </h3>
-              <div
-                className={`px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
-                  isUsersTurn
-                    ? "bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 animate-pulse"
-                    : "bg-amber-500/20 border border-amber-400/30 text-amber-300"
-                }`}
-              >
-                {isUsersTurn
-                  ? "● Your turn"
-                  : `${awayPlayer?.name || "Opponent"}\u2019s turn`}
+                )}
               </div>
             </div>
-            <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
           </div>
 
           {/* Around the Clock — opponent's turn */}
