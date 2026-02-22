@@ -42,6 +42,8 @@ export type Player = {
 
 export type MatchState = {
   roomId: string;
+  /** Identifies which view started this match: 'offline', 'online', 'tournament', or '' */
+  matchContext: string;
   players: Player[];
   currentPlayerIdx: number;
   startingScore: number;
@@ -104,7 +106,12 @@ function updatePlayerEndOfGameStats(player: Player) {
 }
 
 export type Actions = {
-  newMatch: (players: string[], startingScore: number, roomId?: string) => void;
+  newMatch: (
+    players: string[],
+    startingScore: number,
+    roomId?: string,
+    context?: string,
+  ) => void;
   addVisit: (
     score: number,
     darts: number,
@@ -127,12 +134,13 @@ export type Actions = {
 
 export const useMatch = create<MatchState & Actions>((set) => ({
   roomId: "",
+  matchContext: "",
   players: [],
   currentPlayerIdx: 0,
   startingScore: 501,
   inProgress: false,
 
-  newMatch: (playerNames, startingScore, roomId = "") =>
+  newMatch: (playerNames, startingScore, roomId = "", context = "") =>
     set(() => {
       const players = playerNames.map(
         (name, i) =>
@@ -143,13 +151,20 @@ export const useMatch = create<MatchState & Actions>((set) => ({
             legs: [],
           }) as Player,
       );
-      console.debug("[useMatch] newMatch", playerNames, startingScore, roomId);
+      console.debug(
+        "[useMatch] newMatch",
+        playerNames,
+        startingScore,
+        roomId,
+        context,
+      );
       return {
         players,
         currentPlayerIdx: 0,
         startingScore,
         inProgress: true,
         roomId,
+        matchContext: context,
         bestLegThisMatch: undefined,
       };
     }),

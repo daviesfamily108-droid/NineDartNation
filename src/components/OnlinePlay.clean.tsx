@@ -34,6 +34,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   })();
   const [serverMatches, setServerMatches] = useState<any[]>([]);
   const inProgress = useMatch((s) => s.inProgress);
+  const matchContext = useMatch((s) => s.matchContext);
   const players = useMatch((s) => s.players);
   const [focusMode, setFocusMode] = useState(false);
   const matchesRef = useRef<HTMLDivElement | null>(null);
@@ -57,7 +58,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [showStartShowcase, setShowStartShowcase] = useState<boolean>(false);
   const startedShowcasedRef = React.useRef(false);
   useEffect(() => {
-    if (!inProgress) {
+    if (!inProgress || matchContext !== "online") {
       startedShowcasedRef.current = false;
       setShowStartShowcase(false);
       return;
@@ -71,11 +72,11 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     if (hasVisits) return;
     startedShowcasedRef.current = true;
     setShowStartShowcase(true);
-  }, [inProgress]);
+  }, [inProgress, matchContext]);
 
   // Auto-open the dedicated match window for online X01 matches.
   useEffect(() => {
-    if (!inProgress) return;
+    if (!inProgress || matchContext !== "online") return;
     try {
       const st = useMatch.getState();
       const game = ((st as any)?.game || "X01") as string;
@@ -87,13 +88,13 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       window.sessionStorage.setItem(flagKey, "1");
       openMatchWindow();
     } catch {}
-  }, [inProgress]);
+  }, [inProgress, matchContext]);
 
   // Allow the overlay to show again the next time a match starts.
   useEffect(() => {
-    if (inProgress) return;
+    if (inProgress && matchContext === "online") return;
     startedShowcasedRef.current = false;
-  }, [inProgress]);
+  }, [inProgress, matchContext]);
 
   // Announce presence to server so it knows our username
   useEffect(() => {
@@ -535,7 +536,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
 
       // Initialize the match in the store — sets inProgress = true
       try {
-        useMatch.getState().newMatch(playerNames, startScore, roomId);
+        useMatch.getState().newMatch(playerNames, startScore, roomId, "online");
       } catch (e) {
         console.error("[OnlinePlay] newMatch failed:", e);
       }
@@ -786,7 +787,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   };
 
   // ── When a match is in progress, render the full in-game shell ──
-  if (inProgress) {
+  // Only show InGameShell if the match was started from OnlinePlay (context === 'online').
+  // This prevents offline or tournament matches from falsely rendering here.
+  if (inProgress && matchContext === "online") {
     const matchState = useMatch.getState();
     const localIdx = (matchState.players || []).findIndex(
       (p: any) => p?.name && p.name.toLowerCase() === username.toLowerCase(),

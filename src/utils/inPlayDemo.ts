@@ -25,7 +25,7 @@ export function launchInPlayDemo({
   if (!players || players.length === 0) return;
   try {
     const match = useMatch.getState();
-    match.newMatch(players, startingScore, roomId);
+    match.newMatch(players, startingScore, roomId, "demo");
 
     const seededVisits: DemoVisit[] =
       visits && visits.length > 0

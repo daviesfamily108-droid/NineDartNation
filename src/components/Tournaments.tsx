@@ -94,10 +94,11 @@ export default function Tournaments({ user }: { user: any }) {
   const _startedShowcasedRef = useRef(false);
 
   const inProgress = useMatch((s) => s.inProgress);
+  const matchContext = useMatch((s) => s.matchContext);
   const roomId = useMatch((s) => s.roomId);
 
   useEffect(() => {
-    if (!inProgress) return;
+    if (!inProgress || matchContext !== "tournament") return;
     try {
       const st = useMatch.getState();
       const game = ((st as any)?.game || "X01") as string;
@@ -108,7 +109,7 @@ export default function Tournaments({ user }: { user: any }) {
       window.sessionStorage.setItem(flagKey, "1");
       openMatchWindow();
     } catch {}
-  }, [inProgress, roomId]);
+  }, [inProgress, matchContext, roomId]);
 
   const [form, setForm] = useState({
     title: "",
@@ -213,7 +214,9 @@ export default function Tournaments({ user }: { user: any }) {
               : [opponentName, localName];
             const startScore = msg.startingScore || 501;
             const roomId = msg.roomId || "";
-            useMatch.getState().newMatch(playerNames, startScore, roomId);
+            useMatch
+              .getState()
+              .newMatch(playerNames, startScore, roomId, "tournament");
             setCurrentGame(msg.game || "X01");
             // Join the WS room for state sync
             if (wsGlobal?.connected && roomId) {
@@ -804,7 +807,9 @@ export default function Tournaments({ user }: { user: any }) {
   const username = user?.username || "You";
 
   // ── When a tournament match is in progress, render the full in-game shell ──
-  if (inProgress) {
+  // Only show InGameShell if the match was started from Tournaments (context === 'tournament').
+  // This prevents offline or online matches from falsely rendering here.
+  if (inProgress && matchContext === "tournament") {
     const matchState = useMatch.getState();
     const localIdx = (matchState.players || []).findIndex(
       (p: any) => p?.name && p.name.toLowerCase() === username.toLowerCase(),

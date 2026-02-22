@@ -1633,7 +1633,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     const humanName = getPreferredUserName(user, "You");
     const aiName = ai !== "None" ? `AI (${ai})` : "Opponent";
     const players = ai !== "None" ? [humanName, aiName] : [humanName];
-    match.newMatch(players, x01Score, `offline-${Date.now()}`);
+    match.newMatch(players, x01Score, `offline-${Date.now()}`, "offline");
 
     // Keep match in the current page (no popout window).
   }
