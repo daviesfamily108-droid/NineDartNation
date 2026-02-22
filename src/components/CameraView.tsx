@@ -1135,7 +1135,7 @@ export default forwardRef(function CameraView(
 
   const clampCameraScale = useCallback((value: number) => {
     if (typeof value !== "number" || Number.isNaN(value)) return 1;
-    return Math.min(1.25, Math.max(0.5, Math.round(value * 100) / 100));
+    return Math.min(3.0, Math.max(0.5, Math.round(value * 100) / 100));
   }, []);
 
   const adjustCameraScale = useCallback(
@@ -5066,8 +5066,8 @@ export default forwardRef(function CameraView(
       "fit";
     const videoClass =
       aspect === "square"
-        ? "absolute left-0 top-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left bg-black"
-        : "absolute inset-0 w-full h-full object-cover object-center bg-black ndn-video-smooth";
+        ? "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-left"
+        : "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 min-w-full min-h-full object-cover object-center ndn-video-smooth";
     const videoScale = cameraScale ?? 1;
 
     // Optional, low-risk glare reduction for the *preview* video element.
@@ -5181,7 +5181,7 @@ export default forwardRef(function CameraView(
           <div className="flex items-center gap-1 ml-auto">
             <button
               className="rounded-lg px-2 py-1.5 bg-slate-800 border border-white/10 text-white/60 min-h-[2.25rem] text-sm font-bold"
-              onClick={() => adjustCameraScale(-0.05)}
+              onClick={() => adjustCameraScale(-0.1)}
               title="Zoom out"
             >
               −
@@ -5191,7 +5191,7 @@ export default forwardRef(function CameraView(
             </span>
             <button
               className="rounded-lg px-2 py-1.5 bg-slate-800 border border-white/10 text-white/60 min-h-[2.25rem] text-sm font-bold"
-              onClick={() => adjustCameraScale(0.05)}
+              onClick={() => adjustCameraScale(0.1)}
               title="Zoom in"
             >
               +
@@ -6304,7 +6304,7 @@ export default forwardRef(function CameraView(
                   </span>
                   <button
                     className="btn btn--ghost px-2 py-1"
-                    onClick={() => adjustCameraScale(-0.05)}
+                    onClick={() => adjustCameraScale(-0.1)}
                     title="Decrease camera zoom"
                   >
                     -
@@ -6314,7 +6314,7 @@ export default forwardRef(function CameraView(
                   </span>
                   <button
                     className="btn btn--ghost px-2 py-1"
-                    onClick={() => adjustCameraScale(0.05)}
+                    onClick={() => adjustCameraScale(0.1)}
                     title="Increase camera zoom"
                   >
                     +
