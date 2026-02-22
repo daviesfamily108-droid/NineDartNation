@@ -46,10 +46,6 @@ export function launchInPlayDemo({
     return;
   }
 
-  if (!openWindow || typeof window === "undefined") return;
-  try {
-    const url = new URL(window.location.href);
-    url.searchParams.set("match", "1");
-    window.open(url.toString(), "_blank", "noopener,noreferrer");
-  } catch {}
+  // No-op: the in-game UI now renders inline via InGameShell,
+  // so we no longer open a separate browser window.
 }
