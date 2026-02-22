@@ -706,3 +706,19 @@ select.input option {
     font-size: 1rem;
   }
 }
+
+/* ============================================================
+   Safe-area helpers for devices with gesture navigation bars
+   (Samsung, iPhone X+, etc.) — requires viewport-fit=cover
+   ============================================================ */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* In-game shell: allow vertical scrolling so the score input + quick buttons
+   are reachable on small / Samsung screens. */
+.ndn-ingame-active {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+}

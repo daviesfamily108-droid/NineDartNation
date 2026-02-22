@@ -469,7 +469,7 @@ export default function InGameShell({
   }, [match.inProgress, deriveWinningLabel, winningShot?.label]);
 
   return (
-    <div className="ndn-game-shell ndn-page ndn-ingame-active relative overflow-hidden">
+    <div className="ndn-game-shell ndn-page ndn-ingame-active relative">
       {/* ── Ambient background glow ── */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-indigo-600/10 blur-[120px]" />
@@ -642,7 +642,7 @@ export default function InGameShell({
       </div>
 
       {/* ── Main content — camera always visible + turn-sensitive controls ── */}
-      <div className="flex-1 min-h-0 overflow-y-auto pb-16">
+      <div className="flex-1 min-h-0 overflow-y-auto pb-28 sm:pb-20">
         <div className="flex flex-col gap-2">
           {/* Scoreboard + Camera side by side */}
           <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-2 min-h-0">
@@ -924,7 +924,12 @@ export default function InGameShell({
 
       {/* ── Fixed bottom score input bar (X01 and other numpad modes only) ── */}
       {!isATC && !showNumpad && !showQuitPause && !paused && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 px-3 py-2 safe-bottom">
+        <div
+          className="fixed bottom-0 left-0 right-0 z-30 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 px-3 py-2 safe-bottom"
+          style={{
+            paddingBottom: "max(0.5rem, env(safe-area-inset-bottom, 0px))",
+          }}
+        >
           <div className="flex items-center gap-2 max-w-lg mx-auto">
             <input
               type="number"
