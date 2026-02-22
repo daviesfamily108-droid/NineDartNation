@@ -2653,7 +2653,11 @@ wss.on('connection', (ws, req) => {
         }
         matches.delete(matchId)
         persistMatchesToDisk()
-        console.log('[INVITE-ACCEPT] creator accepted invite for match %s — prestart sent to both', matchId)
+        // Broadcast updated lobby so all clients remove the accepted match
+        const lobbyPayloadAccept = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+        for (const c of wss.clients) { if (c.readyState === 1) try { c.send(lobbyPayloadAccept) } catch {} }
+        try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch {}
+        console.log('[INVITE-ACCEPT] creator accepted invite for match %s — prestart sent to both, lobby broadcast sent', matchId)
       } else if (data.type === 'invite-decline') {
         // Creator declined the invite
         const matchId = String(data.matchId || '')
@@ -2705,6 +2709,9 @@ wss.on('connection', (ws, req) => {
           if (requester && requester.readyState === 1) requester.send(JSON.stringify(payload))
           matches.delete(matchId)
           persistMatchesToDisk()
+          // Broadcast updated lobby so all clients remove the accepted match
+          const lobbyPayloadResp = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
+          for (const c of wss.clients) { if (c.readyState === 1) try { c.send(lobbyPayloadResp) } catch {} }
           try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch (err) { startLogger.warn('[Matches] Supabase delete failed:', err && err.message) }
           // Setup a pending prestart session so we can collect prestart choices (skip/bull) and bull-up throws
           try {
