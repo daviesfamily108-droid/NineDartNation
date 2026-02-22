@@ -18,22 +18,9 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON public.users(username);
 -- Create an index on email for faster lookups
 CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email);
 
--- Rooms table for WebSocket game rooms
-CREATE TABLE IF NOT EXISTS public.rooms (
-    id TEXT PRIMARY KEY,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Room members (many-to-many relationship)
-CREATE TABLE IF NOT EXISTS public.room_members (
-    room_id TEXT REFERENCES public.rooms(id) ON DELETE CASCADE,
-    client_id TEXT NOT NULL,
-    username TEXT,
-    email TEXT,
-    joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    PRIMARY KEY (room_id, client_id)
-);
+-- NOTE: WebSocket game sessions are managed in-memory on the server (rooms Map).
+-- The old rooms / room_members tables have been removed — they were never
+-- queried by server.cjs and only added dead schema weight.
 
 -- Active matches table
 CREATE TABLE IF NOT EXISTS public.matches (
@@ -113,7 +100,6 @@ CREATE TABLE IF NOT EXISTS public.camera_sessions (
 );
 
 -- Indexes for performance
-CREATE INDEX IF NOT EXISTS idx_rooms_updated_at ON public.rooms(updated_at);
 CREATE INDEX IF NOT EXISTS idx_matches_status ON public.matches(status);
 CREATE INDEX IF NOT EXISTS idx_matches_creator ON public.matches(creator_id);
 CREATE INDEX IF NOT EXISTS idx_tournaments_status ON public.tournaments(status);
@@ -219,13 +205,5 @@ CREATE OR REPLACE FUNCTION cleanup_expired_camera_sessions()
 RETURNS void AS $$
 BEGIN
     DELETE FROM public.camera_sessions WHERE expires_at < NOW();
-END;
-$$ LANGUAGE plpgsql;
-
--- Remove stale rooms with no activity for 24 hours
-CREATE OR REPLACE FUNCTION cleanup_stale_rooms()
-RETURNS void AS $$
-BEGIN
-    DELETE FROM public.rooms WHERE updated_at < NOW() - INTERVAL '24 hours';
 END;
 $$ LANGUAGE plpgsql;

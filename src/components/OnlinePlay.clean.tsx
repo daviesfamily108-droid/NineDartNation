@@ -21,9 +21,9 @@ import { openMatchWindow } from "../utils/matchWindow.js";
 
 export default function OnlinePlayClean({ user }: { user?: any }) {
   const username = user?.username || "You";
-  const [currentRoomIdx, setCurrentRoomIdx] = useState(0);
-  const [rooms, setRooms] = useState(() => [
-    { id: 1, name: "room-1", matches: [] as any[] },
+  const [currentPageIdx, setCurrentPageIdx] = useState(0);
+  const [pages, setPages] = useState(() => [
+    { id: 1, name: "page-1", matches: [] as any[] },
   ]);
   const wsGlobal = (() => {
     try {
@@ -200,11 +200,11 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
 
-  const currentRoom = rooms[currentRoomIdx];
-  // NOTE: This is a *UX* hint for when to show a "room is full" message.
+  const currentPage_ = pages[currentPageIdx];
+  // NOTE: This is a *UX* hint for when to show a "page is full" message.
   // We do not hard-cap rendering at this number (tests and pagination rely on
   // the full list being renderable).
-  const maxMatchesPerRoom = 999;
+  const maxMatchesPerPage = 999;
 
   const normalizeMatch = React.useCallback((m: any) => {
     if (!m) return m;
@@ -259,9 +259,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   // NOTE: worldLobby was previously used for an alternate lobby view; keep the
   // computation removed to avoid unused-vars warnings.
 
-  // Combined matches: show only current room, filtered
+  // Combined matches: show only current page, filtered
   const combinedMatches = useMemo(() => {
-    let all = filterMatches(currentRoom?.matches || []);
+    let all = filterMatches(currentPage_?.matches || []);
 
     // In WS-driven mode, serverMatches is the canonical list. Fall back to it
     // if the current room hasn't been hydrated yet.
@@ -312,22 +312,22 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       return sortBy === "newest" ? tB - tA : tA - tB;
     });
 
-    return all.slice(0, maxMatchesPerRoom);
+    return all.slice(0, maxMatchesPerPage);
   }, [
-    currentRoom,
+    currentPage_,
     serverMatches,
     filterMatches,
     searchQuery,
     filterGame,
     filterMode,
     sortBy,
-    maxMatchesPerRoom,
+    maxMatchesPerPage,
   ]);
 
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterGame, filterMode, sortBy, currentRoomIdx]);
+  }, [searchQuery, filterGame, filterMode, sortBy, currentPageIdx]);
 
   const totalPages = Math.ceil(combinedMatches.length / itemsPerPage);
   const paginatedMatches = combinedMatches.slice(
@@ -355,9 +355,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     // Only add optimistically if we are NOT connected to the server
     // Otherwise, we wait for the server to broadcast the new match to avoid duplicates
     if (!wsGlobal?.connected) {
-      setRooms((prev) =>
+      setPages((prev) =>
         prev.map((r, idx) =>
-          idx === currentRoomIdx
+          idx === currentPageIdx
             ? { ...r, matches: [newMatch, ...r.matches] }
             : r,
         ),
@@ -388,13 +388,13 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     } catch {}
   };
 
-  const newRoom = () => {
+  const newPage = () => {
     setServerMatches([]);
-    setRooms((prev) => {
+    setPages((prev) => {
       const id = prev.length + 1;
-      const newRooms = [...prev, { id, name: `room-${id}`, matches: [] }];
-      setCurrentRoomIdx(newRooms.length - 1);
-      return newRooms;
+      const newPages = [...prev, { id, name: `page-${id}`, matches: [] }];
+      setCurrentPageIdx(newPages.length - 1);
+      return newPages;
     });
   };
 
@@ -584,9 +584,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           const filtered = filterMatches(msg.matches || []);
           setServerMatches(filtered);
           serverMatchesRef.current = filtered;
-          setRooms((prev) =>
+          setPages((prev) =>
             prev.map((r, idx) =>
-              idx === currentRoomIdx ? { ...r, matches: filtered } : r,
+              idx === currentPageIdx ? { ...r, matches: filtered } : r,
             ),
           );
         }
@@ -652,7 +652,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     wsGlobal,
     joinChoice,
     filterMatches,
-    currentRoomIdx,
+    currentPageIdx,
     handleInviteOrPrestart,
     handleMatchStart,
   ]);
@@ -937,18 +937,18 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         </h2>
         <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
           <div className="h-full flex flex-col gap-3">
-            {/* Top row: Room, New Room, Create Match */}
+            {/* Top row: Page, New Page, Create Match */}
             <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-800/50 flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
-                <div className="text-sm text-white/70">Room</div>
+                <div className="text-sm text-white/70">Page</div>
                 <div className="px-3 py-1.5 bg-slate-800/60 rounded-lg border border-slate-700/50 text-white/90 font-medium">
-                  Room ({currentRoom?.id})
+                  Page {currentPage_?.id}
                 </div>
                 <button
                   className="btn btn-ghost btn-sm rounded-lg"
-                  onClick={newRoom}
+                  onClick={newPage}
                 >
-                  New Room
+                  New Page
                 </button>
               </div>
               <div className="shrink-0 flex items-center gap-2">
@@ -956,7 +956,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm flex items-center gap-2 rounded-lg"
                   onClick={() => setShowCreateModal(true)}
                   disabled={
-                    (currentRoom?.matches?.length || 0) >= maxMatchesPerRoom
+                    (currentPage_?.matches?.length || 0) >= maxMatchesPerPage
                   }
                 >
                   <Trophy className="w-4 h-4" />
@@ -970,9 +970,9 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                     Demo In-Play
                   </button>
                 )}
-                {(currentRoom?.matches?.length || 0) >= maxMatchesPerRoom && (
+                {(currentPage_?.matches?.length || 0) >= maxMatchesPerPage && (
                   <div className="text-xs text-rose-400">
-                    Room full — create a new room
+                    Page full — create a new page
                   </div>
                 )}
               </div>
