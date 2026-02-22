@@ -528,9 +528,9 @@ export default function InGameShell({
         <div className="absolute inset-0 bg-gradient-to-r from-indigo-950/80 via-slate-900/90 to-amber-950/80" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(255,255,255,0.03),transparent_70%)]" />
 
-        <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(80px,auto)_minmax(0,1fr)] items-center py-3 sm:py-4 px-3 sm:px-6">
+        <div className="relative grid grid-cols-[minmax(0,1fr)_minmax(80px,auto)_minmax(0,1fr)] items-center py-5 sm:py-6 px-3 sm:px-6">
           {/* Player 1 (local) */}
-          <div className="flex flex-col items-center gap-0.5">
+          <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-2">
               <div
                 className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${isUsersTurn ? "text-emerald-400" : "text-slate-400"}`}
@@ -615,7 +615,7 @@ export default function InGameShell({
           </div>
 
           {/* Player 2 (away) */}
-          <div className="flex flex-col items-center gap-0.5">
+          <div className="flex flex-col items-center gap-1">
             <div className="flex items-center gap-2">
               <div
                 className={`text-xs sm:text-sm font-bold uppercase tracking-widest ${!isUsersTurn ? "text-amber-400" : "text-slate-400"}`}
@@ -699,7 +699,7 @@ export default function InGameShell({
 
       {/* ── Main content — camera always visible + turn-sensitive controls ── */}
       <div className="ndn-shell-body">
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-4">
           {/* Camera — always visible, alternates between local and remote feeds */}
           <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2 border-b border-white/5 bg-white/5">
@@ -721,7 +721,7 @@ export default function InGameShell({
                   : `Waiting for ${awayPlayer?.name || "opponent"}\u2026`}
               </span>
             </div>
-            <div className="relative min-h-[12rem] max-h-[50vh] bg-black">
+            <div className="relative min-h-[14rem] max-h-[50vh] pb-3 bg-black">
               {/* Your turn: show your local camera (with auto-scoring) */}
               <div className={isUsersTurn || !remoteStream ? "" : "hidden"}>
                 <CameraView hideInlinePanels={true} forceAutoStart={true} />
