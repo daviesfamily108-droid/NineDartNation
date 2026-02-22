@@ -69,9 +69,8 @@ vi.mock("../../store/userSettings", () => {
 import OnlinePlay from "../OnlinePlay.clean";
 
 // NOTE:
-// `OnlinePlay.clean.tsx` is a lightweight variant that does NOT mount `CameraView`.
-// The `OnlinePlay.tsx` default export points at the production wrapper we actually ship.
-import OnlinePlayReal from "../OnlinePlay.js";
+// `OnlinePlay.clean.tsx` is the production online-play component we actually ship.
+import OnlinePlayReal from "../OnlinePlay.clean.js";
 
 // A few extra dependencies are referenced by the real OnlinePlay wrapper; we mock them here
 // so this remains a small prop-wiring regression test rather than a full integration test.

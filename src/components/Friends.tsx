@@ -539,8 +539,8 @@ export default function Friends({ user }: { user?: any }) {
 
   return (
     <div
-      className="card ndn-game-shell ndn-page"
-      style={{ minHeight: "calc(100% + 100px)", paddingBottom: "100px" }}
+      className="card ndn-game-shell ndn-page ndn-friends-page"
+      style={{ minHeight: "calc(100% + 100px)" }}
     >
       <h2 className="text-2xl font-bold text-brand-700 mb-2 ndn-section-title">
         Friends 👥
