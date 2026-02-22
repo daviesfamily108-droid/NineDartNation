@@ -110,7 +110,14 @@ html, body {
   border-color: #8F43EE44;
 }
 
-/* Light mode: force light surface */
+/* Game-shell page cards always use solid dark purple (never white) on all devices */
+.ndn-game-shell.card {
+  background: #0f0d2e !important;
+  border-color: #8F43EE44 !important;
+  color: #F5F5F5 !important;
+}
+
+/* Light mode: force light surface for normal cards/panels */
 [data-color-mode="light"] .card,
 [data-color-mode="light"] .panel {
   background-color: var(--surface) !important;
@@ -118,18 +125,11 @@ html, body {
   border-color: rgba(0,0,0,0.1) !important;
 }
 
-/* Lobby card items keep the dark purple look in all modes */
-[data-color-mode="light"] .ndn-lobby-card {
-  background: rgba(49,46,129,0.85) !important;
-  border-color: #8F43EE66 !important;
-  color: #F5F5F5 !important;
-}
-
-/* Game-shell pages should use the page background, not card surface, so they
-   don't appear as a white rectangle in light mode. */
+/* Game-shell cards override light mode — always dark purple */
 [data-color-mode="light"] .ndn-game-shell.card {
-  background-color: var(--bg) !important;
-  border-color: rgba(0,0,0,0.06) !important;
+  background: #0f0d2e !important;
+  border-color: #8F43EE44 !important;
+  color: #F5F5F5 !important;
 }
 
 /* Inner panels inside game shells need readable colours in light mode */
