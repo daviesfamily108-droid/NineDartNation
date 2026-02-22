@@ -29,10 +29,7 @@ export default function MatchCard({
   disabled?: boolean;
 }) {
   return (
-    <li
-      className="p-3 rounded-xl border flex items-center justify-between relative"
-      style={{ background: "rgba(49,46,129,0.18)", borderColor: "#8F43EE44" }}
-    >
+    <li className="p-3 rounded-xl border flex items-center justify-between relative ndn-lobby-card">
       <div className="space-y-0.5">
         <div className="font-semibold">
           {t.title}

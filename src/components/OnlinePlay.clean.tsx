@@ -1136,7 +1136,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                         {paginatedMatches.map((m: any) => (
                           <div
                             key={m.id}
-                            className="group relative p-4 rounded-lg border border-slate-700/30 bg-slate-950/40 hover:border-indigo-500/50 hover:bg-slate-900/50 transition-all duration-150 shadow-sm hover:shadow-[0_8px_24px_-12px_rgba(99,102,241,0.4)] flex flex-col gap-3 min-h-[6.5rem]"
+                            className="group relative p-4 rounded-lg border ndn-lobby-card hover:border-indigo-500/50 transition-all duration-150 shadow-sm hover:shadow-[0_8px_24px_-12px_rgba(99,102,241,0.4)] flex flex-col gap-3 min-h-[6.5rem]"
                             data-testid={`match-${m.id}`}
                           >
                             <div className="flex items-start justify-between">

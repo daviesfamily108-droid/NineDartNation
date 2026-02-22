@@ -118,6 +118,13 @@ html, body {
   border-color: rgba(0,0,0,0.1) !important;
 }
 
+/* Lobby card items keep the dark purple look in all modes */
+[data-color-mode="light"] .ndn-lobby-card {
+  background: rgba(49,46,129,0.85) !important;
+  border-color: #8F43EE66 !important;
+  color: #F5F5F5 !important;
+}
+
 /* Game-shell pages should use the page background, not card surface, so they
    don't appear as a white rectangle in light mode. */
 [data-color-mode="light"] .ndn-game-shell.card {

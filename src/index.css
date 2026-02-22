@@ -348,6 +348,13 @@ body {
   border: 1.5px solid #8F43EE44;
 }
 
+/* Lobby card items (match/tournament list items inside game shells) */
+.ndn-lobby-card {
+  background: rgba(49,46,129,0.18);
+  border-color: #8F43EE44;
+  color: #F5F5F5;
+}
+
 /* Consistent outer shell for all game-mode screens (online, offline, tournaments)
    Ensures the card stretches to fill the tab and inner panels can scroll. */
 .ndn-game-shell {
