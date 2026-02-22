@@ -130,3 +130,102 @@ CREATE TABLE IF NOT EXISTS public.user_stats (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_user_stats_updated_at ON public.user_stats(updated_at);
+
+-- ============================================================
+-- MISSING TABLES — referenced by server.cjs but not yet in schema
+-- ============================================================
+
+-- Notifications (server pushes to supabase.from('notifications'))
+CREATE TABLE IF NOT EXISTS public.notifications (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL,
+    message TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'generic',
+    read BOOLEAN DEFAULT FALSE,
+    meta JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_email ON public.notifications(email);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON public.notifications(email, read);
+
+-- Friend requests (server pushes to supabase.from('friend_requests'))
+CREATE TABLE IF NOT EXISTS public.friend_requests (
+    id TEXT PRIMARY KEY,
+    from_email TEXT NOT NULL,
+    to_email TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',  -- 'pending', 'accepted', 'rejected'
+    ts BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_friend_requests_to ON public.friend_requests(to_email, status);
+CREATE INDEX IF NOT EXISTS idx_friend_requests_from ON public.friend_requests(from_email);
+
+-- ============================================================
+-- NEW TABLES — improve the site with match history & leaderboard
+-- ============================================================
+
+-- Match history: persists completed match results so players can review past games.
+-- The server currently deletes matches from the matches table on completion;
+-- this table preserves a permanent record.
+CREATE TABLE IF NOT EXISTS public.match_history (
+    id TEXT PRIMARY KEY,
+    game TEXT NOT NULL,                -- 'X01', 'Cricket', etc.
+    mode TEXT NOT NULL,                -- 'bestof' or 'firstto'
+    value INTEGER NOT NULL,            -- legs/sets target
+    starting_score INTEGER,
+    winner_email TEXT,
+    winner_name TEXT,
+    players JSONB NOT NULL,            -- array of { email, name, legsWon, avg3, bestCheckout }
+    duration_seconds INTEGER,          -- how long the match lasted
+    completed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_match_history_winner ON public.match_history(winner_email);
+CREATE INDEX IF NOT EXISTS idx_match_history_completed ON public.match_history(completed_at DESC);
+-- GIN index lets us query "all matches a player was in" via JSONB containment
+CREATE INDEX IF NOT EXISTS idx_match_history_players ON public.match_history USING GIN (players);
+
+-- Leaderboard: materialised ranking per game mode, refreshed periodically.
+-- Keeps the leaderboard query O(1) instead of scanning match_history every time.
+CREATE TABLE IF NOT EXISTS public.leaderboard (
+    email TEXT NOT NULL,
+    username TEXT NOT NULL,
+    game TEXT NOT NULL,                -- 'X01-501', 'X01-301', 'Cricket', etc.
+    rating INTEGER NOT NULL DEFAULT 1000,
+    wins INTEGER NOT NULL DEFAULT 0,
+    losses INTEGER NOT NULL DEFAULT 0,
+    avg_3dart NUMERIC(6,2) DEFAULT 0,
+    best_checkout INTEGER DEFAULT 0,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    PRIMARY KEY (email, game)
+);
+CREATE INDEX IF NOT EXISTS idx_leaderboard_game_rating ON public.leaderboard(game, rating DESC);
+
+-- Announcements: persist admin announcements so new/reconnecting clients
+-- get the latest announcement from the DB instead of in-memory only.
+CREATE TABLE IF NOT EXISTS public.announcements (
+    id SERIAL PRIMARY KEY,
+    message TEXT NOT NULL,
+    created_by TEXT,                   -- admin email
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_announcements_latest ON public.announcements(created_at DESC);
+
+-- ============================================================
+-- CLEANUP: auto-expire stale rows
+-- ============================================================
+
+-- Remove expired camera pairing sessions automatically
+CREATE OR REPLACE FUNCTION cleanup_expired_camera_sessions()
+RETURNS void AS $$
+BEGIN
+    DELETE FROM public.camera_sessions WHERE expires_at < NOW();
+END;
+$$ LANGUAGE plpgsql;
+
+-- Remove stale rooms with no activity for 24 hours
+CREATE OR REPLACE FUNCTION cleanup_stale_rooms()
+RETURNS void AS $$
+BEGIN
+    DELETE FROM public.rooms WHERE updated_at < NOW() - INTERVAL '24 hours';
+END;
+$$ LANGUAGE plpgsql;
