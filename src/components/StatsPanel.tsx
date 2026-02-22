@@ -274,7 +274,6 @@ export default function StatsPanel({ user }: { user?: any }) {
       className="card ndn-game-shell ndn-page ndn-stats-page overflow-visible"
       style={{
         background: "linear-gradient(135deg, #393053 0%, #635985 100%)",
-        paddingBottom: "800px",
       }}
     >
       <div className="mb-4">
