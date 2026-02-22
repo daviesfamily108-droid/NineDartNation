@@ -1703,17 +1703,6 @@ export default function AdminDashboard({ user }: { user: any }) {
               </div>
             </div>
           </div>
-          {selectedRequest && (
-            <HelpdeskChat
-              request={selectedRequest}
-              user={{
-                email: user?.email,
-                username: user?.username,
-                isAdmin: true,
-              }}
-              onClose={() => setSelectedRequest(null)}
-            />
-          )}
         </>
       )}
       {activeTab === "premium" && isOwner && (
@@ -2194,6 +2183,18 @@ export default function AdminDashboard({ user }: { user: any }) {
             )}
           </div>
         </>
+      )}
+      {/* Helpdesk chat modal — rendered outside tab blocks so it works from any tab */}
+      {selectedRequest && (
+        <HelpdeskChat
+          request={selectedRequest}
+          user={{
+            email: user?.email,
+            username: user?.username,
+            isAdmin: true,
+          }}
+          onClose={() => setSelectedRequest(null)}
+        />
       )}
       {/* Inline email preview overlay */}
       {preview.open && (
