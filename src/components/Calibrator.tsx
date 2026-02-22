@@ -5052,9 +5052,7 @@ export default function Calibrator() {
               <div
                 className="relative w-full overflow-hidden rounded-2xl border border-indigo-400/30 bg-black"
                 style={{
-                  aspectRatio: frameSize
-                    ? `${frameSize.w} / ${frameSize.h}`
-                    : "16 / 9",
+                  aspectRatio: "16 / 9",
                 }}
               >
                 <div className="absolute top-2 right-2 z-40 flex items-center gap-2 rounded-full bg-black/40 px-2 py-1 text-[11px] text-white backdrop-blur">

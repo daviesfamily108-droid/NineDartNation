@@ -5178,6 +5178,25 @@ export default forwardRef(function CameraView(
           >
             ↻
           </button>
+          <div className="flex items-center gap-1 ml-auto">
+            <button
+              className="rounded-lg px-2 py-1.5 bg-slate-800 border border-white/10 text-white/60 min-h-[2.25rem] text-sm font-bold"
+              onClick={() => adjustCameraScale(-0.05)}
+              title="Zoom out"
+            >
+              −
+            </button>
+            <span className="w-10 text-center font-semibold text-white text-[10px]">
+              {Math.round((cameraScale ?? 1) * 100)}%
+            </span>
+            <button
+              className="rounded-lg px-2 py-1.5 bg-slate-800 border border-white/10 text-white/60 min-h-[2.25rem] text-sm font-bold"
+              onClick={() => adjustCameraScale(0.05)}
+              title="Zoom in"
+            >
+              +
+            </button>
+          </div>
         </div>
 
         {/* ── Camera feed ── */}
