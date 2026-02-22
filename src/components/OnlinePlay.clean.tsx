@@ -638,6 +638,12 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             useMatchControl.getState().setPaused(false, null);
           } catch {}
         }
+        // Incoming match state from opponent — sync scores/turns
+        if (msg?.type === "state" && msg.payload) {
+          try {
+            useMatch.getState().importState(msg.payload);
+          } catch {}
+        }
       } catch (err) {}
     });
     return unsub;
