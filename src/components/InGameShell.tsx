@@ -38,6 +38,7 @@ export default function InGameShell({
   gameModeOverride,
   isOnline,
   remoteStream,
+  remoteFrame: remoteFrameProp,
 }: {
   user: any;
   showStartShowcase?: boolean;
@@ -62,6 +63,8 @@ export default function InGameShell({
   isOnline?: boolean;
   /** Remote opponent camera stream for turn-by-turn camera alternation. */
   remoteStream?: MediaStream | null;
+  /** Remote opponent camera snapshot (base64 JPEG) relayed via WebSocket. */
+  remoteFrame?: string | null;
 }) {
   const match = useMatch();
   useUserSettings((s: any) => s.hideInGameSidebar ?? true);
@@ -75,7 +78,7 @@ export default function InGameShell({
     frame?: string | null;
     ts?: number;
   } | null>(null);
-  const [remoteFrame] = useState<string | null>(null);
+  const remoteFrame = remoteFrameProp ?? null;
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
   // Attach remote opponent camera stream to the video element
@@ -691,7 +694,7 @@ export default function InGameShell({
               </div>
               <div className="relative flex-1 min-h-0 bg-black">
                 <div
-                  className={`h-full ${isUsersTurn || !remoteStream ? "" : "hidden"}`}
+                  className={`h-full ${isUsersTurn || (!remoteStream && !remoteFrame) ? "" : "hidden"}`}
                 >
                   <CameraView hideInlinePanels={true} forceAutoStart={true} />
                 </div>
@@ -704,7 +707,14 @@ export default function InGameShell({
                     className="w-full h-full object-contain"
                   />
                 )}
-                {!isUsersTurn && !remoteStream && (
+                {!isUsersTurn && !remoteStream && remoteFrame && (
+                  <img
+                    src={remoteFrame}
+                    alt="Opponent board"
+                    className="w-full h-full object-contain"
+                  />
+                )}
+                {!isUsersTurn && !remoteStream && !remoteFrame && (
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="text-center">
                       <div className="text-white/30 text-xs uppercase tracking-wider mb-1">

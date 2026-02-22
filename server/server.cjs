@@ -3930,6 +3930,11 @@ wss.on('connection', (ws, req) => {
           u.lastSeen = Date.now()
           users.set(ws._email, u)
         }
+      } else if (data.type === 'camera-frame') {
+        // Relay camera snapshot to opponent in the same room
+        if (ws._roomId && data.frame) {
+          broadcastToRoom(ws._roomId, { type: 'camera-frame', frame: data.frame, from: ws._id }, ws)
+        }
       } else if (data.type === 'presence') {
         ws._username = data.username || `user-${ws._id}`
         ws._email = (data.email || '').toLowerCase()

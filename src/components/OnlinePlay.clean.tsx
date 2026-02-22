@@ -185,6 +185,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [opponentQuitName, setOpponentQuitName] = useState<string | null>(null);
   // Track the active game mode for the current match (e.g. 'X01', 'Cricket', 'Around the Clock')
   const [currentGame, setCurrentGame] = useState<string>("X01");
+  // Opponent camera frame (base64 JPEG snapshot relayed via WS)
+  const [opponentFrame, setOpponentFrame] = useState<string | null>(null);
 
   // Filter & Sort State
   const [searchQuery, setSearchQuery] = useState("");
@@ -645,6 +647,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             useMatch.getState().importState(msg.payload);
           } catch {}
         }
+        // Opponent camera frame snapshot
+        if (msg?.type === "camera-frame" && msg.frame) {
+          setOpponentFrame(msg.frame);
+        }
       } catch (err) {}
     });
     return unsub;
@@ -777,6 +783,37 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     } catch {}
   }, [wsGlobal]);
 
+  // Periodically capture local camera frames and send to opponent via WS
+  useEffect(() => {
+    if (!inProgress || matchContext !== "online") return;
+    if (!wsGlobal?.connected) return;
+    const iv = setInterval(() => {
+      try {
+        const dbg = (window as any).__ndn_camera_debug;
+        const video = dbg?.videoEl?.() as HTMLVideoElement | null;
+        if (!video || !video.videoWidth || !video.videoHeight) return;
+        const w = 320;
+        const h = Math.round((video.videoHeight / video.videoWidth) * w) || 180;
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        const ctx = c.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(video, 0, 0, w, h);
+        const frame = c.toDataURL("image/jpeg", 0.4);
+        wsGlobal.send({ type: "camera-frame", frame });
+      } catch {}
+    }, 1500);
+    return () => clearInterval(iv);
+  }, [inProgress, matchContext, wsGlobal]);
+
+  // Clear opponent frame when match ends
+  useEffect(() => {
+    if (!inProgress || matchContext !== "online") {
+      setOpponentFrame(null);
+    }
+  }, [inProgress, matchContext]);
+
   const runOnlineInPlayDemo = () => {
     launchInPlayDemo({
       players: [username, "Opponent"],
@@ -877,6 +914,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}
           gameModeOverride={currentGame}
           isOnline={true}
+          remoteFrame={opponentFrame}
         />
         {/* Opponent quit overlay */}
         {opponentQuitName && (
