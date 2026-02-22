@@ -4088,7 +4088,56 @@ setInterval(() => {
       const minPlayers = t.official ? 8 : 2
       if (now >= t.startAt && t.participants.length >= minPlayers) {
         t.status = 'running'
+        // Build bracket pairings with proper bye seeding
+        const names = (t.participants || []).map(p => ({ email: (p.email || '').toLowerCase(), username: p.username || p.email || 'Player' }))
+        const bracketSize = Math.max(1, Math.pow(2, Math.ceil(Math.log2(Math.max(1, names.length)))))
+        // Seed: place participants at the top, byes at the bottom
+        const seeded = [...names]
+        while (seeded.length < bracketSize) seeded.push({ email: '', username: 'BYE' })
+        // Build pairs: top seed vs bottom seed pattern for fair bracket
+        const pairs = []
+        for (let i = 0; i < seeded.length; i += 2) {
+          pairs.push([seeded[i], seeded[i + 1] || { email: '', username: 'BYE' }])
+        }
+        t.bracket = { round: 1, pairs }
+        // Create match rooms and notify participants
+        const startingScore = t.startingScore || 501
+        for (let pi = 0; pi < pairs.length; pi++) {
+          const [p1, p2] = pairs[pi]
+          const roomId = `tournament-${t.id}-r1-m${pi}`
+          // If one side is a BYE, auto-advance the other player
+          if (p2.username === 'BYE' || p1.username === 'BYE') {
+            const advancer = p1.username === 'BYE' ? p2 : p1
+            if (!t.bracketAdvances) t.bracketAdvances = {}
+            t.bracketAdvances[`r1-m${pi}`] = advancer
+            continue
+          }
+          // Find WS connections for both participants
+          let ws1 = null, ws2 = null
+          for (const c of wss.clients) {
+            if (c.readyState !== 1) continue
+            if (c._email && p1.email && c._email === p1.email) ws1 = c
+            if (c._email && p2.email && c._email === p2.email) ws2 = c
+          }
+          const matchPayload = {
+            type: 'tournament-match-start',
+            tournamentId: t.id,
+            title: t.title,
+            roomId,
+            round: 1,
+            matchIndex: pi,
+            game: t.game || 'X01',
+            mode: t.mode || 'bestof',
+            value: t.value || 3,
+            startingScore,
+            player1: { email: p1.email, username: p1.username },
+            player2: { email: p2.email, username: p2.username },
+          }
+          if (ws1 && ws1.readyState === 1) try { ws1.send(JSON.stringify(matchPayload)) } catch {}
+          if (ws2 && ws2.readyState === 1) try { ws2.send(JSON.stringify(matchPayload)) } catch {}
+        }
         broadcastAll({ type: 'tournament-start', tournamentId: t.id, title: t.title })
+        try { persistTournamentsToDisk() } catch {}
       }
       // If startAt passed and not enough players, leave scheduled; owner can adjust later
     }

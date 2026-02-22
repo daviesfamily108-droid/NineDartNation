@@ -12,8 +12,10 @@ import {
   type ModeKey,
 } from "../utils/games.js";
 import { useMatch } from "../store/match.js";
+import { useMatchControl } from "../store/matchControl.js";
 import MatchCard from "./MatchCard.js";
 import MatchStartShowcase from "./ui/MatchStartShowcase.js";
+import InGameShell from "./InGameShell.js";
 import { useToast } from "../store/toast.js";
 import { useWS } from "./WSProvider.js";
 import { apiFetch } from "../utils/api.js";
@@ -141,11 +143,15 @@ export default function Tournaments({ user }: { user: any }) {
     open: boolean;
     t: Tournament | null;
   }>({ open: false, t: null });
+  // Track the active game mode for the current tournament match
+  const [currentGame, setCurrentGame] = useState<string>("X01");
+  // Opponent quit notification
+  const [opponentQuitName, setOpponentQuitName] = useState<string | null>(null);
   const serverPrestartRef = useRef(false);
   const _joinAcceptRef = useRef<HTMLButtonElement>(null);
   const [participants, setParticipants] = useState<Record<string, string>>({});
 
-  // Listen for match-prestart events (same as OnlinePlay)
+  // Listen for match-prestart and tournament-match-start events
   useEffect(() => {
     if (!wsGlobal) return;
     const unsub = wsGlobal.addListener((msg) => {
@@ -188,6 +194,61 @@ export default function Tournaments({ user }: { user: any }) {
             setJoinChoice(null);
             setRemoteChoices({});
           }
+        }
+        // Tournament bracket match start — server paired us with an opponent
+        if (msg?.type === "tournament-match-start") {
+          try {
+            if (useMatch.getState().inProgress) return;
+            const localEmail = String(user?.email || "").toLowerCase();
+            const localName = user?.username || "You";
+            const p1 = msg.player1 || {};
+            const p2 = msg.player2 || {};
+            const isP1 =
+              localEmail && p1.email && p1.email.toLowerCase() === localEmail;
+            const opponentName = isP1
+              ? p2.username || "Opponent"
+              : p1.username || "Opponent";
+            const playerNames = isP1
+              ? [localName, opponentName]
+              : [opponentName, localName];
+            const startScore = msg.startingScore || 501;
+            const roomId = msg.roomId || "";
+            useMatch.getState().newMatch(playerNames, startScore, roomId);
+            setCurrentGame(msg.game || "X01");
+            // Join the WS room for state sync
+            if (wsGlobal?.connected && roomId) {
+              wsGlobal.send({ type: "join", roomId });
+            }
+            setJoinMatch(null);
+            setJoinChoice(null);
+            setRemoteChoices({});
+          } catch (e) {
+            console.error("[Tournaments] tournament-match-start failed:", e);
+          }
+        }
+        // Incoming match state from opponent — sync scores/turns
+        if (msg?.type === "state" && msg.payload) {
+          try {
+            useMatch.getState().importState(msg.payload);
+          } catch {}
+        }
+        // Opponent quit
+        if (msg?.type === "opponent-quit") {
+          setOpponentQuitName(msg.quitterName || "Opponent");
+        }
+        // Opponent paused
+        if (msg?.type === "opponent-paused") {
+          try {
+            useMatchControl
+              .getState()
+              .setPaused(true, null, msg.pauserName || "Opponent");
+          } catch {}
+        }
+        // Opponent resumed
+        if (msg?.type === "opponent-unpaused") {
+          try {
+            useMatchControl.getState().setPaused(false, null);
+          } catch {}
         }
         if (msg?.type === "prestart-choice-notify") {
           const { roomId, playerId, choice } = msg;
@@ -251,6 +312,15 @@ export default function Tournaments({ user }: { user: any }) {
       }
     } catch {}
   };
+
+  const sendState = useCallback(() => {
+    try {
+      if (wsGlobal?.connected) {
+        const st = useMatch.getState();
+        wsGlobal.send({ type: "state", payload: st });
+      }
+    } catch {}
+  }, [wsGlobal]);
 
   async function refresh() {
     try {
@@ -387,11 +457,15 @@ export default function Tournaments({ user }: { user: any }) {
       1,
       2 ** Math.ceil(Math.log2(Math.max(1, names.length))),
     );
-    const padded = [...names];
-    while (padded.length < size) padded.push("BYE");
+    // Standard tournament seeding: seed 1 vs seed N, seed 2 vs seed N-1, etc.
+    // This places BYEs opposite the top seeds so they get free passes.
+    const seeded: string[] = new Array(size).fill("BYE");
+    for (let i = 0; i < names.length; i++) {
+      seeded[i] = names[i];
+    }
     const pairs: Array<[string, string]> = [];
-    for (let i = 0; i < padded.length; i += 2) {
-      pairs.push([padded[i], padded[i + 1] ?? "BYE"]);
+    for (let i = 0; i < size / 2; i++) {
+      pairs.push([seeded[i], seeded[size - 1 - i]]);
     }
     return pairs;
   }, []);
@@ -725,6 +799,124 @@ export default function Tournaments({ user }: { user: any }) {
   function fmt(ts: number) {
     const d = new Date(ts);
     return d.toLocaleString();
+  }
+
+  const username = user?.username || "You";
+
+  // ── When a tournament match is in progress, render the full in-game shell ──
+  if (inProgress) {
+    const matchState = useMatch.getState();
+    const localIdx = (matchState.players || []).findIndex(
+      (p: any) => p?.name && p.name.toLowerCase() === username.toLowerCase(),
+    );
+    return (
+      <>
+        <InGameShell
+          user={user}
+          showStartShowcase={showStartShowcase}
+          onShowStartShowcaseChange={setShowStartShowcase}
+          onCommitVisit={(score, _darts, _meta) => {
+            try {
+              const m = useMatch.getState();
+              const p = m.players[m.currentPlayerIdx];
+              const leg = p?.legs?.[p.legs.length - 1];
+              const preRem = leg ? leg.totalScoreRemaining : m.startingScore;
+              const postRem = Math.max(0, preRem - score);
+              const attempts = preRem <= 50 ? 3 : postRem <= 50 ? 1 : 0;
+              const finished = postRem === 0;
+              m.addVisit(score, 3, {
+                preOpenDarts: 0,
+                doubleWindowDarts: attempts,
+                finishedByDouble: finished,
+                visitTotal: score,
+              });
+              if (leg && leg.totalScoreRemaining === 0) {
+                m.endLeg(score);
+              } else {
+                m.nextPlayer();
+              }
+            } catch {
+              useMatch.getState().addVisit(score, 3);
+              useMatch.getState().nextPlayer();
+            }
+            sendState();
+          }}
+          onQuit={() => {
+            try {
+              useMatch.getState().endGame();
+            } catch {}
+            try {
+              if (wsGlobal?.connected) {
+                wsGlobal.send({ type: "match-quit" });
+              }
+            } catch {}
+            setOpponentQuitName(null);
+            setJoinMatch(null);
+            setJoinChoice(null);
+            setRemoteChoices({});
+            sendState();
+            try {
+              window.dispatchEvent(new Event("ndn:match-quit"));
+            } catch {}
+          }}
+          onPause={() => {
+            try {
+              useMatchControl.getState().setPaused(true, null, username);
+            } catch {}
+            try {
+              if (wsGlobal?.connected) {
+                wsGlobal.send({ type: "match-pause" });
+              }
+            } catch {}
+          }}
+          onResume={() => {
+            try {
+              useMatchControl.getState().setPaused(false, null);
+            } catch {}
+            try {
+              if (wsGlobal?.connected) {
+                wsGlobal.send({ type: "match-unpause" });
+              }
+            } catch {}
+          }}
+          onStateChange={sendState}
+          localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}
+          gameModeOverride={currentGame}
+          isOnline={true}
+        />
+        {/* Opponent quit overlay */}
+        {opponentQuitName && (
+          <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="bg-slate-900 border border-white/10 rounded-2xl p-6 max-w-sm w-full mx-4 text-center shadow-2xl">
+              <div className="text-4xl mb-3">🚪</div>
+              <h3 className="text-lg font-bold text-white mb-2">
+                {opponentQuitName} left the match
+              </h3>
+              <p className="text-sm text-white/60 mb-5">
+                Your opponent has quit. You can leave the match now.
+              </p>
+              <button
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold hover:scale-[1.02] active:scale-[0.98] transition-all"
+                onClick={() => {
+                  try {
+                    useMatch.getState().endGame();
+                  } catch {}
+                  setOpponentQuitName(null);
+                  setJoinMatch(null);
+                  setJoinChoice(null);
+                  setRemoteChoices({});
+                  try {
+                    window.dispatchEvent(new Event("ndn:match-quit"));
+                  } catch {}
+                }}
+              >
+                Leave Match
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    );
   }
 
   return (
