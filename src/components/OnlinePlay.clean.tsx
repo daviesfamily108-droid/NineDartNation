@@ -185,7 +185,8 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const [opponentQuitName, setOpponentQuitName] = useState<string | null>(null);
   // Track the active game mode for the current match (e.g. 'X01', 'Cricket', 'Around the Clock')
   const [currentGame, setCurrentGame] = useState<string>("X01");
-  // Opponent camera frame (base64 JPEG snapshot relayed via WS)
+  // Opponent camera frame — use a ref to avoid React re-renders on every frame
+  const opponentFrameRef = useRef<string | null>(null);
   const [opponentFrame, setOpponentFrame] = useState<string | null>(null);
 
   // Filter & Sort State
@@ -652,9 +653,18 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             useMatch.getState().importState(msg.payload);
           } catch {}
         }
-        // Opponent camera frame snapshot
+        // Opponent camera frame snapshot — update ref directly to bypass React re-renders
         if (msg?.type === "camera-frame" && msg.frame) {
-          setOpponentFrame(msg.frame);
+          opponentFrameRef.current = msg.frame;
+          // Update the img element directly via DOM ref for zero-lag rendering
+          try {
+            const el = document.getElementById(
+              "ndn-opponent-frame",
+            ) as HTMLImageElement | null;
+            if (el) el.src = msg.frame;
+          } catch {}
+          // Set state once to signal that frames are arriving (controls visibility)
+          if (!opponentFrame) setOpponentFrame(msg.frame);
         }
       } catch (err) {}
     });
@@ -807,55 +817,38 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     } catch {}
   }, [wsGlobal]);
 
-  // Stream local camera frames to opponent via WS at ~10 FPS for smooth video
+  // Stream local camera frames to opponent via WS at ~24 FPS for smooth video
   useEffect(() => {
     if (!inProgress || matchContext !== "online") return;
     if (!wsGlobal?.connected) return;
     let alive = true;
-    let sending = false;
     // Reuse a single off-screen canvas to avoid GC pressure
     const c = document.createElement("canvas");
     const ctx = c.getContext("2d");
     let lastSendTs = 0;
-    const FRAME_INTERVAL = 100; // ~10 FPS
+    const FRAME_INTERVAL = 42; // ~24 FPS
 
     const loop = () => {
       if (!alive) return;
       requestAnimationFrame(loop);
       const now = performance.now();
       if (now - lastSendTs < FRAME_INTERVAL) return;
-      if (sending) return; // backpressure: skip if previous frame still encoding
       try {
         const dbg = (window as any).__ndn_camera_debug;
         const video = dbg?.videoEl?.() as HTMLVideoElement | null;
         if (!video || !video.videoWidth || !video.videoHeight) return;
-        const w = 320;
-        const h = Math.round((video.videoHeight / video.videoWidth) * w) || 180;
+        const w = 480;
+        const h = Math.round((video.videoHeight / video.videoWidth) * w) || 270;
         if (c.width !== w) c.width = w;
         if (c.height !== h) c.height = h;
         if (!ctx) return;
         ctx.drawImage(video, 0, 0, w, h);
-        sending = true;
         lastSendTs = now;
-        c.toBlob(
-          (blob) => {
-            sending = false;
-            if (!alive || !blob) return;
-            const reader = new FileReader();
-            reader.onloadend = () => {
-              if (!alive) return;
-              try {
-                wsGlobal.send({
-                  type: "camera-frame",
-                  frame: reader.result as string,
-                });
-              } catch {}
-            };
-            reader.readAsDataURL(blob);
-          },
-          "image/jpeg",
-          0.5,
-        );
+        // Synchronous toDataURL is faster than async toBlob+FileReader for small frames
+        const frame = c.toDataURL("image/jpeg", 0.55);
+        try {
+          wsGlobal.send({ type: "camera-frame", frame });
+        } catch {}
       } catch {}
     };
     requestAnimationFrame(loop);

@@ -710,6 +710,7 @@ export default function InGameShell({
                   )}
                   {!isUsersTurn && !remoteStream && remoteFrame && (
                     <img
+                      id="ndn-opponent-frame"
                       src={remoteFrame}
                       alt="Opponent board"
                       className="w-full h-full object-contain"

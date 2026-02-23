@@ -3987,8 +3987,8 @@ wss.on('connection', (ws, req) => {
   ws.on('error', (err) => {
     try { console.warn(`[WS] error id=${ws._id} message=${err?.message||err}`) } catch {}
   })
-  // Token-bucket rate limit: 10 msg/sec, burst 20
-  ws._bucket = { tokens: 20, last: Date.now(), rate: 10, capacity: 20 }
+  // Token-bucket rate limit: 30 msg/sec, burst 50 (high enough for ~24 FPS camera frames + game state)
+  ws._bucket = { tokens: 50, last: Date.now(), rate: 30, capacity: 50 }
   function allowMessage() {
     const now = Date.now()
     const delta = (now - ws._bucket.last) / 1000

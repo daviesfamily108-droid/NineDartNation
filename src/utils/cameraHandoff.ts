@@ -1,19 +1,19 @@
-﻿// PoC: forward small JPEG frames from a video element across windows using BroadcastChannel
+// PoC: forward small JPEG frames from a video element across windows using BroadcastChannel
 import { broadcastMessage, subscribeMatchSync } from "./broadcast.js";
 
 let _interval: number | null = null;
 let _video: HTMLVideoElement | null = null;
 
-export function startForwarding(video: HTMLVideoElement, ms = 500) {
+export function startForwarding(video: HTMLVideoElement, ms = 42) {
   try {
     stopForwarding();
     _video = video;
     _interval = window.setInterval(() => {
       try {
         if (!_video || !_video.videoWidth || !_video.videoHeight) return;
-        const w = 320;
+        const w = 480;
         const h =
-          Math.round((_video.videoHeight / _video.videoWidth) * w) || 180;
+          Math.round((_video.videoHeight / _video.videoWidth) * w) || 270;
         const c = document.createElement("canvas");
         c.width = w;
         c.height = h;
@@ -21,7 +21,7 @@ export function startForwarding(video: HTMLVideoElement, ms = 500) {
         if (!ctx) return;
         ctx.drawImage(_video, 0, 0, w, h);
         try {
-          const frame = c.toDataURL("image/jpeg", 0.45);
+          const frame = c.toDataURL("image/jpeg", 0.55);
           broadcastMessage({ type: "cameraFrame", frame, ts: Date.now() });
         } catch (e) {}
       } catch (e) {}
