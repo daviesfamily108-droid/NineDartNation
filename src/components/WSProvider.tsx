@@ -124,6 +124,11 @@ export function WSProvider({ children }: { children: ReactNode }) {
       if (!shouldReconnectRef.current) return;
       const attempt = (attemptsRef.current || 0) + 1;
       attemptsRef.current = attempt;
+      // Stop retrying after 15 attempts to avoid infinite reconnection storms
+      if (attempt > 15) {
+        if (debug) console.log("[WS] max retries reached, stopping");
+        return;
+      }
       // rotate endpoint every 2 failed attempts for broader coverage
       if (attempt % 2 === 0) rotateEndpoint();
       if (debug)
@@ -133,17 +138,12 @@ export function WSProvider({ children }: { children: ReactNode }) {
           "next endpoint",
           currentEndpoint(),
         );
-      const base = 1000 * Math.pow(2, attempt - 1);
+      // Minimum 2s delay on first attempt, exponential backoff after, capped at 60s
+      const base = 1000 * Math.pow(2, attempt);
       const jitter = Math.floor(Math.random() * 1000);
-      let delay = Math.min(30000, base + jitter);
-      // First retry should be immediate for instant reconnect UX
-      if (attempt === 1) delay = 0;
+      const delay = Math.min(60000, Math.max(2000, base + jitter));
       if (timerRef.current) clearTimeout(timerRef.current);
-      if (delay === 0) {
-        connect();
-      } else {
-        timerRef.current = setTimeout(connect, delay);
-      }
+      timerRef.current = setTimeout(connect, delay);
     };
   }, []);
 

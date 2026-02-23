@@ -160,7 +160,12 @@ export default function CameraTile(props: CameraTileProps) {
   }, [pairCode, lanHost, httpsInfo]);
 
   function ensureWS() {
-    if (ws && ws.readyState === WebSocket.OPEN) return ws;
+    if (
+      ws &&
+      (ws.readyState === WebSocket.OPEN ||
+        ws.readyState === WebSocket.CONNECTING)
+    )
+      return ws;
     const url = getPreferredWsUrl();
     const socket = new WebSocket(url);
     setWs(socket);

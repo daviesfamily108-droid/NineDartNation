@@ -117,6 +117,9 @@ if (redisClient) {
 } else {
   startLogger.warn('[REDIS] Not configured - using in-memory storage for sessions');
 }
+// Upstash REST fallback (when @upstash/redis SDK is not used but REST URL is available)
+const upstashRestUrl = process.env.UPSTASH_REDIS_REST_URL || null;
+const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN || null;
 // Observability: metrics registry
 const register = new client.Registry()
 client.collectDefaultMetrics({ register })
@@ -990,10 +993,8 @@ app.post('/api/admins/revoke', requireAdmin, (req, res) => {
   res.json({ ok: true, admins: Array.from(adminEmails) })
 })
 
-// Admin ops (owner-only; demo ÔÇö not secure)
-app.get('/api/admin/status', (req, res) => {
-  const requesterEmail = String(req.query.requesterEmail || '').toLowerCase()
-  if (requesterEmail !== OWNER_EMAIL) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+// Admin ops
+app.get('/api/admin/status', requireAuth, requireAdmin, (req, res) => {
   res.json({
     ok: true,
     server: {
@@ -1019,15 +1020,7 @@ app.post('/api/admin/maintenance', (req, res) => {
   res.json({ ok: true, maintenance: maintenanceMode })
 })
 
-app.get('/api/admin/system-health', (req, res) => {
-  const authHeader = req.headers.authorization || ''
-  
-  // Basic authentication check
-  const isAuthenticated = !!authHeader
-  if (!isAuthenticated) {
-    return res.status(403).json({ ok: false, error: 'UNAUTHORIZED' })
-  }
-  
+app.get('/api/admin/system-health', requireAuth, requireAdmin, (req, res) => {
   const uptime = process.uptime()
   const memUsage = process.memoryUsage()
   
@@ -1054,14 +1047,7 @@ app.get('/api/admin/system-health', (req, res) => {
   })
 })
 
-app.post('/api/admin/clustering', (req, res) => {
-  const authHeader = req.headers.authorization || ''
-  
-  // Verify authorization header exists
-  if (!authHeader) {
-    return res.status(403).json({ ok: false, error: 'UNAUTHORIZED' })
-  }
-  
+app.post('/api/admin/clustering', requireAuth, requireAdmin, (req, res) => {
   const { enabled, maxWorkers, capacity } = req.body || {}
   
   // Store clustering config
@@ -1105,6 +1091,80 @@ app.post('/api/admin/subscription', (req, res) => {
   }
   subscription.fullAccess = !!fullAccess
   res.json({ ok: true, subscription })
+})
+
+// Admin: list recently created members
+app.get('/api/admin/members', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const list = []
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('users').select('email, username, created_at').order('created_at', { ascending: false }).limit(50)
+        if (!error && Array.isArray(data)) {
+          for (const u of data) list.push({ email: u.email, username: u.username, createdAt: u.created_at })
+        }
+      } catch (err) { startLogger.warn('[Admin] Supabase members query failed:', err && err.message) }
+    }
+    if (list.length === 0) {
+      for (const [email, u] of users.entries()) {
+        list.push({ email, username: u.username || email, createdAt: u.createdAt || null })
+      }
+    }
+    return res.json({ ok: true, members: list })
+  } catch (err) {
+    return res.status(500).json({ ok: false, error: 'FAILED' })
+  }
+})
+
+// Admin: server logs stub (returns recent log lines if available, else empty)
+app.get('/api/admin/logs', requireAuth, requireAdmin, (req, res) => {
+  res.json({ ok: true, logs: [] })
+})
+
+// In-memory help/support requests
+const helpRequests = []
+
+app.get('/api/admin/help-requests', requireAuth, requireAdmin, (req, res) => {
+  res.json({ ok: true, requests: helpRequests })
+})
+
+app.post('/api/admin/help-requests', requireAuth, (req, res) => {
+  const { email, username, message, category } = req.body || {}
+  if (!message) return res.status(400).json({ ok: false, error: 'MESSAGE_REQUIRED' })
+  const id = nanoid(10)
+  const request = { id, email: String(email || '').toLowerCase(), username: String(username || ''), message: String(message), category: String(category || 'general'), status: 'open', createdAt: Date.now() }
+  helpRequests.push(request)
+  res.json({ ok: true, id })
+})
+
+app.post('/api/admin/help-requests/claim', requireAuth, requireAdmin, (req, res) => {
+  const { id } = req.body || {}
+  const idx = helpRequests.findIndex(r => r.id === id)
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  helpRequests[idx].status = 'claimed'
+  helpRequests[idx].claimedBy = req.user?.email || ''
+  res.json({ ok: true })
+})
+
+app.post('/api/admin/help-requests/resolve', requireAuth, requireAdmin, (req, res) => {
+  const { id } = req.body || {}
+  const idx = helpRequests.findIndex(r => r.id === id)
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  helpRequests[idx].status = 'resolved'
+  res.json({ ok: true })
+})
+
+app.post('/api/admin/help-requests/delete', requireAuth, requireAdmin, (req, res) => {
+  const { id } = req.body || {}
+  const idx = helpRequests.findIndex(r => r.id === id)
+  if (idx === -1) return res.status(404).json({ ok: false, error: 'NOT_FOUND' })
+  helpRequests.splice(idx, 1)
+  res.json({ ok: true })
+})
+
+app.post('/api/admin/help-requests/clear', requireAuth, requireAdmin, (req, res) => {
+  helpRequests.splice(0, helpRequests.length)
+  res.json({ ok: true })
 })
 
 // --- Subscription expiry scanner & notification cron --------------------------------
@@ -1234,14 +1294,23 @@ app.post('/api/admin/matches/delete', (req, res) => {
 })
 
 // Admin persistence status endpoint (owner-only)
-app.get('/api/admin/persistence/status', requireAdmin, (req, res) => {
-  const owner = getOwnerFromReq(req)
-  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
-  res.json({ ok: true, supabase: !!supabase, redis: !!redisClient || (!!upstashRestUrl && !!upstashToken), lastTournamentPersistAt })
+app.get('/api/admin/persistence/status', requireAuth, requireAdmin, (req, res) => {
+  res.json({ ok: true, supabase: !!supabase, redis: !!redisClient, lastTournamentPersistAt })
 })
 
 // Health check for quick connectivity tests
 app.get('/health', (req, res) => res.json({ ok: true }))
+// Kubernetes-style readiness probe
+app.get('/readyz', (req, res) => res.json({ ok: true }))
+// Prometheus-compatible metrics endpoint
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', register.contentType)
+    res.end(await register.metrics())
+  } catch (err) {
+    res.status(500).end()
+  }
+})
 // Surface whether HTTPS was configured so clients can prefer secure links
 app.get('/api/https-info', (req, res) => {
   res.json({ https: HTTPS_ACTIVE, port: HTTPS_PORT })
@@ -1555,8 +1624,6 @@ function loadTournamentsFromDisk() {
   } catch (err) { startLogger.warn('[Tournaments] Failed to load from disk:', err && err.message) }
 }
 
-function persistTournamentsToDisk() {
-
 // Persist tournaments to Redis or Upstash REST key for cross-instance persistence.
 async function persistTournamentsToRedis(arr) {
   try {
@@ -1628,6 +1695,8 @@ async function loadTournamentsFromPersistence() {
     loadTournamentsFromDisk()
   } catch (err) { startLogger.warn('[Tournaments] loadTournamentsFromPersistence error:', err && err.message) }
 }
+
+function persistTournamentsToDisk() {
   try {
     const dir = path.dirname(TOURNAMENTS_FILE)
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -1643,6 +1712,7 @@ async function loadTournamentsFromPersistence() {
 ;(async () => { await loadTournamentsFromPersistence().catch(err => startLogger.warn('[Tournaments] initial load failed', err && err.message)) })()
 // Optional: if SUPABASE configured and NDN_AUTO_MIGRATE_TOURNAMENTS=1, upsert disk tournaments to Supabase
 if (supabase && String(process.env.NDN_AUTO_MIGRATE_TOURNAMENTS || '') === '1') {
+  ;(async () => {
   try {
     const raw = fs.existsSync(TOURNAMENTS_FILE) ? fs.readFileSync(TOURNAMENTS_FILE, 'utf8') : '[]'
     const arr = JSON.parse(raw || '[]') || []
@@ -1673,6 +1743,7 @@ if (supabase && String(process.env.NDN_AUTO_MIGRATE_TOURNAMENTS || '') === '1') 
   logger.info('[Tournaments] Auto-migrated %d tournaments into Supabase', arr.length)
     }
   } catch (err) { startLogger.warn('[Tournaments] Auto-migrate failed', err && err.message) }
+  })()
 }
 // Simple in-memory users and friendships (demo)
 // users: email -> { email, username, status: 'online'|'offline'|'ingame', wsId? }
@@ -2128,7 +2199,15 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
   }
 }
 
+const MAX_WS_CLIENTS = Number(process.env.MAX_WS_CLIENTS) || 200
+
 wss.on('connection', (ws, req) => {
+  // Reject new connections if at capacity to prevent resource exhaustion
+  if (clients.size >= MAX_WS_CLIENTS) {
+    try { logger.warn('[WS] connection rejected — at capacity (%d/%d)', clients.size, MAX_WS_CLIENTS) } catch {}
+    try { ws.close(1013, 'Server at capacity') } catch {}
+    return
+  }
   try { logger.info(`[WS] client connected path=${req?.url||'/'} origin=${req?.headers?.origin||''}`) } catch {}
   ws._id = nanoid(8);
   clients.set(ws._id, ws)
@@ -3988,15 +4067,11 @@ app.post('/api/admin/tournaments/reseed-weekly', (req, res) => {
 })
 
 // Admin: force re-broadcast of tournaments to all instances
-app.post('/api/admin/tournaments/broadcast', (req, res) => {
-  const owner = getAdminFromReq(req)
-  if (!owner) return res.status(403).json({ ok: false, error: 'FORBIDDEN' })
+app.post('/api/admin/tournaments/broadcast', requireAuth, requireAdmin, (req, res) => {
   try {
     const arr = Array.from(tournaments.values())
     // Broadcast locally
     for (const client of wss.clients) { if (client.readyState === 1) client.send(JSON.stringify({ type: 'tournaments', tournaments: arr })) }
-    // Publish cross-instance
-  publishTournamentUpdate(arr).catch(err => startLogger.warn('[Tournaments] publishTournamentUpdate error:', err && err.message))
     res.json({ ok: true })
   } catch (err) {
     startLogger.warn('[Tournaments] force broadcast failed:', err && err.message)

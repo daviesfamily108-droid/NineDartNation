@@ -64,6 +64,21 @@ export function getApiBaseUrl(): string {
 export function apiFetch(path: ApiPath, init?: RequestInit) {
   const url = resolveApiUrl(path);
 
+  // Auto-attach JWT auth token if available and not already set
+  const mergedInit = { ...init };
+  try {
+    const token =
+      typeof localStorage !== "undefined"
+        ? localStorage.getItem("authToken")
+        : null;
+    if (token) {
+      const existing = mergedInit.headers as Record<string, string> | undefined;
+      if (!existing?.Authorization && !existing?.authorization) {
+        mergedInit.headers = { ...existing, Authorization: `Bearer ${token}` };
+      }
+    }
+  } catch (_) {}
+
   // Admin and auth endpoints should ALWAYS reach the real server — never
   // short-circuit them with the API-disabled flag. These are explicit user
   // actions (login, clustering toggle, etc.) that must attempt the network.
@@ -99,7 +114,7 @@ export function apiFetch(path: ApiPath, init?: RequestInit) {
   // network / devtools with repeated failing requests.
   // Critical paths (admin, auth) never set the disabled flag — a failed admin
   // request shouldn't kill the entire API for the rest of the app.
-  return fetch(url, init)
+  return fetch(url, mergedInit)
     .catch((err) => {
       if (!isCriticalPath) {
         try {
