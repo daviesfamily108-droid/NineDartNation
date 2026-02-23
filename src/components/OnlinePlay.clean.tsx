@@ -761,9 +761,13 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   };
 
   const requestJoin = (m: any) => {
-    setJoinMatch(m);
-    // MatchPrestart overlay handles the pre-game flow now; MatchStartShowcase
-    // is shown later when the user accepts via handleJoinAccept.
+    // Do NOT set joinMatch here — wait for the server's match-prestart after
+    // the creator accepts.  Setting it prematurely opens MatchPrestart and
+    // auto-starts the match before the creator has even accepted.
+    // Show immediate "Waiting for creator" feedback instead.
+    setWaitingForCreator(m.creatorName || m.createdBy || "Creator");
+    // Stash match info so handleMatchStart has fallback data
+    pendingMatchRef.current = { ...m };
     try {
       if (wsGlobal?.connected) {
         // Ensure presence is sent before joining
@@ -1183,110 +1187,84 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                       )}
                       <div
                         ref={matchesRef}
-                        className={`ndn-card-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-h-[28rem] overflow-auto p-1 ${focusMode ? "opacity-90" : ""}`}
+                        className={`ndn-card-grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 max-h-[28rem] overflow-auto p-1 ${focusMode ? "opacity-90" : ""}`}
                         data-testid="matches-grid"
                       >
                         {paginatedMatches.map((m: any) => (
                           <div
                             key={m.id}
-                            className="group relative p-4 rounded-lg border ndn-lobby-card hover:border-indigo-500/50 transition-all duration-150 shadow-sm hover:shadow-[0_8px_24px_-12px_rgba(99,102,241,0.4)] flex flex-col gap-3 min-h-[6.5rem]"
+                            className="group relative p-2.5 rounded-lg border ndn-lobby-card hover:border-indigo-500/50 transition-all duration-150 shadow-sm hover:shadow-[0_4px_16px_-8px_rgba(99,102,241,0.4)] flex flex-col gap-1.5"
                             data-testid={`match-${m.id}`}
                           >
-                            <div className="flex items-start justify-between">
-                              <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-3">
-                                  {!focusMode && (
-                                    <div
-                                      className="w-9 h-9 rounded-full flex items-center justify-center border group-hover:border-opacity-60 transition-colors text-sm"
-                                      style={{
-                                        backgroundColor: `${getGameDisplay(m.game).color}15`,
-                                        borderColor: `${getGameDisplay(m.game).color}30`,
-                                      }}
-                                    >
-                                      {getGameDisplay(m.game).emoji}
-                                    </div>
-                                  )}
-                                  <div className="min-w-0">
-                                    <div
-                                      className="font-bold group-hover:text-indigo-300 transition-colors truncate"
-                                      style={{
-                                        color: getGameDisplay(m.game).color,
-                                      }}
-                                    >
-                                      {getGameDisplay(m.game).emoji} {m.game}
-                                    </div>
-                                    <div className="text-xs text-white/50 flex items-center gap-1">
-                                      <Clock className="w-3 h-3" />
-                                      {new Date(m.createdAt).toLocaleTimeString(
-                                        [],
-                                        { hour: "2-digit", minute: "2-digit" },
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                              {m.roomName && (
-                                <div className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-none bg-slate-950 border border-slate-850 text-white/70">
-                                  {m.roomName}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex flex-col gap-1 text-sm text-white/70 bg-transparent border-t border-slate-850 pt-2">
-                              <div className="flex items-center gap-2">
-                                <span className="px-1.5 py-0.5 rounded-none bg-white/5 text-xs font-medium border border-slate-850">
-                                  {m.modeType === "bestof"
-                                    ? "Best Of"
-                                    : "First To"}
-                                </span>
-                                <span className="font-mono text-indigo-300">
-                                  {m.legs}
-                                </span>
-                                <span>legs</span>
-                                {m.startingScore && (
-                                  <>
-                                    <span className="w-1 h-1 rounded-full bg-white/20" />
-                                    <span className="font-mono text-amber-300">
-                                      {m.startingScore}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
+                            {/* Row 1: Game icon + name + time + mode/legs/score */}
+                            <div className="flex items-center gap-2">
                               {!focusMode && (
-                                <div className="text-xs text-white/40 flex items-center gap-1 mt-1">
-                                  <Users className="w-3 h-3" />
-                                  Created by:{" "}
-                                  <span className="text-white/60">
-                                    {m.createdBy || m.creatorName || "Unknown"}
-                                  </span>
+                                <div
+                                  className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center border group-hover:border-opacity-60 transition-colors text-xs"
+                                  style={{
+                                    backgroundColor: `${getGameDisplay(m.game).color}15`,
+                                    borderColor: `${getGameDisplay(m.game).color}30`,
+                                  }}
+                                >
+                                  {getGameDisplay(m.game).emoji}
                                 </div>
+                              )}
+                              <div
+                                className="text-sm font-bold group-hover:text-indigo-300 transition-colors truncate"
+                                style={{ color: getGameDisplay(m.game).color }}
+                              >
+                                {m.game}
+                              </div>
+                              <div className="text-[10px] text-white/40 flex items-center gap-0.5 shrink-0 ml-auto">
+                                <Clock className="w-2.5 h-2.5" />
+                                {new Date(m.createdAt).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Row 2: Mode badge + legs + score */}
+                            <div className="flex items-center gap-1.5 text-xs text-white/70">
+                              <span className="px-1 py-px rounded-sm bg-white/5 text-[10px] font-medium border border-slate-800">
+                                {m.modeType === "bestof" ? "BO" : "FT"}
+                              </span>
+                              <span className="font-mono text-indigo-300 text-xs">
+                                {m.legs}
+                              </span>
+                              <span className="text-[10px]">legs</span>
+                              {m.startingScore && (
+                                <>
+                                  <span className="w-0.5 h-0.5 rounded-full bg-white/20" />
+                                  <span className="font-mono text-amber-300 text-xs">
+                                    {m.startingScore}
+                                  </span>
+                                </>
                               )}
                             </div>
 
-                            <div className="flex items-center justify-between mt-auto pt-2 border-t border-white/5">
-                              <div className="flex items-center gap-2 min-w-0">
+                            {/* Row 3: Creator + Join button */}
+                            <div className="flex items-center justify-between pt-1 border-t border-white/5">
+                              <div className="flex items-center gap-1.5 min-w-0">
                                 {!focusMode && (
-                                  <div className="flex items-center gap-3 min-w-0">
-                                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-[10px] font-bold text-white">
+                                  <>
+                                    <div className="w-5 h-5 shrink-0 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-[8px] font-bold text-white">
                                       {(m.createdBy || m.creatorName || "U")
                                         .substring(0, 2)
                                         .toUpperCase()}
                                     </div>
-                                    <span className="text-xs text-white/60 truncate max-w-[120px]">
+                                    <span className="text-[10px] text-white/50 truncate max-w-[90px]">
                                       {m.createdBy || m.creatorName}
                                     </span>
-                                  </div>
+                                  </>
                                 )}
                               </div>
-
-                              <div className="flex items-center justify-end">
-                                <button
-                                  className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm px-4 rounded-none"
-                                  onClick={() => requestJoin(m)}
-                                >
-                                  Join
-                                </button>
-                              </div>
+                              <button
+                                className="btn btn-sm bg-indigo-600 hover:bg-indigo-500 text-white border-none shadow-sm px-3 py-0.5 text-xs rounded-none"
+                                onClick={() => requestJoin(m)}
+                              >
+                                Join
+                              </button>
                             </div>
                           </div>
                         ))}

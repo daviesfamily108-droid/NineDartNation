@@ -86,6 +86,14 @@
   }
 }
 
+/* ─── Desktop (>1024px) ─── */
+@media (min-width: 1025px) {
+  /* Tighter grid gap for compact lobby cards */
+  .ndn-card-grid {
+    gap: 0.5rem;
+  }
+}
+
 /* ─── Small phones (iPhone SE, etc) ─── */
 @media (max-width: 380px) {
   .home-content h2 {
