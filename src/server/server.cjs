@@ -2170,8 +2170,10 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
   const set = rooms.get(roomId);
   if (!set) return;
   const payload = (typeof data === 'string') ? data : JSON.stringify(data)
+  // Suppress verbose logging for high-frequency camera-frame messages
+  const isCameraFrame = (typeof data === 'object' && data && data.type === 'camera-frame');
   try {
-    if (DEBUG) {
+    if (DEBUG && !isCameraFrame) {
       try { logger.debug('[BROADCAST] room=%s clients=%s except=%s data=%s', roomId, Array.from(set).map(s => s && s._id).join(','), exceptWs && exceptWs._id, typeof data === 'string' ? data : JSON.stringify(data).slice(0,200)) } catch {}
       try { console.log('[BROADCAST] room=%s clients=%s except=%s data=%s', roomId, Array.from(set).map(s => s && s._id).join(','), exceptWs && exceptWs._id, typeof data === 'string' ? data : JSON.stringify(data).slice(0,200)) } catch {}
     }

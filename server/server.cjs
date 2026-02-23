@@ -3910,8 +3910,10 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
   const set = rooms.get(roomId);
   if (!set) return;
   const payload = (typeof data === 'string') ? data : JSON.stringify(data)
+  // Suppress verbose logging for high-frequency camera-frame messages
+  const isCameraFrame = (typeof data === 'object' && data && data.type === 'camera-frame');
   try {
-    try { console.log('[BROADCAST] room=%s clients=%s except=%s data=%s', roomId, Array.from(set).map(s => s && s._id).join(','), exceptWs && exceptWs._id, typeof data === 'string' ? data : JSON.stringify(data).slice(0,200)) } catch {}
+    if (!isCameraFrame) { try { console.log('[BROADCAST] room=%s clients=%s except=%s data=%s', roomId, Array.from(set).map(s => s && s._id).join(','), exceptWs && exceptWs._id, typeof data === 'string' ? data : JSON.stringify(data).slice(0,200)) } catch {} }
   } catch {}
   for (const client of set) {
     try {

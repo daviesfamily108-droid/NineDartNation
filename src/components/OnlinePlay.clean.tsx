@@ -803,28 +803,61 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     } catch {}
   }, [wsGlobal]);
 
-  // Periodically capture local camera frames and send to opponent via WS
+  // Stream local camera frames to opponent via WS at ~10 FPS for smooth video
   useEffect(() => {
     if (!inProgress || matchContext !== "online") return;
     if (!wsGlobal?.connected) return;
-    const iv = setInterval(() => {
+    let alive = true;
+    let sending = false;
+    // Reuse a single off-screen canvas to avoid GC pressure
+    const c = document.createElement("canvas");
+    const ctx = c.getContext("2d");
+    let lastSendTs = 0;
+    const FRAME_INTERVAL = 100; // ~10 FPS
+
+    const loop = () => {
+      if (!alive) return;
+      requestAnimationFrame(loop);
+      const now = performance.now();
+      if (now - lastSendTs < FRAME_INTERVAL) return;
+      if (sending) return; // backpressure: skip if previous frame still encoding
       try {
         const dbg = (window as any).__ndn_camera_debug;
         const video = dbg?.videoEl?.() as HTMLVideoElement | null;
         if (!video || !video.videoWidth || !video.videoHeight) return;
         const w = 320;
         const h = Math.round((video.videoHeight / video.videoWidth) * w) || 180;
-        const c = document.createElement("canvas");
-        c.width = w;
-        c.height = h;
-        const ctx = c.getContext("2d");
+        if (c.width !== w) c.width = w;
+        if (c.height !== h) c.height = h;
         if (!ctx) return;
         ctx.drawImage(video, 0, 0, w, h);
-        const frame = c.toDataURL("image/jpeg", 0.4);
-        wsGlobal.send({ type: "camera-frame", frame });
+        sending = true;
+        lastSendTs = now;
+        c.toBlob(
+          (blob) => {
+            sending = false;
+            if (!alive || !blob) return;
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              if (!alive) return;
+              try {
+                wsGlobal.send({
+                  type: "camera-frame",
+                  frame: reader.result as string,
+                });
+              } catch {}
+            };
+            reader.readAsDataURL(blob);
+          },
+          "image/jpeg",
+          0.5,
+        );
       } catch {}
-    }, 1500);
-    return () => clearInterval(iv);
+    };
+    requestAnimationFrame(loop);
+    return () => {
+      alive = false;
+    };
   }, [inProgress, matchContext, wsGlobal]);
 
   // Clear opponent frame when match ends
