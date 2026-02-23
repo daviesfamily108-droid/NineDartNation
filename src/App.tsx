@@ -1611,46 +1611,6 @@ export default function App() {
       {/* Global phone camera overlay - visibility controlled by store */}
       {/* Keep a hidden global video element alive across navigation */}
       {!minimalUI && <GlobalPhoneVideoSink />}
-      {/* Camera warm-up: keep an offscreen CameraView mounted when camera is enabled so
-          entering game modes (offline/online/tournaments) shows the feed instantly. */}
-      {/* Keep the camera active while the user is on the site so it stays warm and ready.
-          Rendering the offscreen CameraView when a user is present will request camera
-          access on first visit (browser permission prompt). If the user denies permission
-          the camera will remain inactive. */}
-      {user && (
-        // Keep the warmup CameraView mounted and rendered by the browser
-        // compositor while remaining invisible to the user. Avoid using
-        // `display:none` or moving the element far offscreen (left:-9999)
-        // because some browsers will stop painting video frames for such
-        // elements. Using a visible layout rectangle with a tiny opacity
-        // and transform keeps frames flowing while remaining non-interactive.
-        <div
-          aria-hidden
-          style={{
-            position: "fixed",
-            right: 0,
-            bottom: 0,
-            width: "4px",
-            height: "4px",
-            overflow: "hidden",
-            pointerEvents: "none",
-            opacity: 0.001,
-            // Keep behind other UI but still rendered
-            zIndex: -100,
-            transform: "translateZ(0)",
-          }}
-        >
-          <Suspense fallback={null}>
-            <CameraView
-              showToolbar={false}
-              hideInlinePanels
-              scoringMode="custom"
-              immediateAutoCommit={false}
-              disableDetection={true}
-            />
-          </Suspense>
-        </div>
-      )}
       <AnnouncementPopup />
     </ThemeProvider>
   );

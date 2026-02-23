@@ -194,7 +194,7 @@ export default function OfflinePlay({ user }: { user: any }) {
     rememberLastOffline,
     setLastOffline,
     autoStartOffline,
-    cameraEnabled,
+    cameraEnabled: _cameraEnabledSetting,
     textSize,
     boxSize,
     autoscoreProvider,
@@ -206,6 +206,8 @@ export default function OfflinePlay({ user }: { user: any }) {
     teamBName = "Team B",
     setTeamBName,
   } = useUserSettings();
+  // Camera is only used during online matches — disable in offline mode
+  const cameraEnabled = false;
   const manualScoring = autoscoreProvider === "manual";
   const cameraToolbarVisible = cameraEnabled && !manualScoring;
   const effectiveLayout =

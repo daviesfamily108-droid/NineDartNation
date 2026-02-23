@@ -673,61 +673,63 @@ export default function InGameShell({
               <GameScoreboard gameMode={gameMode} players={scoreboardPlayers} />
             </div>
 
-            {/* Camera — right side, matches scoreboard height */}
-            <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between px-3 py-1 border-b border-white/5 bg-white/5 shrink-0">
-                <div className="flex items-center gap-2">
-                  <div
-                    className={`w-2 h-2 rounded-full shadow-lg animate-pulse ${isUsersTurn ? "bg-emerald-400 shadow-emerald-400/50" : "bg-amber-400 shadow-amber-400/50"}`}
-                  />
-                  <span className="text-xs font-semibold text-white/80">
-                    {isUsersTurn
-                      ? "Your Board"
-                      : `${awayPlayer?.name || "Opponent"}\u2019s Board`}
+            {/* Camera — right side, only shown for online matches */}
+            {isOnline && (
+              <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between px-3 py-1 border-b border-white/5 bg-white/5 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-2 h-2 rounded-full shadow-lg animate-pulse ${isUsersTurn ? "bg-emerald-400 shadow-emerald-400/50" : "bg-amber-400 shadow-amber-400/50"}`}
+                    />
+                    <span className="text-xs font-semibold text-white/80">
+                      {isUsersTurn
+                        ? "Your Board"
+                        : `${awayPlayer?.name || "Opponent"}\u2019s Board`}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-[10px] font-medium ${isUsersTurn ? "text-emerald-300" : "text-amber-300"}`}
+                  >
+                    {isUsersTurn ? "● Live" : "● Waiting"}
                   </span>
                 </div>
-                <span
-                  className={`text-[10px] font-medium ${isUsersTurn ? "text-emerald-300" : "text-amber-300"}`}
-                >
-                  {isUsersTurn ? "● Live" : "● Waiting"}
-                </span>
-              </div>
-              <div className="relative flex-1 min-h-0 bg-black">
-                <div
-                  className={`h-full ${isUsersTurn || (!remoteStream && !remoteFrame) ? "" : "hidden"}`}
-                >
-                  <CameraView hideInlinePanels={true} forceAutoStart={true} />
-                </div>
-                {!isUsersTurn && remoteStream && (
-                  <video
-                    ref={remoteVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-contain"
-                  />
-                )}
-                {!isUsersTurn && !remoteStream && remoteFrame && (
-                  <img
-                    src={remoteFrame}
-                    alt="Opponent board"
-                    className="w-full h-full object-contain"
-                  />
-                )}
-                {!isUsersTurn && !remoteStream && !remoteFrame && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="text-center">
-                      <div className="text-white/30 text-xs uppercase tracking-wider mb-1">
-                        Opponent&apos;s camera not available
-                      </div>
-                      <div className="text-white/20 text-[10px]">
-                        Showing your board instead
+                <div className="relative flex-1 min-h-0 bg-black">
+                  <div
+                    className={`h-full ${isUsersTurn || (!remoteStream && !remoteFrame) ? "" : "hidden"}`}
+                  >
+                    <CameraView hideInlinePanels={true} forceAutoStart={true} />
+                  </div>
+                  {!isUsersTurn && remoteStream && (
+                    <video
+                      ref={remoteVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-contain"
+                    />
+                  )}
+                  {!isUsersTurn && !remoteStream && remoteFrame && (
+                    <img
+                      src={remoteFrame}
+                      alt="Opponent board"
+                      className="w-full h-full object-contain"
+                    />
+                  )}
+                  {!isUsersTurn && !remoteStream && !remoteFrame && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <div className="text-white/30 text-xs uppercase tracking-wider mb-1">
+                          Opponent&apos;s camera not available
+                        </div>
+                        <div className="text-white/20 text-[10px]">
+                          Showing your board instead
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Around the Clock — opponent's turn */}
