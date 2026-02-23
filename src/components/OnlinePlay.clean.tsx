@@ -437,6 +437,11 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           setWaitingForCreator(null);
           const m = normalizeMatch(msg.match || null);
           if (m) m.prestartEndsAt = msg.prestartEndsAt;
+          // Store server-assigned first thrower for RPS reveal
+          if (m) {
+            m.firstThrowerId = msg.firstThrowerId || null;
+            m.firstThrowerName = msg.firstThrowerName || null;
+          }
           // Determine if the local user is the creator so we can set the
           // correct opponent name and send the right toId in handleJoinAccept
           if (m) {
@@ -719,9 +724,10 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const handleJoinAccept = () => {
     // Show the pre-game overlay immediately for snappy UX.
     setShowStartShowcase(true);
-    // Save match info so the match-start handler can use it after joinMatch is cleared
-    if (joinMatch) {
-      pendingMatchRef.current = { ...joinMatch };
+    // Save match info so we can start the match directly
+    const saved = joinMatch ? { ...joinMatch } : null;
+    if (saved) {
+      pendingMatchRef.current = saved;
     }
     // Send accept (invite-response) to server
     try {
@@ -737,7 +743,21 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         });
       }
     } catch {}
-    setJoinMatch(null);
+    // Start the match directly — do not wait for server match-start
+    // (the server will still send match-start, but handleMatchStart
+    // will no-op because inProgress is already true)
+    if (saved) {
+      handleMatchStart({
+        type: "match-start",
+        match: saved,
+        roomId: saved.id,
+        firstThrowerId: saved.firstThrowerId || null,
+        firstPlayerId: saved.firstThrowerId || null,
+      });
+    } else {
+      // Fallback: clear joinMatch and hope server sends match-start
+      setJoinMatch(null);
+    }
   };
 
   const requestJoin = (m: any) => {

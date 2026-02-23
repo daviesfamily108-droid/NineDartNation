@@ -2709,22 +2709,25 @@ wss.on('connection', (ws, req) => {
           }
         }
         const PRESTART_MS = (typeof PRESTART_SECONDS !== 'undefined' ? PRESTART_SECONDS : 15) * 1000
-        const payload = JSON.stringify({ type: 'match-prestart', roomId, match: m, prestartEndsAt: Date.now() + PRESTART_MS })
+        // Randomly pick who throws first (RPS reveal on client)
+        const firstThrowerId = Math.random() < 0.5 ? m.creatorId : m.joinerId
+        const firstThrowerName = firstThrowerId === m.creatorId ? (m.creatorName || 'Creator') : (m.joinerName || 'Opponent')
+        const payload = JSON.stringify({ type: 'match-prestart', roomId, match: m, prestartEndsAt: Date.now() + PRESTART_MS, firstThrowerId, firstThrowerName })
         if (creatorWs && creatorWs.readyState === 1) try { creatorWs.send(payload) } catch {}
         if (joinerWs && joinerWs.readyState === 1) try { joinerWs.send(payload) } catch {}
         // Setup prestart state
         try {
           if (!global._prestartState) global._prestartState = new Map()
-          global._prestartState.set(roomId, { roomId, match: m, choices: {}, players: [m.creatorId, m.joinerId] })
+          global._prestartState.set(roomId, { roomId, match: m, choices: {}, players: [m.creatorId, m.joinerId], firstThrowerId })
         } catch {}
-        // Auto-start after prestart period
+        // Auto-start after prestart period (backup — client starts match directly after RPS animation)
         if (typeof pendingPrestarts !== 'undefined') {
           try {
-            const pre = { roomId, match: m, players: [m.creatorId, m.joinerId], choices: {}, bullRound: 0, bullThrows: {}, timer: null }
+            const pre = { roomId, match: m, players: [m.creatorId, m.joinerId], choices: {}, bullRound: 0, bullThrows: {}, timer: null, firstThrowerId }
             pendingPrestarts.set(roomId, pre)
             pre.timer = setTimeout(() => {
               try {
-                const startPayload = JSON.stringify({ type: 'match-start', roomId, match: m })
+                const startPayload = JSON.stringify({ type: 'match-start', roomId, match: m, firstThrowerId })
                 const cr = clients.get(m.creatorId)
                 const rq = clients.get(m.joinerId)
                 if (cr && cr.readyState === 1) cr.send(startPayload)
@@ -2741,7 +2744,7 @@ wss.on('connection', (ws, req) => {
         const lobbyPayloadAccept = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
         for (const c of wss.clients) { if (c.readyState === 1) try { c.send(lobbyPayloadAccept) } catch {} }
         try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch {}
-        console.log('[INVITE-ACCEPT] creator accepted invite for match %s — prestart sent to both, lobby broadcast sent', matchId)
+        console.log('[INVITE-ACCEPT] creator accepted invite for match %s — prestart with RPS sent to both, firstThrower=%s', matchId, firstThrowerName)
       } else if (data.type === 'invite-decline') {
         // Creator declined the invite
         const matchId = String(data.matchId || '')
@@ -2788,7 +2791,10 @@ wss.on('connection', (ws, req) => {
           // Create a prestart session and notify both players; then after PRESTART_SECONDS start the match
           const roomId = matchId
           const creator = clients.get(m.creatorId)
-          const payload = { type: 'match-prestart', roomId, match: m, prestartEndsAt: Date.now() + (PRESTART_SECONDS * 1000) }
+          // Randomly pick who throws first (RPS reveal on client)
+          const firstThrowerId = Math.random() < 0.5 ? m.creatorId : (requester ? requester._id : m.joinerId)
+          const firstThrowerName = firstThrowerId === m.creatorId ? (m.creatorName || 'Creator') : (m.joinerName || 'Opponent')
+          const payload = { type: 'match-prestart', roomId, match: m, prestartEndsAt: Date.now() + (PRESTART_SECONDS * 1000), firstThrowerId, firstThrowerName }
           if (creator && creator.readyState === 1) creator.send(JSON.stringify(payload))
           if (requester && requester.readyState === 1) requester.send(JSON.stringify(payload))
           matches.delete(matchId)
@@ -2797,16 +2803,16 @@ wss.on('connection', (ws, req) => {
           const lobbyPayloadResp = JSON.stringify({ type: 'matches', matches: Array.from(matches.values()) })
           for (const c of wss.clients) { if (c.readyState === 1) try { c.send(lobbyPayloadResp) } catch {} }
           try { (async () => { if (!supabase) return; await supabase.from('matches').delete().eq('id', matchId) })() } catch (err) { startLogger.warn('[Matches] Supabase delete failed:', err && err.message) }
-          // Setup a pending prestart session so we can collect prestart choices (skip/bull) and bull-up throws
+          // Setup a pending prestart session (backup auto-start timer)
           try {
-            const pre = { roomId, match: m, players: [m.creatorId, requester._id], choices: {}, bullRound: 0, bullThrows: {}, timer: null }
+            const pre = { roomId, match: m, players: [m.creatorId, requester ? requester._id : m.joinerId], choices: {}, bullRound: 0, bullThrows: {}, timer: null, firstThrowerId }
             pendingPrestarts.set(roomId, pre)
-            // Start a countdown to finalize match start if no special choices are made
+            // Start a countdown to finalize match start if client doesn't trigger it
             pre.timer = setTimeout(() => {
               try {
-                const startPayload = { type: 'match-start', roomId, match: m }
+                const startPayload = { type: 'match-start', roomId, match: m, firstThrowerId }
                 const cr = clients.get(m.creatorId)
-                const rq = clients.get(requester._id)
+                const rq = requester ? clients.get(requester._id) : null
                 if (cr && cr.readyState === 1) cr.send(JSON.stringify(startPayload))
                 if (rq && rq.readyState === 1) rq.send(JSON.stringify(startPayload))
                 // Initialize server-side per-room flags
@@ -2844,6 +2850,7 @@ wss.on('connection', (ws, req) => {
           if (client.readyState === 1) client.send(lobbyPayload2)
         }
       } else if (data.type === 'prestart-choice') {
+        // Legacy handler — kept for backward compatibility but RPS flow no longer uses it
         const roomId = String(data.roomId || '')
         const sess = pendingPrestarts.get(roomId)
         if (!sess) return
@@ -2855,13 +2862,13 @@ wss.on('connection', (ws, req) => {
           const c = clients.get(pid)
           if (c && c.readyState === 1) c.send(JSON.stringify(notify))
         }
-        // If both chosen and both chose skip -> start match
+        // If both chosen and both chose skip -> start match immediately
         const allChosen = sess.players.every(pid => !!sess.choices[pid])
         if (allChosen) {
           const choices = Object.values(sess.choices)
           const unique = Array.from(new Set(choices))
           if (unique.length === 1 && unique[0] === 'skip') {
-            const startPayload = { type: 'match-start', roomId, match: sess.match }
+            const startPayload = { type: 'match-start', roomId, match: sess.match, firstThrowerId: sess.firstThrowerId || null }
             for (const pid of sess.players) {
               const c = clients.get(pid)
               if (c && c.readyState === 1) c.send(JSON.stringify(startPayload))

@@ -63,6 +63,8 @@ export type MatchPrestartProps = {
     startingScore?: number;
     createdBy?: string;
     creatorName?: string;
+    firstThrowerId?: string;
+    firstThrowerName?: string;
   } | null;
   localUser: { username: string; email?: string; [k: string]: any } | null;
   opponentName: string;
@@ -78,13 +80,13 @@ export type MatchPrestartProps = {
   onBullThrow: (distanceMm: number) => void;
   onAccept: () => void;
   onCancel: () => void;
-  /** Remote player's choice */
+  /** Remote player's choice (legacy — unused in RPS flow) */
   remoteChoice?: "bull" | "skip" | null;
-  /** Whether the bull-up phase is active (server confirmed both chose bull) */
+  /** Whether the bull-up phase is active (legacy) */
   bullActive?: boolean;
-  /** Winner of the bull-up (username) */
+  /** Winner of the bull-up (legacy) */
   bullWinner?: string | null;
-  /** Whether the bull-up tied (another round) */
+  /** Whether the bull-up tied (legacy) */
   bullTied?: boolean;
 };
 
@@ -597,29 +599,45 @@ export default function MatchPrestart({
   opponentName,
   opponentStats,
   countdown = 15,
-  onChoice,
-  onBullThrow,
+  onChoice: _onChoice,
+  onBullThrow: _onBullThrow,
   onAccept,
   onCancel,
-  remoteChoice,
-  bullActive,
-  bullWinner,
-  bullTied,
+  remoteChoice: _remoteChoice,
+  bullActive: _bullActive,
+  bullWinner: _bullWinner,
+  bullTied: _bullTied,
 }: MatchPrestartProps) {
   const [seconds, setSeconds] = useState(countdown);
-  const [phase, setPhase] = useState<
-    "preview" | "choice" | "bull" | "result" | "go"
-  >("preview");
-  const [localChoice, setLocalChoice] = useState<"bull" | "skip" | null>(null);
-  const [dartPoint, setDartPoint] = useState<{ x: number; y: number } | null>(
-    null,
+  const [phase, setPhase] = useState<"preview" | "rps" | "result" | "go">(
+    "preview",
   );
-  const [dartDistMm, setDartDistMm] = useState<number | null>(null);
-  const [dartLocked, setDartLocked] = useState(false); // Lock dart position after first tap
-  const [dartSubmitted, setDartSubmitted] = useState(false);
+  const [rpsStep, setRpsStep] = useState(0); // 0-2 cycling, 3 = revealed
+  const [localRps, setLocalRps] = useState<"rock" | "paper" | "scissors">(
+    "rock",
+  );
+  const [opponentRps, setOpponentRps] = useState<"rock" | "paper" | "scissors">(
+    "rock",
+  );
   const portalElRef = useRef<HTMLElement | null>(
     typeof document !== "undefined" ? document.createElement("div") : null,
   );
+
+  const RPS_ICONS: Record<string, string> = {
+    rock: "✊",
+    paper: "✋",
+    scissors: "✌️",
+  };
+  const RPS_LABELS: Record<string, string> = {
+    rock: "Rock",
+    paper: "Paper",
+    scissors: "Scissors",
+  };
+  const RPS_OPTIONS: Array<"rock" | "paper" | "scissors"> = [
+    "rock",
+    "paper",
+    "scissors",
+  ];
 
   const localStats = useMemo(
     () => getPlayerStats(localUser?.username || ""),
@@ -653,87 +671,54 @@ export default function MatchPrestart({
     };
   }, []);
 
-  // Countdown timer
+  // Reset on open
   useEffect(() => {
     if (!open) return;
     setSeconds(countdown);
     setPhase("preview");
-    setLocalChoice(null);
-    setDartPoint(null);
-    setDartDistMm(null);
-    setDartLocked(false);
-    setDartSubmitted(false);
+    setRpsStep(0);
   }, [open, countdown]);
 
+  // Preview → RPS auto-transition after 4 seconds
   useEffect(() => {
-    if (!open || phase === "result" || phase === "go") return;
-    const id = window.setInterval(() => {
-      setSeconds((s) => {
-        const next = s - 1;
-        if (next <= 0) {
-          window.clearInterval(id);
-          // Auto-transition based on phase
-          if (phase === "preview") {
-            setPhase("choice");
-            return countdown;
-          }
-          if (phase === "choice" && !localChoice) {
-            // Time ran out without choosing → auto-skip
-            setLocalChoice("skip");
-            onChoice("skip");
-          }
-          return 0;
-        }
-        // After 5 seconds of preview, move to choice automatically
-        if (phase === "preview" && countdown - next >= 5) {
-          setPhase("choice");
-        }
-        return next;
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [open, phase, countdown, localChoice, onChoice]);
+    if (!open || phase !== "preview") return;
+    const t = setTimeout(() => setPhase("rps"), 4000);
+    return () => clearTimeout(t);
+  }, [open, phase]);
 
-  // React to bull-up activation from server
+  // RPS cycling animation (rock → paper → scissors → rock...) for 3 seconds then reveal
   useEffect(() => {
-    if (bullActive) {
-      setPhase("bull");
-      setDartPoint(null);
-      setDartDistMm(null);
-      setDartLocked(false);
-      setDartSubmitted(false);
-    }
-  }, [bullActive]);
+    if (!open || phase !== "rps") return;
+    setRpsStep(0);
+    let step = 0;
+    const cycleInterval = setInterval(() => {
+      step++;
+      if (step >= 9) {
+        // After cycling 3 times (9 steps), reveal the result
+        clearInterval(cycleInterval);
+        // Pick random cosmetic RPS choices for the reveal
+        const localPick = RPS_OPTIONS[Math.floor(Math.random() * 3)];
+        const opponentPick = RPS_OPTIONS[Math.floor(Math.random() * 3)];
+        setLocalRps(localPick);
+        setOpponentRps(opponentPick);
+        setRpsStep(3); // revealed
+        // Transition to result after a brief pause
+        setTimeout(() => setPhase("result"), 1500);
+      } else {
+        setLocalRps(RPS_OPTIONS[step % 3]);
+        setOpponentRps(RPS_OPTIONS[(step + 1) % 3]);
+        setRpsStep(step);
+      }
+    }, 350);
+    return () => clearInterval(cycleInterval);
+  }, [open, phase]);
 
-  // React to bull winner
+  // Result → GO transition
   useEffect(() => {
-    if (bullWinner) {
-      setPhase("result");
-      // After 3 seconds, show "GO"
-      const t = setTimeout(() => setPhase("go"), 3000);
-      return () => clearTimeout(t);
-    }
-  }, [bullWinner]);
-
-  // React to bull tied — reset for another round
-  useEffect(() => {
-    if (bullTied) {
-      setDartPoint(null);
-      setDartDistMm(null);
-      setDartLocked(false);
-      setDartSubmitted(false);
-      setPhase("bull");
-    }
-  }, [bullTied]);
-
-  // When both skip, go directly
-  useEffect(() => {
-    if (localChoice === "skip" && remoteChoice === "skip") {
-      setPhase("result");
-      const t = setTimeout(() => setPhase("go"), 2000);
-      return () => clearTimeout(t);
-    }
-  }, [localChoice, remoteChoice]);
+    if (phase !== "result") return;
+    const t = setTimeout(() => setPhase("go"), 3000);
+    return () => clearTimeout(t);
+  }, [phase]);
 
   // Auto-accept when "go" phase completes
   useEffect(() => {
@@ -744,30 +729,14 @@ export default function MatchPrestart({
     return () => clearTimeout(t);
   }, [phase, onAccept]);
 
-  const handleDartSelect = useCallback(
-    (x: number, y: number, distMm: number) => {
-      // Once a dart is placed, lock it - no further changes allowed
-      if (dartLocked) return;
-      setDartPoint({ x, y });
-      setDartDistMm(distMm);
-      setDartLocked(true); // Lock immediately after first placement
-    },
-    [dartLocked],
-  );
-
-  const handleSubmitDart = useCallback(() => {
-    if (dartDistMm == null) return;
-    setDartSubmitted(true);
-    onBullThrow(dartDistMm);
-  }, [dartDistMm, onBullThrow]);
-
-  const handleChoice = useCallback(
-    (c: "bull" | "skip") => {
-      setLocalChoice(c);
-      onChoice(c);
-    },
-    [onChoice],
-  );
+  // Countdown timer for preview
+  useEffect(() => {
+    if (!open || phase !== "preview") return;
+    const id = window.setInterval(() => {
+      setSeconds((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [open, phase]);
 
   const localName = localUser?.username || "You";
   const headToHead = useMemo(
@@ -779,9 +748,16 @@ export default function MatchPrestart({
 
   if (!open || !portalElRef.current || !matchInfo) return null;
 
-  const isLocalWinner = bullWinner === localName;
-  const isOpponentWinner = bullWinner === opponentName;
-  const bothSkipped = localChoice === "skip" && remoteChoice === "skip";
+  // Determine who throws first from server-provided firstThrowerName
+  const firstThrowerName =
+    matchInfo.firstThrowerName ||
+    matchInfo.createdBy ||
+    matchInfo.creatorName ||
+    localName;
+  const isLocalWinner =
+    firstThrowerName.toLowerCase() === localName.toLowerCase();
+  const isOpponentWinner =
+    firstThrowerName.toLowerCase() === opponentName.toLowerCase();
 
   const overlay = (
     <div
@@ -829,57 +805,25 @@ export default function MatchPrestart({
               </div>
             )}
 
-            {phase === "choice" && (
-              <div className="animate-in fade-in duration-500">
-                <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tighter">
-                  Who Throws First?
-                </h2>
-                <p className="text-xs sm:text-sm text-white/50 mt-0.5">
-                  Bull up to decide, or skip and let the creator go first
-                </p>
-              </div>
-            )}
-
-            {phase === "bull" && (
+            {phase === "rps" && (
               <div className="animate-in fade-in duration-500">
                 <h2 className="text-2xl sm:text-3xl font-black text-amber-300 tracking-tighter">
-                  🎯 Bull Up!
+                  ✊ Rock Paper Scissors! ✌️
                 </h2>
-                <p className="text-[10px] sm:text-xs text-white/50 mt-0.5">
-                  Throw your dart at the bullseye, then tap where it landed on
-                  the board
-                </p>
-                <p className="text-[9px] text-white/30">
-                  Both players mark their throw — closest to the bull throws
-                  first
+                <p className="text-xs sm:text-sm text-white/50 mt-0.5">
+                  Deciding who throws first…
                 </p>
               </div>
             )}
 
             {phase === "result" && (
               <div className="animate-in fade-in zoom-in-95 duration-700">
-                {bullWinner ? (
-                  <>
-                    <h2 className="text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-amber-500 tracking-tighter">
-                      🎉 {bullWinner} Wins the Bull!
-                    </h2>
-                    <p className="text-xs sm:text-sm text-white/50 mt-1">
-                      {bullWinner} throws first
-                    </p>
-                  </>
-                ) : bothSkipped ? (
-                  <>
-                    <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tighter">
-                      Both Players Skipped
-                    </h2>
-                    <p className="text-xs sm:text-sm text-white/50 mt-0.5">
-                      {matchInfo.createdBy ||
-                        matchInfo.creatorName ||
-                        localName}{" "}
-                      throws first
-                    </p>
-                  </>
-                ) : null}
+                <h2 className="text-2xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-amber-500 tracking-tighter">
+                  🎉 {firstThrowerName} Throws First!
+                </h2>
+                <p className="text-xs sm:text-sm text-white/50 mt-1">
+                  {firstThrowerName} won the coin toss
+                </p>
               </div>
             )}
 
@@ -893,7 +837,7 @@ export default function MatchPrestart({
           </div>
 
           {/* Timer bar */}
-          {phase !== "result" && phase !== "go" && (
+          {phase === "preview" && (
             <div className="mb-2 sm:mb-4 flex-shrink-0">
               <div className="flex items-center justify-center gap-2 mb-1">
                 <Timer className="w-3 h-3 sm:w-4 sm:h-4 text-white/40" />
@@ -916,9 +860,7 @@ export default function MatchPrestart({
           )}
 
           {/* Player cards + VS */}
-          {(phase === "preview" ||
-            phase === "choice" ||
-            phase === "result") && (
+          {(phase === "preview" || phase === "rps" || phase === "result") && (
             <div className="grid grid-cols-1 md:grid-cols-[1fr,auto,1fr] gap-2 sm:gap-4 items-start mb-2 sm:mb-4 flex-shrink-0">
               <PlayerCard
                 name={localName}
@@ -926,13 +868,7 @@ export default function MatchPrestart({
                 isLocal
                 showCamera={phase === "preview"}
                 legDiff={localLegDiff}
-                isWinner={
-                  phase === "result" &&
-                  (isLocalWinner ||
-                    (bothSkipped &&
-                      (matchInfo.createdBy === localName ||
-                        matchInfo.creatorName === localName)))
-                }
+                isWinner={phase === "result" && isLocalWinner}
               />
 
               {/* VS divider */}
@@ -954,172 +890,72 @@ export default function MatchPrestart({
                 isLocal={false}
                 showCamera={phase === "preview"}
                 legDiff={opponentLegDiff}
-                isWinner={
-                  phase === "result" &&
-                  (isOpponentWinner ||
-                    (bothSkipped &&
-                      (matchInfo.createdBy === opponentName ||
-                        matchInfo.creatorName === opponentName)))
-                }
+                isWinner={phase === "result" && isOpponentWinner}
               />
             </div>
           )}
 
-          {/* Choice phase */}
-          {phase === "choice" && !localChoice && (
-            <div className="flex flex-col items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-500 flex-shrink-0">
-              <div className="flex gap-3">
-                <button
-                  className="group relative px-5 sm:px-8 py-3 sm:py-4 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-white font-black text-base sm:text-lg hover:shadow-xl hover:shadow-amber-500/30 hover:scale-105 transition-all duration-200 border border-amber-400/30"
-                  onClick={() => handleChoice("bull")}
-                >
-                  <div className="flex items-center gap-2">
-                    <Target className="w-5 h-5" />
-                    <span>Bull Up</span>
+          {/* RPS Animation */}
+          {phase === "rps" && (
+            <div className="flex flex-col items-center gap-4 animate-in fade-in duration-500 flex-shrink-0">
+              <div className="flex items-center justify-center gap-8 sm:gap-12">
+                {/* Local player RPS */}
+                <div className="text-center">
+                  <div
+                    className={`text-6xl sm:text-7xl transition-transform duration-200 ${rpsStep < 3 ? "animate-bounce" : "scale-110"}`}
+                  >
+                    {RPS_ICONS[localRps]}
                   </div>
-                  <div className="text-[9px] sm:text-[10px] mt-0.5 font-medium opacity-80">
-                    Throw at the bullseye to decide
+                  <div className="text-xs text-white/50 mt-2 font-semibold">
+                    {localName}
                   </div>
-                </button>
+                  {rpsStep >= 3 && (
+                    <div className="text-[10px] text-white/40 mt-0.5">
+                      {RPS_LABELS[localRps]}
+                    </div>
+                  )}
+                </div>
 
-                <button
-                  className="group relative px-5 sm:px-8 py-3 sm:py-4 rounded-xl bg-white/5 border border-white/10 text-white font-bold text-base sm:text-lg hover:bg-white/10 hover:border-white/20 hover:scale-105 transition-all duration-200"
-                  onClick={() => handleChoice("skip")}
-                >
-                  <div className="flex items-center gap-2">
-                    <ArrowRight className="w-5 h-5" />
-                    <span>Skip</span>
+                {/* VS */}
+                <div className="flex flex-col items-center gap-1">
+                  <div className="text-2xl sm:text-3xl font-black text-white/30">
+                    VS
                   </div>
-                  <div className="text-[9px] sm:text-[10px] mt-0.5 font-medium opacity-50">
-                    Creator throws first
-                  </div>
-                </button>
-              </div>
-            </div>
-          )}
+                  {rpsStep < 3 && (
+                    <div className="w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
+                  )}
+                </div>
 
-          {/* Choice made — waiting */}
-          {phase === "choice" && localChoice && !bullActive && (
-            <div className="text-center animate-in fade-in duration-300">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white/70">
-                <Zap className="w-4 h-4 text-amber-400" />
-                You chose{" "}
-                <span className="font-bold text-white">
-                  {localChoice === "bull" ? "Bull Up" : "Skip"}
-                </span>
-                {remoteChoice ? (
-                  <>
-                    {" "}
-                    · Opponent chose{" "}
-                    <span className="font-bold text-white">
-                      {remoteChoice === "bull" ? "Bull Up" : "Skip"}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    {" "}
-                    · Waiting for opponent
-                    <span className="animate-pulse">…</span>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Bull-up phase — camera feed + dartboard */}
-          {phase === "bull" && (
-            <div className="flex flex-col items-center gap-2 sm:gap-3 animate-in fade-in zoom-in-95 duration-500 flex-1 min-h-0 overflow-hidden">
-              {/* Live camera feed so the player can see their dart on the board */}
-              <div className="w-full max-w-[280px] sm:max-w-sm mx-auto rounded-xl border border-white/10 bg-black/60 overflow-hidden shadow-xl shadow-black/40 flex-shrink-0">
-                <div className="relative aspect-[16/10]">
-                  <CameraTile
-                    autoStart
-                    forceAutoStart
-                    fill
-                    aspect="free"
-                    className="w-full h-full"
-                  />
-                  <div className="absolute top-1 left-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10">
-                    <Camera className="w-2.5 h-2.5 text-emerald-400" />
-                    <span className="text-[9px] font-bold text-white/80 uppercase tracking-wider">
-                      Live Feed
-                    </span>
+                {/* Opponent RPS */}
+                <div className="text-center">
+                  <div
+                    className={`text-6xl sm:text-7xl transition-transform duration-200 ${rpsStep < 3 ? "animate-bounce" : "scale-110"}`}
+                  >
+                    {RPS_ICONS[opponentRps]}
                   </div>
-                  <div className="absolute top-1 right-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30">
-                    <span className="text-[9px] font-bold text-emerald-400">
-                      ● LIVE
-                    </span>
+                  <div className="text-xs text-white/50 mt-2 font-semibold">
+                    {opponentName}
                   </div>
+                  {rpsStep >= 3 && (
+                    <div className="text-[10px] text-white/40 mt-0.5">
+                      {RPS_LABELS[opponentRps]}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-white/50 flex-shrink-0">
-                <Target className="w-3 h-3 text-amber-400" />
-                <span>
-                  See your dart above, then tap the board below where it landed
-                </span>
-              </div>
-
-              {/* Interactive dartboard for marking position */}
-              <div className="w-full max-w-[240px] sm:max-w-[280px] md:max-w-xs mx-auto rounded-xl border border-white/10 bg-black/40 p-2 sm:p-3 shadow-2xl shadow-black/50 flex-1 min-h-0">
-                <DartboardBullUp
-                  onSelect={handleDartSelect}
-                  selectedPoint={dartPoint}
-                  disabled={dartLocked || dartSubmitted}
-                  label={
-                    dartLocked
-                      ? "Dart position locked"
-                      : "Tap where your dart landed"
-                  }
-                />
-              </div>
-
-              {/* Distance readout + button row */}
-              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 flex-shrink-0">
-                {dartDistMm != null && (
-                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 border border-white/10 animate-in fade-in duration-300">
-                    <Target className="w-4 h-4 text-amber-400" />
-                    <span className="text-xl font-black text-white tabular-nums">
-                      {dartDistMm.toFixed(1)}
-                    </span>
-                    <span className="text-sm text-white/50">mm</span>
-                  </div>
-                )}
-
-                {/* Confirm / Waiting */}
-                {!dartSubmitted ? (
-                  <button
-                    className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-bold text-sm sm:text-base hover:shadow-xl hover:shadow-emerald-500/30 hover:scale-105 active:scale-95 transition-all disabled:opacity-30 disabled:pointer-events-none border border-emerald-400/30"
-                    disabled={dartDistMm == null}
-                    onClick={handleSubmitDart}
-                  >
-                    ✅ Confirm
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-xs text-white/70">
-                    <div className="w-3 h-3 border-2 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
-                    Waiting for opponent…
-                  </div>
-                )}
-              </div>
-
-              {bullTied && (
-                <div className="text-xs text-amber-300 font-bold animate-bounce px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 flex-shrink-0">
-                  🔄 It's a tie! Throw again.
+              {rpsStep >= 3 && (
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-400/30 text-sm text-amber-200 font-semibold animate-in fade-in zoom-in-95 duration-500">
+                  <Zap className="w-4 h-4 text-amber-400" />
+                  {firstThrowerName} throws first!
                 </div>
               )}
             </div>
           )}
 
-          {/* Accept / Cancel row (for preview phase) */}
+          {/* Preview cancel button */}
           {phase === "preview" && (
-            <div className="flex items-center justify-center gap-2 sm:gap-3 mt-2 sm:mt-4 flex-shrink-0">
-              <button
-                className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold text-sm sm:text-base hover:shadow-xl hover:shadow-indigo-500/30 hover:scale-105 transition-all"
-                onClick={() => setPhase("choice")}
-              >
-                Ready — Continue
-              </button>
+            <div className="flex items-center justify-center mt-2 sm:mt-4 flex-shrink-0">
               <button
                 className="px-4 sm:px-6 py-2 sm:py-3 rounded-xl bg-white/5 border border-white/10 text-white/70 font-semibold text-sm sm:text-base hover:bg-white/10 transition-all"
                 onClick={onCancel}
