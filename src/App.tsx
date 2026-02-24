@@ -1389,7 +1389,7 @@ export default function App() {
             <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none"></div>
 
             <button
-              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-white transition z-10"
+              className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-full bg-white/5 hover:bg-white/10 text-white transition z-20"
               onClick={() => setNotificationsOpen(false)}
               aria-label="Close notifications"
             >
