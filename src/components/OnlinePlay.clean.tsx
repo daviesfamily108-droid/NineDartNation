@@ -907,7 +907,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                 finishedByDouble: finished,
                 visitTotal: score,
               });
-              if (leg && leg.totalScoreRemaining === 0) {
+              if (finished && score > 0) {
                 m.endLeg(score);
               } else {
                 m.nextPlayer();
