@@ -377,17 +377,20 @@ body {
 }
 
 /* Stats page card — locked at 800px; do NOT change this value */
-.ndn-stats-page {
+.ndn-game-shell.ndn-stats-page,
+.card.ndn-stats-page {
   padding-bottom: 800px !important;
 }
 
-/* Online play page card — locked at 820px; do NOT change this value */
-.ndn-online-page {
-  padding-bottom: 820px !important;
+/* Online play page card — locked at 900px; do NOT change this value */
+.ndn-game-shell.ndn-online-page,
+.card.ndn-online-page {
+  padding-bottom: 900px !important;
 }
 
 /* Friends page card — locked at 100px */
-.ndn-friends-page {
+.ndn-game-shell.ndn-friends-page,
+.card.ndn-friends-page {
   padding-bottom: 100px !important;
 }
 
