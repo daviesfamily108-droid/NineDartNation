@@ -23,7 +23,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const username = user?.username || "You";
   const [currentPageIdx, setCurrentPageIdx] = useState(0);
   const [pages, setPages] = useState(() => [
-    { id: 1, name: "page-1", matches: [] as any[] },
+    { id: 1, name: "page-1", pageId: "default", matches: [] as any[] },
   ]);
   const wsGlobal = (() => {
     try {
@@ -262,23 +262,31 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   // NOTE: worldLobby was previously used for an alternate lobby view; keep the
   // computation removed to avoid unused-vars warnings.
 
-  // Combined matches: show only current page, filtered
+  // Combined matches: show only current page, filtered by its pageId
   const combinedMatches = useMemo(() => {
+    const activePageId = currentPage_?.pageId || "default";
     let all = filterMatches(currentPage_?.matches || []);
 
-    // In WS-driven mode, serverMatches is the canonical list. Fall back to it
-    // if the current room hasn't been hydrated yet.
+    // Fallback: if the page hasn't been hydrated yet (first render before WS
+    // responds), filter serverMatches by this page's pageId.
     if ((all?.length || 0) === 0 && (serverMatches?.length || 0) > 0) {
-      all = filterMatches(serverMatches);
+      all = filterMatches(
+        serverMatches.filter(
+          (m: any) => (m.pageId || "default") === activePageId,
+        ),
+      );
     }
 
-    // Last-resort fallback for test environments where state updates are
-    // async and the memo can run before serverMatches is visible.
+    // Last-resort fallback for test environments (same page-scoped filter).
     if (
       (all?.length || 0) === 0 &&
       (serverMatchesRef.current?.length || 0) > 0
     ) {
-      all = filterMatches(serverMatchesRef.current);
+      all = filterMatches(
+        serverMatchesRef.current.filter(
+          (m: any) => (m.pageId || "default") === activePageId,
+        ),
+      );
     }
 
     // 1. Search
@@ -345,6 +353,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   };
 
   const handleCreateMatch = (payload: any) => {
+    const activePageId = currentPage_?.pageId || "default";
     const newMatch = {
       id: `m-${Date.now()}`,
       createdBy: payload.createdBy || username,
@@ -352,6 +361,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       modeType: payload.modeType,
       legs: payload.legs,
       startingScore: payload.startingScore,
+      pageId: activePageId,
       createdAt: Date.now(),
     };
 
@@ -386,16 +396,20 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           value: payload.legs,
           startingScore: payload.startingScore,
           creatorAvg: payload.avgChoice || 0,
+          pageId: activePageId,
         });
       }
     } catch {}
   };
 
   const newPage = () => {
-    setServerMatches([]);
     setPages((prev) => {
       const id = prev.length + 1;
-      const newPages = [...prev, { id, name: `page-${id}`, matches: [] }];
+      const pageId = `page-${id}-${Date.now()}`;
+      const newPages = [
+        ...prev,
+        { id, name: `page-${id}`, pageId, matches: [] },
+      ];
       setCurrentPageIdx(newPages.length - 1);
       return newPages;
     });
@@ -592,10 +606,15 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           const filtered = filterMatches(msg.matches || []);
           setServerMatches(filtered);
           serverMatchesRef.current = filtered;
+          // Partition matches by pageId into each page
           setPages((prev) =>
-            prev.map((r, idx) =>
-              idx === currentPageIdx ? { ...r, matches: filtered } : r,
-            ),
+            prev.map((r) => {
+              const pageMatches = filtered.filter((m: any) => {
+                const mPage = m.pageId || "default";
+                return mPage === r.pageId;
+              });
+              return { ...r, matches: pageMatches };
+            }),
           );
         }
         // Invite / prestart / expired / declined

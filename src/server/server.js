@@ -1836,6 +1836,7 @@ if (wss) {
            startingScore: Number(data.startingScore) || 501,
            creatorAvg: Number(data.creatorAvg) || 0,
            game,
+           pageId: typeof data.pageId === 'string' ? data.pageId : 'default',
            requireCalibration: !!data.requireCalibration,
            createdAt: Date.now(),
          }
