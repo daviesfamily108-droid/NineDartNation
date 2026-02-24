@@ -376,10 +376,10 @@ body {
   padding-bottom: 80px !important;
 }
 
-/* Stats page card — locked at 800px; do NOT change this value */
+/* Stats page card — default 810px; admin-tuneable via --ndn-card-padding-bottom */
 .ndn-game-shell.ndn-stats-page,
 .card.ndn-stats-page {
-  padding-bottom: 800px !important;
+  padding-bottom: var(--ndn-card-padding-bottom, 810px) !important;
 }
 
 /* Online play page card — locked at 900px; do NOT change this value */

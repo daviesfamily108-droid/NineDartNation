@@ -66,6 +66,12 @@
   .ndn-page {
     padding-bottom: var(--ndn-safe-bottom, 0px);
   }
+
+  /* Stats page card — match desktop default; admin-tuneable via --ndn-card-padding-bottom */
+  .ndn-game-shell.ndn-stats-page,
+  .card.ndn-stats-page {
+    padding-bottom: var(--ndn-card-padding-bottom, 810px) !important;
+  }
 }
 
 /* ─── Tablet (769px – 1024px) ─── */

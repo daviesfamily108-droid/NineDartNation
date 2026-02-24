@@ -91,7 +91,12 @@ function EmailEditor({
 }
 
 export default function AdminDashboard({ user }: { user: any }) {
-  const { hiddenSections, setHiddenSections } = useUserSettings();
+  const {
+    hiddenSections,
+    setHiddenSections,
+    cardPaddingBottom,
+    setCardPaddingBottom,
+  } = useUserSettings();
   const hiddenSectionList = hiddenSections || [];
   const sectionCatalog = useMemo(
     () => [
@@ -1087,6 +1092,31 @@ export default function AdminDashboard({ user }: { user: any }) {
               </div>
             </div>
           )}
+
+          {/* ─── Card Depth Tuning ─── */}
+          <div className="card">
+            <h3 className="text-xl font-semibold mb-2">
+              Card Depth (Stats Page)
+            </h3>
+            <div className="text-sm opacity-80 mb-3">
+              Controls the <code>padding-bottom</code> on the stats page card.
+              Change this value if content is cut off on mobile or desktop.
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                className="input w-32"
+                min={0}
+                max={1200}
+                value={cardPaddingBottom ?? 810}
+                onChange={(e) => {
+                  const v = parseInt(e.target.value, 10);
+                  if (!isNaN(v)) setCardPaddingBottom(v);
+                }}
+              />
+              <span className="text-xs opacity-70">px (default 810)</span>
+            </div>
+          </div>
 
           <div className="card">
             <h2 className="text-2xl font-bold mb-2">Admin Control ⚙️</h2>

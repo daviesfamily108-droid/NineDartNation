@@ -272,7 +272,7 @@ function load(): Pick<
         textSize: "medium",
         boxSize: "medium",
         statsCardMinHeight: 220,
-        cardPaddingBottom: 900,
+        cardPaddingBottom: 810,
         matchType: "singles",
         teamAName: "Team A",
         teamBName: "Team B",
@@ -313,6 +313,17 @@ function load(): Pick<
         ...j,
         cardPaddingBottom: 900,
         __version: 4,
+      };
+      try {
+        localStorage.setItem(KEY, JSON.stringify(migrated));
+      } catch {}
+    }
+    // Version 5: Lock stats card padding-bottom at 810px
+    if (version < 5) {
+      const migrated = {
+        ...j,
+        cardPaddingBottom: 810,
+        __version: 5,
       };
       try {
         localStorage.setItem(KEY, JSON.stringify(migrated));
@@ -458,7 +469,7 @@ function load(): Pick<
       cardPaddingBottom:
         typeof j.cardPaddingBottom === "number" && isFinite(j.cardPaddingBottom)
           ? Math.max(0, Math.min(1200, Math.round(j.cardPaddingBottom)))
-          : 900,
+          : 810,
       matchType: j.matchType === "doubles" ? "doubles" : "singles",
       teamAName: typeof j.teamAName === "string" ? j.teamAName : "Team A",
       teamBName: typeof j.teamBName === "string" ? j.teamBName : "Team B",
@@ -514,7 +525,7 @@ function load(): Pick<
       textSize: "medium",
       boxSize: "medium",
       statsCardMinHeight: 220,
-      cardPaddingBottom: 900,
+      cardPaddingBottom: 810,
       matchType: "singles",
       teamAName: "Team A",
       teamBName: "Team B",
