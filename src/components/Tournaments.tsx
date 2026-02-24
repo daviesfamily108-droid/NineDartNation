@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import {
-  allGames,
   getModeOptionsForGame,
   labelForMode,
   getGameDisplay,
@@ -185,6 +184,9 @@ export default function Tournaments({ user }: { user: any }) {
   const [currentGame, setCurrentGame] = useState<string>("X01");
   // Opponent quit notification
   const [opponentQuitName, setOpponentQuitName] = useState<string | null>(null);
+  // Opponent camera frame — use a ref to avoid React re-renders on every frame
+  const opponentFrameRef = useRef<string | null>(null);
+  const [opponentFrame, setOpponentFrame] = useState<string | null>(null);
   const serverPrestartRef = useRef(false);
   const _joinAcceptRef = useRef<HTMLButtonElement>(null);
   const [participants, setParticipants] = useState<Record<string, string>>({});
@@ -282,6 +284,17 @@ export default function Tournaments({ user }: { user: any }) {
           try {
             useMatch.getState().importState(msg.payload);
           } catch {}
+        }
+        // Opponent camera frame snapshot — update ref directly to bypass React re-renders
+        if (msg?.type === "camera-frame" && msg.frame) {
+          opponentFrameRef.current = msg.frame;
+          try {
+            const el = document.getElementById(
+              "ndn-opponent-frame",
+            ) as HTMLImageElement | null;
+            if (el) el.src = msg.frame;
+          } catch {}
+          if (!opponentFrame) setOpponentFrame(msg.frame);
         }
         // Opponent quit
         if (msg?.type === "opponent-quit") {
@@ -851,6 +864,51 @@ export default function Tournaments({ user }: { user: any }) {
 
   const username = user?.username || "You";
 
+  // Stream local camera frames to opponent via WS at ~24 FPS for smooth video
+  useEffect(() => {
+    if (!inProgress || matchContext !== "tournament") return;
+    if (!wsGlobal?.connected) return;
+    let alive = true;
+    const c = document.createElement("canvas");
+    const ctx = c.getContext("2d");
+    let lastSendTs = 0;
+    const FRAME_INTERVAL = 42; // ~24 FPS
+
+    const loop = () => {
+      if (!alive) return;
+      requestAnimationFrame(loop);
+      const now = performance.now();
+      if (now - lastSendTs < FRAME_INTERVAL) return;
+      try {
+        const dbg = (window as any).__ndn_camera_debug;
+        const video = dbg?.videoEl?.() as HTMLVideoElement | null;
+        if (!video || !video.videoWidth || !video.videoHeight) return;
+        const w = 480;
+        const h = Math.round((video.videoHeight / video.videoWidth) * w) || 270;
+        if (c.width !== w) c.width = w;
+        if (c.height !== h) c.height = h;
+        if (!ctx) return;
+        ctx.drawImage(video, 0, 0, w, h);
+        lastSendTs = now;
+        const frame = c.toDataURL("image/jpeg", 0.55);
+        try {
+          wsGlobal.send({ type: "camera-frame", frame });
+        } catch {}
+      } catch {}
+    };
+    requestAnimationFrame(loop);
+    return () => {
+      alive = false;
+    };
+  }, [inProgress, matchContext, wsGlobal]);
+
+  // Clear opponent frame when match ends
+  useEffect(() => {
+    if (!inProgress || matchContext !== "tournament") {
+      setOpponentFrame(null);
+    }
+  }, [inProgress, matchContext]);
+
   // ── When a tournament match is in progress, render the full in-game shell ──
   // Only show InGameShell if the match was started from Tournaments (context === 'tournament').
   // This prevents offline or online matches from falsely rendering here.
@@ -933,6 +991,7 @@ export default function Tournaments({ user }: { user: any }) {
           localPlayerIndexOverride={localIdx >= 0 ? localIdx : undefined}
           gameModeOverride={currentGame}
           isOnline={true}
+          remoteFrame={opponentFrame}
         />
         {/* Opponent quit overlay */}
         {opponentQuitName && (
@@ -1564,11 +1623,10 @@ export default function Tournaments({ user }: { user: any }) {
                           }));
                         }}
                       >
-                        {allGames.map((g) => (
-                          <option key={g} value={g}>
-                            {getGameDisplay(g).emoji} {g}
-                          </option>
-                        ))}
+                        {/* Only X01 is available for tournaments for now */}
+                        <option value="X01">
+                          {getGameDisplay("X01").emoji} X01
+                        </option>
                       </select>
                       <div
                         className="text-[9px] mt-0.5 px-0.5"
