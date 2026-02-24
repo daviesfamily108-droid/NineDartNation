@@ -72,6 +72,25 @@
   .card.ndn-stats-page {
     padding-bottom: var(--ndn-card-padding-bottom, 810px) !important;
   }
+
+  /* ── Online Lobby mobile fixes ── */
+
+  /* Override the 900px desktop card depth to the project-standard 80px on mobile */
+  .ndn-online-page {
+    padding-bottom: 80px !important;
+  }
+
+  /* Shell body must scroll on mobile so all lobby content is reachable */
+  .ndn-online-page .ndn-shell-body {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Compact page header on mobile */
+  .ndn-page-header {
+    padding: 0.5rem 0.75rem !important;
+    gap: 0.5rem !important;
+  }
 }
 
 /* ─── Tablet (769px – 1024px) ─── */
