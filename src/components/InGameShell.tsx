@@ -680,7 +680,7 @@ export default function InGameShell({
 
             {/* Camera — right side, only shown for online matches */}
             {isOnline && (
-              <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden flex flex-col">
+              <div className="relative rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl ring-1 ring-white/5 overflow-hidden flex flex-col min-h-0">
                 <div className="flex items-center justify-between px-3 py-1 border-b border-white/5 bg-white/5 shrink-0">
                   <div className="flex items-center gap-2">
                     <div
