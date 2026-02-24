@@ -381,6 +381,11 @@ body {
   padding-bottom: 800px !important;
 }
 
+/* Online play page card — locked at 790px; do NOT change this value */
+.ndn-online-page {
+  padding-bottom: 790px !important;
+}
+
 /* Friends page card — locked at 100px */
 .ndn-friends-page {
   padding-bottom: 100px !important;

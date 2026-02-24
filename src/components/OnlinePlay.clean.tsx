@@ -1011,7 +1011,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
       className="flex-1 min-h-0 ndn-page"
       style={{ position: "relative", marginTop: 0 }}
     >
-      <div className="card ndn-game-shell relative overflow-hidden md:overflow-hidden overflow-y-auto h-full flex flex-col">
+      <div className="card ndn-game-shell ndn-online-page relative overflow-hidden md:overflow-hidden overflow-y-auto h-full flex flex-col">
         {showStartShowcase && (
           <MatchStartShowcase
             players={(players || []) as any}
@@ -1321,6 +1321,23 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
               {/* World Lobby removed: combined matches are displayed above */}
             </div>
           </div>
+        </div>
+
+        {/* ── Page pagination at bottom of the card ── */}
+        <div className="flex items-center justify-center gap-2 py-3 mt-auto">
+          {pages.map((p, idx) => (
+            <button
+              key={p.id}
+              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                idx === currentPageIdx
+                  ? "bg-white/20 text-white border border-white/30"
+                  : "text-white/60 hover:text-white hover:bg-white/10"
+              }`}
+              onClick={() => setCurrentPageIdx(idx)}
+            >
+              {p.id}
+            </button>
+          ))}
         </div>
 
         {/* Create Match modal */}
