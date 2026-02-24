@@ -317,6 +317,11 @@ export default function InGameShell({
   const [showNumpad, setShowNumpad] = useState(false);
   const [numpadValue, setNumpadValue] = useState("");
   const numpadInputRef = useRef<HTMLInputElement>(null);
+  const [dartsAtDouble, setDartsAtDouble] = useState(0);
+
+  // Show darts-at-double selector when remaining is ≤ 60 (checkout range)
+  const showDartsAtDouble =
+    isX01 && isUsersTurn && localRemaining <= 60 && localRemaining > 0;
 
   // Auto-focus the input when numpad opens
   useEffect(() => {
@@ -771,7 +776,19 @@ export default function InGameShell({
                 <button
                   key={v}
                   className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-white/90 transition-all active:scale-95"
-                  onClick={() => commitVisit(v, 3, { visitTotal: v })}
+                  onClick={() => {
+                    const isFinish = localRemaining - v === 0 && v > 0;
+                    commitVisit(v, 3, {
+                      visitTotal: v,
+                      ...(showDartsAtDouble
+                        ? {
+                            doubleWindowDarts: dartsAtDouble,
+                            finishedByDouble: isFinish,
+                          }
+                        : {}),
+                    });
+                    setDartsAtDouble(0);
+                  }}
                 >
                   {v}
                 </button>
@@ -832,14 +849,34 @@ export default function InGameShell({
                   }
                 }}
                 onKeyDown={(e) => {
+                  if (e.key === "ArrowUp" && showDartsAtDouble) {
+                    e.preventDefault();
+                    setDartsAtDouble((v) => Math.min(3, v + 1));
+                    return;
+                  }
+                  if (e.key === "ArrowDown" && showDartsAtDouble) {
+                    e.preventDefault();
+                    setDartsAtDouble((v) => Math.max(0, v - 1));
+                    return;
+                  }
                   if (e.key === "Enter") {
                     e.preventDefault();
                     const score = Math.max(
                       0,
                       Math.min(numpadMax, Number(numpadValue) || 0),
                     );
-                    commitVisit(score, 3, { visitTotal: score });
+                    const isFinish = localRemaining - score === 0 && score > 0;
+                    commitVisit(score, 3, {
+                      visitTotal: score,
+                      ...(showDartsAtDouble
+                        ? {
+                            doubleWindowDarts: dartsAtDouble,
+                            finishedByDouble: isFinish,
+                          }
+                        : {}),
+                    });
                     setNumpadValue("");
+                    setDartsAtDouble(0);
                     setShowNumpad(false);
                   }
                 }}
@@ -852,6 +889,40 @@ export default function InGameShell({
                   </div>
                 )}
             </div>
+
+            {/* Darts at double selector in numpad */}
+            {showDartsAtDouble && (
+              <div className="mb-3 rounded-xl bg-amber-500/10 border border-amber-400/20 px-3 py-2 flex items-center justify-between select-none">
+                <span className="text-xs font-semibold text-amber-300/80 uppercase tracking-wide">
+                  Darts at Double
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/15 active:bg-white/20 border border-white/10 text-white/80 text-base font-bold transition-all active:scale-90"
+                    onClick={() => {
+                      setDartsAtDouble((v) => Math.max(0, v - 1));
+                      numpadInputRef.current?.focus();
+                    }}
+                    aria-label="Decrease darts at double"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center font-mono text-2xl font-black text-amber-300 tabular-nums">
+                    {dartsAtDouble}
+                  </span>
+                  <button
+                    className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/15 active:bg-white/20 border border-white/10 text-white/80 text-base font-bold transition-all active:scale-90"
+                    onClick={() => {
+                      setDartsAtDouble((v) => Math.min(3, v + 1));
+                      numpadInputRef.current?.focus();
+                    }}
+                    aria-label="Increase darts at double"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Numpad grid */}
             <div className="grid grid-cols-3 gap-2 mb-3">
@@ -895,8 +966,18 @@ export default function InGameShell({
                     0,
                     Math.min(numpadMax, Number(numpadValue) || 0),
                   );
-                  commitVisit(score, 3, { visitTotal: score });
+                  const isFinish = localRemaining - score === 0 && score > 0;
+                  commitVisit(score, 3, {
+                    visitTotal: score,
+                    ...(showDartsAtDouble
+                      ? {
+                          doubleWindowDarts: dartsAtDouble,
+                          finishedByDouble: isFinish,
+                        }
+                      : {}),
+                  });
                   setNumpadValue("");
+                  setDartsAtDouble(0);
                   setShowNumpad(false);
                 }}
               >
@@ -914,8 +995,18 @@ export default function InGameShell({
                   key={v}
                   className="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 border border-white/10 text-white/80 transition-all active:scale-95"
                   onClick={() => {
-                    commitVisit(v, 3, { visitTotal: v });
+                    const isFinish = localRemaining - v === 0 && v > 0;
+                    commitVisit(v, 3, {
+                      visitTotal: v,
+                      ...(showDartsAtDouble
+                        ? {
+                            doubleWindowDarts: dartsAtDouble,
+                            finishedByDouble: isFinish,
+                          }
+                        : {}),
+                    });
                     setNumpadValue("");
+                    setDartsAtDouble(0);
                     setShowNumpad(false);
                   }}
                 >
@@ -965,6 +1056,16 @@ export default function InGameShell({
                 }
               }}
               onKeyDown={(e) => {
+                if (e.key === "ArrowUp" && showDartsAtDouble) {
+                  e.preventDefault();
+                  setDartsAtDouble((v) => Math.min(3, v + 1));
+                  return;
+                }
+                if (e.key === "ArrowDown" && showDartsAtDouble) {
+                  e.preventDefault();
+                  setDartsAtDouble((v) => Math.max(0, v - 1));
+                  return;
+                }
                 if (e.key === "Enter") {
                   e.preventDefault();
                   const score = Math.max(
@@ -972,12 +1073,48 @@ export default function InGameShell({
                     Math.min(numpadMax, Number(numpadValue) || 0),
                   );
                   if (numpadValue !== "") {
-                    commitVisit(score, 3, { visitTotal: score });
+                    const isFinish = localRemaining - score === 0 && score > 0;
+                    commitVisit(score, 3, {
+                      visitTotal: score,
+                      ...(showDartsAtDouble
+                        ? {
+                            doubleWindowDarts: dartsAtDouble,
+                            finishedByDouble: isFinish,
+                          }
+                        : {}),
+                    });
                     setNumpadValue("");
+                    setDartsAtDouble(0);
                   }
                 }
               }}
             />
+            {showDartsAtDouble && (
+              <div className="flex flex-col items-center gap-0.5 select-none">
+                <div className="text-[9px] uppercase tracking-wider text-amber-300/70 font-semibold whitespace-nowrap">
+                  Darts@Dbl
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 active:bg-white/20 border border-white/10 text-white/80 text-sm font-bold transition-all active:scale-90"
+                    onClick={() => setDartsAtDouble((v) => Math.max(0, v - 1))}
+                    aria-label="Decrease darts at double"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center font-mono text-lg font-black text-amber-300 tabular-nums">
+                    {dartsAtDouble}
+                  </span>
+                  <button
+                    className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 active:bg-white/20 border border-white/10 text-white/80 text-sm font-bold transition-all active:scale-90"
+                    onClick={() => setDartsAtDouble((v) => Math.min(3, v + 1))}
+                    aria-label="Increase darts at double"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            )}
             <button
               className={`px-5 py-3 rounded-xl text-sm font-bold text-white border transition-all active:scale-95 whitespace-nowrap ${
                 isUsersTurn && numpadValue !== ""
@@ -990,8 +1127,18 @@ export default function InGameShell({
                   0,
                   Math.min(numpadMax, Number(numpadValue) || 0),
                 );
-                commitVisit(score, 3, { visitTotal: score });
+                const isFinish = localRemaining - score === 0 && score > 0;
+                commitVisit(score, 3, {
+                  visitTotal: score,
+                  ...(showDartsAtDouble
+                    ? {
+                        doubleWindowDarts: dartsAtDouble,
+                        finishedByDouble: isFinish,
+                      }
+                    : {}),
+                });
                 setNumpadValue("");
+                setDartsAtDouble(0);
               }}
             >
               Submit
