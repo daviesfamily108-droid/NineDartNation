@@ -20,7 +20,6 @@ import { useToast } from "../store/toast.js";
 import { useWS } from "./WSProvider.js";
 import { apiFetch } from "../utils/api.js";
 import { useUserSettings } from "../store/userSettings.js";
-import { launchInPlayDemo } from "../utils/inPlayDemo.js";
 import { openMatchWindow } from "../utils/matchWindow.js";
 
 type Tournament = {
@@ -108,7 +107,6 @@ export default function Tournaments({ user }: { user: any }) {
   const [lastRefresh, setLastRefresh] = useState<number | null>(null);
   const [cooldownUntil, setCooldownUntil] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [showDemoStart, setShowDemoStart] = useState(false);
   const [showStartShowcase, setShowStartShowcase] = useState(false);
   const _startedShowcasedRef = useRef(false);
 
@@ -442,17 +440,6 @@ export default function Tournaments({ user }: { user: any }) {
   }, [wsGlobal?.connected]);
 
   const email = String(user?.email || "").toLowerCase();
-  const showDemoControls =
-    (import.meta as any).env?.DEV || email === "daviesfamily108@gmail.com";
-
-  const runTournamentInPlayDemo = () => {
-    launchInPlayDemo({
-      players: ["Tournament A", "Tournament B"],
-      startingScore: 501,
-      roomId: "tournament-demo",
-      visits: [{ score: 45 }, { score: 81 }, { score: 140 }],
-    });
-  };
 
   const hasJoined = useCallback(
     (t: Tournament | null | undefined) => {
@@ -975,36 +962,9 @@ export default function Tournaments({ user }: { user: any }) {
             <button className="btn" onClick={() => setShowCreate(true)}>
               Create Tournament + 🎯
             </button>
-            {showDemoControls && (
-              <button
-                className="btn btn-ghost ml-2"
-                onClick={() => setShowDemoStart(true)}
-              >
-                Demo Start Showcase 🎯
-              </button>
-            )}
-            {showDemoControls && (
-              <button
-                className="btn btn-ghost ml-2"
-                onClick={runTournamentInPlayDemo}
-              >
-                Demo In-Game 🎮
-              </button>
-            )}
           </div>
         </div>
         <MatchPrefs />
-        {/* DEV-only start showcase demo */}
-        {showDemoStart && (
-          <MatchStartShowcase
-            players={[
-              { id: "0", name: "Demo A", legsWon: 0, legs: [] },
-              { id: "1", name: "Demo B", legsWon: 0, legs: [] },
-            ]}
-            user={user}
-            onDone={() => setShowDemoStart(false)}
-          />
-        )}
         {/* Show overlay when a tournament match starts while on the tournaments page */}
         {showStartShowcase && (
           <MatchStartShowcase

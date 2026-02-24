@@ -16,7 +16,6 @@ import InGameShell from "./InGameShell.js";
 import { useMatch } from "../store/match.js";
 import { useMatchControl } from "../store/matchControl.js";
 import { useWS } from "./WSProvider.js";
-import { launchInPlayDemo } from "../utils/inPlayDemo.js";
 import { openMatchWindow } from "../utils/matchWindow.js";
 
 export default function OnlinePlayClean({ user }: { user?: any }) {
@@ -38,10 +37,6 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const players = useMatch((s) => s.players);
   const [focusMode, setFocusMode] = useState(false);
   const matchesRef = useRef<HTMLDivElement | null>(null);
-  const showDemoControls =
-    (import.meta as any).env?.DEV ||
-    String(user?.email || "").toLowerCase() === "daviesfamily108@gmail.com";
-
   useEffect(() => {
     if (!focusMode) return;
     function onDocClick(e: MouseEvent) {
@@ -883,15 +878,6 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
     }
   }, [inProgress, matchContext]);
 
-  const runOnlineInPlayDemo = () => {
-    launchInPlayDemo({
-      players: [username, "Opponent"],
-      startingScore: 501,
-      roomId: "online-demo",
-      visits: [{ score: 60 }, { score: 85 }, { score: 100 }],
-    });
-  };
-
   // ── When a match is in progress, render the full in-game shell ──
   // Only show InGameShell if the match was started from OnlinePlay (context === 'online').
   // This prevents offline or tournament matches from falsely rendering here.
@@ -1069,14 +1055,6 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
                   <Trophy className="w-4 h-4" />
                   Create Match +
                 </button>
-                {showDemoControls && (
-                  <button
-                    className="btn btn-sm btn-ghost rounded-lg"
-                    onClick={runOnlineInPlayDemo}
-                  >
-                    Demo In-Play
-                  </button>
-                )}
                 {(currentPage_?.matches?.length || 0) >= maxMatchesPerPage && (
                   <div className="text-xs text-rose-400">
                     Page full — create a new page
