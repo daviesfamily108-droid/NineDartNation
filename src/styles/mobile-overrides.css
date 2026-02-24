@@ -75,21 +75,55 @@
 
   /* ── Online Lobby mobile fixes ── */
 
-  /* Override the 900px desktop card depth to the project-standard 80px on mobile */
-  .ndn-online-page {
-    padding-bottom: 80px !important;
-  }
-
-  /* Shell body must scroll on mobile so all lobby content is reachable */
+  /* Shell body must scroll on mobile */
   .ndn-online-page .ndn-shell-body {
     overflow-y: auto !important;
     -webkit-overflow-scrolling: touch;
   }
 
-  /* Compact page header on mobile */
+  /* Compact page header: smaller padding, hide New Page button */
   .ndn-page-header {
     padding: 0.5rem 0.75rem !important;
     gap: 0.5rem !important;
+  }
+
+  .ndn-new-page-btn {
+    display: none !important;
+  }
+
+  /* Hide bottom page tabs on mobile (single page is typical) */
+  .ndn-page-tabs {
+    display: none !important;
+  }
+
+  /* Filter bar: wrap horizontally instead of stacking vertically */
+  .ndn-online-page .ndn-filterbar {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 0.375rem !important;
+  }
+
+  .ndn-online-page .ndn-filterbar > * {
+    flex: 1 1 45%;
+    min-width: 100px;
+  }
+
+  /* Search input takes full width */
+  .ndn-online-page .ndn-filterbar > :first-child {
+    flex: 1 1 100%;
+  }
+
+  /* Smaller filter controls on mobile */
+  .ndn-online-page .ndn-filterbar select,
+  .ndn-online-page .ndn-filterbar button {
+    font-size: 0.75rem;
+    padding: 0.375rem 0.5rem;
+  }
+
+  /* Online page card bottom padding — specificity must match index.css rule */
+  .ndn-game-shell.ndn-online-page,
+  .card.ndn-online-page {
+    padding-bottom: 80px !important;
   }
 }
 
