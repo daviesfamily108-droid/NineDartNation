@@ -51,6 +51,11 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         setSummaryPlayers(JSON.parse(JSON.stringify(st.players)));
         setShowMatchSummary(true);
       }
+      // Scroll the main container back to the top so the lobby renders correctly
+      try {
+        const scroller = document.getElementById("ndn-main-scroll");
+        if (scroller) scroller.scrollTop = 0;
+      } catch {}
     }
     prevInProgressRef.current = inProgress;
   }, [inProgress, matchContext]);
@@ -1052,7 +1057,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         <h2 className="text-3xl font-bold text-black dark:text-white mb-4 ndn-section-title">
           Online Lobby 🌐
         </h2>
-        <div className="ndn-shell-body flex-1 overflow-y-auto p-3 pb-20">
+        <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
           <div className="h-full flex flex-col gap-3">
             {/* Top row: Page, New Page, Create Match */}
             <div className="ndn-page-header p-4 rounded-lg bg-slate-900/50 border border-slate-800/50 flex items-center justify-between gap-3 flex-wrap">

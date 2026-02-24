@@ -72,14 +72,6 @@
   .card.ndn-stats-page {
     padding-bottom: var(--ndn-card-padding-bottom, 810px) !important;
   }
-
-  /* ── Online Lobby mobile fixes ── */
-
-  /* Shell body must scroll on mobile */
-  .ndn-online-page .ndn-shell-body {
-    overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch;
-  }
 }
 
 /* ─── Tablet (769px – 1024px) ─── */
