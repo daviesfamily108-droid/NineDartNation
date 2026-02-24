@@ -2516,6 +2516,7 @@ app.post('/api/tournaments/create', async (req, res) => {
     winnerEmail: null,
   creatorEmail: String(creatorEmail || ''),
   creatorName: (isAdminCreator ? 'ADMIN' : String(creatorName || '')),
+    pageId: typeof req.body.pageId === 'string' ? req.body.pageId : 'default',
     createdAt: Date.now(),
     startingScore: (typeof startingScore === 'number' && startingScore>0) ? Math.floor(startingScore) : (String(game)==='X01' ? 501 : undefined),
   }

@@ -82,6 +82,25 @@ export default function Tournaments({ user }: { user: any }) {
     teamBName: _teamBName = "Team B",
     setTeamBName: _setTeamBName,
   } = useUserSettings();
+  // Independent pages system — each page has its own set of tournaments
+  const [currentPageIdx, setCurrentPageIdx] = useState(0);
+  const [pages, setPages] = useState(() => [
+    { id: 1, name: "page-1", pageId: "default" },
+  ]);
+  const activePageId = pages[currentPageIdx]?.pageId || "default";
+
+  const newPage = () => {
+    setPages((prev) => {
+      const id = prev.length + 1;
+      const newPages = [
+        ...prev,
+        { id, name: `page-${id}`, pageId: `page-${id}-${Date.now()}` },
+      ];
+      setCurrentPageIdx(newPages.length - 1);
+      return newPages;
+    });
+  };
+
   const [list, setList] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -686,6 +705,7 @@ export default function Tournaments({ user }: { user: any }) {
           requireCalibration: !!form.requireCalibration,
           creatorEmail: user?.email,
           creatorName: user?.username,
+          pageId: activePageId,
         }),
       });
       if (!res.ok) {
@@ -734,8 +754,15 @@ export default function Tournaments({ user }: { user: any }) {
   }, [showCreate]);
 
   const visibleTournaments = useMemo(
-    () => list.filter((t) => !isIntegrationTournament(t)),
-    [list],
+    () =>
+      list
+        .filter((t) => !isIntegrationTournament(t))
+        .filter(
+          (t) =>
+            (t as any).pageId === activePageId ||
+            (!(t as any).pageId && activePageId === "default"),
+        ),
+    [list, activePageId],
   );
   const official = useMemo(
     () => visibleTournaments.filter((t) => t.official),
@@ -930,12 +957,21 @@ export default function Tournaments({ user }: { user: any }) {
         <h2 className="text-2xl font-bold ndn-section-title">Tournaments 🎯</h2>
       </div>
       <div className="ndn-shell-body overflow-visible flex-1 min-h-0">
-        {/* Create Tournament + and default match prefs on a single header row */}
+        {/* Page selector + Create Tournament header row */}
         <div className="mb-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-between gap-2 flex-wrap">
-          <div className="min-w-0">
-            <MatchPrefs />
+          <div className="flex items-center gap-3 flex-wrap min-w-0">
+            <div className="text-sm text-white/70">Page</div>
+            <div className="px-3 py-1.5 bg-slate-800/60 rounded-lg border border-slate-700/50 text-white/90 font-medium">
+              Page {pages[currentPageIdx]?.id}
+            </div>
+            <button
+              className="btn btn-ghost btn-sm rounded-lg"
+              onClick={newPage}
+            >
+              New Page
+            </button>
           </div>
-          <div className="shrink-0">
+          <div className="shrink-0 flex items-center gap-2">
             <button className="btn" onClick={() => setShowCreate(true)}>
               Create Tournament + 🎯
             </button>
@@ -957,6 +993,7 @@ export default function Tournaments({ user }: { user: any }) {
             )}
           </div>
         </div>
+        <MatchPrefs />
         {/* DEV-only start showcase demo */}
         {showDemoStart && (
           <MatchStartShowcase
@@ -1971,6 +2008,23 @@ export default function Tournaments({ user }: { user: any }) {
         )}
 
         {/* Phone camera overlay removed per UX preference; header badge preview only */}
+      </div>
+
+      {/* ── Page pagination at bottom of the card ── */}
+      <div className="flex items-center justify-center gap-2 py-3 mt-auto">
+        {pages.map((p, idx) => (
+          <button
+            key={p.id}
+            className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+              idx === currentPageIdx
+                ? "bg-white/20 text-white border border-white/30"
+                : "text-white/60 hover:text-white hover:bg-white/10"
+            }`}
+            onClick={() => setCurrentPageIdx(idx)}
+          >
+            {p.id}
+          </button>
+        ))}
       </div>
     </div>
   );
