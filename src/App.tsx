@@ -1373,13 +1373,13 @@ export default function App() {
       {/* Full Screen Notification Modal - Moved to root level for proper overlay */}
       {notificationsOpen && (
         <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm pt-0 px-4 pb-4 sm:p-4"
+          className="fixed inset-0 z-[9999] flex items-start sm:items-center justify-center bg-black/90 backdrop-blur-sm pt-0 px-2 pb-2 sm:p-4 overflow-y-auto"
           onClick={() => setNotificationsOpen(false)}
         >
           <div
             role="dialog"
             aria-modal="true"
-            className="relative w-full max-w-4xl max-h-[95vh] sm:max-h-[85vh] overflow-y-auto rounded-3xl border border-white/10 bg-[#13111C] pt-3 px-6 pb-6 sm:p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
+            className="relative w-full max-w-4xl max-h-[100dvh] sm:max-h-[85vh] overflow-y-auto overflow-x-hidden rounded-3xl sm:rounded-3xl border border-white/10 bg-[#13111C] pt-4 px-4 pb-4 sm:p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Background pattern */}
