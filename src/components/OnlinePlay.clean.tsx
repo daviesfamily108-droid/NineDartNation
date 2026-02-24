@@ -1370,191 +1370,189 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
             setShowCreateModal(false);
           }}
         />
+      </div>
 
-        {/* ── Incoming invite popup (creator sees this) ── */}
-        {pendingInvite && (
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="relative w-full max-w-md mx-4 p-6 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 border border-indigo-500/30 shadow-2xl shadow-indigo-500/20">
-              {/* Glow accent */}
-              <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+      {/* ── Incoming invite popup (creator sees this) ── */}
+      {pendingInvite && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md mx-4 p-6 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 border border-indigo-500/30 shadow-2xl shadow-indigo-500/20">
+            {/* Glow accent */}
+            <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-32 h-32 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
 
-              <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 ring-2 ring-indigo-500/30">
-                    <Zap className="w-6 h-6" />
+            <div className="relative z-10">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-400 ring-2 ring-indigo-500/30">
+                  <Zap className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-white">
+                    Match Invite!
+                  </h3>
+                  <p className="text-sm text-white/60">Someone wants to play</p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-white/5 border border-white/10 mb-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white font-bold text-sm">
+                    {(pendingInvite.fromName || "?")
+                      .substring(0, 2)
+                      .toUpperCase()}
                   </div>
                   <div>
-                    <h3 className="text-xl font-black text-white">
-                      Match Invite!
-                    </h3>
-                    <p className="text-sm text-white/60">
-                      Someone wants to play
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-white/5 border border-white/10 mb-5">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white font-bold text-sm">
-                      {(pendingInvite.fromName || "?")
-                        .substring(0, 2)
-                        .toUpperCase()}
+                    <div className="font-bold text-white text-lg">
+                      {pendingInvite.fromName || "Opponent"}
                     </div>
-                    <div>
-                      <div className="font-bold text-white text-lg">
-                        {pendingInvite.fromName || "Opponent"}
-                      </div>
-                      <div className="text-xs text-white/50">
-                        wants to join your match
-                      </div>
+                    <div className="text-xs text-white/50">
+                      wants to join your match
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap text-sm text-white/70">
-                    <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 font-medium">
-                      {pendingInvite.game || "X01"}
-                    </span>
-                    <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10">
-                      {pendingInvite.mode === "bestof" ? "Best Of" : "First To"}{" "}
-                      {pendingInvite.value || 1}
-                    </span>
-                    <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 font-mono text-amber-300">
-                      {pendingInvite.startingScore || 501}
-                    </span>
-                  </div>
                 </div>
+                <div className="flex items-center gap-2 flex-wrap text-sm text-white/70">
+                  <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 font-medium">
+                    {pendingInvite.game || "X01"}
+                  </span>
+                  <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10">
+                    {pendingInvite.mode === "bestof" ? "Best Of" : "First To"}{" "}
+                    {pendingInvite.value || 1}
+                  </span>
+                  <span className="px-2 py-1 rounded-lg bg-white/5 border border-white/10 font-mono text-amber-300">
+                    {pendingInvite.startingScore || 501}
+                  </span>
+                </div>
+              </div>
 
-                <div className="flex gap-3">
-                  <button
-                    className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-lg shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all hover:scale-[1.02] active:scale-95"
-                    onClick={() => {
-                      // Send invite-accept to start prestart for both
-                      try {
-                        if (wsGlobal?.connected && pendingInvite?.id) {
-                          wsGlobal.send({
-                            type: "invite-accept",
-                            matchId: pendingInvite.id,
-                          });
-                        }
-                      } catch {}
-                      setPendingInvite(null);
-                    }}
-                  >
-                    ✅ Accept
-                  </button>
-                  <button
-                    className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-rose-600/80 text-white/80 hover:text-white font-bold text-lg border border-white/10 hover:border-rose-500/50 transition-all hover:scale-[1.02] active:scale-95"
-                    onClick={() => {
-                      // Send invite-decline
-                      try {
-                        if (wsGlobal?.connected && pendingInvite?.id) {
-                          wsGlobal.send({
-                            type: "invite-decline",
-                            matchId: pendingInvite.id,
-                          });
-                        }
-                      } catch {}
-                      setPendingInvite(null);
-                    }}
-                  >
-                    ❌ Decline
-                  </button>
-                </div>
+              <div className="flex gap-3">
+                <button
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-lg shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all hover:scale-[1.02] active:scale-95"
+                  onClick={() => {
+                    // Send invite-accept to start prestart for both
+                    try {
+                      if (wsGlobal?.connected && pendingInvite?.id) {
+                        wsGlobal.send({
+                          type: "invite-accept",
+                          matchId: pendingInvite.id,
+                        });
+                      }
+                    } catch {}
+                    setPendingInvite(null);
+                  }}
+                >
+                  ✅ Accept
+                </button>
+                <button
+                  className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-rose-600/80 text-white/80 hover:text-white font-bold text-lg border border-white/10 hover:border-rose-500/50 transition-all hover:scale-[1.02] active:scale-95"
+                  onClick={() => {
+                    // Send invite-decline
+                    try {
+                      if (wsGlobal?.connected && pendingInvite?.id) {
+                        wsGlobal.send({
+                          type: "invite-decline",
+                          matchId: pendingInvite.id,
+                        });
+                      }
+                    } catch {}
+                    setPendingInvite(null);
+                  }}
+                >
+                  ❌ Decline
+                </button>
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ── Waiting for creator (joiner sees this) ── */}
-        {waitingForCreator && !joinMatch && (
-          <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="w-full max-w-sm mx-4 p-6 rounded-2xl bg-slate-900 border border-slate-700/50 text-center">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-indigo-500/10 flex items-center justify-center">
-                <Clock className="w-8 h-8 text-indigo-400 animate-pulse" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">
-                Waiting for {waitingForCreator}
-              </h3>
-              <p className="text-sm text-white/50 mb-5">
-                The match creator needs to accept your request…
-              </p>
-              <button
-                className="px-6 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 transition-all text-sm font-medium"
-                onClick={() => setWaitingForCreator(null)}
-              >
-                Cancel
-              </button>
+      {/* ── Waiting for creator (joiner sees this) ── */}
+      {waitingForCreator && !joinMatch && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-sm mx-4 p-6 rounded-2xl bg-slate-900 border border-slate-700/50 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-indigo-500/10 flex items-center justify-center">
+              <Clock className="w-8 h-8 text-indigo-400 animate-pulse" />
             </div>
+            <h3 className="text-xl font-bold text-white mb-2">
+              Waiting for {waitingForCreator}
+            </h3>
+            <p className="text-sm text-white/50 mb-5">
+              The match creator needs to accept your request…
+            </p>
+            <button
+              className="px-6 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 hover:text-white border border-white/10 transition-all text-sm font-medium"
+              onClick={() => setWaitingForCreator(null)}
+            >
+              Cancel
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Modern join / prestart overlay */}
-        <MatchPrestart
-          open={!!joinMatch}
-          matchInfo={joinMatch}
-          localUser={user}
-          opponentName={(() => {
-            if (!joinMatch) return "Opponent";
-            const localName = (user?.username || "").toLowerCase();
-            const creatorName =
-              joinMatch.createdBy || joinMatch.creatorName || "";
-            // If local user is the creator, opponent is the joiner
-            if (
-              joinMatch._isCreatorView ||
-              creatorName.toLowerCase() === localName
-            ) {
-              return (
-                joinMatch.joinerName ||
-                (joinMatch.joinerId
-                  ? participants[joinMatch.joinerId] || joinMatch.joinerId
-                  : "Opponent")
-              );
-            }
-            // Otherwise, local user is the joiner — opponent is the creator
+      {/* Modern join / prestart overlay */}
+      <MatchPrestart
+        open={!!joinMatch}
+        matchInfo={joinMatch}
+        localUser={user}
+        opponentName={(() => {
+          if (!joinMatch) return "Opponent";
+          const localName = (user?.username || "").toLowerCase();
+          const creatorName =
+            joinMatch.createdBy || joinMatch.creatorName || "";
+          // If local user is the creator, opponent is the joiner
+          if (
+            joinMatch._isCreatorView ||
+            creatorName.toLowerCase() === localName
+          ) {
             return (
-              creatorName ||
-              (joinMatch.creatorId
-                ? participants[joinMatch.creatorId] || joinMatch.creatorId
+              joinMatch.joinerName ||
+              (joinMatch.joinerId
+                ? participants[joinMatch.joinerId] || joinMatch.joinerId
                 : "Opponent")
             );
-          })()}
-          countdown={15}
-          onChoice={sendPrestartChoice}
-          onBullThrow={(distanceMm: number) => {
-            try {
-              if (wsGlobal?.connected && joinMatch?.id) {
-                wsGlobal.send({
-                  type: "prestart-bull-throw",
-                  roomId: joinMatch.id,
-                  score: distanceMm,
-                });
-              }
-            } catch {}
-            setBullLocalThrow(distanceMm);
-            setBullThrown(true);
-          }}
-          onAccept={handleJoinAccept}
-          onCancel={() => {
-            // If the creator cancels during prestart, notify the server
-            try {
-              if (
-                wsGlobal?.connected &&
-                joinMatch?.id &&
-                joinMatch._isCreatorView
-              ) {
-                wsGlobal.send({
-                  type: "invite-decline",
-                  matchId: joinMatch.id,
-                });
-              }
-            } catch {}
-            setJoinMatch(null);
-          }}
-          remoteChoice={Object.values(remoteChoices)[0] || null}
-          bullActive={bullActive}
-          bullWinner={bullWinner}
-          bullTied={bullTied}
-        />
-      </div>
+          }
+          // Otherwise, local user is the joiner — opponent is the creator
+          return (
+            creatorName ||
+            (joinMatch.creatorId
+              ? participants[joinMatch.creatorId] || joinMatch.creatorId
+              : "Opponent")
+          );
+        })()}
+        countdown={15}
+        onChoice={sendPrestartChoice}
+        onBullThrow={(distanceMm: number) => {
+          try {
+            if (wsGlobal?.connected && joinMatch?.id) {
+              wsGlobal.send({
+                type: "prestart-bull-throw",
+                roomId: joinMatch.id,
+                score: distanceMm,
+              });
+            }
+          } catch {}
+          setBullLocalThrow(distanceMm);
+          setBullThrown(true);
+        }}
+        onAccept={handleJoinAccept}
+        onCancel={() => {
+          // If the creator cancels during prestart, notify the server
+          try {
+            if (
+              wsGlobal?.connected &&
+              joinMatch?.id &&
+              joinMatch._isCreatorView
+            ) {
+              wsGlobal.send({
+                type: "invite-decline",
+                matchId: joinMatch.id,
+              });
+            }
+          } catch {}
+          setJoinMatch(null);
+        }}
+        remoteChoice={Object.values(remoteChoices)[0] || null}
+        bullActive={bullActive}
+        bullWinner={bullWinner}
+        bullTied={bullTied}
+      />
 
       {/* Match Summary Modal */}
       <MatchSummaryModal
