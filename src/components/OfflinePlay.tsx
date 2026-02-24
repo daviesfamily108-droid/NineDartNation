@@ -89,6 +89,7 @@ import {
   UnifiedMatchActions,
 } from "../logic/matchActions";
 import { useMatch } from "../store/match";
+import BarChart from "./BarChart";
 import { useOfflineGameStats } from "./scoreboards/useGameStats";
 import {
   freeGames,
@@ -6559,6 +6560,44 @@ export default function OfflinePlay({ user }: { user: any }) {
                     ? Math.round((aiDoublesHit / aiDoublesAtt) * 100)
                     : 0;
 
+                const MATCH_BUCKETS = [
+                  { min: 0, max: 39, label: "0+" },
+                  { min: 40, max: 59, label: "40+" },
+                  { min: 60, max: 79, label: "60+" },
+                  { min: 80, max: 99, label: "80+" },
+                  { min: 100, max: 119, label: "100+" },
+                  { min: 120, max: 139, label: "120+" },
+                  { min: 140, max: 179, label: "140+" },
+                  { min: 180, max: 180, label: "180" },
+                ];
+                const computeDist = (playerIdx: number) => {
+                  const counts = new Array(MATCH_BUCKETS.length).fill(0);
+                  const mp = match.players?.[playerIdx];
+                  if (mp) {
+                    for (const L of mp.legs || []) {
+                      for (const v of L.visits || []) {
+                        const s =
+                          (v as any)?.score || (v as any)?.visitTotal || 0;
+                        for (let i = MATCH_BUCKETS.length - 1; i >= 0; i--) {
+                          if (
+                            s >= MATCH_BUCKETS[i].min &&
+                            s <= MATCH_BUCKETS[i].max
+                          ) {
+                            counts[i]++;
+                            break;
+                          }
+                        }
+                      }
+                    }
+                  }
+                  return MATCH_BUCKETS.map((b, i) => ({
+                    label: b.label,
+                    value: counts[i],
+                  }));
+                };
+                const playerDist = computeDist(0);
+                const aiDist = computeDist(1);
+
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="p-3 rounded-2xl glass border border-white/10">
@@ -6599,6 +6638,18 @@ export default function OfflinePlay({ user }: { user: any }) {
                           <div className="font-semibold">{player180s}</div>
                         </div>
                       </div>
+                      <div className="mt-3">
+                        <div className="text-[10px] opacity-60 mb-1 text-center">
+                          Score Distribution
+                        </div>
+                        <BarChart
+                          data={playerDist}
+                          height={80}
+                          barWidth={18}
+                          gap={2}
+                          showValues
+                        />
+                      </div>
                     </div>
                     <div className="hidden md:flex items-center justify-center">
                       <div className="text-4xl font-black">
@@ -6638,6 +6689,18 @@ export default function OfflinePlay({ user }: { user: any }) {
                           <span className="opacity-70">180's Hit</span>
                           <div className="font-semibold">{ai180s}</div>
                         </div>
+                      </div>
+                      <div className="mt-3">
+                        <div className="text-[10px] opacity-60 mb-1 text-center">
+                          Score Distribution
+                        </div>
+                        <BarChart
+                          data={aiDist}
+                          height={80}
+                          barWidth={18}
+                          gap={2}
+                          showValues
+                        />
                       </div>
                     </div>
                   </div>

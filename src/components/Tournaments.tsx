@@ -16,6 +16,7 @@ import { useMatchControl } from "../store/matchControl.js";
 import MatchCard from "./MatchCard.js";
 import MatchStartShowcase from "./ui/MatchStartShowcase.js";
 import InGameShell from "./InGameShell.js";
+import MatchSummaryModal from "./MatchSummaryModal.js";
 import { useToast } from "../store/toast.js";
 import { useWS } from "./WSProvider.js";
 import { apiFetch } from "../utils/api.js";
@@ -113,6 +114,25 @@ export default function Tournaments({ user }: { user: any }) {
   const inProgress = useMatch((s) => s.inProgress);
   const matchContext = useMatch((s) => s.matchContext);
   const roomId = useMatch((s) => s.roomId);
+
+  // ── Match summary modal (shown when a tournament match ends) ──
+  const [showMatchSummary, setShowMatchSummary] = useState(false);
+  const [summaryPlayers, setSummaryPlayers] = useState<any[]>([]);
+  const prevInProgressRef = useRef(false);
+  useEffect(() => {
+    if (
+      prevInProgressRef.current &&
+      !inProgress &&
+      matchContext === "tournament"
+    ) {
+      const st = useMatch.getState();
+      if (st.players && st.players.length > 0) {
+        setSummaryPlayers(JSON.parse(JSON.stringify(st.players)));
+        setShowMatchSummary(true);
+      }
+    }
+    prevInProgressRef.current = inProgress;
+  }, [inProgress, matchContext]);
 
   useEffect(() => {
     if (!inProgress || matchContext !== "tournament") return;
@@ -1997,6 +2017,14 @@ export default function Tournaments({ user }: { user: any }) {
           </button>
         ))}
       </div>
+
+      {/* Match Summary Modal */}
+      <MatchSummaryModal
+        open={showMatchSummary}
+        onClose={() => setShowMatchSummary(false)}
+        title="Match Summary"
+        players={summaryPlayers}
+      />
     </div>
   );
 }

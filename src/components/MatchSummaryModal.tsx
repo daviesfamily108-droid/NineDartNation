@@ -1,6 +1,36 @@
 import ResizableModal from "./ui/ResizableModal.js";
 import type { Player } from "../store/match.js";
 import { getHeadToHeadLegDiff } from "../store/profileStats.js";
+import BarChart from "./BarChart.js";
+
+const MATCH_BUCKETS = [
+  { min: 0, max: 39, label: "0+" },
+  { min: 40, max: 59, label: "40+" },
+  { min: 60, max: 79, label: "60+" },
+  { min: 80, max: 99, label: "80+" },
+  { min: 100, max: 119, label: "100+" },
+  { min: 120, max: 139, label: "120+" },
+  { min: 140, max: 179, label: "140+" },
+  { min: 180, max: 180, label: "180" },
+] as const;
+
+function computeScoreDistribution(
+  p: Player,
+): { label: string; value: number }[] {
+  const counts = new Array(MATCH_BUCKETS.length).fill(0);
+  for (const L of p.legs || []) {
+    for (const v of L.visits || []) {
+      const score = v?.score || (v as any)?.visitTotal || 0;
+      for (let i = MATCH_BUCKETS.length - 1; i >= 0; i--) {
+        if (score >= MATCH_BUCKETS[i].min && score <= MATCH_BUCKETS[i].max) {
+          counts[i]++;
+          break;
+        }
+      }
+    }
+  }
+  return MATCH_BUCKETS.map((b, i) => ({ label: b.label, value: counts[i] }));
+}
 
 function computeTotals(p: Player) {
   let points = 0;
@@ -100,6 +130,7 @@ export default function MatchSummaryModal({
 
   const cards = players.map((p, idx) => {
     const t = computeTotals(p);
+    const distribution = computeScoreDistribution(p);
     const dbl = doublesStats?.[p.id] || {};
     const att = Math.max(
       0,
@@ -117,6 +148,7 @@ export default function MatchSummaryModal({
       name: p.name,
       legsWon: p.legsWon,
       ...t,
+      distribution,
       dartsAtDouble: att,
       doublesHit: hit,
       doublePct: pct,
@@ -269,6 +301,20 @@ export default function MatchSummaryModal({
                     </div>
                     <div className="opacity-60">Leg Diff</div>
                   </div>
+                </div>
+
+                {/* Score Distribution */}
+                <div className="mt-3">
+                  <div className="text-[10px] opacity-60 mb-1 text-center">
+                    Score Distribution
+                  </div>
+                  <BarChart
+                    data={card.distribution}
+                    height={90}
+                    barWidth={20}
+                    gap={3}
+                    showValues
+                  />
                 </div>
               </div>
             ))}

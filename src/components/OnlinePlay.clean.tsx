@@ -13,7 +13,9 @@ import CreateMatchModal from "./ui/CreateMatchModal.js";
 import MatchStartShowcase from "./ui/MatchStartShowcase.js";
 import MatchPrestart from "./ui/MatchPrestart.js";
 import InGameShell from "./InGameShell.js";
+import MatchSummaryModal from "./MatchSummaryModal.js";
 import { useMatch } from "../store/match.js";
+import type { Player } from "../store/match.js";
 import { useMatchControl } from "../store/matchControl.js";
 import { useWS } from "./WSProvider.js";
 import { openMatchWindow } from "../utils/matchWindow.js";
@@ -37,6 +39,21 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
   const players = useMatch((s) => s.players);
   const [focusMode, setFocusMode] = useState(false);
   const matchesRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Match summary modal (shown when an online match ends) ──
+  const [showMatchSummary, setShowMatchSummary] = useState(false);
+  const [summaryPlayers, setSummaryPlayers] = useState<Player[]>([]);
+  const prevInProgressRef = useRef(false);
+  useEffect(() => {
+    if (prevInProgressRef.current && !inProgress && matchContext === "online") {
+      const st = useMatch.getState();
+      if (st.players && st.players.length > 0) {
+        setSummaryPlayers(JSON.parse(JSON.stringify(st.players)));
+        setShowMatchSummary(true);
+      }
+    }
+    prevInProgressRef.current = inProgress;
+  }, [inProgress, matchContext]);
   useEffect(() => {
     if (!focusMode) return;
     function onDocClick(e: MouseEvent) {
@@ -1538,6 +1555,14 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
           bullTied={bullTied}
         />
       </div>
+
+      {/* Match Summary Modal */}
+      <MatchSummaryModal
+        open={showMatchSummary}
+        onClose={() => setShowMatchSummary(false)}
+        title="Match Summary"
+        players={summaryPlayers}
+      />
     </div>
   );
 }
