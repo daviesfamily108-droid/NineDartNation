@@ -240,6 +240,14 @@ export default function App() {
             setTab("online");
           }
         }
+        // Tournament bracket messages — switch to tournaments tab so the component mounts
+        if (
+          msg?.type === "tournament-match-start" ||
+          msg?.type === "tournament-waiting" ||
+          msg?.type === "tournament-complete"
+        ) {
+          setTab("tournaments");
+        }
       } catch {}
     });
     return unsub;

@@ -2160,6 +2160,36 @@ if (wss) {
             users.set(toEmailReal, u2)
           }
         } catch {}
+      } else if (data.type === 'camera-frame') {
+        // Relay camera frame to all peers in the same room
+        if (ws._roomId && data.frame) {
+          broadcastToRoom(ws._roomId, { type: 'camera-frame', frame: data.frame, from: ws._id }, ws)
+        }
+      } else if (data.type === 'match-quit') {
+        // Relay quit notification to opponent in the same room
+        const roomId = ws._roomId
+        if (roomId) {
+          broadcastToRoom(roomId, { type: 'opponent-quit', quitterName: ws._username || 'Opponent', quitterId: ws._id }, ws)
+        }
+      } else if (data.type === 'match-pause') {
+        if (ws._roomId) broadcastToRoom(ws._roomId, { type: 'opponent-paused', pauserName: ws._username || 'Opponent' }, ws)
+      } else if (data.type === 'match-unpause') {
+        if (ws._roomId) broadcastToRoom(ws._roomId, { type: 'opponent-unpaused', resumerName: ws._username || 'Opponent' }, ws)
+      } else if (data.type === 'tournament-match-result') {
+        // Client reports who won a tournament bracket match
+        // { tournamentId, round, matchIndex, winnerEmail, winnerUsername, loserEmail }
+        try {
+          await handleTournamentMatchResult(data, ws)
+        } catch (e) {
+          startLogger.error('tournament-match-result error: %s', e && e.message ? e.message : e)
+        }
+      } else if (data.type === 'tournament-skip-wait') {
+        // Player wants to skip the between-round waiting period
+        try {
+          await handleTournamentSkipWait(data, ws)
+        } catch (e) {
+          startLogger.error('tournament-skip-wait error: %s', e && e.message ? e.message : e)
+        }
       }
     } catch (e) {
       try { errorsTotal.inc({ scope: 'ws_message' }) } catch {}
@@ -2721,6 +2751,252 @@ async function ensureOfficialWeekly() {
   await ensureOfficialWeekly()
 })();
 
+// ── Tournament Bracket Engine ──────────────────────────────────────────
+// In-memory map of between-round wait timers: tournamentId → { round, timers: Map<email, { timeout, skipped }> }
+const tournamentWaitTimers = new Map()
+const BETWEEN_ROUND_WAIT_MS = 5 * 60 * 1000 // 5 minutes between rounds
+
+async function generateTournamentBracket(t) {
+  // Build bracket pairings with proper BYE seeding
+  const names = (t.participants || []).map(p => ({ email: (p.email || '').toLowerCase(), username: p.username || p.email || 'Player' }))
+  const bracketSize = Math.max(2, Math.pow(2, Math.ceil(Math.log2(Math.max(2, names.length)))))
+  // Seed: place participants at the top, BYEs fill the rest
+  const seeded = [...names]
+  while (seeded.length < bracketSize) seeded.push({ email: '', username: 'BYE' })
+  // Build pairs
+  const pairs = []
+  for (let i = 0; i < seeded.length; i += 2) {
+    pairs.push([seeded[i], seeded[i + 1] || { email: '', username: 'BYE' }])
+  }
+  t.bracket = { round: 1, pairs, totalRounds: Math.ceil(Math.log2(bracketSize)) }
+  if (!t.bracketAdvances) t.bracketAdvances = {}
+  if (!t.bracketResults) t.bracketResults = {}
+  // Create match rooms and notify participants
+  const startingScore = t.startingScore || 501
+  for (let pi = 0; pi < pairs.length; pi++) {
+    const [p1, p2] = pairs[pi]
+    const roomId = `tournament-${t.id}-r1-m${pi}`
+    // If one side is a BYE, auto-advance the other player
+    if (p2.username === 'BYE' || p1.username === 'BYE') {
+      const advancer = p1.username === 'BYE' ? p2 : p1
+      t.bracketAdvances[`r1-m${pi}`] = advancer
+      continue
+    }
+    // Find WS connections for both participants
+    let ws1 = null, ws2 = null
+    for (const c of wss.clients) {
+      if (c.readyState !== 1) continue
+      if (c._email && p1.email && c._email === p1.email) ws1 = c
+      if (c._email && p2.email && c._email === p2.email) ws2 = c
+    }
+    const matchPayload = {
+      type: 'tournament-match-start',
+      tournamentId: t.id,
+      title: t.title,
+      roomId,
+      round: 1,
+      matchIndex: pi,
+      game: t.game || 'X01',
+      mode: t.mode || 'bestof',
+      value: t.value || 3,
+      startingScore,
+      player1: { email: p1.email, username: p1.username },
+      player2: { email: p2.email, username: p2.username },
+    }
+    if (ws1 && ws1.readyState === 1) try { ws1.send(JSON.stringify(matchPayload)) } catch {}
+    if (ws2 && ws2.readyState === 1) try { ws2.send(JSON.stringify(matchPayload)) } catch {}
+  }
+  t.status = 'running'
+  await db.updateTournament(t.id, t)
+  broadcastAll({ type: 'tournament-start', tournamentId: t.id, title: t.title })
+  await broadcastTournaments()
+  // After bracket generation, check if any round 1 matches can auto-advance (all BYEs)
+  await checkRoundCompletion(t.id, 1)
+}
+
+async function handleTournamentMatchResult(data, ws) {
+  const { tournamentId, round, matchIndex, winnerEmail, winnerUsername, loserEmail } = data
+  if (!tournamentId || round == null || matchIndex == null || !winnerEmail) return
+  const t = await db.getTournament(tournamentId)
+  if (!t || t.status !== 'running') return
+  if (!t.bracketAdvances) t.bracketAdvances = {}
+  if (!t.bracketResults) t.bracketResults = {}
+  const matchKey = `r${round}-m${matchIndex}`
+  // Prevent duplicate results
+  if (t.bracketAdvances[matchKey]) return
+  t.bracketAdvances[matchKey] = { email: winnerEmail.toLowerCase(), username: winnerUsername || winnerEmail }
+  t.bracketResults[matchKey] = { winnerEmail: winnerEmail.toLowerCase(), loserEmail: (loserEmail || '').toLowerCase(), reportedAt: Date.now() }
+  await db.updateTournament(t.id, t)
+  // Notify both players that the result is recorded
+  broadcastAll({ type: 'tournament-match-result-ack', tournamentId, round, matchIndex, winnerEmail: winnerEmail.toLowerCase(), winnerUsername: winnerUsername || winnerEmail })
+  await broadcastTournaments()
+  // Check if this completes the round
+  await checkRoundCompletion(tournamentId, round)
+}
+
+async function checkRoundCompletion(tournamentId, round) {
+  const t = await db.getTournament(tournamentId)
+  if (!t || t.status !== 'running') return
+  if (!t.bracketAdvances) return
+  const totalRounds = t.bracket?.totalRounds || 1
+  // Count how many matches exist in this round
+  const bracketSize = Math.max(2, Math.pow(2, Math.ceil(Math.log2(Math.max(2, (t.participants || []).length)))))
+  const matchesInRound = Math.floor(bracketSize / Math.pow(2, round))
+  // Check if all matches in this round have results
+  let allDone = true
+  for (let mi = 0; mi < matchesInRound; mi++) {
+    const key = `r${round}-m${mi}`
+    if (!t.bracketAdvances[key]) { allDone = false; break }
+  }
+  if (!allDone) return
+  // All matches in this round are done
+  if (round >= totalRounds) {
+    // Tournament is complete — declare the winner
+    const finalKey = `r${round}-m0`
+    const winner = t.bracketAdvances[finalKey]
+    if (winner) {
+      t.status = 'completed'
+      t.winnerEmail = winner.email
+      await db.updateTournament(t.id, t)
+      broadcastAll({ type: 'tournament-complete', tournamentId, winnerEmail: winner.email, winnerUsername: winner.username, title: t.title })
+      broadcastAll({ type: 'tournament-win', tournamentId, message: `🏆 ${winner.username} has won the ${t.title}!` })
+      await broadcastTournaments()
+    }
+    return
+  }
+  // Start the between-round waiting period for winners
+  const nextRound = round + 1
+  const winners = []
+  for (let mi = 0; mi < matchesInRound; mi++) {
+    const key = `r${round}-m${mi}`
+    if (t.bracketAdvances[key]) winners.push(t.bracketAdvances[key])
+  }
+  // Notify all winners about the wait period
+  const waitEndsAt = Date.now() + BETWEEN_ROUND_WAIT_MS
+  const waitState = { round: nextRound, waitEndsAt, readyPlayers: new Set() }
+  tournamentWaitTimers.set(tournamentId, waitState)
+  for (const w of winners) {
+    // Find their WS connection
+    for (const c of wss.clients) {
+      if (c.readyState !== 1) continue
+      if (c._email && c._email === w.email) {
+        try {
+          c.send(JSON.stringify({
+            type: 'tournament-waiting',
+            tournamentId,
+            nextRound,
+            waitEndsAt,
+            message: `Next round starts in 5 minutes. You can skip the wait when ready.`
+          }))
+        } catch {}
+      }
+    }
+  }
+  // Set a timer to auto-advance after the wait period
+  setTimeout(async () => {
+    try {
+      await advanceToNextRound(tournamentId, nextRound)
+    } catch (e) {
+      startLogger.error('advanceToNextRound error: %s', e && e.message ? e.message : e)
+    }
+  }, BETWEEN_ROUND_WAIT_MS)
+}
+
+async function handleTournamentSkipWait(data, ws) {
+  const { tournamentId } = data
+  if (!tournamentId || !ws._email) return
+  const waitState = tournamentWaitTimers.get(tournamentId)
+  if (!waitState) return
+  waitState.readyPlayers.add(ws._email)
+  // Check if all winners for the next round are ready
+  const t = await db.getTournament(tournamentId)
+  if (!t || t.status !== 'running') return
+  const prevRound = waitState.round - 1
+  const bracketSize = Math.max(2, Math.pow(2, Math.ceil(Math.log2(Math.max(2, (t.participants || []).length)))))
+  const matchesInPrevRound = Math.floor(bracketSize / Math.pow(2, prevRound))
+  let allReady = true
+  for (let mi = 0; mi < matchesInPrevRound; mi++) {
+    const key = `r${prevRound}-m${mi}`
+    const winner = t.bracketAdvances?.[key]
+    if (winner && winner.email && !waitState.readyPlayers.has(winner.email)) {
+      allReady = false
+      break
+    }
+  }
+  // Notify the player their skip was registered
+  try {
+    ws.send(JSON.stringify({ type: 'tournament-skip-ack', tournamentId }))
+  } catch {}
+  if (allReady) {
+    // Everyone is ready — advance immediately
+    tournamentWaitTimers.delete(tournamentId)
+    await advanceToNextRound(tournamentId, waitState.round)
+  }
+}
+
+async function advanceToNextRound(tournamentId, nextRound) {
+  const t = await db.getTournament(tournamentId)
+  if (!t || t.status !== 'running') return
+  if (!t.bracketAdvances) return
+  // Clean up wait timer
+  tournamentWaitTimers.delete(tournamentId)
+  const prevRound = nextRound - 1
+  const bracketSize = Math.max(2, Math.pow(2, Math.ceil(Math.log2(Math.max(2, (t.participants || []).length)))))
+  const matchesInPrevRound = Math.floor(bracketSize / Math.pow(2, prevRound))
+  // Pair winners from previous round into next-round matches
+  const nextRoundPairs = []
+  for (let mi = 0; mi < matchesInPrevRound; mi += 2) {
+    const w1Key = `r${prevRound}-m${mi}`
+    const w2Key = `r${prevRound}-m${mi + 1}`
+    const w1 = t.bracketAdvances[w1Key] || { email: '', username: 'BYE' }
+    const w2 = t.bracketAdvances[w2Key] || { email: '', username: 'BYE' }
+    nextRoundPairs.push([w1, w2])
+  }
+  const startingScore = t.startingScore || 501
+  for (let pi = 0; pi < nextRoundPairs.length; pi++) {
+    const [p1, p2] = nextRoundPairs[pi]
+    const roomId = `tournament-${t.id}-r${nextRound}-m${pi}`
+    // If one side is a BYE, auto-advance
+    if (p2.username === 'BYE' || !p2.email) {
+      t.bracketAdvances[`r${nextRound}-m${pi}`] = p1
+      continue
+    }
+    if (p1.username === 'BYE' || !p1.email) {
+      t.bracketAdvances[`r${nextRound}-m${pi}`] = p2
+      continue
+    }
+    // Find WS connections for both players
+    let ws1 = null, ws2 = null
+    for (const c of wss.clients) {
+      if (c.readyState !== 1) continue
+      if (c._email && p1.email && c._email === p1.email) ws1 = c
+      if (c._email && p2.email && c._email === p2.email) ws2 = c
+    }
+    const matchPayload = {
+      type: 'tournament-match-start',
+      tournamentId: t.id,
+      title: t.title,
+      roomId,
+      round: nextRound,
+      matchIndex: pi,
+      game: t.game || 'X01',
+      mode: t.mode || 'bestof',
+      value: t.value || 3,
+      startingScore,
+      player1: { email: p1.email, username: p1.username },
+      player2: { email: p2.email, username: p2.username },
+    }
+    if (ws1 && ws1.readyState === 1) try { ws1.send(JSON.stringify(matchPayload)) } catch {}
+    if (ws2 && ws2.readyState === 1) try { ws2.send(JSON.stringify(matchPayload)) } catch {}
+  }
+  // Update bracket info
+  t.bracket = { ...t.bracket, round: nextRound }
+  await db.updateTournament(t.id, t)
+  await broadcastTournaments()
+  // Check if auto-advances (BYEs) complete this round too
+  await checkRoundCompletion(tournamentId, nextRound)
+}
+
 // Simple scheduler for reminders and start triggers
 let lastOfficialDeleteAt = 0
 const OFFICIAL_RESEED_COOLDOWN_MS = 5 * 60 * 1000 // 5 minutes after a manual delete, do not reseed
@@ -2739,9 +3015,11 @@ setInterval(async () => {
       // Start condition at start time with min participants 8 (for official) or 2 otherwise
       const minPlayers = t.official ? 8 : 2
       if (now >= t.startAt && t.participants.length >= minPlayers) {
-        t.status = 'running'
-        await db.updateTournament(t.id, t)
-        broadcastAll({ type: 'tournament-start', tournamentId: t.id, title: t.title })
+        try {
+          await generateTournamentBracket(t)
+        } catch (e) {
+          startLogger.error('generateTournamentBracket error for %s: %s', t.id, e && e.message ? e.message : e)
+        }
       }
       // If startAt passed and not enough players, leave scheduled; owner can adjust later
     }

@@ -118,6 +118,7 @@ export default function Tournaments({ user }: { user: any }) {
   const [showMatchSummary, setShowMatchSummary] = useState(false);
   const [summaryPlayers, setSummaryPlayers] = useState<any[]>([]);
   const prevInProgressRef = useRef(false);
+  const resultReportedRef = useRef<string | null>(null);
   useEffect(() => {
     if (
       prevInProgressRef.current &&
@@ -128,10 +129,47 @@ export default function Tournaments({ user }: { user: any }) {
       if (st.players && st.players.length > 0) {
         setSummaryPlayers(JSON.parse(JSON.stringify(st.players)));
         setShowMatchSummary(true);
+        // Report match result to the server for bracket advancement
+        const matchInfo = activeTournamentMatchRef.current;
+        if (matchInfo && wsGlobal?.connected) {
+          const reportKey = `${matchInfo.tournamentId}-r${matchInfo.round}-m${matchInfo.matchIndex}`;
+          if (resultReportedRef.current !== reportKey) {
+            resultReportedRef.current = reportKey;
+            // Determine winner: the player with most legs won
+            const winner = st.players.reduce((a: any, b: any) =>
+              (a.legsWon || 0) > (b.legsWon || 0) ? a : b,
+            );
+            const loser = st.players.find((p: any) => p !== winner);
+            const localEmail = String(user?.email || "").toLowerCase();
+            // Resolve email: match player1/player2 from the matchInfo
+            const isWinnerLocal =
+              winner.name?.toLowerCase() ===
+              (user?.username || "").toLowerCase();
+            const winnerEmail = isWinnerLocal
+              ? localEmail
+              : matchInfo.player1.email === localEmail
+                ? matchInfo.player2.email
+                : matchInfo.player1.email;
+            const loserEmail = isWinnerLocal
+              ? matchInfo.player1.email === localEmail
+                ? matchInfo.player2.email
+                : matchInfo.player1.email
+              : localEmail;
+            wsGlobal.send({
+              type: "tournament-match-result",
+              tournamentId: matchInfo.tournamentId,
+              round: matchInfo.round,
+              matchIndex: matchInfo.matchIndex,
+              winnerEmail,
+              winnerUsername: winner.name || "Winner",
+              loserEmail,
+            });
+          }
+        }
       }
     }
     prevInProgressRef.current = inProgress;
-  }, [inProgress, matchContext]);
+  }, [inProgress, matchContext, wsGlobal, user?.email, user?.username]);
 
   useEffect(() => {
     if (!inProgress || matchContext !== "tournament") return;
@@ -190,6 +228,26 @@ export default function Tournaments({ user }: { user: any }) {
   const serverPrestartRef = useRef(false);
   const _joinAcceptRef = useRef<HTMLButtonElement>(null);
   const [participants, setParticipants] = useState<Record<string, string>>({});
+
+  // ── Between-round waiting state ──
+  const [tournamentWaiting, setTournamentWaiting] = useState<{
+    tournamentId: string;
+    nextRound: number;
+    waitEndsAt: number;
+  } | null>(null);
+  const [waitSecondsLeft, setWaitSecondsLeft] = useState(0);
+  const [tournamentComplete, setTournamentComplete] = useState<{
+    winnerUsername: string;
+    title: string;
+  } | null>(null);
+  // Track the current tournament match info for result reporting
+  const activeTournamentMatchRef = useRef<{
+    tournamentId: string;
+    round: number;
+    matchIndex: number;
+    player1: { email: string; username: string };
+    player2: { email: string; username: string };
+  } | null>(null);
 
   // Listen for match-prestart and tournament-match-start events
   useEffect(() => {
@@ -268,6 +326,24 @@ export default function Tournaments({ user }: { user: any }) {
                 tLegsToWin,
               );
             setCurrentGame(msg.game || "X01");
+            // Store match info for result reporting when match ends
+            activeTournamentMatchRef.current = {
+              tournamentId: msg.tournamentId,
+              round: msg.round,
+              matchIndex: msg.matchIndex,
+              player1: {
+                email: (p1.email || "").toLowerCase(),
+                username: p1.username || "",
+              },
+              player2: {
+                email: (p2.email || "").toLowerCase(),
+                username: p2.username || "",
+              },
+            };
+            resultReportedRef.current = null;
+            // Clear any waiting state since we're starting a new match
+            setTournamentWaiting(null);
+            setTournamentComplete(null);
             // Join the WS room for state sync
             if (wsGlobal?.connected && roomId) {
               wsGlobal.send({ type: "join", roomId });
@@ -278,6 +354,31 @@ export default function Tournaments({ user }: { user: any }) {
           } catch (e) {
             console.error("[Tournaments] tournament-match-start failed:", e);
           }
+        }
+        // Between-round waiting notification from server
+        if (msg?.type === "tournament-waiting") {
+          setTournamentWaiting({
+            tournamentId: msg.tournamentId,
+            nextRound: msg.nextRound,
+            waitEndsAt: msg.waitEndsAt,
+          });
+        }
+        // Tournament complete — winner declared
+        if (msg?.type === "tournament-complete") {
+          setTournamentComplete({
+            winnerUsername: msg.winnerUsername || "Unknown",
+            title: msg.title || "Tournament",
+          });
+          setTournamentWaiting(null);
+          activeTournamentMatchRef.current = null;
+        }
+        // Skip wait acknowledged
+        if (msg?.type === "tournament-skip-ack") {
+          // Server acknowledged our skip — just wait for tournament-match-start
+        }
+        // Match result acknowledged
+        if (msg?.type === "tournament-match-result-ack") {
+          // Result recorded by server
         }
         // Incoming match state from opponent — sync scores/turns
         if (msg?.type === "state" && msg.payload) {
@@ -352,6 +453,27 @@ export default function Tournaments({ user }: { user: any }) {
     const t = setInterval(() => setJoinTimer((v) => Math.max(0, v - 1)), 1000);
     return () => clearInterval(t);
   }, [joinMatch]);
+
+  // Between-round wait countdown timer
+  useEffect(() => {
+    if (!tournamentWaiting) {
+      setWaitSecondsLeft(0);
+      return;
+    }
+    const tick = () => {
+      const remaining = Math.max(
+        0,
+        Math.ceil((tournamentWaiting.waitEndsAt - Date.now()) / 1000),
+      );
+      setWaitSecondsLeft(remaining);
+      if (remaining <= 0) {
+        setTournamentWaiting(null);
+      }
+    };
+    tick();
+    const iv = setInterval(tick, 1000);
+    return () => clearInterval(iv);
+  }, [tournamentWaiting]);
 
   // Watch for match start (inProgress)
   const match = useMatch((s) => ({
@@ -1025,6 +1147,79 @@ export default function Tournaments({ user }: { user: any }) {
           </div>
         )}
       </>
+    );
+  }
+
+  // ── Tournament complete screen ──
+  if (tournamentComplete) {
+    return (
+      <div
+        className="card ndn-game-shell ndn-page flex flex-col items-center justify-center min-h-[400px] text-center"
+        style={{ paddingBottom: 80 }}
+      >
+        <div className="text-6xl mb-4">🏆</div>
+        <h2 className="text-3xl font-black text-white mb-2">
+          {tournamentComplete.title}
+        </h2>
+        <p className="text-xl text-emerald-400 font-bold mb-6">
+          Winner: {tournamentComplete.winnerUsername}
+        </p>
+        {tournamentComplete.winnerUsername.toLowerCase() ===
+        username.toLowerCase() ? (
+          <p className="text-lg text-amber-300 font-semibold mb-8">
+            🎉 Congratulations! You won the tournament!
+          </p>
+        ) : (
+          <p className="text-lg text-white/60 mb-8">Better luck next time!</p>
+        )}
+        <button
+          className="px-8 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold hover:scale-[1.02] active:scale-[0.98] transition-all"
+          onClick={() => setTournamentComplete(null)}
+        >
+          Back to Tournaments
+        </button>
+      </div>
+    );
+  }
+
+  // ── Between-round waiting screen ──
+  if (tournamentWaiting) {
+    const mins = Math.floor(waitSecondsLeft / 60);
+    const secs = waitSecondsLeft % 60;
+    return (
+      <div
+        className="card ndn-game-shell ndn-page flex flex-col items-center justify-center min-h-[400px] text-center"
+        style={{ paddingBottom: 80 }}
+      >
+        <div className="text-5xl mb-4">⏳</div>
+        <h2 className="text-2xl font-bold text-white mb-2">
+          Round {tournamentWaiting.nextRound} Starting Soon
+        </h2>
+        <p className="text-white/60 mb-6">
+          Waiting for other matches to finish. Next round begins automatically.
+        </p>
+        <div className="text-4xl font-black text-white mb-8 tabular-nums">
+          {mins}:{secs.toString().padStart(2, "0")}
+        </div>
+        <button
+          className="px-8 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold hover:scale-[1.02] active:scale-[0.98] transition-all"
+          onClick={() => {
+            if (wsGlobal?.connected) {
+              wsGlobal.send({
+                type: "tournament-skip-wait",
+                tournamentId: tournamentWaiting.tournamentId,
+              });
+            }
+            setTournamentWaiting(null);
+          }}
+        >
+          Skip Wait — I'm Ready!
+        </button>
+        <p className="text-xs text-white/40 mt-4">
+          All players must skip or timer must expire before the next round
+          starts.
+        </p>
+      </div>
     );
   }
 
