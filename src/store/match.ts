@@ -48,6 +48,8 @@ export type MatchState = {
   currentPlayerIdx: number;
   startingScore: number;
   inProgress: boolean;
+  /** Number of legs a player must win to win the match (default 1). */
+  legsToWin: number;
   bestLegThisMatch?: { playerId: string; darts: number; timestamp: number };
 };
 
@@ -111,6 +113,7 @@ export type Actions = {
     startingScore: number,
     roomId?: string,
     context?: string,
+    legsToWin?: number,
   ) => void;
   addVisit: (
     score: number,
@@ -139,8 +142,15 @@ export const useMatch = create<MatchState & Actions>((set) => ({
   currentPlayerIdx: 0,
   startingScore: 501,
   inProgress: false,
+  legsToWin: 1,
 
-  newMatch: (playerNames, startingScore, roomId = "", context = "") =>
+  newMatch: (
+    playerNames,
+    startingScore,
+    roomId = "",
+    context = "",
+    legsToWin = 1,
+  ) =>
     set(() => {
       const players = playerNames.map(
         (name, i) =>
@@ -157,6 +167,8 @@ export const useMatch = create<MatchState & Actions>((set) => ({
         startingScore,
         roomId,
         context,
+        "legsToWin:",
+        legsToWin,
       );
       return {
         players,
@@ -165,6 +177,7 @@ export const useMatch = create<MatchState & Actions>((set) => ({
         inProgress: true,
         roomId,
         matchContext: context,
+        legsToWin: Math.max(1, legsToWin),
         bestLegThisMatch: undefined,
       };
     }),
@@ -321,14 +334,28 @@ export const useMatch = create<MatchState & Actions>((set) => ({
           };
         }
       }
-      const newPlayer: Player = {
+      const winnerPlayer: Player = {
         ...oldPlayer,
         legs: newLegs,
         legsWon: newLegsWon,
       };
-      const newPlayers = state.players.map((pl, i) =>
-        i === playerIdx ? newPlayer : pl,
-      );
+
+      // Close ALL players' current unfinished legs (the leg is over for everyone)
+      let newPlayers = state.players.map((pl, i) => {
+        if (i === playerIdx) return winnerPlayer;
+        const curLeg = pl.legs[pl.legs.length - 1];
+        if (curLeg && !curLeg.finished) {
+          const closedLeg: Leg = {
+            ...curLeg,
+            finished: true,
+            checkoutScore: null,
+            endTime,
+          };
+          return { ...pl, legs: [...pl.legs.slice(0, -1), closedLeg] };
+        }
+        return pl;
+      });
+
       try {
         broadcastMessage({
           type: "endLeg",
@@ -337,6 +364,40 @@ export const useMatch = create<MatchState & Actions>((set) => ({
           ts: Date.now(),
         });
       } catch {}
+
+      // Check if the match is over (player reached required legs to win)
+      const matchOver = newLegsWon >= (state.legsToWin || 1);
+      if (matchOver) {
+        // Compute end-of-game stats for every player
+        newPlayers = newPlayers.map((p) => {
+          const updated = { ...p, currentThreeDartAvg: 0 };
+          updatePlayerEndOfGameStats(updated);
+          return updated;
+        });
+        try {
+          import("./profileStats.js").then((m) => {
+            try {
+              m.addMatchToAllTime(newPlayers, { recordSeries: true });
+            } catch {}
+            try {
+              m.updateHeadToHeadLegs(newPlayers);
+            } catch {}
+            try {
+              m.addMatchToDistribution(newPlayers);
+            } catch {}
+          });
+        } catch {}
+        try {
+          broadcastMessage({ type: "endGame", ts: Date.now() });
+        } catch {}
+        return {
+          ...state,
+          players: newPlayers,
+          bestLegThisMatch: newBestLeg,
+          inProgress: false,
+        };
+      }
+
       return { ...state, players: newPlayers, bestLegThisMatch: newBestLeg };
     }),
 

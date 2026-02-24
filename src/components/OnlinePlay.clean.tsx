@@ -551,9 +551,16 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         ? [localName, opponentName]
         : [opponentName, localName];
 
+      // Compute legsToWin from match format (bestof / firstto)
+      const mode = serverMatch.mode || saved.mode || saved.modeType || "bestof";
+      const value = Number(serverMatch.value || saved.value || saved.legs || 1);
+      const legsToWin = mode === "firstto" ? value : Math.ceil(value / 2);
+
       // Initialize the match in the store — sets inProgress = true
       try {
-        useMatch.getState().newMatch(playerNames, startScore, roomId, "online");
+        useMatch
+          .getState()
+          .newMatch(playerNames, startScore, roomId, "online", legsToWin);
       } catch (e) {
         console.error("[OnlinePlay] newMatch failed:", e);
       }

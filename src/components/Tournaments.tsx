@@ -231,9 +231,20 @@ export default function Tournaments({ user }: { user: any }) {
               : [opponentName, localName];
             const startScore = msg.startingScore || 501;
             const roomId = msg.roomId || "";
+            // Compute legsToWin from match format (bestof / firstto)
+            const tMode = msg.mode || "bestof";
+            const tValue = Number(msg.value || 1);
+            const tLegsToWin =
+              tMode === "firstto" ? tValue : Math.ceil(tValue / 2);
             useMatch
               .getState()
-              .newMatch(playerNames, startScore, roomId, "tournament");
+              .newMatch(
+                playerNames,
+                startScore,
+                roomId,
+                "tournament",
+                tLegsToWin,
+              );
             setCurrentGame(msg.game || "X01");
             // Join the WS room for state sync
             if (wsGlobal?.connected && roomId) {
