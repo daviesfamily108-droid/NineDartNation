@@ -619,6 +619,8 @@ export default function MatchPrestart({
   const [opponentRps, setOpponentRps] = useState<"rock" | "paper" | "scissors">(
     "rock",
   );
+  const [rpsRound, setRpsRound] = useState(0);
+  const [rpsDraw, setRpsDraw] = useState(false);
   const portalElRef = useRef<HTMLElement | null>(
     typeof document !== "undefined" ? document.createElement("div") : null,
   );
@@ -658,6 +660,25 @@ export default function MatchPrestart({
     return getPlayerStats(opponentName);
   }, [opponentName, opponentStats]);
 
+  // Pre-compute first thrower so the RPS effect can align the animation
+  const firstThrowerResolved = useMemo(() => {
+    if (!matchInfo) return localUser?.username || "You";
+    return (
+      matchInfo.firstThrowerName ||
+      matchInfo.createdBy ||
+      matchInfo.creatorName ||
+      localUser?.username ||
+      "You"
+    );
+  }, [matchInfo, localUser?.username]);
+
+  const isLocalFirst = useMemo(
+    () =>
+      firstThrowerResolved.toLowerCase() ===
+      (localUser?.username || "You").toLowerCase(),
+    [firstThrowerResolved, localUser?.username],
+  );
+
   // Portal
   useEffect(() => {
     const el = portalElRef.current;
@@ -677,6 +698,8 @@ export default function MatchPrestart({
     setSeconds(countdown);
     setPhase("preview");
     setRpsStep(0);
+    setRpsRound(0);
+    setRpsDraw(false);
   }, [open, countdown]);
 
   // Preview → RPS auto-transition after 4 seconds
@@ -686,24 +709,45 @@ export default function MatchPrestart({
     return () => clearTimeout(t);
   }, [open, phase]);
 
-  // RPS cycling animation (rock → paper → scissors → rock...) for 3 seconds then reveal
+  // RPS cycling animation — re-rolls on draw until a winner is determined
   useEffect(() => {
     if (!open || phase !== "rps") return;
     setRpsStep(0);
+    setRpsDraw(false);
     let step = 0;
     const cycleInterval = setInterval(() => {
       step++;
       if (step >= 9) {
-        // After cycling 3 times (9 steps), reveal the result
         clearInterval(cycleInterval);
-        // Pick random cosmetic RPS choices for the reveal
-        const localPick = RPS_OPTIONS[Math.floor(Math.random() * 3)];
-        const opponentPick = RPS_OPTIONS[Math.floor(Math.random() * 3)];
-        setLocalRps(localPick);
-        setOpponentRps(opponentPick);
-        setRpsStep(3); // revealed
-        // Transition to result after a brief pause
-        setTimeout(() => setPhase("result"), 1500);
+        const pick1 = RPS_OPTIONS[Math.floor(Math.random() * 3)];
+        const pick2 = RPS_OPTIONS[Math.floor(Math.random() * 3)];
+        if (pick1 === pick2) {
+          // Draw — show briefly then re-round
+          setLocalRps(pick1);
+          setOpponentRps(pick2);
+          setRpsStep(3);
+          setRpsDraw(true);
+          setTimeout(() => {
+            setRpsDraw(false);
+            setRpsRound((r) => r + 1);
+          }, 1800);
+        } else {
+          // Determine which pick wins
+          const pick1Wins =
+            (pick1 === "rock" && pick2 === "scissors") ||
+            (pick1 === "scissors" && pick2 === "paper") ||
+            (pick1 === "paper" && pick2 === "rock");
+          // Assign so the winning hand belongs to whoever the server says throws first
+          if (pick1Wins) {
+            setLocalRps(isLocalFirst ? pick1 : pick2);
+            setOpponentRps(isLocalFirst ? pick2 : pick1);
+          } else {
+            setLocalRps(isLocalFirst ? pick2 : pick1);
+            setOpponentRps(isLocalFirst ? pick1 : pick2);
+          }
+          setRpsStep(3);
+          setTimeout(() => setPhase("result"), 1500);
+        }
       } else {
         setLocalRps(RPS_OPTIONS[step % 3]);
         setOpponentRps(RPS_OPTIONS[(step + 1) % 3]);
@@ -711,7 +755,7 @@ export default function MatchPrestart({
       }
     }, 350);
     return () => clearInterval(cycleInterval);
-  }, [open, phase]);
+  }, [open, phase, rpsRound, isLocalFirst]);
 
   // Result → GO transition
   useEffect(() => {
@@ -748,16 +792,10 @@ export default function MatchPrestart({
 
   if (!open || !portalElRef.current || !matchInfo) return null;
 
-  // Determine who throws first from server-provided firstThrowerName
-  const firstThrowerName =
-    matchInfo.firstThrowerName ||
-    matchInfo.createdBy ||
-    matchInfo.creatorName ||
-    localName;
-  const isLocalWinner =
-    firstThrowerName.toLowerCase() === localName.toLowerCase();
-  const isOpponentWinner =
-    firstThrowerName.toLowerCase() === opponentName.toLowerCase();
+  // Use pre-computed first thrower from useMemo (handles null matchInfo above)
+  const firstThrowerName = firstThrowerResolved;
+  const isLocalWinner = isLocalFirst;
+  const isOpponentWinner = !isLocalFirst;
 
   const overlay = (
     <div
@@ -944,10 +982,15 @@ export default function MatchPrestart({
                 </div>
               </div>
 
-              {rpsStep >= 3 && (
+              {rpsStep >= 3 && !rpsDraw && (
                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-400/30 text-sm text-amber-200 font-semibold animate-in fade-in zoom-in-95 duration-500">
                   <Zap className="w-4 h-4 text-amber-400" />
                   {firstThrowerName} throws first!
+                </div>
+              )}
+              {rpsStep >= 3 && rpsDraw && (
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-rose-500/10 border border-rose-400/30 text-sm text-rose-200 font-semibold animate-in fade-in zoom-in-95 duration-500">
+                  🤝 Draw! Going again…
                 </div>
               )}
             </div>

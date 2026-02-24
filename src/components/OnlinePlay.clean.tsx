@@ -1052,17 +1052,17 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         <h2 className="text-3xl font-bold text-black dark:text-white mb-4 ndn-section-title">
           Online Lobby 🌐
         </h2>
-        <div className="ndn-shell-body flex-1 overflow-hidden p-3 pb-0">
+        <div className="ndn-shell-body flex-1 overflow-y-auto p-3 pb-20">
           <div className="h-full flex flex-col gap-3">
             {/* Top row: Page, New Page, Create Match */}
-            <div className="p-4 rounded-lg bg-slate-900/50 border border-slate-800/50 flex items-center justify-between gap-3 flex-wrap">
+            <div className="ndn-page-header p-4 rounded-lg bg-slate-900/50 border border-slate-800/50 flex items-center justify-between gap-3 flex-wrap">
               <div className="flex items-center gap-3 flex-wrap">
                 <div className="text-sm text-white/70">Page</div>
                 <div className="px-3 py-1.5 bg-slate-800/60 rounded-lg border border-slate-700/50 text-white/90 font-medium">
                   Page {currentPage_?.id}
                 </div>
                 <button
-                  className="btn btn-ghost btn-sm rounded-lg"
+                  className="ndn-new-page-btn btn btn-ghost btn-sm rounded-lg"
                   onClick={newPage}
                 >
                   New Page
@@ -1345,7 +1345,7 @@ export default function OnlinePlayClean({ user }: { user?: any }) {
         </div>
 
         {/* ── Page pagination at bottom of the card ── */}
-        <div className="flex items-center justify-center gap-2 py-3 mt-auto">
+        <div className="ndn-page-tabs flex items-center justify-center gap-2 py-3 mt-auto">
           {pages.map((p, idx) => (
             <button
               key={p.id}
