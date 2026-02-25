@@ -1044,29 +1044,27 @@ export default function AdminDashboard({ user }: { user: any }) {
           </div>
         </div>
       )}
-      {isOwner && (
-        <TabPills
-          tabs={[
-            { key: "general", label: "General" },
-            { key: "maintenance", label: "Maintenance" },
-            { key: "premium", label: "Premium" },
-            { key: "tourneys", label: "Tourneys" },
-            { key: "helpdesk", label: "Help Desk" },
-          ]}
-          active={activeTab}
-          onChange={(key) =>
-            setActiveTab(
-              key as
-                | "general"
-                | "maintenance"
-                | "premium"
-                | "helpdesk"
-                | "tourneys",
-            )
-          }
-          className="mb-4"
-        />
-      )}{" "}
+      <TabPills
+        tabs={[
+          { key: "general", label: "General" },
+          { key: "maintenance", label: "Maintenance" },
+          { key: "premium", label: "Premium" },
+          { key: "tourneys", label: "Tourneys" },
+          { key: "helpdesk", label: "Help Desk" },
+        ]}
+        active={activeTab}
+        onChange={(key) =>
+          setActiveTab(
+            key as
+              | "general"
+              | "maintenance"
+              | "premium"
+              | "helpdesk"
+              | "tourneys",
+          )
+        }
+        className="mb-4"
+      />
       {activeTab === "general" && (
         <>
           {isOwner && (
@@ -1093,30 +1091,32 @@ export default function AdminDashboard({ user }: { user: any }) {
             </div>
           )}
 
-          {/* ─── Card Depth Tuning ─── */}
-          <div className="card">
-            <h3 className="text-xl font-semibold mb-2">
-              Card Depth (Stats Page)
-            </h3>
-            <div className="text-sm opacity-80 mb-3">
-              Controls the <code>padding-bottom</code> on the stats page card.
-              Change this value if content is cut off on mobile or desktop.
+          {/* ─── Card Depth Tuning (owner only) ─── */}
+          {isOwner && (
+            <div className="card">
+              <h3 className="text-xl font-semibold mb-2">
+                Card Depth (Stats Page)
+              </h3>
+              <div className="text-sm opacity-80 mb-3">
+                Controls the <code>padding-bottom</code> on the stats page card.
+                Change this value if content is cut off on mobile or desktop.
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  className="input w-32"
+                  min={0}
+                  max={1200}
+                  value={cardPaddingBottom ?? 810}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!isNaN(v)) setCardPaddingBottom(v);
+                  }}
+                />
+                <span className="text-xs opacity-70">px (default 810)</span>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                className="input w-32"
-                min={0}
-                max={1200}
-                value={cardPaddingBottom ?? 810}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10);
-                  if (!isNaN(v)) setCardPaddingBottom(v);
-                }}
-              />
-              <span className="text-xs opacity-70">px (default 810)</span>
-            </div>
-          </div>
+          )}
 
           <div className="card">
             <h2 className="text-2xl font-bold mb-2">Admin Control ⚙️</h2>
@@ -1333,7 +1333,7 @@ export default function AdminDashboard({ user }: { user: any }) {
           )}
         </>
       )}
-      {activeTab === "maintenance" && isOwner && (
+      {activeTab === "maintenance" && (
         <>
           <div className="card">
             <h3 className="text-xl font-semibold mb-2">User Management</h3>
@@ -1735,7 +1735,7 @@ export default function AdminDashboard({ user }: { user: any }) {
           </div>
         </>
       )}
-      {activeTab === "premium" && isOwner && (
+      {activeTab === "premium" && (
         <>
           <div className="card">
             <h3 className="text-xl font-semibold mb-2">
@@ -1809,7 +1809,7 @@ export default function AdminDashboard({ user }: { user: any }) {
           </div>
         </>
       )}
-      {activeTab === "tourneys" && isOwner && (
+      {activeTab === "tourneys" && (
         <>
           <div className="card">
             <h3 className="text-xl font-semibold mb-3">
@@ -2134,7 +2134,7 @@ export default function AdminDashboard({ user }: { user: any }) {
           </div>
         </>
       )}
-      {activeTab === "helpdesk" && isOwner && (
+      {activeTab === "helpdesk" && (
         <>
           <div className="card">
             <h3 className="text-lg font-semibold mb-2">Helpdesk Requests</h3>
