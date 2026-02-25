@@ -18,79 +18,6 @@ import { useIsAdmin, invalidateAdminCache } from "../utils/admin.js";
 
 const OWNER_EMAIL = "daviesfamily108@gmail.com";
 
-function EmailEditor({
-  kind,
-  label,
-  emailCopy,
-  onSave,
-  onPreview,
-}: {
-  kind: string;
-  label: string;
-  emailCopy: any;
-  onSave: (kind: string, payload: any) => void;
-  onPreview: (kind: string, openInNewTab?: boolean) => void;
-}) {
-  const key =
-    kind === "confirm-email"
-      ? "confirmEmail"
-      : kind === "changed"
-        ? "changed"
-        : kind;
-  const cfg = emailCopy?.[key] || { title: "", intro: "", buttonLabel: "" };
-  const [title, setTitle] = useState(cfg.title || "");
-  const [intro, setIntro] = useState(cfg.intro || "");
-  const [btn, setBtn] = useState(cfg.buttonLabel || "");
-  useEffect(() => {
-    setTitle(cfg.title || "");
-    setIntro(cfg.intro || "");
-    setBtn(cfg.buttonLabel || "");
-  }, [cfg.title, cfg.intro, cfg.buttonLabel]);
-
-  return (
-    <div className="p-2 rounded bg-black/20 space-y-2">
-      <div className="font-semibold">{label}</div>
-      <input
-        className="input w-full"
-        placeholder="Title (optional)"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-      />
-      <textarea
-        className="input w-full"
-        rows={2}
-        placeholder="Intro line (optional)"
-        value={intro}
-        onChange={(e) => setIntro(e.target.value)}
-      />
-      <input
-        className="input w-full"
-        placeholder="Button label (optional)"
-        value={btn}
-        onChange={(e) => setBtn(e.target.value)}
-      />
-      <div className="flex gap-2 justify-end">
-        <button
-          className="btn"
-          type="button"
-          onClick={() => onPreview(kind, true)}
-        >
-          Preview
-        </button>
-        <button className="btn" type="button" onClick={() => onPreview(kind)}>
-          Popup
-        </button>
-        <button
-          className="btn"
-          onClick={() => onSave(kind, { title, intro, buttonLabel: btn })}
-        >
-          Save
-        </button>
-      </div>
-    </div>
-  );
-}
-
 export default function AdminDashboard({ user }: { user: any }) {
   const {
     hiddenSections,
@@ -190,17 +117,6 @@ export default function AdminDashboard({ user }: { user: any }) {
     prizeAmount: 3,
     prizeNotes: "",
   });
-  const [emailCopy, setEmailCopy] = useState<any>({
-    reset: {},
-    reminder: {},
-    confirmEmail: {},
-    changed: {},
-  });
-  const [preview, setPreview] = useState<{
-    open: boolean;
-    kind?: string;
-    html?: string;
-  }>({ open: false });
   const [activeTab, setActiveTab] = useState<
     "general" | "maintenance" | "premium" | "helpdesk" | "tourneys"
   >("general");
@@ -259,15 +175,6 @@ export default function AdminDashboard({ user }: { user: any }) {
   );
 
   const toast = useToast();
-
-  useEffect(() => {
-    if (!preview.open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setPreview({ open: false });
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [preview.open]);
 
   // Fetch admin data on mount
   useEffect(() => {
@@ -823,81 +730,12 @@ export default function AdminDashboard({ user }: { user: any }) {
 
   // quick-fix helper removed: not used in current UI
 
-  async function loadEmailCopy() {
-    try {
-      const authHeader = {
-        Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-      };
-      const res = await apiFetch("/api/admin/email-copy", {
-        headers: authHeader,
-      });
-      if (res.ok) {
-        const d = await res.json();
-        if (d?.ok) setEmailCopy(d.copy || emailCopy);
-      }
-    } catch {}
-  }
-  useEffect(() => {
-    if (isOwner) loadEmailCopy();
-  }, [isOwner]);
-
   useEffect(() => {
     if (isOwner && (activeTab === "general" || activeTab === "maintenance")) {
       fetchLogs();
       fetchSystemHealth();
     }
   }, [isOwner, activeTab]);
-
-  async function saveEmailCopy(kind: string, payload: any) {
-    await apiFetch("/api/admin/email-copy", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-      },
-      body: JSON.stringify({ kind, ...payload }),
-    });
-    await loadEmailCopy();
-  }
-
-  async function openInlinePreview(kind: string, openInNewTab?: boolean) {
-    try {
-      const authHeader = {
-        Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-      };
-      const res = await apiFetch(
-        `/api/email/preview?kind=${encodeURIComponent(kind)}`,
-        { headers: authHeader },
-      );
-      const html = await res.text();
-      if (openInNewTab) {
-        const w = window.open();
-        if (w) {
-          w.document.open();
-          w.document.write(html);
-          w.document.close();
-          return;
-        }
-      }
-      setPreview({ open: true, kind, html });
-    } catch {
-      setPreview({
-        open: true,
-        kind,
-        html: '<!doctype html><html><body style="font-family:sans-serif;padding:16px">Failed to load preview.</body></html>',
-      });
-    }
-  }
-
-  const handleEmailSave = useCallback(
-    (kind: string, payload: any) => saveEmailCopy(kind, payload),
-    [],
-  );
-  const handleEmailPreview = useCallback(
-    (kind: string, openInNewTab?: boolean) =>
-      openInlinePreview(kind, openInNewTab),
-    [],
-  );
 
   if (!isOwner && !isAdminUser) {
     return (
@@ -1298,46 +1136,6 @@ export default function AdminDashboard({ user }: { user: any }) {
               </div>
             )}
           </div>
-
-          {isOwner && (
-            <div className="card">
-              <h3 className="text-xl font-semibold mb-3">Email Templates</h3>
-              <div className="text-sm opacity-80 mb-2">
-                Customize titles, intro lines, and button text. Previews open in
-                a new tab or as a popup.
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <EmailEditor
-                  kind="reset"
-                  label="Password reset"
-                  emailCopy={emailCopy}
-                  onSave={handleEmailSave}
-                  onPreview={handleEmailPreview}
-                />
-                <EmailEditor
-                  kind="reminder"
-                  label="Password reset reminder"
-                  emailCopy={emailCopy}
-                  onSave={handleEmailSave}
-                  onPreview={handleEmailPreview}
-                />
-                <EmailEditor
-                  kind="confirm-email"
-                  label="Confirm new email"
-                  emailCopy={emailCopy}
-                  onSave={handleEmailSave}
-                  onPreview={handleEmailPreview}
-                />
-                <EmailEditor
-                  kind="changed"
-                  label="Password changed notice"
-                  emailCopy={emailCopy}
-                  onSave={handleEmailSave}
-                  onPreview={handleEmailPreview}
-                />
-              </div>
-            </div>
-          )}
         </>
       )}
       {activeTab === "maintenance" && (
@@ -2232,46 +2030,6 @@ export default function AdminDashboard({ user }: { user: any }) {
           }}
           onClose={() => setSelectedRequest(null)}
         />
-      )}
-      {/* Inline email preview overlay */}
-      {preview.open && (
-        <div
-          className="fixed inset-0 z-[1000]"
-          onClick={() => setPreview({ open: false })}
-        >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-          <div className="absolute inset-0 p-4 md:p-8 overflow-auto flex items-start md:items-center justify-center">
-            <div
-              className="w-full max-w-3xl bg-[#0b1020] rounded-2xl border border-indigo-500/40 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-3 border-b border-indigo-500/20">
-                <div className="font-semibold">Preview: {preview.kind}</div>
-                <button
-                  className="btn"
-                  onClick={() => setPreview({ open: false })}
-                >
-                  Close
-                </button>
-              </div>
-              <div className="p-0 bg-black/30">
-                <iframe
-                  title="Email Preview"
-                  style={{
-                    width: "100%",
-                    height: "70vh",
-                    border: "0",
-                    background: "transparent",
-                  }}
-                  srcDoc={preview.html || ""}
-                />
-              </div>
-              <div className="px-4 py-3 border-t border-indigo-500/20 text-xs opacity-70">
-                Click outside this panel or press Esc to close.
-              </div>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
