@@ -11,7 +11,7 @@ import {
   getModeValueOptionsForGame,
 } from "../utils/games.js";
 import { useWS } from "./WSProvider.js";
-import CameraStatusBadge from "./CameraStatusBadge.js";
+import WSConnectionDot from "./WSConnectionDot.js";
 import HelpdeskChat from "./HelpdeskChat.js";
 import { useToast } from "../store/toast.js";
 import { useIsAdmin, invalidateAdminCache } from "../utils/admin.js";
@@ -922,8 +922,10 @@ export default function AdminDashboard({ user }: { user: any }) {
           </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
-          {/* Keep the green connected badge; no HTTP/HTTPS pills here */}
-          <CameraStatusBadge />
+          <div className="inline-flex items-center gap-2 rounded-lg border border-white/15 bg-white/5 px-3 py-1 text-xs">
+            <WSConnectionDot />
+            <span className="text-slate-100 select-none">Server</span>
+          </div>
           {ws && (ws as any).reconnect && (
             <button
               onClick={() => (ws as any).reconnect()}
