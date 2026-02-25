@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 const LS_KEY = "ndn:isAdmin:v1";
 
@@ -20,6 +20,19 @@ function setCache(email: string, v: boolean) {
   } catch {}
 }
 
+/** Clear the cached admin status for a specific email so the next check hits the server. */
+export function invalidateAdminCache(email?: string | null) {
+  try {
+    if (email) {
+      const c = getCache();
+      delete c[(email || "").toLowerCase()];
+      localStorage.setItem(LS_KEY, JSON.stringify(c));
+    } else {
+      localStorage.removeItem(LS_KEY);
+    }
+  } catch {}
+}
+
 export async function fetchIsAdmin(email?: string | null): Promise<boolean> {
   const e = String(email || "").toLowerCase();
   if (!e) return false;
@@ -36,10 +49,10 @@ export async function fetchIsAdmin(email?: string | null): Promise<boolean> {
     const force = localStorage.getItem("ndn:forceAdmin");
     if (force === "1" || force === "true") return true;
   } catch {}
-  // try cache first (5 minutes)
+  // try cache first (60 seconds)
   const c = getCache();
   const hit = c[e];
-  if (hit && Date.now() - hit.ts < 5 * 60 * 1000) return !!hit.v;
+  if (hit && Date.now() - hit.ts < 60 * 1000) return !!hit.v;
   try {
     const res = await fetch(`/api/admins/check?email=${encodeURIComponent(e)}`);
     const data = await res.json().catch(() => ({}));
@@ -86,11 +99,17 @@ export function useIsAdmin(email?: string | null) {
       setIsAdmin(true);
       return;
     }
-    fetchIsAdmin(e).then((v) => {
-      if (on) setIsAdmin(!!v);
-    });
+    const check = () => {
+      fetchIsAdmin(e).then((v) => {
+        if (on) setIsAdmin(!!v);
+      });
+    };
+    check();
+    // Re-check periodically so newly-granted admin status is picked up
+    const iv = setInterval(check, 60 * 1000);
     return () => {
       on = false;
+      clearInterval(iv);
     };
   }, [e]);
   return isAdmin;

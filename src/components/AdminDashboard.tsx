@@ -14,6 +14,7 @@ import { useWS } from "./WSProvider.js";
 import CameraStatusBadge from "./CameraStatusBadge.js";
 import HelpdeskChat from "./HelpdeskChat.js";
 import { useToast } from "../store/toast.js";
+import { useIsAdmin, invalidateAdminCache } from "../utils/admin.js";
 
 const OWNER_EMAIL = "daviesfamily108@gmail.com";
 
@@ -204,6 +205,7 @@ export default function AdminDashboard({ user }: { user: any }) {
     "general" | "maintenance" | "premium" | "helpdesk" | "tourneys"
   >("general");
   const isOwner = user?.email?.toLowerCase() === OWNER_EMAIL;
+  const isAdminUser = useIsAdmin(user?.email);
   const [winners] = useState<any[]>([]);
   const [reports] = useState<any[]>([]);
   const [helpRequests, setHelpRequests] = useState<any[]>([]);
@@ -545,7 +547,10 @@ export default function AdminDashboard({ user }: { user: any }) {
       },
       body: JSON.stringify({ email }),
     });
+    // Clear the admin cache for the granted user so their next check hits the server
+    invalidateAdminCache(email);
     setEmail("");
+    await refresh();
   }
 
   async function searchUsers() {
@@ -894,12 +899,12 @@ export default function AdminDashboard({ user }: { user: any }) {
     [],
   );
 
-  if (!isOwner) {
+  if (!isOwner && !isAdminUser) {
     return (
       <div className="card ndn-page">
         <h2 className="text-2xl font-bold mb-2 ndn-section-title">Admin 🛡️</h2>
         <div className="text-sm opacity-80">
-          You don't have permission to manage admins.
+          You don't have permission to access the admin dashboard.
         </div>
       </div>
     );
