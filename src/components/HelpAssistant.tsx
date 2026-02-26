@@ -233,7 +233,20 @@ export default function HelpAssistant() {
         // fire-and-forget
         (async () => {
           try {
-            const payload = { message: lastUserQuestion || userMessageRaw };
+            // Include username/email in body so the server can identify the user
+            // even if the JWT is expired or missing
+            let bodyUsername: string | null = null;
+            let bodyEmail: string | null = null;
+            try {
+              bodyUsername = localStorage.getItem("ndn:currentUser") || null;
+              const wsId = localStorage.getItem("ndn:ws-identity");
+              if (wsId) bodyEmail = JSON.parse(wsId).email || null;
+            } catch {}
+            const payload = {
+              message: lastUserQuestion || userMessageRaw,
+              username: bodyUsername,
+              email: bodyEmail,
+            };
             const authHeaders: Record<string, string> = {
               "Content-Type": "application/json",
             };

@@ -1563,6 +1563,9 @@ app.post('/api/help/requests', express.json(), async (req, res) => {
     const body = req.body || {}
     const message = body.message || ''
     if (!message) return res.status(400).json({ error: 'Message required.' })
+    // Use body username/email as fallback when JWT doesn't provide them
+    if (!username && body.username) username = String(body.username)
+    if (!userEmail && body.email) userEmail = String(body.email).toLowerCase()
     const rec = await createHelpRequest(username, message, body.meta || {}, userEmail)
     // Broadcast to connected admin WS clients so admins see new requests immediately
     try {
@@ -1601,8 +1604,17 @@ app.get('/api/help/requests/:id', async (req, res) => {
     if (!rec) return res.status(404).json({ error: 'Not found' })
     // Only allow the ticket creator or an admin to view
     const isCreator = callerEmail && rec.email && callerEmail === String(rec.email).toLowerCase()
+    // Also allow match by username (fallback when email was missing on the original request)
+    const callerUser = callerEmail ? users.get(callerEmail) : null
+    const isCreatorByUsername = !isCreator && callerUser && callerUser.username && rec.username && callerUser.username === rec.username
     const isAdmin = callerEmail && adminEmails.has(callerEmail)
-    if (!isCreator && !isAdmin) return res.status(403).json({ error: 'Forbidden' })
+    if (!isCreator && !isCreatorByUsername && !isAdmin) return res.status(403).json({ error: 'Forbidden' })
+    // Back-fill email on the help request if it was missing (so WS routing works in future)
+    if ((isCreator || isCreatorByUsername) && callerEmail && !rec.email) {
+      rec.email = callerEmail
+      helpCache = store
+      persistHelpToDisk()
+    }
     return res.json({ ok: true, request: rec })
   } catch (err) { console.error('[Help] Fetch request error:', err && err.message); return res.status(500).json({ error: 'Internal server error.' }) }
 })
@@ -1628,8 +1640,15 @@ app.post('/api/help/requests/:id/messages', express.json(), async (req, res) => 
     if (idx === -1) return res.status(404).json({ error: 'Not found' })
     const reqRec = store[idx]
     const isCreator = callerEmail && reqRec.email && callerEmail === String(reqRec.email).toLowerCase()
+    // Also allow match by username (fallback when email was missing on the original request)
+    const msgCallerUser = callerEmail ? users.get(callerEmail) : null
+    const isCreatorByUsername = !isCreator && msgCallerUser && msgCallerUser.username && reqRec.username && msgCallerUser.username === reqRec.username
     const isAdmin = callerEmail && adminEmails.has(callerEmail)
-    if (!isCreator && !isAdmin) return res.status(403).json({ error: 'Forbidden' })
+    if (!isCreator && !isCreatorByUsername && !isAdmin) return res.status(403).json({ error: 'Forbidden' })
+    // Back-fill email on the help request if it was missing (so future WS routing works)
+    if ((isCreator || isCreatorByUsername) && callerEmail && !reqRec.email) {
+      reqRec.email = callerEmail
+    }
     const msgObj = {
       fromEmail: callerEmail,
       fromName: callerUsername || callerEmail,
@@ -4226,6 +4245,13 @@ wss.on('connection', (ws, req) => {
             if (idx === -1) { console.warn('[Help-WS] Request not found:', requestId); return }
             const reqRec = store[idx]
             const senderIsAdmin = !!(ws._email && adminEmails.has(String(ws._email).toLowerCase()))
+            // Back-fill email/username on the help request if missing (ensures future WS routing works)
+            if (!senderIsAdmin && ws._email && !reqRec.email) {
+              reqRec.email = String(ws._email).toLowerCase()
+            }
+            if (!senderIsAdmin && ws._username && !reqRec.username) {
+              reqRec.username = ws._username
+            }
             console.log('[Help-WS] message from=%s email=%s admin=%s reqId=%s reqEmail=%s reqUser=%s', ws._id, ws._email, senderIsAdmin, requestId, reqRec.email, reqRec.username)
             const msgObj = {
               fromEmail: ws._email || null,
