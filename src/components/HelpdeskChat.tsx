@@ -341,13 +341,36 @@ export default function HelpdeskChat({
               </span>
             )}
           </div>
-          <button
-            aria-label="Close"
-            className="px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm"
-            onClick={onClose}
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            {user?.isAdmin && !resolved && (
+              <button
+                className="px-3 py-1 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-semibold"
+                onClick={async () => {
+                  try {
+                    const headers: Record<string, string> = {
+                      "Content-Type": "application/json",
+                    };
+                    const authToken = localStorage.getItem("authToken");
+                    if (authToken)
+                      headers["Authorization"] = `Bearer ${authToken}`;
+                    await apiFetch(
+                      `/api/admin/help-requests/${request.id}/resolve`,
+                      { method: "POST", headers },
+                    );
+                  } catch {}
+                }}
+              >
+                Goodbye
+              </button>
+            )}
+            <button
+              aria-label="Close"
+              className="px-2 py-1 rounded bg-neutral-700 hover:bg-neutral-600 text-sm"
+              onClick={onClose}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         <div
