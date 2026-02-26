@@ -1767,6 +1767,16 @@ app.post('/api/admin/help-requests/:id/resolve', express.json(), async (req, res
     if (!id) return res.status(400).json({ error: 'id required' })
     const rec = await resolveHelpRequest(id, adminEmail)
     if (!rec) return res.status(404).json({ error: 'Not found' })
+    // Append a system goodbye message so the user sees the chat has ended
+    rec.messages = rec.messages || []
+    rec.messages.push({
+      fromName: 'System',
+      message: 'Goodbye and thanks for getting in touch with the NineDartNation team! 🎯',
+      ts: Date.now(),
+      admin: true,
+      system: true
+    })
+    persistHelpToDisk()
     // Broadcast resolve update
     try {
       const payload = JSON.stringify({ type: 'help-request-updated', request: rec })

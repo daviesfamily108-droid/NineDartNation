@@ -41,6 +41,9 @@ export default function HelpdeskChat({
   const [input, setInput] = useState("");
   const [typingUsers, setTypingUsers] = useState<Record<string, number>>({});
   const [adminConnected, setAdminConnected] = useState(false);
+  const [resolved, setResolved] = useState(
+    () => request?.status === "resolved",
+  );
   const [waitTime, setWaitTime] = useState("");
   const msgsRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<number | null>(null);
@@ -64,7 +67,15 @@ export default function HelpdeskChat({
     if (request?.claimedBy) {
       setAdminConnected(true);
     }
-  }, [request?.id, request?.messages?.length, request?.claimedBy]);
+    if (request?.status === "resolved") {
+      setResolved(true);
+    }
+  }, [
+    request?.id,
+    request?.messages?.length,
+    request?.claimedBy,
+    request?.status,
+  ]);
 
   useEffect(() => {
     if (!ws) return;
@@ -92,6 +103,9 @@ export default function HelpdeskChat({
         ) {
           setMessages(data.request.messages || []);
           setAdminConnected(data.request.claimedBy ? true : false);
+          if (data.request.status === "resolved") {
+            setResolved(true);
+          }
         }
         if (
           data?.type === "help-typing" &&
@@ -253,6 +267,7 @@ export default function HelpdeskChat({
             return prev;
           });
           if (j.request.claimedBy) setAdminConnected(true);
+          if (j.request.status === "resolved") setResolved(true);
         }
       } catch {}
     };
@@ -315,9 +330,14 @@ export default function HelpdeskChat({
               <Zap className="w-4 h-4 text-yellow-400" />
               Help Desk — {request.username || "Anonymous"}
             </div>
-            {adminConnected && (
+            {adminConnected && !resolved && (
               <span className="text-xs px-2 py-1 rounded bg-emerald-600">
                 Admin Connected
+              </span>
+            )}
+            {resolved && (
+              <span className="text-xs px-2 py-1 rounded bg-slate-500">
+                Chat Ended
               </span>
             )}
           </div>
@@ -435,30 +455,44 @@ export default function HelpdeskChat({
           )}
         </div>
 
-        <div className="p-3 border-t border-slate-700 bg-slate-800 flex gap-2">
-          <input
-            className="input flex-1 text-sm"
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              sendTyping();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                sendMsg();
-              }
-            }}
-            placeholder="Ask a question (e.g., 'How does calibration work?')..."
-          />
-          <button
-            aria-label="Send message"
-            className="btn bg-blue-600 hover:bg-blue-700 text-white"
-            onClick={sendMsg}
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </div>
+        {resolved ? (
+          <div className="p-3 border-t border-slate-700 bg-slate-800 text-center">
+            <p className="text-sm text-slate-400">
+              This chat has been closed. Thank you!
+            </p>
+            <button
+              className="mt-2 btn bg-slate-600 hover:bg-slate-500 text-white text-sm px-4 py-1"
+              onClick={onClose}
+            >
+              Close
+            </button>
+          </div>
+        ) : (
+          <div className="p-3 border-t border-slate-700 bg-slate-800 flex gap-2">
+            <input
+              className="input flex-1 text-sm"
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                sendTyping();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMsg();
+                }
+              }}
+              placeholder="Ask a question (e.g., 'How does calibration work?')..."
+            />
+            <button
+              aria-label="Send message"
+              className="btn bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={sendMsg}
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
