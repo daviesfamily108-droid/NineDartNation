@@ -77,6 +77,15 @@ export default function HelpdeskChat({
     request?.status,
   ]);
 
+  // Auto-close the chat for the user after the goodbye message is shown
+  useEffect(() => {
+    if (!resolved || user?.isAdmin) return;
+    const t = window.setTimeout(() => {
+      onClose?.();
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [resolved, user?.isAdmin, onClose]);
+
   useEffect(() => {
     if (!ws) return;
     const un = ws.addListener((data: any) => {
@@ -483,6 +492,11 @@ export default function HelpdeskChat({
             <p className="text-sm text-slate-400">
               This chat has been closed. Thank you!
             </p>
+            {!user?.isAdmin && (
+              <p className="text-xs text-slate-500 mt-1">
+                Closing automatically in a few seconds…
+              </p>
+            )}
             <button
               className="mt-2 btn bg-slate-600 hover:bg-slate-500 text-white text-sm px-4 py-1"
               onClick={onClose}
