@@ -2197,7 +2197,7 @@ function broadcastToRoom(roomId, data, exceptWs=null) {
       }
     } catch (e) {
       try { logger.warn('[BROADCAST] iteration error for room=%s: %s', roomId, e && e.message) } catch {}
-    }
+    
   }
 }
 
@@ -2341,6 +2341,129 @@ wss.on('connection', (ws, req) => {
           broadcastToRoom(ws._roomId, { type: 'chat', message: cleanMsg, from: ws._id }, null);
           try { chatMessagesTotal.inc() } catch (e) {}
         }
+      } else if (data.type === 'help-message') {
+        // Real-time help desk messaging over WS. Persist via help store and route to admin/user.
+        try {
+          const requestId = String(data.requestId || '')
+          const text = String(data.message || '')
+          if (!requestId || !text) return
+          const store = loadHelpFromDisk()
+          const idx = store.findIndex(r => String(r.id) === requestId)
+          if (idx === -1) return
+          const reqRec = store[idx]
+          const callerEmail = ws._email || null
+          const callerUser = callerEmail ? users.get(callerEmail) : null
+          const isAdmin = callerEmail && (adminEmails.has(String(callerEmail).toLowerCase()) || (callerUser && !!callerUser.admin))
+          // Allow if admin or ticket creator (match by email or username)
+          const isCreator = callerEmail && reqRec.email && callerEmail === String(reqRec.email).toLowerCase()
+          const isCreatorByUsername = !isCreator && callerUser && callerUser.username && reqRec.username && callerUser.username === reqRec.username
+          if (!isAdmin && !isCreator && !isCreatorByUsername) return
+          const msgObj = {
+            fromEmail: callerEmail,
+            fromName: ws._username || callerEmail || reqRec.username || 'User',
+            message: text,
+            ts: Date.now(),
+            admin: !!isAdmin
+          }
+          reqRec.messages = reqRec.messages || []
+          reqRec.messages.push(msgObj)
+          helpCache = store
+          persistHelpToDisk()
+
+          const payload = JSON.stringify({ type: 'help-message', requestId: reqRec.id, message: msgObj })
+
+          if (isAdmin) {
+            // Route to ticket creator (if online)
+            let targetUser = null
+            if (reqRec.email) targetUser = users.get(String(reqRec.email).toLowerCase())
+            if (!targetUser && reqRec.username) targetUser = findUserByUsername(reqRec.username)
+            if (targetUser && targetUser.wsId) {
+              const target = clients.get(targetUser.wsId)
+              if (target && target.readyState === 1) try { target.send(payload) } catch {}
+            }
+            // Also echo to all admins so admin UI updates
+            for (const client of wss.clients) {
+              try {
+                if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+                  client.send(payload)
+                }
+              } catch {}
+            }
+          } else {
+            // From user: route to claimed admin if present, otherwise broadcast to all admins
+            if (reqRec.claimedBy) {
+              const a = users.get(String(reqRec.claimedBy).toLowerCase())
+              if (a && a.wsId) {
+                const target = clients.get(a.wsId)
+                if (target && target.readyState === 1) try { target.send(payload) } catch {}
+              }
+            } else {
+              for (const client of wss.clients) {
+                try {
+                  if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+                    client.send(payload)
+                  }
+                } catch {}
+              }
+            }
+          }
+        } catch (e) { try { console.warn('[Help][WS] help-message handler failed:', e && e.message) } catch {} }
+      } else if (data.type === 'help-typing') {
+        try {
+          const requestId = String(data.requestId || '')
+          if (!requestId) return
+          const fromName = data.fromName || ws._username || ws._email || 'user'
+          const fromEmail = data.fromEmail || ws._email || null
+          const isAdminTyping = !!data.admin || (fromEmail && adminEmails.has(String(fromEmail).toLowerCase()))
+          const payload = JSON.stringify({ type: 'help-typing', requestId, fromName, fromEmail, admin: !!isAdminTyping })
+          const store = loadHelpFromDisk()
+          const reqRec = store.find(r => String(r.id) === requestId)
+          if (!reqRec) return
+          if (isAdminTyping) {
+            // route to ticket creator
+            let targetUser = null
+            if (reqRec.email) targetUser = users.get(String(reqRec.email).toLowerCase())
+            if (!targetUser && reqRec.username) targetUser = findUserByUsername(reqRec.username)
+            if (targetUser && targetUser.wsId) {
+              const target = clients.get(targetUser.wsId)
+              if (target && target.readyState === 1) try { target.send(payload) } catch {}
+            }
+          } else {
+            // user typing -> notify claimed admin or all admins
+            if (reqRec.claimedBy) {
+              const a = users.get(String(reqRec.claimedBy).toLowerCase())
+              if (a && a.wsId) {
+                const target = clients.get(a.wsId)
+                if (target && target.readyState === 1) try { target.send(payload) } catch {}
+              }
+            } else {
+              for (const client of wss.clients) {
+                try {
+                  if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+                    client.send(payload)
+                  }
+                } catch {}
+              }
+            }
+          }
+        } catch (e) { try { console.warn('[Help][WS] help-typing handler failed:', e && e.message) } catch {} }
+      } else if (data.type === 'help-escalate') {
+        try {
+          const requestId = String(data.requestId || '')
+          if (!requestId) return
+          const store = loadHelpFromDisk()
+          const reqRec = store.find(r => String(r.id) === requestId)
+          if (!reqRec) return
+          const payload = JSON.stringify({ type: 'help-escalate', request: reqRec })
+          // Broadcast escalation notice to all online admins
+          for (const client of wss.clients) {
+            try {
+              if (client && client.readyState === 1 && client._email && adminEmails.has(String(client._email).toLowerCase())) {
+                client.send(payload)
+              }
+            } catch {}
+          }
+        } catch (e) { try { console.warn('[Help][WS] help-escalate handler failed:', e && e.message) } catch {} }
       } else if (data.type === 'celebration') {
         // Broadcast client-declared celebrations (e.g., leg win) to the room
         if (ws._roomId) {
